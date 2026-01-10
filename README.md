@@ -1,9 +1,10 @@
 # ToonNet - Production-Ready TOON Serialization Library
 
 **Status:** ✅ Production Ready  
-**Test Coverage:** 173/173 passing (100%)  
+**Test Coverage:** 185/185 passing (100%)  
 **Performance:** 3-5x faster with Phase 3 Source Generator  
-**Compatibility:** .NET 8.0+
+**Compatibility:** .NET 8.0+  
+**Latest:** Phase 4 - Advanced Features (Custom Converters, Custom Constructors, Nested Serializable)
 
 ---
 
@@ -30,6 +31,54 @@ var restored = User.Deserialize(doc);     // Type-safe
 
 **Benefits:** 3-5x faster, zero reflection, compile-time type safety
 
+### Phase 4: Advanced Features (Custom Logic)
+
+```csharp
+// Custom converters for special types
+public class DateTimeOffsetConverter : ToonConverter<DateTimeOffset>
+{
+    public override ToonValue? Write(DateTimeOffset value, ToonSerializerOptions options)
+        => new ToonString(value.ToString("O"));
+    public override DateTimeOffset Read(ToonValue value, ToonSerializerOptions options)
+        => DateTimeOffset.Parse(((ToonString)value).Value);
+}
+
+[ToonSerializable]
+public partial class Event
+{
+    public string Title { get; set; }
+    [ToonConverter(typeof(DateTimeOffsetConverter))]
+    public DateTimeOffset Timestamp { get; set; }
+}
+
+// Nested serializable classes
+[ToonSerializable]
+public partial class Address
+{
+    public string City { get; set; }
+}
+
+[ToonSerializable]
+public partial class Person
+{
+    public string Name { get; set; }
+    public Address Address { get; set; }  // Automatically handled
+}
+
+// Custom constructors
+[ToonSerializable]
+public partial class Point
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    
+    [ToonConstructor]
+    public Point(int x, int y) { X = x; Y = y; }
+}
+```
+
+**Benefits:** Custom type logic, nested objects, custom deserialization instantiation
+
 ### Phase 2: Reflection-Based (Always Available)
 
 ```csharp
@@ -48,9 +97,17 @@ var restored = ToonSerializer.Deserialize<User>(ToonEncoder.Encode(doc));
 
 ---
 
-## Architecture: Three Layers
+## Architecture: Four Layers
 
 ```
+┌─────────────────────────────────────────────────┐
+│ Phase 4: Advanced Features (Roslyn Generator)   │
+│ • [ToonConverter] - Custom type converters      │
+│ • [ToonConstructor] - Custom deserialization    │
+│ • Nested [ToonSerializable] classes             │
+│ • Zero reflection, compile-time                 │
+└─────────────────────────────────────────────────┘
+             ↓ (extends)
 ┌─────────────────────────────────────────────────┐
 │ Phase 3: Source Generator (Roslyn)              │
 │ • [ToonSerializable] attribute                  │
@@ -94,7 +151,16 @@ var restored = ToonSerializer.Deserialize<User>(ToonEncoder.Encode(doc));
 **Serialization:**
 - `ToonSerializer.Serialize<T>(T)` → `string` - Reflection-based
 - `ToonSerializer.Deserialize<T>(string)` → `T`
-- `[ToonSerializable]` - Mark classes for code generation
+- `[ToonSerializable]` - Mark classes for code generation (Phase 3)
+- `[ToonConverter(typeof(...))]` - Custom type converters (Phase 4)
+- `[ToonConstructor]` - Custom deserialization instantiation (Phase 4)
+
+**Attributes:**
+- `[ToonIgnore]` - Skip property during serialization
+- `[ToonProperty(name)]` - Custom property name
+- `[ToonPropertyOrder(order)]` - Serialization order
+- `[ToonConverter(typeof(...))]` - Custom type converter (Phase 4)
+- `[ToonConstructor]` - Mark deserialization constructor (Phase 4)
 
 **Configuration:**
 - `ToonOptions` - Parse/encode settings
