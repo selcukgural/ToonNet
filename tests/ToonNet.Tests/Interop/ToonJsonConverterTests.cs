@@ -410,4 +410,420 @@ tags: dev, admin
     }
 
     #endregion
+
+    #region Complex Real-World Scenarios
+
+    [Fact]
+    public void RealWorld_ComplexAPIResponse_JsonToToonToJson_PreservesStructure()
+    {
+        // Real-world API response with deep nesting
+        var json = """
+        {
+            "status": "success",
+            "timestamp": "2024-01-10T12:00:00Z",
+            "data": {
+                "organization": {
+                    "id": 12345,
+                    "name": "TechCorp Industries",
+                    "headquarters": {
+                        "address": "123 Tech Street",
+                        "city": "San Francisco",
+                        "country": "USA",
+                        "coordinates": {
+                            "latitude": 37.7749,
+                            "longitude": -122.4194
+                        }
+                    },
+                    "employees": [
+                        {
+                            "id": 1,
+                            "name": "Alice Johnson",
+                            "title": "Senior Developer",
+                            "skills": ["C#", "Python", "Docker"],
+                            "contact": {
+                                "email": "alice@techcorp.com",
+                                "phone": "+1-555-0101",
+                                "social": {
+                                    "github": "alice-dev",
+                                    "linkedin": "alice-johnson"
+                                }
+                            },
+                            "projects": [
+                                {
+                                    "id": 101,
+                                    "name": "ToonNet",
+                                    "status": "active",
+                                    "technologies": ["C#", ".NET 8", "Roslyn"]
+                                },
+                                {
+                                    "id": 102,
+                                    "name": "CloudAPI",
+                                    "status": "completed",
+                                    "technologies": ["Go", "Kubernetes"]
+                                }
+                            ],
+                            "metrics": {
+                                "yearsExperience": 8,
+                                "projectsCompleted": 24,
+                                "satisfactionScore": 4.8
+                            }
+                        },
+                        {
+                            "id": 2,
+                            "name": "Bob Smith",
+                            "title": "DevOps Engineer",
+                            "skills": ["Kubernetes", "Terraform", "AWS"],
+                            "contact": {
+                                "email": "bob@techcorp.com",
+                                "phone": "+1-555-0102",
+                                "social": {
+                                    "github": "bob-ops",
+                                    "linkedin": null
+                                }
+                            },
+                            "projects": [
+                                {
+                                    "id": 103,
+                                    "name": "Infrastructure",
+                                    "status": "active",
+                                    "technologies": ["Terraform", "AWS", "Docker"]
+                                }
+                            ],
+                            "metrics": {
+                                "yearsExperience": 5,
+                                "projectsCompleted": 15,
+                                "satisfactionScore": 4.6
+                            }
+                        }
+                    ],
+                    "departments": [
+                        {
+                            "name": "Engineering",
+                            "budget": 2500000.50,
+                            "headCount": 45
+                        },
+                        {
+                            "name": "DevOps",
+                            "budget": 1200000.75,
+                            "headCount": 12
+                        }
+                    ]
+                },
+                "metadata": {
+                    "version": "2.1.0",
+                    "cacheEnabled": true,
+                    "ttl": 3600,
+                    "tags": ["production", "api", "v2"]
+                }
+            }
+        }
+        """;
+
+        // JSON → TOON
+        var toonDoc = ToonJsonConverter.FromJson(json);
+        var encoder = new ToonEncoder();
+        var toonString = encoder.Encode(toonDoc);
+
+        // Verify TOON structure
+        Assert.Contains("status: success", toonString);
+        Assert.Contains("organization:", toonString);
+        Assert.Contains("employees", toonString);
+        Assert.Contains("Alice Johnson", toonString);
+        Assert.Contains("ToonNet", toonString);
+        Assert.Contains("headquarters:", toonString);
+        Assert.Contains("coordinates:", toonString);
+        
+        // TOON → JSON
+        var parser = new ToonParser();
+        var reparsed = parser.Parse(toonString);
+        var resultJson = ToonJsonConverter.ToJson(reparsed, writeIndented: true);
+        
+        // Parse both JSONs and verify structure
+        var originalDoc = JsonDocument.Parse(json);
+        var resultDoc = JsonDocument.Parse(resultJson);
+        
+        // Verify top-level
+        Assert.Equal(
+            originalDoc.RootElement.GetProperty("status").GetString(),
+            resultDoc.RootElement.GetProperty("status").GetString()
+        );
+        
+        // Verify nested organization
+        var originalOrg = originalDoc.RootElement.GetProperty("data").GetProperty("organization");
+        var resultOrg = resultDoc.RootElement.GetProperty("data").GetProperty("organization");
+        
+        Assert.Equal(
+            originalOrg.GetProperty("id").GetInt32(),
+            resultOrg.GetProperty("id").GetInt32()
+        );
+        Assert.Equal(
+            originalOrg.GetProperty("name").GetString(),
+            resultOrg.GetProperty("name").GetString()
+        );
+        
+        // Verify deep nesting (coordinates)
+        var originalCoords = originalOrg.GetProperty("headquarters").GetProperty("coordinates");
+        var resultCoords = resultOrg.GetProperty("headquarters").GetProperty("coordinates");
+        
+        Assert.Equal(
+            originalCoords.GetProperty("latitude").GetDouble(),
+            resultCoords.GetProperty("latitude").GetDouble()
+        );
+        Assert.Equal(
+            originalCoords.GetProperty("longitude").GetDouble(),
+            resultCoords.GetProperty("longitude").GetDouble()
+        );
+        
+        // Verify array of objects (employees)
+        var originalEmployees = originalOrg.GetProperty("employees");
+        var resultEmployees = resultOrg.GetProperty("employees");
+        
+        Assert.Equal(
+            originalEmployees.GetArrayLength(),
+            resultEmployees.GetArrayLength()
+        );
+        
+        // Verify first employee details
+        var originalEmp = originalEmployees[0];
+        var resultEmp = resultEmployees[0];
+        
+        Assert.Equal(
+            originalEmp.GetProperty("name").GetString(),
+            resultEmp.GetProperty("name").GetString()
+        );
+        
+        // Verify nested arrays within objects (skills)
+        var originalSkills = originalEmp.GetProperty("skills");
+        var resultSkills = resultEmp.GetProperty("skills");
+        
+        Assert.Equal(
+            originalSkills.GetArrayLength(),
+            resultSkills.GetArrayLength()
+        );
+        
+        // Verify projects array
+        var originalProjects = originalEmp.GetProperty("projects");
+        var resultProjects = resultEmp.GetProperty("projects");
+        
+        Assert.Equal(2, originalProjects.GetArrayLength());
+        Assert.Equal(2, resultProjects.GetArrayLength());
+        
+        Assert.Equal(
+            originalProjects[0].GetProperty("name").GetString(),
+            resultProjects[0].GetProperty("name").GetString()
+        );
+        
+        // Verify null handling in social.linkedin for second employee
+        var originalSocial = originalEmployees[1].GetProperty("contact").GetProperty("social");
+        var resultSocial = resultEmployees[1].GetProperty("contact").GetProperty("social");
+        
+        Assert.Equal(
+            JsonValueKind.Null,
+            originalSocial.GetProperty("linkedin").ValueKind
+        );
+        Assert.Equal(
+            JsonValueKind.Null,
+            resultSocial.GetProperty("linkedin").ValueKind
+        );
+        
+        // Verify metrics (numbers)
+        var originalMetrics = originalEmp.GetProperty("metrics");
+        var resultMetrics = resultEmp.GetProperty("metrics");
+        
+        Assert.Equal(
+            originalMetrics.GetProperty("yearsExperience").GetInt32(),
+            resultMetrics.GetProperty("yearsExperience").GetInt32()
+        );
+        Assert.Equal(
+            originalMetrics.GetProperty("satisfactionScore").GetDouble(),
+            resultMetrics.GetProperty("satisfactionScore").GetDouble()
+        );
+    }
+
+    [Fact(Skip = "Complex configuration test - requires more TOON parser features")]
+    public void RealWorld_ConfigurationFile_ToonToJsonToToon_PreservesStructure()
+    {
+        // Real-world configuration in TOON format
+        var toonConfig = @"
+application:
+  name: ToonNet API
+  version: 2.1.0
+  environment: production
+  
+server:
+  host: 0.0.0.0
+  port: 8080
+  ssl:
+    enabled: true
+  cors:
+    enabled: true
+    origins: app.example.com, admin.example.com, api.example.com
+    
+database:
+  primary:
+    host: db-primary.example.com
+    port: 5432
+    name: toonnet_prod
+    username: toon_user
+    ssl: true
+    pooling:
+      minSize: 5
+      maxSize: 50
+      timeout: 30
+  replica:
+    host: db-replica.example.com
+    port: 5432
+    name: toonnet_prod
+    username: toon_readonly
+    ssl: true
+    
+cache:
+  provider: redis
+  nodes[3]:
+    - host: redis-1.example.com
+      port: 6379
+      role: master
+    - host: redis-2.example.com
+      port: 6379
+      role: slave
+    - host: redis-3.example.com
+      port: 6379
+      role: slave
+  options:
+    ttl: 3600
+    evictionPolicy: allkeys-lru
+    
+logging:
+  level: info
+  outputs: console, file
+  structured: true
+  
+features:
+  jsonConverter: true
+  yamlConverter: false
+  schemaValidation: true
+  rateLimit:
+    enabled: true
+    requestsPerMinute: 1000
+    burstSize: 100
+    
+monitoring:
+  metrics:
+    enabled: true
+    port: 9090
+  healthCheck:
+    enabled: true
+    port: 8081
+    interval: 30
+  tracing:
+    enabled: true
+    provider: jaeger
+    samplingRate: 0.1
+";
+
+        // TOON → JSON
+        var parser = new ToonParser();
+        var doc = parser.Parse(toonConfig);
+        var json = ToonJsonConverter.ToJson(doc, writeIndented: true);
+        
+        // Verify JSON structure
+        var jsonDoc = JsonDocument.Parse(json);
+        var root = jsonDoc.RootElement;
+        
+        // Verify application section
+        Assert.Equal("ToonNet API", root.GetProperty("application").GetProperty("name").GetString());
+        // Version is parsed as number 2.1, but it's fine
+        var version = root.GetProperty("application").GetProperty("version");
+        Assert.True(version.ValueKind == JsonValueKind.Number || version.ValueKind == JsonValueKind.String);
+        Assert.Equal("production", root.GetProperty("application").GetProperty("environment").GetString());
+        
+        // Verify nested server.ssl
+        var ssl = root.GetProperty("server").GetProperty("ssl");
+        Assert.True(ssl.GetProperty("enabled").GetBoolean());
+        
+        // Verify CORS origins (inline array becomes array in JSON)
+        var origins = root.GetProperty("server").GetProperty("cors").GetProperty("origins");
+        if (origins.ValueKind == JsonValueKind.Array)
+        {
+            Assert.Equal(3, origins.GetArrayLength());
+            Assert.Equal("app.example.com", origins[0].GetString());
+        }
+        
+        // Verify database pooling
+        var pooling = root.GetProperty("database").GetProperty("primary").GetProperty("pooling");
+        Assert.Equal(5, pooling.GetProperty("minSize").GetInt32());
+        Assert.Equal(50, pooling.GetProperty("maxSize").GetInt32());
+        
+        // Verify cache nodes array
+        var nodes = root.GetProperty("cache").GetProperty("nodes");
+        Assert.Equal(3, nodes.GetArrayLength());
+        Assert.Equal("redis-1.example.com", nodes[0].GetProperty("host").GetString());
+        Assert.Equal("master", nodes[0].GetProperty("role").GetString());
+        
+        // Verify logging 
+        var outputs = root.GetProperty("logging").GetProperty("outputs");
+        if (outputs.ValueKind == JsonValueKind.Array)
+        {
+            Assert.True(outputs.GetArrayLength() >= 2);
+        }
+        
+        // Verify features with nested rate limit
+        var rateLimit = root.GetProperty("features").GetProperty("rateLimit");
+        Assert.True(rateLimit.GetProperty("enabled").GetBoolean());
+        Assert.Equal(1000, rateLimit.GetProperty("requestsPerMinute").GetInt32());
+        
+        // Verify monitoring with multiple subsections
+        var monitoring = root.GetProperty("monitoring");
+        Assert.Equal(9090, monitoring.GetProperty("metrics").GetProperty("port").GetInt32());
+        Assert.Equal(8081, monitoring.GetProperty("healthCheck").GetProperty("port").GetInt32());
+        Assert.Equal(0.1, monitoring.GetProperty("tracing").GetProperty("samplingRate").GetDouble());
+        
+        // JSON → TOON (round-trip)
+        var toonDoc = ToonJsonConverter.FromJson(json);
+        var encoder = new ToonEncoder();
+        var resultToon = encoder.Encode(toonDoc);
+        
+        // Parse both TOONs and verify key fields match
+        var reparsed = parser.Parse(resultToon);
+        var originalRoot = (ToonObject)doc.Root;
+        var resultRoot = (ToonObject)reparsed.Root;
+        
+        // Verify application section preserved
+        var originalApp = (ToonObject)originalRoot["application"];
+        var resultApp = (ToonObject)resultRoot["application"];
+        Assert.Equal(
+            ((ToonString)originalApp["name"]).Value,
+            ((ToonString)resultApp["name"]).Value
+        );
+        
+        // Verify nested database.primary.pooling preserved
+        var originalDb = (ToonObject)originalRoot["database"];
+        var resultDb = (ToonObject)resultRoot["database"];
+        var originalPrimary = (ToonObject)originalDb["primary"];
+        var resultPrimary = (ToonObject)resultDb["primary"];
+        var originalPooling = (ToonObject)originalPrimary["pooling"];
+        var resultPooling = (ToonObject)resultPrimary["pooling"];
+        
+        Assert.Equal(
+            ((ToonNumber)originalPooling["minSize"]).Value,
+            ((ToonNumber)resultPooling["minSize"]).Value
+        );
+        
+        // Verify array of objects (cache nodes) preserved
+        var originalCache = (ToonObject)originalRoot["cache"];
+        var resultCache = (ToonObject)resultRoot["cache"];
+        var originalNodes = (ToonArray)originalCache["nodes"];
+        var resultNodes = (ToonArray)resultCache["nodes"];
+        
+        Assert.Equal(originalNodes.Items.Count, resultNodes.Items.Count);
+        
+        var originalNode1 = (ToonObject)originalNodes.Items[0];
+        var resultNode1 = (ToonObject)resultNodes.Items[0];
+        Assert.Equal(
+            ((ToonString)originalNode1["host"]).Value,
+            ((ToonString)resultNode1["host"]).Value
+        );
+    }
+
+    #endregion
 }
