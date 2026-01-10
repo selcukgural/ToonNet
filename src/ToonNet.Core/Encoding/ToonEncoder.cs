@@ -196,6 +196,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             {
                 _sb.AppendLine();
                 EncodeValue(item, indentLevel + _options.IndentSize);
+                _sb.AppendLine();
             }
             else
             {

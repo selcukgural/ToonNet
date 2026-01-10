@@ -404,9 +404,8 @@ level1:
     /// Combines all TOON features.
     /// Complex real-world test combining multiple features.
     /// Tests nested objects, arrays, list items, and various value types.
-    /// ⚠️ KNOWN ISSUE: Nested objects within list items with multiple sibling nested objects
     /// </summary>
-    [Fact(Skip = "Complex nested list items - needs debugging")]
+    [Fact]
     public void ComplexRealWorld_APIResponse_RoundTrip()
     {
         var toonString = @"
