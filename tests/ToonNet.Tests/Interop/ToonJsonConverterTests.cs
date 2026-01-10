@@ -683,7 +683,7 @@ monitoring:
         Assert.Equal("ToonNet API", root.GetProperty("application").GetProperty("name").GetString());
         // Version is parsed as number 2.1, but it's fine
         var version = root.GetProperty("application").GetProperty("version");
-        Assert.True(version.ValueKind == JsonValueKind.Number || version.ValueKind == JsonValueKind.String);
+        Assert.True(version.ValueKind is JsonValueKind.Number or JsonValueKind.String);
         Assert.Equal("production", root.GetProperty("application").GetProperty("environment").GetString());
 
         // Verify nested server.ssl

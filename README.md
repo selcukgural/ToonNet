@@ -14,7 +14,7 @@
 *Modern data serialization for .NET*
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Tests](https://img.shields.io/badge/tests-288%20passing-success?style=flat)](FINAL_STATUS.md)
+[![Tests](https://img.shields.io/badge/tests-413%20passing-success?style=flat)](FINAL_STATUS.md)
 [![Coverage](https://img.shields.io/badge/coverage-75.9%25-brightgreen?style=flat)](COVERAGE_REPORT.md)
 [![Spec Compliance](https://img.shields.io/badge/TOON%20v3.0-100%25%20compliant-blue?style=flat)](ToonSpec.md)
 
@@ -32,7 +32,7 @@ project:
     - 🤖 AI-ready clean syntax
     - 📖 Human-readable format
   stats:
-    tests: 288
+    tests: 413
     coverage: 75.9%
     spec_compliance: 100%
     status: production-ready
@@ -554,10 +554,96 @@ Parallel.For(0, 1000, i =>
 
 ---
 
+## ⚙️ Configuration Options
+
+### ToonOptions (Parsing & Encoding)
+
+```csharp
+var options = new ToonOptions
+{
+    IndentSize = 2,              // Spaces per level (2-100, must be even)
+    MaxDepth = 100,              // Max nesting depth (default: 100)
+    Delimiter = ',',             // Array element separator
+    StrictMode = true,           // Throw on invalid documents
+    AllowExtendedLimits = false  // Allow MaxDepth up to 1000
+};
+
+var parser = new ToonParser(options);
+var encoder = new ToonEncoder(options);
+```
+
+**MaxDepth Limits:**
+- **Standard**: 1-200 (default: 100, matches TOON spec §15)
+- **Extended**: 1-1000 (set `AllowExtendedLimits = true`)
+
+```csharp
+// Standard usage (safe for most cases)
+var options = new ToonOptions { MaxDepth = 150 };  // ✅ OK
+
+// Deep nesting (use with caution)
+var options = new ToonOptions 
+{ 
+    AllowExtendedLimits = true,
+    MaxDepth = 500  // ✅ OK with extended limits
+};
+
+// This will throw an exception
+var options = new ToonOptions { MaxDepth = 300 };  
+// ❌ Throws: "MaxDepth cannot exceed 200. Set AllowExtendedLimits = true to allow up to 1000"
+```
+
+### ToonSerializerOptions (Serialization)
+
+```csharp
+var options = new ToonSerializerOptions
+{
+    ToonOptions = new ToonOptions { IndentSize = 4 },
+    MaxDepth = 100,                    // Circular reference protection
+    AllowExtendedLimits = false,       // Allow MaxDepth up to 1000
+    IgnoreNullValues = true,           // Skip null properties
+    PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
+    IncludeTypeInformation = false,    // Polymorphic support
+    PublicOnly = true,                 // Serialize only public members
+    IncludeReadOnlyProperties = true   // Include get-only properties
+};
+
+var toon = ToonSerializer.Serialize(user, options);
+```
+
+**Property Naming Policies:**
+- `PropertyNamingPolicy.Default` - Keep original names
+- `PropertyNamingPolicy.CamelCase` - `userId` → `userId`
+- `PropertyNamingPolicy.SnakeCase` - `userId` → `user_id`
+- `PropertyNamingPolicy.KebabCase` - `userId` → `user-id`
+
+### Validation Rules
+
+All configuration properties are validated:
+
+```csharp
+// ✅ Valid
+options.IndentSize = 4;          // Even number, 2-100
+options.MaxDepth = 100;          // Within standard limit
+options.Delimiter = ';';         // Non-whitespace character
+
+// ❌ Throws ArgumentOutOfRangeException
+options.IndentSize = 3;          // Must be even
+options.IndentSize = 150;        // Exceeds max (100)
+options.MaxDepth = 0;            // Below min (1)
+options.MaxDepth = 300;          // Exceeds standard max (200)
+
+// ❌ Throws ArgumentException
+options.Delimiter = ' ';         // Whitespace not allowed
+options.Delimiter = '\n';        // Newline not allowed
+options.Delimiter = '\t';        // Tab not allowed
+```
+
+---
+
 ## 🧪 Testing & Quality
 
 ```
-✅ 288/288 tests passing (100%)
+✅ 413/413 tests passing (100%)
 ✅ 75.9% code coverage (ToonNet.Core)
 ✅ 100% TOON v3.0 spec compliance
 ✅ Zero known bugs
@@ -661,7 +747,7 @@ public partial class User
 
 We welcome contributions! Please follow these guidelines:
 
-1. ✅ **Tests must pass** - All 288 tests must remain green
+1. ✅ **Tests must pass** - All 413 tests must remain green
 2. 📝 **Add tests** - New features need test coverage
 3. 📚 **Document** - Update README if adding user-facing features
 4. 🎨 **Code style** - Follow existing C# conventions

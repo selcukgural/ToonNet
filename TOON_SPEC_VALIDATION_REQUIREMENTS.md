@@ -80,22 +80,38 @@ if (MaxDepth < 1)
 ```
 
 #### Önerdiğim Değerler vs Spec:
-| Parametre | Önerim | Spec Gereksinimi | Uyumluluk |
-|-----------|--------|------------------|-----------|
-| Min | 1 | >= 1 (MUST) | ✅ Tam uyumlu |
-| Max | 1000 | - (önerilmiş 100) | ✅ Güvenlik için |
-| Default | 64 | **100** (suggested) | ⚠️ **Spec önerisi farklı** |
+| Parametre | Eski Değer | Yeni Değer | Spec Gereksinimi | Uyumluluk |
+|-----------|------------|------------|------------------|-----------|
+| Min | 1 | 1 | >= 1 (MUST) | ✅ Tam uyumlu |
+| Standard Max | 1000 | **200** | - | ✅ Güvenlik için |
+| Extended Max | - | **1000** | - | ✅ İleri seviye kullanım |
+| Default | 64 | **100** | 100 (suggested) | ✅ **Spec ile tam uyumlu** |
 
-**❗ Düzeltme Önerisi:**
-```diff
-- public int MaxDepth { get; set; } = 64;
-+ public int MaxDepth { get; set; } = 100; // Per TOON spec §15 reference implementation
+**✅ Uygulanan Değişiklikler (2026-01-10):**
+```csharp
+public bool AllowExtendedLimits { get; set; } = false;  // NEW: Extended limits flag
+public int MaxDepth { get; set; } = 100;  // Changed from 64 to 100 (per TOON spec §15)
+
+// Validation logic:
+// - Standard limit: 1-200 (AllowExtendedLimits = false)
+// - Extended limit: 1-1000 (AllowExtendedLimits = true)
+// - Default: 100 (matches spec recommendation)
 ```
 
-Veya 64'te kalmak istiyorsak:
+**Kullanım Örnekleri:**
 ```csharp
-// 64 is acceptable but 100 is recommended per spec
-public int MaxDepth { get; set; } = 64;  // Conservative default (spec suggests 100)
+// Standard usage (max 200)
+var options = new ToonOptions { MaxDepth = 150 };  // OK
+
+// Extended usage (max 1000)
+var options = new ToonOptions 
+{ 
+    AllowExtendedLimits = true,
+    MaxDepth = 500  // OK with extended limits
+};
+
+// Error without extended limits
+var options = new ToonOptions { MaxDepth = 300 };  // Throws: "Set AllowExtendedLimits = true"
 ```
 
 ---

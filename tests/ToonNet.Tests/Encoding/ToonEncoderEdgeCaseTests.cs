@@ -327,8 +327,8 @@ public class ToonEncoderEdgeCaseTests
         var root = new ToonObject();
         var current = root;
 
-        // Create 70 levels of nesting (exceeds default max of 64)
-        for (var i = 0; i < 70; i++)
+        // Create 110 levels of nesting (exceeds default max of 100)
+        for (var i = 0; i < 110; i++)
         {
             var next = new ToonObject();
             current[$"level{i}"] = next;

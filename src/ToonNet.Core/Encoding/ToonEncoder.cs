@@ -46,6 +46,9 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <returns>
     ///     The encoded TOON format string.
     /// </returns>
+    /// <exception cref="ArgumentNullException">
+    ///     Thrown when document is null or document.Root is null.
+    /// </exception>
     /// <exception cref="ToonEncodingException">
     ///     Thrown when encoding exceeds the maximum depth specified in the options.
     /// </exception>
@@ -56,6 +59,13 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// </remarks>
     public string Encode(ToonDocument document)
     {
+        ArgumentNullException.ThrowIfNull(document, nameof(document));
+
+        if (document.Root == null)
+        {
+            throw new ArgumentNullException(nameof(document), "Document root cannot be null");
+        }
+
         _sb.Clear();
         _depth = 0;
 
@@ -321,7 +331,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             WriteIndent(indentLevel);
             _sb.Append("- ");
 
-            if (item is ToonObject || item is ToonArray)
+            if (item is ToonObject or ToonArray)
             {
                 _sb.AppendLine();
                 EncodeValue(item, indentLevel + _options.IndentSize);

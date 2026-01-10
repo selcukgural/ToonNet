@@ -17,9 +17,12 @@ public sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     /// <param name="input">The TOON format string to parse.</param>
     /// <returns>A ToonDocument representing the parsed input.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
     /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
     public ToonDocument Parse(string input)
     {
+        ArgumentNullException.ThrowIfNull(input, nameof(input));
+
         var lexer = new ToonLexer(input);
         _tokens.Clear();
         _tokens.AddRange(lexer.Tokenize());

@@ -254,9 +254,9 @@ people{name,age,city}:
         // Each row should be an object
         var firstRow = people.Items[0] as ToonObject;
         Assert.NotNull(firstRow);
-        Assert.Equal("Alice", ((ToonString)firstRow!["name"]).Value);
-        Assert.Equal(30, ((ToonNumber)firstRow!["age"]).Value);
-        Assert.Equal("New York", ((ToonString)firstRow!["city"]).Value);
+        Assert.Equal("Alice", ((ToonString)firstRow["name"]).Value);
+        Assert.Equal(30, ((ToonNumber)firstRow["age"]).Value);
+        Assert.Equal("New York", ((ToonString)firstRow["city"]).Value);
     }
 
     /// <summary>
