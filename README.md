@@ -14,7 +14,7 @@
 *Modern data serialization for .NET*
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Tests](https://img.shields.io/badge/tests-267%20passing-success?style=flat)](FINAL_STATUS.md)
+[![Tests](https://img.shields.io/badge/tests-288%20passing-success?style=flat)](FINAL_STATUS.md)
 [![Coverage](https://img.shields.io/badge/coverage-75.9%25-brightgreen?style=flat)](COVERAGE_REPORT.md)
 [![Spec Compliance](https://img.shields.io/badge/TOON%20v3.0-100%25%20compliant-blue?style=flat)](ToonSpec.md)
 
@@ -32,7 +32,7 @@ project:
     - 🤖 AI-ready clean syntax
     - 📖 Human-readable format
   stats:
-    tests: 267
+    tests: 288
     coverage: 75.9%
     spec_compliance: 100%
     status: production-ready
@@ -327,6 +327,89 @@ var profile = (ToonObject)firstEmployee["profile"];
 var email = ((ToonString)profile["email"]).Value;
 ```
 
+### Example 5: JSON ↔️ TOON Conversion
+
+```csharp
+using ToonNet.Core.Interop;
+using System.Text.Json;
+
+// JSON → TOON
+var json = """
+{
+    "name": "Alice",
+    "age": 30,
+    "tags": ["dev", "admin"],
+    "profile": {
+        "email": "alice@example.com",
+        "verified": true
+    }
+}
+""";
+
+// Convert JSON to TOON document
+var toonDoc = ToonJsonConverter.FromJson(json);
+
+// Encode as TOON string
+var encoder = new ToonEncoder();
+var toonString = encoder.Encode(toonDoc);
+
+Console.WriteLine(toonString);
+```
+
+**Output:**
+```toon
+name: Alice
+age: 30
+tags[3]: dev, admin
+profile:
+  email: alice@example.com
+  verified: true
+```
+
+**TOON → JSON:**
+```csharp
+var toon = """
+name: Alice
+age: 30
+tags: dev, admin
+profile:
+  email: alice@example.com
+  verified: true
+""";
+
+// Parse TOON
+var parser = new ToonParser();
+var doc = parser.Parse(toon);
+
+// Convert to JSON
+var json = ToonJsonConverter.ToJson(doc, writeIndented: true);
+
+Console.WriteLine(json);
+```
+
+**Output:**
+```json
+{
+  "name": "Alice",
+  "age": 30,
+  "tags": [
+    "dev",
+    "admin"
+  ],
+  "profile": {
+    "email": "alice@example.com",
+    "verified": true
+  }
+}
+```
+
+**Use Cases:**
+- 🔄 **Migrate from JSON** - Convert existing JSON configs to TOON
+- 📡 **API Integration** - Accept JSON, work with TOON internally
+- 🔧 **Tooling** - Build JSON/TOON converters and validators
+- 📊 **Data Migration** - Batch convert between formats
+```
+
 ---
 
 ## 🛠️ Installation
@@ -474,7 +557,7 @@ Parallel.For(0, 1000, i =>
 ## 🧪 Testing & Quality
 
 ```
-✅ 267/267 tests passing (100%)
+✅ 288/288 tests passing (100%)
 ✅ 75.9% code coverage (ToonNet.Core)
 ✅ 100% TOON v3.0 spec compliance
 ✅ Zero known bugs
@@ -578,7 +661,7 @@ public partial class User
 
 We welcome contributions! Please follow these guidelines:
 
-1. ✅ **Tests must pass** - All 267 tests must remain green
+1. ✅ **Tests must pass** - All 288 tests must remain green
 2. 📝 **Add tests** - New features need test coverage
 3. 📚 **Document** - Update README if adding user-facing features
 4. 🎨 **Code style** - Follow existing C# conventions
