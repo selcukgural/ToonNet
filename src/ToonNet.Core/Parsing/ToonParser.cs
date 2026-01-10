@@ -1,5 +1,6 @@
 using System.Globalization;
 using ToonNet.Core.Models;
+using System.Text;
 
 namespace ToonNet.Core.Parsing;
 
@@ -57,6 +58,60 @@ public sealed class ToonParser(ToonOptions? options = null)
 
         var root = ParseValue(0);
         return new ToonDocument(root);
+    }
+
+    /// <summary>
+    ///     Asynchronously parses a TOON format string into a document.
+    /// </summary>
+    /// <param name="input">The TOON format string to parse.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous parse operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public async Task<ToonDocument> ParseAsync(string input, CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Parse(input);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously parses a TOON document from a file.
+    /// </summary>
+    /// <param name="filePath">The file path to read from.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous parse operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public async Task<ToonDocument> ParseFromFileAsync(string filePath, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filePath);
+        
+        var input = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken);
+        return await ParseAsync(input, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously parses a TOON document from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read from.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous parse operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public async Task<ToonDocument> ParseFromStreamAsync(Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        
+        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        var input = await reader.ReadToEndAsync(cancellationToken);
+        return await ParseAsync(input, cancellationToken);
     }
 
     #endregion

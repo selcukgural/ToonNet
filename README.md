@@ -14,7 +14,7 @@
 *Modern data serialization for .NET*
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Tests](https://img.shields.io/badge/tests-413%20passing-success?style=flat)](FINAL_STATUS.md)
+[![Tests](https://img.shields.io/badge/tests-437%20passing-success?style=flat)](FINAL_STATUS.md)
 [![Coverage](https://img.shields.io/badge/coverage-75.9%25-brightgreen?style=flat)](COVERAGE_REPORT.md)
 [![Spec Compliance](https://img.shields.io/badge/TOON%20v3.0-100%25%20compliant-blue?style=flat)](ToonSpec.md)
 
@@ -32,7 +32,7 @@ project:
     - 🤖 AI-ready clean syntax
     - 📖 Human-readable format
   stats:
-    tests: 413
+    tests: 437
     coverage: 75.9%
     spec_compliance: 100%
     status: production-ready
@@ -643,7 +643,7 @@ options.Delimiter = '\t';        // Tab not allowed
 ## 🧪 Testing & Quality
 
 ```
-✅ 413/413 tests passing (100%)
+✅ 437/437 tests passing (100%)
 ✅ 75.9% code coverage (ToonNet.Core)
 ✅ 100% TOON v3.0 spec compliance
 ✅ Zero known bugs
@@ -732,6 +732,79 @@ public partial class User
 
 ---
 
+## 🔄 Async APIs
+
+ToonNet supports comprehensive async operations for high-performance applications with proper cancellation token support:
+
+### Serialization
+```csharp
+using ToonNet.Core.Serialization;
+
+// Async serialization
+var toonString = await ToonSerializer.SerializeAsync(user, cancellationToken: ct);
+
+// Async file operations
+await ToonSerializer.SerializeToFileAsync(user, "data.toon", cancellationToken: ct);
+await ToonSerializer.SerializeCollectionToFileAsync(users, "users.toon", cancellationToken: ct);
+
+// Async stream operations  
+await ToonSerializer.SerializeToStreamAsync(user, stream, cancellationToken: ct);
+
+// Async deserialization
+var user = await ToonSerializer.DeserializeAsync<User>(toonString, cancellationToken: ct);
+var user = await ToonSerializer.DeserializeFromFileAsync<User>("data.toon", cancellationToken: ct);
+var user = await ToonSerializer.DeserializeFromStreamAsync<User>(stream, cancellationToken: ct);
+```
+
+### Streaming Deserialization
+Perfect for processing large files with multiple TOON documents:
+
+```csharp
+// Stream through multiple objects efficiently
+await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("large-file.toon", ct))
+{
+    if (user != null)
+    {
+        Console.WriteLine($"Processing user: {user.Name}");
+        // Process each user without loading entire file into memory
+    }
+}
+```
+
+### Parsing & Encoding
+```csharp
+using ToonNet.Core.Parsing;
+using ToonNet.Core.Encoding;
+
+// Async parsing
+var parser = new ToonParser();
+var doc = await parser.ParseAsync(toonString, cancellationToken: ct);
+var doc = await parser.ParseFromFileAsync("config.toon", cancellationToken: ct);
+var doc = await parser.ParseFromStreamAsync(stream, cancellationToken: ct);
+
+// Async encoding
+var encoder = new ToonEncoder();
+var toonString = await encoder.EncodeAsync(doc, cancellationToken: ct);
+await encoder.EncodeToFileAsync(doc, "output.toon", cancellationToken: ct);
+await encoder.EncodeToStreamAsync(doc, stream, cancellationToken: ct);
+```
+
+### Features
+- ✅ **Full cancellation support** - All methods accept `CancellationToken`
+- ✅ **Memory efficient** - Streaming operations for large files
+- ✅ **Collection support** - Serialize multiple objects with blank line separation
+- ✅ **File & stream operations** - Work directly with files and streams
+- ✅ **Thread-safe** - All async operations are thread-safe
+- ✅ **Task.Run wrapping** - CPU-bound operations properly offloaded
+
+**Use cases:**
+- 📡 **Web APIs** - Non-blocking request processing
+- 📁 **Large files** - Memory-efficient streaming processing
+- 🔄 **Background tasks** - Cancellable serialization operations
+- ⚡ **High throughput** - Concurrent processing with proper resource management
+
+---
+
 ## 📖 Documentation
 
 | Document | Description |
@@ -747,7 +820,7 @@ public partial class User
 
 We welcome contributions! Please follow these guidelines:
 
-1. ✅ **Tests must pass** - All 413 tests must remain green
+1. ✅ **Tests must pass** - All 437 tests must remain green
 2. 📝 **Add tests** - New features need test coverage
 3. 📚 **Document** - Update README if adding user-facing features
 4. 🎨 **Code style** - Follow existing C# conventions

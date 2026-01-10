@@ -203,6 +203,12 @@ public static class ToonSerializer
             return false;
         }
 
+        // IDictionary also implements IEnumerable. Dictionaries must be serialized as objects, not arrays.
+        if (value is IDictionary)
+        {
+            return false;
+        }
+
         var array = new ToonArray();
 
         foreach (var item in enumerable)
@@ -760,4 +766,319 @@ public static class ToonSerializer
     }
 
     #endregion
+
+    #region Async APIs
+
+    /// <summary>
+    ///     Asynchronously serializes an object to TOON format string.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize.</typeparam>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous serialization operation.</returns>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public static async Task<string> SerializeAsync<T>(T? value, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Serialize(value, options);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously deserializes a TOON format string to an object.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="toonString">The TOON format string to deserialize.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous deserialization operation.</returns>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public static async Task<T?> DeserializeAsync<T>(string toonString, ToonSerializerOptions? options = null,
+                                                     CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Deserialize<T>(toonString, options);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes an object and writes it to a file.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize.</typeparam>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="filePath">The file path to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when file I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public static async Task SerializeToFileAsync<T>(T? value, string filePath, ToonSerializerOptions? options = null,
+                                                     CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filePath);
+
+        var toonString = await SerializeAsync(value, options, cancellationToken);
+
+        await File.WriteAllTextAsync(filePath, toonString, System.Text.Encoding.UTF8, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously reads a file and deserializes its contents to an object.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="filePath">The file path to read from.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous read and deserialization operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public static async Task<T?> DeserializeFromFileAsync<T>(string filePath, ToonSerializerOptions? options = null,
+                                                             CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filePath);
+
+        var toonString = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken);
+
+        return await DeserializeAsync<T>(toonString, options, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes an object and writes it to a stream.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize.</typeparam>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the stream is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public static async Task SerializeToStreamAsync<T>(T? value, Stream stream, ToonSerializerOptions? options = null,
+                                                       CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+
+        var toonString = await SerializeAsync(value, options, cancellationToken);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(toonString);
+
+        await stream.WriteAsync(bytes, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously reads from a stream and deserializes the content to an object.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="stream">The stream to read from.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous read and deserialization operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the stream is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public static async Task<T?> DeserializeFromStreamAsync<T>(Stream stream, ToonSerializerOptions? options = null,
+                                                               CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+
+        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        var toonString = await reader.ReadToEndAsync(cancellationToken);
+
+        return await DeserializeAsync<T>(toonString, options, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously deserializes a stream of TOON objects from a file.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="filePath">The file path to read from.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>An async enumerable of deserialized objects.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method assumes the file contains multiple TOON objects separated by blank lines.
+    ///     Each object is parsed and yielded individually, making it memory-efficient for large files.
+    /// </remarks>
+    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options = null,
+                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filePath);
+
+        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+        using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
+
+        await foreach (var item in DeserializeStreamAsync<T>(reader, options, cancellationToken))
+        {
+            yield return item;
+        }
+    }
+
+    /// <summary>
+    ///     Asynchronously deserializes a stream of TOON objects from a StreamReader.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="reader">The StreamReader to read from.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>An async enumerable of deserialized objects.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the reader is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method assumes the stream contains multiple TOON objects separated by blank lines.
+    ///     Each object is parsed and yielded individually, making it memory-efficient for large streams.
+    /// </remarks>
+    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options = null,
+                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+
+        var currentObject = new StringBuilder();
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // If we hit a blank line, process the current object
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                if (currentObject.Length <= 0)
+                {
+                    continue;
+                }
+
+                var toonString = currentObject.ToString();
+                currentObject.Clear();
+
+                // Parse and yield the object
+                var obj = await DeserializeAsync<T>(toonString, options, cancellationToken);
+                yield return obj;
+            }
+            else
+            {
+                currentObject.AppendLine(line);
+            }
+        }
+
+        if (currentObject.Length <= 0)
+        {
+            yield break;
+        }
+
+        // Process the last object if the file doesn't end with a blank line
+        var lastToonString = currentObject.ToString();
+        var lastObj = await DeserializeAsync<T>(lastToonString, options, cancellationToken);
+        yield return lastObj;
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a collection of objects to a file with each object separated by a blank line.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to serialize.</typeparam>
+    /// <param name="values">The collection of values to serialize.</param>
+    /// <param name="filePath">The file path to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when values or filePath is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when file I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method writes each object as a separate TOON document, separated by blank lines.
+    ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
+    /// </remarks>
+    public static async Task SerializeCollectionToFileAsync<T>(IEnumerable<T> values, string filePath, ToonSerializerOptions? options = null,
+                                                               CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(filePath);
+
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+        await using var writer = new StreamWriter(fileStream, System.Text.Encoding.UTF8);
+
+        var isFirst = true;
+
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Add a blank line separator between objects (but not before the first)
+            if (!isFirst)
+            {
+                await writer.WriteLineAsync(); // End previous object
+                await writer.WriteLineAsync(); // End previous object // Add blank line
+            }
+
+            var toonString = await SerializeAsync(value, options, cancellationToken);
+            await writer.WriteAsync(toonString);
+
+            isFirst = false;
+        }
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a collection of objects to a stream with each object separated by a blank line.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to serialize.</typeparam>
+    /// <param name="values">The collection of values to serialize.</param>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when values or stream is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method writes each object as a separate TOON document, separated by blank lines.
+    ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
+    /// </remarks>
+    public static async Task SerializeCollectionToStreamAsync<T>(IEnumerable<T> values, Stream stream, ToonSerializerOptions? options = null,
+                                                                 CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(stream);
+
+        await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        var isFirst = true;
+
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Add a blank line separator between objects (but not before the first)
+            if (!isFirst)
+            {
+                await writer.WriteLineAsync(); // End previous object
+            }
+
+            var toonString = await SerializeAsync(value, options, cancellationToken);
+            await writer.WriteAsync(toonString);
+
+            isFirst = false;
+        }
+    }
+
+    #endregion
 }
+

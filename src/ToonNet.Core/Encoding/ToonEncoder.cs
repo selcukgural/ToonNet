@@ -639,4 +639,58 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
         _sb.Append(new string(' ', indentLevel));
     }
+
+    /// <summary>
+    ///     Asynchronously encodes a TOON document into its string representation.
+    /// </summary>
+    /// <param name="document">The document to encode.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous encoding operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when document is null.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public async Task<string> EncodeAsync(ToonDocument document, CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Encode(document);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously encodes a TOON document and writes it to a file.
+    /// </summary>
+    /// <param name="document">The document to encode.</param>
+    /// <param name="filePath">The file path to write to.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous encoding and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when document or filePath is null.</exception>
+    /// <exception cref="IOException">Thrown when file I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public async Task EncodeToFileAsync(ToonDocument document, string filePath, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filePath);
+        
+        var encodedString = await EncodeAsync(document, cancellationToken);
+        await File.WriteAllTextAsync(filePath, encodedString, System.Text.Encoding.UTF8, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously encodes a TOON document and writes it to a stream.
+    /// </summary>
+    /// <param name="document">The document to encode.</param>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous encoding and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when document or stream is null.</exception>
+    /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    public async Task EncodeToStreamAsync(ToonDocument document, Stream stream, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        
+        var encodedString = await EncodeAsync(document, cancellationToken);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(encodedString);
+        await stream.WriteAsync(bytes, cancellationToken);
+    }
 }
