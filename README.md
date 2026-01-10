@@ -1,23 +1,41 @@
-# 🎨 ToonNet
+<div align="center">
 
-> **A modern, human-readable serialization format for .NET - Simple as JSON, Powerful as YAML**
+```
+    ╔══════════════════════════════════════════════════════╗
+    ║                                                      ║
+    ║        ▀█▀ █▀█ █▀█ █▄░█   █▄░█ █▀▀ ▀█▀             ║
+    ║        ░█░ █▄█ █▄█ █░▀█ • █░▀█ ██▄ ░█░             ║
+    ║                                                      ║
+    ╚══════════════════════════════════════════════════════╝
+```
+
+**⚡ Lightning-Fast • 🤖 AI-Ready • 📖 Human-First**
+
+*Modern data serialization for .NET*
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
 [![Tests](https://img.shields.io/badge/tests-267%20passing-success?style=flat)](FINAL_STATUS.md)
 [![Coverage](https://img.shields.io/badge/coverage-75.9%25-brightgreen?style=flat)](COVERAGE_REPORT.md)
 [![Spec Compliance](https://img.shields.io/badge/TOON%20v3.0-100%25%20compliant-blue?style=flat)](ToonSpec.md)
 
+</div>
+
+---
+
 ```toon
-name: ToonNet
-description: Human-readable data serialization format
-features[3]:
-  - Clean, minimal syntax
-  - Type-safe serialization
-  - Zero-reflection code generation
-stats:
-  tests: 267
-  coverage: 75.9%
-  performance: 3-5x faster than reflection
+# ToonNet itself, described in TOON format
+project:
+  name: ToonNet
+  tagline: Lightning-fast data serialization for .NET
+  why[3]:
+    - ⚡ 3-5x faster than reflection
+    - 🤖 AI-ready clean syntax
+    - 📖 Human-readable format
+  stats:
+    tests: 267
+    coverage: 75.9%
+    spec_compliance: 100%
+    status: production-ready
 ```
 
 ---
