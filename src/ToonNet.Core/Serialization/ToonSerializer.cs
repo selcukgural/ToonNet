@@ -12,8 +12,13 @@ namespace ToonNet.Core.Serialization;
 public static class ToonSerializer
 {
     /// <summary>
-    /// Serializes an object to TOON string.
+    /// Serializes an object to TOON format string.
     /// </summary>
+    /// <typeparam name="T">The type of object to serialize.</typeparam>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <returns>The TOON format string representation of the object.</returns>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     public static string Serialize<T>(T? value, ToonSerializerOptions? options = null)
     {
         options ??= ToonSerializerOptions.Default;
@@ -26,16 +31,26 @@ public static class ToonSerializer
     }
 
     /// <summary>
-    /// Deserializes TOON string to an object.
+    /// Deserializes a TOON format string to an object.
     /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="toonString">The TOON format string to deserialize.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The deserialized object, or null if the input is null.</returns>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     public static T? Deserialize<T>(string toonString, ToonSerializerOptions? options = null)
     {
         return (T?)Deserialize(toonString, typeof(T), options);
     }
 
     /// <summary>
-    /// Deserializes TOON string to an object of the specified type.
+    /// Deserializes a TOON format string to an object of the specified type.
     /// </summary>
+    /// <param name="toonString">The TOON format string to deserialize.</param>
+    /// <param name="type">The target type to deserialize to.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The deserialized object, or null if the input is null.</returns>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     public static object? Deserialize(string toonString, Type type, ToonSerializerOptions? options = null)
     {
         options ??= ToonSerializerOptions.Default;
@@ -48,6 +63,15 @@ public static class ToonSerializer
 
     #region Serialization
 
+    /// <summary>
+    /// Serializes a value to its TOON representation.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="type">The type of the value.</param>
+    /// <param name="options">Serialization options.</param>
+    /// <param name="depth">The current serialization depth.</param>
+    /// <returns>A ToonValue representing the serialized value.</returns>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails or depth exceeded.</exception>
     private static ToonValue? SerializeValue(object? value, Type type, ToonSerializerOptions options, int depth)
     {
         if (depth > options.MaxDepth)
@@ -310,6 +334,15 @@ public static class ToonSerializer
 
     #region Deserialization
 
+    /// <summary>
+    /// Deserializes a ToonValue to a C# object.
+    /// </summary>
+    /// <param name="value">The ToonValue to deserialize.</param>
+    /// <param name="targetType">The target C# type.</param>
+    /// <param name="options">Deserialization options.</param>
+    /// <param name="depth">The current deserialization depth.</param>
+    /// <returns>The deserialized object, or null if the value is null.</returns>
+    /// <exception cref="ToonParseException">Thrown when deserialization fails or depth exceeded.</exception>
     private static object? DeserializeValue(ToonValue value, Type targetType, ToonSerializerOptions options, int depth)
     {
         while (true)

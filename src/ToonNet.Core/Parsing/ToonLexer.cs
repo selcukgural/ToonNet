@@ -13,16 +13,30 @@ public sealed class ToonLexer
     private int _line = 1;
     private int _column = 1;
 
+    /// <summary>
+    /// Creates a new lexer for the specified input string.
+    /// </summary>
+    /// <param name="input">The TOON format string to tokenize.</param>
+    /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
     public ToonLexer(string input)
     {
+        ArgumentNullException.ThrowIfNull(input);
         _input = input.AsMemory();
     }
 
+    /// <summary>
+    /// Creates a new lexer for the specified input memory.
+    /// </summary>
+    /// <param name="input">The TOON format memory to tokenize.</param>
     public ToonLexer(ReadOnlyMemory<char> input)
     {
         _input = input;
     }
 
+    /// <summary>
+    /// Tokenizes the input into a list of TOON tokens.
+    /// </summary>
+    /// <returns>A list of tokens representing the input.</returns>
     public List<ToonToken> Tokenize()
     {
         var tokens = new List<ToonToken>();
@@ -127,6 +141,11 @@ public sealed class ToonLexer
             startColumn);
     }
 
+    /// <summary>
+    /// Reads an array length token (e.g., "[3]").
+    /// </summary>
+    /// <returns>An array length token.</returns>
+    /// <exception cref="ToonParseException">Thrown when array length is not properly terminated.</exception>
     private ToonToken ReadArrayLength()
     {
         var startLine = _line;
@@ -179,6 +198,11 @@ public sealed class ToonLexer
         return new ToonToken(ToonTokenType.ArrayFields, value, startLine, startColumn);
     }
 
+    /// <summary>
+    /// Reads a quoted string token with escape sequence handling.
+    /// </summary>
+    /// <returns>A quoted string token.</returns>
+    /// <exception cref="ToonParseException">Thrown when string is not properly terminated.</exception>
     private ToonToken ReadQuotedString()
     {
         var startLine = _line;

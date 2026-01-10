@@ -1,4 +1,5 @@
 using ToonNet.Core.Serialization;
+using Xunit;
 using Xunit.Abstractions;
 
 namespace ToonNet.Tests.Serialization;

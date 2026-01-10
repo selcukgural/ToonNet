@@ -23,10 +23,14 @@ public class ToonException : Exception
         var result = base.ToString();
         
         if (!string.IsNullOrEmpty(Suggestion))
+        {
             result += $"\n\n💡 Suggestion: {Suggestion}";
+        }
             
         if (!string.IsNullOrEmpty(CodeSnippet))
+        {
             result += $"\n\n📝 Code:\n{CodeSnippet}";
+        }
             
         return result;
     }
@@ -60,6 +64,14 @@ public sealed class ToonParseException : ToonException
     /// <summary>
     /// Creates a parse exception with detailed context.
     /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="line">The line number where the error occurred.</param>
+    /// <param name="column">The column number where the error occurred.</param>
+    /// <param name="actual">Optional actual token that was encountered.</param>
+    /// <param name="expected">Optional expected token type.</param>
+    /// <param name="suggestion">Optional suggestion for fixing the error.</param>
+    /// <param name="codeSnippet">Optional code snippet showing the problematic area.</param>
+    /// <returns>A new ToonParseException instance.</returns>
     public static ToonParseException Create(
         string message, 
         int line, 
@@ -97,6 +109,11 @@ public sealed class ToonEncodingException : ToonException
     /// <summary>
     /// Creates an encoding exception with context.
     /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="propertyPath">The optional path to the problematic property.</param>
+    /// <param name="problematicValue">The value that caused the encoding error.</param>
+    /// <param name="suggestion">Optional suggestion for fixing the error.</param>
+    /// <returns>A new ToonEncodingException instance.</returns>
     public static ToonEncodingException Create(
         string message,
         string? propertyPath = null,
@@ -139,6 +156,12 @@ public sealed class ToonSerializationException : ToonException
     /// <summary>
     /// Creates a serialization exception with context.
     /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="targetType">The target type being serialized/deserialized.</param>
+    /// <param name="propertyName">The property name, if applicable.</param>
+    /// <param name="value">The value that caused the error.</param>
+    /// <param name="suggestion">Optional suggestion for fixing the error.</param>
+    /// <returns>A new ToonSerializationException instance.</returns>
     public static ToonSerializationException Create(
         string message,
         Type? targetType = null,

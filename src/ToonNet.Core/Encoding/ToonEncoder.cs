@@ -11,7 +11,17 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
     private readonly StringBuilder _sb = new();
     private int _depth;
+    
+    // Cache for indent strings to avoid allocations in hot paths
+    private static readonly string[] IndentCache = 
+        Enumerable.Range(0, 32).Select(i => new string(' ', i * 2)).ToArray();
 
+    /// <summary>
+    /// Encodes a TOON document into its string representation.
+    /// </summary>
+    /// <param name="document">The document to encode.</param>
+    /// <returns>The encoded TOON format string.</returns>
+    /// <exception cref="ToonEncodingException">Thrown when encoding exceeds maximum depth.</exception>
     public string Encode(ToonDocument document)
     {
         _sb.Clear();
@@ -22,6 +32,12 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         return _sb.ToString();
     }
 
+    /// <summary>
+    /// Encodes a ToonValue into the string builder.
+    /// </summary>
+    /// <param name="value">The value to encode.</param>
+    /// <param name="indentLevel">The current indentation level.</param>
+    /// <exception cref="ToonEncodingException">Thrown when encoding exceeds maximum depth.</exception>
     private void EncodeValue(ToonValue value, int indentLevel)
     {
         if (_depth > _options.MaxDepth)
@@ -269,9 +285,26 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
     private void WriteIndent(int indentLevel)
     {
-        if (indentLevel > 0)
+        if (indentLevel <= 0)
         {
-            _sb.Append(new string(' ', indentLevel));
+            return;
         }
+
+        if (indentLevel < IndentCache.Length * 2)
+        {
+            // For commonly-used indent levels, use cache when possible
+            var cacheIndex = indentLevel / 2;
+            if (cacheIndex > 0 && cacheIndex < IndentCache.Length)
+            {
+                _sb.Append(IndentCache[cacheIndex]);
+                if (indentLevel % 2 == 1)
+                {
+                    _sb.Append(' ');
+                }
+                return;
+            }
+        }
+        
+        _sb.Append(new string(' ', indentLevel));
     }
 }

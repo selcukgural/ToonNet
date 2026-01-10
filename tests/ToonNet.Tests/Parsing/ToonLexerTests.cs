@@ -1,5 +1,7 @@
+using System.Linq;
 using ToonNet.Core.Parsing;
 using ToonNet.Core.Models;
+using Xunit;
 
 namespace ToonNet.Tests.Parsing;
 

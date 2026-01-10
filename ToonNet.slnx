@@ -1,6 +1,10 @@
 <Solution>
+  <Folder Name="/benchmark/">
+    <Project Path="src/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/ToonNet.Core/ToonNet.Core.csproj" />
+    <Project Path="src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="tests/ToonNet.Tests/ToonNet.Tests.csproj" />

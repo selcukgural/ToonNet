@@ -1,3 +1,4 @@
+using System;
 using ToonNet.Core;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;

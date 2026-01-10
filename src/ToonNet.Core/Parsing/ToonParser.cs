@@ -11,6 +11,12 @@ public sealed class ToonParser(ToonOptions? options = null)
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
     private int _position;
 
+    /// <summary>
+    /// Parses a TOON format string into a document.
+    /// </summary>
+    /// <param name="input">The TOON format string to parse.</param>
+    /// <returns>A ToonDocument representing the parsed input.</returns>
+    /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
     public ToonDocument Parse(string input)
     {
         var lexer = new ToonLexer(input);
@@ -22,6 +28,12 @@ public sealed class ToonParser(ToonOptions? options = null)
         return new ToonDocument(root);
     }
 
+    /// <summary>
+    /// Parses a list of TOON tokens into a document.
+    /// </summary>
+    /// <param name="tokens">The tokens to parse.</param>
+    /// <returns>A ToonDocument representing the parsed tokens.</returns>
+    /// <exception cref="ToonParseException">Thrown when the tokens are invalid.</exception>
     public ToonDocument Parse(List<ToonToken> tokens)
     {
         _tokens.Clear();
@@ -37,7 +49,9 @@ public sealed class ToonParser(ToonOptions? options = null)
         SkipNewlines();
 
         if (IsAtEnd())
+        {
             return new ToonObject();
+        }
 
         var token = Peek();
 
@@ -55,6 +69,12 @@ public sealed class ToonParser(ToonOptions? options = null)
         };
     }
 
+    /// <summary>
+    /// Parses an object from the token stream.
+    /// </summary>
+    /// <param name="indentLevel">The current indentation level.</param>
+    /// <returns>A ToonObject containing the parsed key-value pairs.</returns>
+    /// <exception cref="ToonParseException">Thrown when the object structure is invalid.</exception>
     private ToonObject ParseObject(int indentLevel)
     {
         var obj = new ToonObject();
@@ -163,14 +183,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 {
                     // Simple value
                     var valueToken = Advance();
-                    if (valueToken.Type == ToonTokenType.QuotedString)
-                    {
-                        value = new ToonString(valueToken.Value.ToString());
-                    }
-                    else
-                    {
-                        value = ParsePrimitiveValue(valueToken.Value);
-                    }
+                    value = ParseValueToken(valueToken);
                 }
             }
             else
@@ -229,9 +242,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 
                 // Read first value
                 var firstToken = Advance();
-                rowValues.Add(firstToken.Type == ToonTokenType.QuotedString 
-                    ? new ToonString(firstToken.Value.ToString())
-                    : ParsePrimitiveValue(firstToken.Value));
+                rowValues.Add(ParseValueToken(firstToken));
 
                 // Read the remaining values
                 while (Peek().Type == ToonTokenType.Comma)
@@ -241,9 +252,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                     if (IsValueToken(Peek().Type))
                     {
                         var token = Advance();
-                        rowValues.Add(token.Type == ToonTokenType.QuotedString
-                            ? new ToonString(token.Value.ToString())
-                            : ParsePrimitiveValue(token.Value));
+                        rowValues.Add(ParseValueToken(token));
                     }
                 }
 
@@ -302,9 +311,7 @@ public sealed class ToonParser(ToonOptions? options = null)
         if (IsValueToken(Peek().Type))
         {
             var token = Advance();
-            values.Add(token.Type == ToonTokenType.QuotedString
-                ? new ToonString(token.Value.ToString())
-                : ParsePrimitiveValue(token.Value));
+            values.Add(ParseValueToken(token));
         }
 
         // Read the remaining values (separated by commas)
@@ -315,9 +322,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             if (IsValueToken(Peek().Type))
             {
                 var token = Advance();
-                values.Add(token.Type == ToonTokenType.QuotedString
-                    ? new ToonString(token.Value.ToString())
-                    : ParsePrimitiveValue(token.Value));
+                values.Add(ParseValueToken(token));
             }
             else
             {
@@ -338,9 +343,7 @@ public sealed class ToonParser(ToonOptions? options = null)
         if (IsValueToken(Peek().Type))
         {
             var token = Advance();
-            values.Add(token.Type == ToonTokenType.QuotedString
-                ? new ToonString(token.Value.ToString())
-                : ParsePrimitiveValue(token.Value));
+            values.Add(ParseValueToken(token));
         }
 
         // Read the remaining values (separated by commas)
@@ -351,9 +354,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             if (IsValueToken(Peek().Type))
             {
                 var token = Advance();
-                values.Add(token.Type == ToonTokenType.QuotedString
-                    ? new ToonString(token.Value.ToString())
-                    : ParsePrimitiveValue(token.Value));
+                values.Add(ParseValueToken(token));
             }
             else
             {
@@ -393,9 +394,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 if (IsValueToken(Peek().Type))
                 {
                     var valueToken = Advance();
-                    array.Items.Add(valueToken.Type == ToonTokenType.QuotedString
-                        ? new ToonString(valueToken.Value.ToString())
-                        : ParsePrimitiveValue(valueToken.Value));
+                    array.Items.Add(ParseValueToken(valueToken));
                 }
                 else if (Peek().Type == ToonTokenType.Newline)
                 {
@@ -416,6 +415,18 @@ public sealed class ToonParser(ToonOptions? options = null)
         }
 
         return array;
+    }
+
+    /// <summary>
+    /// Parses a value token (either quoted string or primitive).
+    /// </summary>
+    /// <param name="token">The token to parse.</param>
+    /// <returns>A ToonValue representing the token.</returns>
+    private static ToonValue ParseValueToken(ToonToken token)
+    {
+        return token.Type == ToonTokenType.QuotedString
+            ? new ToonString(token.Value.ToString())
+            : ParsePrimitiveValue(token.Value);
     }
 
     private static ToonValue ParsePrimitiveValue(ReadOnlyMemory<char> valueMemory)

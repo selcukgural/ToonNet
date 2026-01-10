@@ -1,5 +1,6 @@
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
+using Xunit;
 
 namespace ToonNet.Tests.Serialization;
 

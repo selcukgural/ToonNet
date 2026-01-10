@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using ToonNet.Core.Models;
 using Xunit;
 
