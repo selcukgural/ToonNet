@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.CodeAnalysis;
 using ToonNet.SourceGenerators.Analysis;
 using ToonNet.SourceGenerators.Utilities;
@@ -5,12 +6,12 @@ using ToonNet.SourceGenerators.Utilities;
 namespace ToonNet.SourceGenerators.Generators;
 
 /// <summary>
-/// Generates the static Serialize method for ToonSerializable classes.
+///     Generates the static Serialize method for ToonSerializable classes.
 /// </summary>
 internal static class SerializeMethodGenerator
 {
     /// <summary>
-    /// Generates a complete Serialize method implementation.
+    ///     Generates a complete Serialize method implementation.
     /// </summary>
     public static string Generate(ClassInfo classInfo)
     {
@@ -63,12 +64,9 @@ internal static class SerializeMethodGenerator
     }
 
     /// <summary>
-    /// Generates serialization code for a single property.
+    ///     Generates serialization code for a single property.
     /// </summary>
-    private static void GeneratePropertySerialization(
-        CodeBuilder code,
-        PropertyInfo prop,
-        ClassInfo classInfo)
+    private static void GeneratePropertySerialization(CodeBuilder code, PropertyInfo prop, ClassInfo classInfo)
     {
         var propName = prop.Name;
         var serializedName = GetSerializedPropertyName(prop, classInfo);
@@ -97,13 +95,9 @@ internal static class SerializeMethodGenerator
     }
 
     /// <summary>
-    /// Generates the actual property serialization logic.
+    ///     Generates the actual property serialization logic.
     /// </summary>
-    private static void GeneratePropertyValueSerialization(
-        CodeBuilder code,
-        PropertyInfo prop,
-        string serializedName,
-        string propName)
+    private static void GeneratePropertyValueSerialization(CodeBuilder code, PropertyInfo prop, string serializedName, string propName)
     {
         var typeName = prop.Type.ToDisplayString();
 
@@ -140,13 +134,9 @@ internal static class SerializeMethodGenerator
     }
 
     /// <summary>
-    /// Generates serialization for simple types (string, int, double, bool, etc).
+    ///     Generates serialization for simple types (string, int, double, bool, etc).
     /// </summary>
-    private static void GenerateSimpleTypeSerialization(
-        CodeBuilder code,
-        PropertyInfo prop,
-        string serializedName,
-        string propName)
+    private static void GenerateSimpleTypeSerialization(CodeBuilder code, PropertyInfo prop, string serializedName, string propName)
     {
         var typeName = prop.Type.ToDisplayString();
 
@@ -170,13 +160,15 @@ internal static class SerializeMethodGenerator
     }
 
     /// <summary>
-    /// Gets the serialized property name (respecting naming policy and custom names).
+    ///     Gets the serialized property name (respecting naming policy and custom names).
     /// </summary>
     private static string GetSerializedPropertyName(PropertyInfo prop, ClassInfo classInfo)
     {
         // Custom name takes priority
         if (!string.IsNullOrEmpty(prop.CustomName))
+        {
             return prop.CustomName;
+        }
 
         // Apply naming policy
         var namingPolicy = GetNamingPolicy(classInfo.Attribute);
@@ -184,25 +176,30 @@ internal static class SerializeMethodGenerator
     }
 
     /// <summary>
-    /// Extracts the naming policy from the [ToonSerializable] attribute.
+    ///     Extracts the naming policy from the [ToonSerializable] attribute.
     /// </summary>
     private static PropertyNamingPolicy GetNamingPolicy(AttributeData? attribute)
     {
         if (attribute is null)
+        {
             return PropertyNamingPolicy.Default;
+        }
 
         var namedArgs = attribute.NamedArguments;
+
         foreach (var arg in namedArgs)
         {
             if (arg.Key == "NamingPolicy" && arg.Value.Value is int policy)
+            {
                 return (PropertyNamingPolicy)policy;
+            }
         }
 
         return PropertyNamingPolicy.Default;
     }
 
     /// <summary>
-    /// Applies a naming policy to a property name.
+    ///     Applies a naming policy to a property name.
     /// </summary>
     private static string ApplyNamingPolicy(string name, PropertyNamingPolicy policy)
     {
@@ -211,64 +208,80 @@ internal static class SerializeMethodGenerator
             PropertyNamingPolicy.CamelCase => ToCamelCase(name),
             PropertyNamingPolicy.SnakeCase => ToSnakeCase(name),
             PropertyNamingPolicy.LowerCase => name.ToLowerInvariant(),
-            _ => name
+            _                              => name
         };
     }
 
     private static string ToCamelCase(string name)
     {
-        if (string.IsNullOrEmpty(name)) return name;
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+
         return char.ToLowerInvariant(name[0]) + name.Substring(1);
     }
 
     private static string ToSnakeCase(string name)
     {
-        if (string.IsNullOrEmpty(name)) return name;
-        var result = new System.Text.StringBuilder();
-        for (int i = 0; i < name.Length; i++)
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+
+        var result = new StringBuilder();
+
+        for (var i = 0; i < name.Length; i++)
         {
             if (char.IsUpper(name[i]) && i > 0)
+            {
                 result.Append('_');
+            }
+
             result.Append(char.ToLowerInvariant(name[i]));
         }
+
         return result.ToString();
     }
 
     /// <summary>
-    /// Checks if a type is a simple/primitive type.
+    ///     Checks if a type is a simple/primitive type.
     /// </summary>
     private static bool IsSimpleType(ITypeSymbol type)
     {
         var name = type.ToDisplayString();
-        return name is "string" or "int" or "long" or "double" or "decimal"
-            or "bool" or "float" or "byte" or "short" or "uint" or "ulong"
-            or "System.String" or "System.Int32" or "System.Int64" or "System.Double"
-            or "System.Decimal" or "System.Boolean" or "System.Single" or "System.Byte"
-            or "System.Int16" or "System.UInt32" or "System.UInt64";
+
+        return name is "string" or "int" or "long" or "double" or "decimal" or "bool" or "float" or "byte" or "short" or "uint" or "ulong"
+                       or "System.String" or "System.Int32" or "System.Int64" or "System.Double" or "System.Decimal" or "System.Boolean"
+                       or "System.Single" or "System.Byte" or "System.Int16" or "System.UInt32" or "System.UInt64";
     }
 
     /// <summary>
-    /// Checks if a type is a numeric type.
+    ///     Checks if a type is a numeric type.
     /// </summary>
     private static bool IsNumericType(string typeName)
     {
-        return typeName is "int" or "long" or "double" or "decimal" or "float" or "byte" or "short"
-            or "uint" or "ulong" or "System.Int32" or "System.Int64" or "System.Double"
-            or "System.Decimal" or "System.Single" or "System.Byte" or "System.Int16"
-            or "System.UInt32" or "System.UInt64";
+        return typeName is "int" or "long" or "double" or "decimal" or "float" or "byte" or "short" or "uint" or "ulong" or "System.Int32"
+                           or "System.Int64" or "System.Double" or "System.Decimal" or "System.Single" or "System.Byte" or "System.Int16"
+                           or "System.UInt32" or "System.UInt64";
     }
 
     /// <summary>
-    /// Checks if a type is a collection type (array, List, IEnumerable, etc).
+    ///     Checks if a type is a collection type (array, List, IEnumerable, etc).
     /// </summary>
     private static bool IsCollectionType(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol)
+        {
             return true;
+        }
 
         var name = type.Name;
+
         if (name is "List" or "Array" or "IEnumerable" or "ICollection" or "IList")
+        {
             return true;
+        }
 
         // Check interfaces
         if (type is INamedTypeSymbol namedType)
@@ -276,7 +289,9 @@ internal static class SerializeMethodGenerator
             foreach (var iface in namedType.AllInterfaces)
             {
                 if (iface.Name is "IEnumerable" or "ICollection" or "IList")
+                {
                     return true;
+                }
             }
         }
 
@@ -284,7 +299,7 @@ internal static class SerializeMethodGenerator
     }
 
     /// <summary>
-    /// Checks if a type is nullable (T?).
+    ///     Checks if a type is nullable (T?).
     /// </summary>
     private static bool IsNullableType(ITypeSymbol type)
     {
@@ -292,7 +307,7 @@ internal static class SerializeMethodGenerator
     }
 
     /// <summary>
-    /// Gets the simple type name for nested [ToonSerializable] classes (they're in same namespace).
+    ///     Gets the simple type name for nested [ToonSerializable] classes (they're in same namespace).
     /// </summary>
     private static string GetTypeNameForNested(ITypeSymbol type)
     {
@@ -300,12 +315,13 @@ internal static class SerializeMethodGenerator
         {
             return namedType.Name;
         }
+
         return type.ToDisplayString();
     }
 }
 
 /// <summary>
-/// Property naming policy enum (defined in ToonSerializerOptions.cs in Core).
+///     Property naming policy enum (defined in ToonSerializerOptions.cs in Core).
 /// </summary>
 public enum PropertyNamingPolicy
 {

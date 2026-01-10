@@ -4,20 +4,20 @@ using ToonNet.Core.Models;
 namespace ToonNet.Core.Parsing;
 
 /// <summary>
-/// Tokenizes TOON format input into a stream of tokens.
+///     Tokenizes TOON format input into a stream of tokens.
 /// </summary>
 /// <remarks>
-/// This is an internal implementation detail. Users should use <see cref="ToonParser"/> instead.
+///     This is an internal implementation detail. Users should use <see cref="ToonParser" /> instead.
 /// </remarks>
 internal sealed class ToonLexer
 {
     private readonly ReadOnlyMemory<char> _input;
-    private int _position;
-    private int _line = 1;
     private int _column = 1;
+    private int _line = 1;
+    private int _position;
 
     /// <summary>
-    /// Creates a new lexer for the specified input string.
+    ///     Creates a new lexer for the specified input string.
     /// </summary>
     /// <param name="input">The TOON format string to tokenize.</param>
     /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
@@ -28,7 +28,7 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    /// Creates a new lexer for the specified input memory.
+    ///     Creates a new lexer for the specified input memory.
     /// </summary>
     /// <param name="input">The TOON format memory to tokenize.</param>
     public ToonLexer(ReadOnlyMemory<char> input)
@@ -37,26 +37,32 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    /// Tokenizes the input into a list of TOON tokens.
+    ///     Tokenizes the input into a list of TOON tokens.
     /// </summary>
     /// <returns>A list of tokens representing the input.</returns>
     public List<ToonToken> Tokenize()
     {
         var tokens = new List<ToonToken>();
-        
+
         while (!IsAtEnd())
         {
             var token = NextToken();
+
             if (token.Type != ToonTokenType.EndOfInput)
             {
                 tokens.Add(token);
             }
         }
-        
+
         tokens.Add(new ToonToken(ToonTokenType.EndOfInput, ReadOnlyMemory<char>.Empty, _line, _column));
         return tokens;
     }
 
+    /// <summary>
+    ///     Reads the next token from the input stream.
+    /// </summary>
+    /// <returns>The next token.</returns>
+    /// <exception cref="ToonParseException">Thrown when an unexpected character is encountered.</exception>
     private ToonToken NextToken()
     {
         while (true)
@@ -89,10 +95,10 @@ internal sealed class ToonLexer
                     }
 
                     Advance();
-                    
+
                     _line++;
                     _column = 1;
-                    
+
                     return new ToonToken(ToonTokenType.Newline, "\n".AsMemory(), startLine, startColumn);
                 }
                 // Indentation (spaces at start of line or after newline)
@@ -126,26 +132,26 @@ internal sealed class ToonLexer
         }
     }
 
+    /// <summary>
+    ///     Reads indentation (spaces) from the input.
+    /// </summary>
+    /// <returns>An indentation token.</returns>
     private ToonToken ReadIndentation()
     {
         var startColumn = _column;
         var count = 0;
-        
+
         while (Peek() == ' ')
         {
             Advance();
             count++;
         }
-        
-        return new ToonToken(
-            ToonTokenType.Indent, 
-            new string(' ', count).AsMemory(), 
-            _line, 
-            startColumn);
+
+        return new ToonToken(ToonTokenType.Indent, new string(' ', count).AsMemory(), _line, startColumn);
     }
 
     /// <summary>
-    /// Reads an array length token (e.g., "[3]").
+    ///     Reads an array length token (e.g., "[3]").
     /// </summary>
     /// <returns>An array length token.</returns>
     /// <exception cref="ToonParseException">Thrown when array length is not properly terminated.</exception>
@@ -154,24 +160,24 @@ internal sealed class ToonLexer
         var startLine = _line;
         var startColumn = _column;
         var startPos = _position;
-        
+
         Advance(); // [
-        
+
         while (!IsAtEnd() && Peek() != ']')
         {
             Advance();
         }
-        
+
         if (IsAtEnd())
         {
             throw new ToonParseException("Unterminated array length", _line, _column);
         }
-        
+
         Advance(); // ]
-        
+
         var length = _position - startPos;
         var value = _input.Slice(startPos, length);
-        
+
         return new ToonToken(ToonTokenType.ArrayLength, value, startLine, startColumn);
     }
 
@@ -180,29 +186,29 @@ internal sealed class ToonLexer
         var startLine = _line;
         var startColumn = _column;
         var startPos = _position;
-        
+
         Advance(); // {
-        
+
         while (!IsAtEnd() && Peek() != '}')
         {
             Advance();
         }
-        
+
         if (IsAtEnd())
         {
             throw new ToonParseException("Unterminated array fields", _line, _column);
         }
-        
+
         Advance(); // }
-        
+
         var length = _position - startPos;
         var value = _input.Slice(startPos, length);
-        
+
         return new ToonToken(ToonTokenType.ArrayFields, value, startLine, startColumn);
     }
 
     /// <summary>
-    /// Reads a quoted string token and determines if it's a key or value.
+    ///     Reads a quoted string token and determines if it's a key or value.
     /// </summary>
     /// <returns>A key or quoted string token depending on what follows.</returns>
     private ToonToken ReadQuotedStringToken()
@@ -210,49 +216,49 @@ internal sealed class ToonLexer
         var startLine = _line;
         var startColumn = _column;
         var stringValue = ReadQuotedStringValue();
-        
+
         // Check what comes after the quoted string to determine if it's a key
         SkipWhitespace();
         var next = Peek();
         var isKey = next is ':' or '[' or '{';
-        
-        return new ToonToken(
-            isKey ? ToonTokenType.Key : ToonTokenType.QuotedString,
-            stringValue.AsMemory(),
-            startLine,
-            startColumn);
+
+        return new ToonToken(isKey ? ToonTokenType.Key : ToonTokenType.QuotedString, stringValue.AsMemory(), startLine, startColumn);
     }
 
     /// <summary>
-    /// Reads the content of a quoted string (without determining token type).
+    ///     Reads the content of a quoted string (without determining token type).
     /// </summary>
     /// <returns>The unescaped string content.</returns>
     /// <exception cref="ToonParseException">Thrown when string is not properly terminated.</exception>
     private string ReadQuotedStringValue()
     {
         var sb = new StringBuilder();
-        
+
         Advance(); // opening "
-        
+
         while (!IsAtEnd() && Peek() != '"')
         {
             var ch = Peek();
-            
+
             if (ch == '\\')
             {
                 Advance();
+
                 if (IsAtEnd())
+                {
                     throw new ToonParseException("Unterminated string", _line, _column);
-                
+                }
+
                 var escaped = Peek();
+
                 sb.Append(escaped switch
                 {
-                    'n' => '\n',
-                    't' => '\t',
-                    'r' => '\r',
-                    '"' => '"',
+                    'n'  => '\n',
+                    't'  => '\t',
+                    'r'  => '\r',
+                    '"'  => '"',
                     '\\' => '\\',
-                    _ => escaped
+                    _    => escaped
                 });
             }
             else
@@ -262,80 +268,87 @@ internal sealed class ToonLexer
 
             Advance();
         }
-        
+
         if (IsAtEnd())
         {
             throw new ToonParseException("Unterminated string", _line, _column);
-        }        
+        }
+
         Advance(); // closing "
-        
+
         return sb.ToString();
     }
 
 
+    /// <summary>
+    ///     Reads a key or value token based on what follows it.
+    /// </summary>
+    /// <returns>A key or value token.</returns>
     private ToonToken ReadKeyOrValue()
     {
         var startLine = _line;
         var startColumn = _column;
-        
+
         // Skip leading whitespace
         while (!IsAtEnd() && Peek() == ' ')
         {
             Advance();
             startColumn = _column;
         }
-        
+
         // If we hit a quoted string after skipping whitespace, parse it as a quoted string token
         if (Peek() == '"')
         {
             return ReadQuotedStringToken();
         }
-        
+
         var startPos = _position;
-        
+
         while (!IsAtEnd())
         {
             var ch = Peek();
-            
+
             // Stop at structural characters
             if (ch is ':' or ',' or '\n' or '\r' or '[' or '{' or ']' or '}' or '"')
             {
                 break;
-            }         
-            
+            }
+
             Advance();
         }
-        
+
         var length = _position - startPos;
         var value = _input.Slice(startPos, length);
-        
+
         // Trim leading and trailing spaces
         var span = value.Span;
         var trimStart = 0;
+
         while (trimStart < span.Length && span[trimStart] == ' ')
         {
             trimStart++;
         }
-        
+
         var trimEnd = span.Length;
+
         while (trimEnd > trimStart && span[trimEnd - 1] == ' ')
         {
             trimEnd--;
-        }        
+        }
+
         value = value.Slice(trimStart, trimEnd - trimStart);
-        
+
         // Determine if this is a key (will be followed by: or [ or {)
         SkipWhitespace();
         var next = Peek();
         var isKey = next is ':' or '[' or '{';
-        
-        return new ToonToken(
-            isKey ? ToonTokenType.Key : ToonTokenType.Value, 
-            value, 
-            startLine, 
-            startColumn);
+
+        return new ToonToken(isKey ? ToonTokenType.Key : ToonTokenType.Value, value, startLine, startColumn);
     }
 
+    /// <summary>
+    ///     Skips whitespace characters (spaces only, not newlines).
+    /// </summary>
     private void SkipWhitespace()
     {
         while (!IsAtEnd() && Peek() == ' ')
@@ -344,27 +357,42 @@ internal sealed class ToonLexer
         }
     }
 
+    /// <summary>
+    ///     Checks if the previous character was a newline.
+    /// </summary>
+    /// <returns>True if the previous character was a newline or at start; otherwise, false.</returns>
     private bool PreviousWasNewline()
     {
         if (_position == 0)
         {
             return true;
         }
-        
+
         var prev = _input.Span[_position - 1];
         return prev is '\n' or '\r';
     }
 
+    /// <summary>
+    ///     Peeks at the current character without advancing.
+    /// </summary>
+    /// <returns>The current character, or '\0' if at end.</returns>
     private char Peek()
     {
         return IsAtEnd() ? '\0' : _input.Span[_position];
     }
 
+    /// <summary>
+    ///     Peeks at the next character without advancing.
+    /// </summary>
+    /// <returns>The next character, or '\0' if beyond end.</returns>
     private char PeekNext()
     {
         return _position + 1 >= _input.Length ? '\0' : _input.Span[_position + 1];
     }
 
+    /// <summary>
+    ///     Advances the position by one character.
+    /// </summary>
     private void Advance()
     {
         if (IsAtEnd())
@@ -376,6 +404,10 @@ internal sealed class ToonLexer
         _column++;
     }
 
+    /// <summary>
+    ///     Checks if the lexer has reached the end of input.
+    /// </summary>
+    /// <returns>True if at end of input; otherwise, false.</returns>
     private bool IsAtEnd()
     {
         return _position >= _input.Length;

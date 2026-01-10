@@ -1,18 +1,19 @@
+using System.Globalization;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Parsing;
 
 /// <summary>
-/// Parses TOON tokens into a document structure.
+///     Parses TOON tokens into a document structure.
 /// </summary>
 public sealed class ToonParser(ToonOptions? options = null)
 {
-    private readonly List<ToonToken> _tokens = [];
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
+    private readonly List<ToonToken> _tokens = [];
     private int _position;
 
     /// <summary>
-    /// Parses a TOON format string into a document.
+    ///     Parses a TOON format string into a document.
     /// </summary>
     /// <param name="input">The TOON format string to parse.</param>
     /// <returns>A ToonDocument representing the parsed input.</returns>
@@ -29,7 +30,7 @@ public sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    /// Parses a list of TOON tokens into a document.
+    ///     Parses a list of TOON tokens into a document.
     /// </summary>
     /// <param name="tokens">The tokens to parse.</param>
     /// <returns>A ToonDocument representing the parsed tokens.</returns>
@@ -44,6 +45,12 @@ public sealed class ToonParser(ToonOptions? options = null)
         return new ToonDocument(root);
     }
 
+    /// <summary>
+    ///     Parses a value at the specified indentation level.
+    /// </summary>
+    /// <param name="indentLevel">The current indentation level.</param>
+    /// <returns>The parsed ToonValue.</returns>
+    /// <exception cref="ToonParseException">Thrown when an unexpected token is encountered.</exception>
     private ToonValue ParseValue(int indentLevel)
     {
         SkipNewlines();
@@ -54,14 +61,14 @@ public sealed class ToonParser(ToonOptions? options = null)
         }
 
         var token = Peek();
-        
+
         // STEP 1.2: Detect list items (Indent followed by ListItem)
         // This handles: key:\n  - item1\n  - item2
         if (token.Type == ToonTokenType.Indent)
         {
             var nextIdx = _position + 1;
             var hasListItems = nextIdx < _tokens.Count && _tokens[nextIdx].Type == ToonTokenType.ListItem;
-            
+
             if (hasListItems)
             {
                 // It's a list of items - parse as array
@@ -84,7 +91,7 @@ public sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    /// Parses an object from the token stream.
+    ///     Parses an object from the token stream.
     /// </summary>
     /// <param name="indentLevel">The current indentation level.</param>
     /// <returns>A ToonObject containing the parsed key-value pairs.</returns>
@@ -127,7 +134,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             // Skip if not at our indent level (shouldn't happen with proper input)
             if (currentIndent > indentLevel && indentLevel > 0)
             {
-                throw new ToonParseException($"Unexpected indentation", Peek().Line, Peek().Column);
+                throw new ToonParseException("Unexpected indentation", Peek().Line, Peek().Column);
             }
 
             var keyToken = Peek();
@@ -183,18 +190,21 @@ public sealed class ToonParser(ToonOptions? options = null)
 
                 // Check if this is actually a list by peeking ahead for list items
                 var isListArray = false;
+
                 if (arrayLength.HasValue || fieldNames != null)
                 {
                     // Peek to see if next content is a list (Indent followed by ListItem)
                     var peekPos = _position;
+
                     while (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Newline)
                     {
                         peekPos++;
                     }
-                    
+
                     if (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Indent)
                     {
                         var nextPos = peekPos + 1;
+
                         if (nextPos < _tokens.Count && _tokens[nextPos].Type == ToonTokenType.ListItem)
                         {
                             isListArray = true;
@@ -230,7 +240,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             }
             else
             {
-                throw new ToonParseException($"Expected value after ':'", Peek().Line, Peek().Column);
+                throw new ToonParseException("Expected value after ':'", Peek().Line, Peek().Column);
             }
 
             obj.Properties[key] = value;
@@ -245,6 +255,14 @@ public sealed class ToonParser(ToonOptions? options = null)
         return obj;
     }
 
+    /// <summary>
+    ///     Parses a tabular array (array of objects with field names).
+    /// </summary>
+    /// <param name="indentLevel">The current indentation level.</param>
+    /// <param name="expectedLength">The expected number of array elements, if specified.</param>
+    /// <param name="fieldNames">The field names for tabular data, if specified.</param>
+    /// <returns>A ToonArray with the parsed tabular data.</returns>
+    /// <exception cref="ToonParseException">Thrown when array length mismatch occurs in strict mode.</exception>
     private ToonArray ParseTabularArray(int indentLevel, int? expectedLength, string[]? fieldNames)
     {
         var array = new ToonArray { FieldNames = fieldNames };
@@ -281,7 +299,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             if (IsValueToken(Peek().Type))
             {
                 var rowValues = new List<ToonValue>();
-                
+
                 // Read first value
                 var firstToken = Advance();
                 rowValues.Add(ParseValueToken(firstToken));
@@ -345,6 +363,12 @@ public sealed class ToonParser(ToonOptions? options = null)
                    : array;
     }
 
+    /// <summary>
+    ///     Parses an inline array of primitive values.
+    /// </summary>
+    /// <param name="expectedLength">The expected number of elements.</param>
+    /// <returns>A ToonArray with the parsed primitive values.</returns>
+    /// <exception cref="ToonParseException">Thrown when array length mismatch occurs in strict mode.</exception>
     private ToonArray ParseInlinePrimitiveArray(int expectedLength)
     {
         var values = new List<ToonValue>();
@@ -377,6 +401,11 @@ public sealed class ToonParser(ToonOptions? options = null)
                    : new ToonArray(values);
     }
 
+    /// <summary>
+    ///     Parses an inline tabular array row (comma-separated values).
+    /// </summary>
+    /// <param name="fieldNames">The field names for tabular data.</param>
+    /// <returns>A ToonArray with the parsed row values.</returns>
     private ToonArray ParseTabularArrayInlineRow(string[]? fieldNames)
     {
         var values = new List<ToonValue>();
@@ -409,6 +438,11 @@ public sealed class ToonParser(ToonOptions? options = null)
                    : new ToonArray(values);
     }
 
+    /// <summary>
+    ///     Parses a list (items prefixed with '-').
+    /// </summary>
+    /// <param name="indentLevel">The current indentation level.</param>
+    /// <returns>A ToonArray containing the list items.</returns>
     private ToonArray ParseList(int indentLevel)
     {
         var array = new ToonArray();
@@ -454,18 +488,18 @@ public sealed class ToonParser(ToonOptions? options = null)
                     // Inline first field: - key: value
                     // Parse as object with first field inline, rest indented
                     var itemObject = new ToonObject();
-                    
+
                     // Parse inline first field
                     var firstKey = Advance().Value.ToString();
-                    
+
                     if (Peek().Type != ToonTokenType.Colon)
                     {
                         throw new ToonParseException($"Expected ':' after key '{firstKey}'", Peek().Line, Peek().Column);
                     }
-                    
+
                     Advance(); // consume colon
                     SkipWhitespace();
-                    
+
                     // Parse first value
                     if (IsValueToken(Peek().Type))
                     {
@@ -476,43 +510,45 @@ public sealed class ToonParser(ToonOptions? options = null)
                     {
                         throw new ToonParseException($"Expected value after ':' for key '{firstKey}'", Peek().Line, Peek().Column);
                     }
-                    
+
                     // Consume trailing newline
                     if (Peek().Type == ToonTokenType.Newline)
                     {
                         Advance();
                     }
-                    
+
                     // Parse remaining fields at higher indentation
                     while (!IsAtEnd())
                     {
                         SkipNewlines();
-                        
+
                         if (IsAtEnd())
+                        {
                             break;
-                        
+                        }
+
                         // Check indentation
                         if (Peek().Type != ToonTokenType.Indent)
                         {
                             // No indent token - we're back at list level or less
                             break;
                         }
-                        
+
                         var propIndent = Peek().Value.Length;
-                        
+
                         // If dedented to list level or below, stop parsing this object
                         if (propIndent <= indentLevel)
                         {
                             break;
                         }
-                        
+
                         Advance(); // consume indent
-                        
+
                         // Parse key-value pair
                         if (Peek().Type == ToonTokenType.Key)
                         {
                             var key = Advance().Value.ToString();
-                            
+
                             // Check for array notation (same as ParseObject)
                             int? arrayLength = null;
                             string[]? fieldNames = null;
@@ -534,53 +570,51 @@ public sealed class ToonParser(ToonOptions? options = null)
                                 var fieldsStr = fieldsToken.Value.ToString().Trim('{', '}');
                                 fieldNames = fieldsStr.Split(',').Select(f => f.Trim()).ToArray();
                             }
-                            
+
                             if (Peek().Type != ToonTokenType.Colon)
                             {
                                 throw new ToonParseException($"Expected ':' after key '{key}'", Peek().Line, Peek().Column);
                             }
-                            
+
                             Advance(); // consume colon
                             SkipWhitespace();
-                            
+
                             // Parse value
                             ToonValue value;
-                            
+
                             // Check if value is on next line (nested object/array)
                             if (Peek().Type == ToonTokenType.Newline)
                             {
                                 Advance(); // consume newline
-                                
+
                                 // Determine if this is a tabular array or nested structure
-                                if ((arrayLength.HasValue || fieldNames != null))
+                                if (arrayLength.HasValue || fieldNames != null)
                                 {
                                     // Check if it's actually a list array by peeking ahead
                                     var isListArray = false;
                                     var peekPos = _position;
+
                                     while (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Newline)
                                     {
                                         peekPos++;
                                     }
-                                    
+
                                     if (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Indent)
                                     {
                                         var nextPos = peekPos + 1;
+
                                         if (nextPos < _tokens.Count && _tokens[nextPos].Type == ToonTokenType.ListItem)
                                         {
                                             isListArray = true;
                                         }
                                     }
-                                    
-                                    if (!isListArray)
-                                    {
-                                        // Tabular array
-                                        value = ParseTabularArray(propIndent + _options.IndentSize, arrayLength, fieldNames);
-                                    }
-                                    else
-                                    {
-                                        // List array
-                                        value = ParseValue(propIndent + _options.IndentSize);
-                                    }
+
+                                    // Tabular array
+                                    value = !isListArray
+                                                ? ParseTabularArray(propIndent + _options.IndentSize, arrayLength, fieldNames)
+                                                :
+                                                // List array
+                                                ParseValue(propIndent + _options.IndentSize);
                                 }
                                 else
                                 {
@@ -604,11 +638,11 @@ public sealed class ToonParser(ToonOptions? options = null)
                             }
                             else
                             {
-                                throw new ToonParseException($"Expected value after ':'", Peek().Line, Peek().Column);
+                                throw new ToonParseException("Expected value after ':'", Peek().Line, Peek().Column);
                             }
-                            
+
                             itemObject.Properties[key] = value;
-                            
+
                             if (Peek().Type == ToonTokenType.Newline)
                             {
                                 Advance();
@@ -619,46 +653,48 @@ public sealed class ToonParser(ToonOptions? options = null)
                             break;
                         }
                     }
-                    
+
                     array.Items.Add(itemObject);
                 }
                 else if (Peek().Type == ToonTokenType.Newline)
                 {
                     // Object list item: - \n properties
                     Advance(); // consume newline
-                    
+
                     // Parse nested object properties at higher indentation
                     var itemObject = new ToonObject();
-                    
+
                     while (!IsAtEnd())
                     {
                         SkipNewlines();
-                        
+
                         if (IsAtEnd())
+                        {
                             break;
-                        
+                        }
+
                         // Check indentation
                         if (Peek().Type != ToonTokenType.Indent)
                         {
                             // No indent token - we're back at list level or less
                             break;
                         }
-                        
+
                         var propIndent = Peek().Value.Length;
-                        
+
                         // If dedented to list level or below, stop parsing this object
                         if (propIndent <= indentLevel)
                         {
                             break;
                         }
-                        
+
                         Advance(); // consume indent
-                        
+
                         // Parse key-value pair for this object
                         if (Peek().Type == ToonTokenType.Key)
                         {
                             var key = Advance().Value.ToString();
-                            
+
                             // Check for array notation (same as inline first field case)
                             int? arrayLength = null;
                             string[]? fieldNames = null;
@@ -680,43 +716,45 @@ public sealed class ToonParser(ToonOptions? options = null)
                                 var fieldsStr = fieldsToken.Value.ToString().Trim('{', '}');
                                 fieldNames = fieldsStr.Split(',').Select(f => f.Trim()).ToArray();
                             }
-                            
+
                             if (Peek().Type != ToonTokenType.Colon)
                             {
                                 throw new ToonParseException($"Expected ':' after key '{key}'", Peek().Line, Peek().Column);
                             }
-                            
+
                             Advance(); // consume colon
                             SkipWhitespace();
-                            
+
                             // Parse value
                             ToonValue value;
-                            
+
                             // Check if value is on next line (nested object/array)
                             if (Peek().Type == ToonTokenType.Newline)
                             {
                                 Advance(); // consume newline
-                                
+
                                 // Determine if this is a tabular array or nested structure
-                                if ((arrayLength.HasValue || fieldNames != null))
+                                if (arrayLength.HasValue || fieldNames != null)
                                 {
                                     // Check if it's actually a list array by peeking ahead
                                     var isListArray = false;
                                     var peekPos = _position;
+
                                     while (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Newline)
                                     {
                                         peekPos++;
                                     }
-                                    
+
                                     if (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Indent)
                                     {
                                         var nextPos = peekPos + 1;
+
                                         if (nextPos < _tokens.Count && _tokens[nextPos].Type == ToonTokenType.ListItem)
                                         {
                                             isListArray = true;
                                         }
                                     }
-                                    
+
                                     if (!isListArray)
                                     {
                                         // Tabular array
@@ -750,11 +788,11 @@ public sealed class ToonParser(ToonOptions? options = null)
                             }
                             else
                             {
-                                throw new ToonParseException($"Expected value after ':'", Peek().Line, Peek().Column);
+                                throw new ToonParseException("Expected value after ':'", Peek().Line, Peek().Column);
                             }
-                            
+
                             itemObject.Properties[key] = value;
-                            
+
                             if (Peek().Type == ToonTokenType.Newline)
                             {
                                 Advance();
@@ -765,7 +803,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                             break;
                         }
                     }
-                    
+
                     array.Items.Add(itemObject);
                 }
             }
@@ -786,17 +824,20 @@ public sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    /// Parses a value token (either quoted string or primitive).
+    ///     Parses a value token (either quoted string or primitive).
     /// </summary>
     /// <param name="token">The token to parse.</param>
     /// <returns>A ToonValue representing the token.</returns>
     private static ToonValue ParseValueToken(ToonToken token)
     {
-        return token.Type == ToonTokenType.QuotedString
-            ? new ToonString(token.Value.ToString())
-            : ParsePrimitiveValue(token.Value);
+        return token.Type == ToonTokenType.QuotedString ? new ToonString(token.Value.ToString()) : ParsePrimitiveValue(token.Value);
     }
 
+    /// <summary>
+    ///     Parses a primitive value from a token's memory.
+    /// </summary>
+    /// <param name="valueMemory">The memory containing the value.</param>
+    /// <returns>A ToonValue representing the primitive (null, boolean, number, or string).</returns>
     private static ToonValue ParsePrimitiveValue(ReadOnlyMemory<char> valueMemory)
     {
         var value = valueMemory.ToString().Trim();
@@ -806,15 +847,24 @@ public sealed class ToonParser(ToonOptions? options = null)
             "null"  => ToonNull.Instance,
             "true"  => new ToonBoolean(true),
             "false" => new ToonBoolean(false),
-            _       => double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var number) ? new ToonNumber(number) : new ToonString(value)
+            _ => double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var number)
+                     ? new ToonNumber(number)
+                     : new ToonString(value)
         };
     }
 
+    /// <summary>
+    ///     Gets the current indentation level.
+    /// </summary>
+    /// <returns>The number of spaces of indentation, or 0 if not at an indent token.</returns>
     private int GetCurrentIndent()
     {
         return IsAtEnd() || Peek().Type != ToonTokenType.Indent ? 0 : Peek().Value.Length;
     }
 
+    /// <summary>
+    ///     Skips all consecutive newline tokens.
+    /// </summary>
     private void SkipNewlines()
     {
         while (!IsAtEnd() && Peek().Type == ToonTokenType.Newline)
@@ -823,6 +873,9 @@ public sealed class ToonParser(ToonOptions? options = null)
         }
     }
 
+    /// <summary>
+    ///     Skips all consecutive whitespace (indent) tokens.
+    /// </summary>
     private void SkipWhitespace()
     {
         while (!IsAtEnd() && Peek().Type == ToonTokenType.Indent)
@@ -831,25 +884,45 @@ public sealed class ToonParser(ToonOptions? options = null)
         }
     }
 
+    /// <summary>
+    ///     Checks if a token type represents a value (either Value or QuotedString).
+    /// </summary>
+    /// <param name="type">The token type to check.</param>
+    /// <returns>True if the token is a value token; otherwise, false.</returns>
     private bool IsValueToken(ToonTokenType type)
     {
         return type is ToonTokenType.Value or ToonTokenType.QuotedString;
     }
 
+    /// <summary>
+    ///     Peeks at the current token without advancing.
+    /// </summary>
+    /// <returns>The current token, or an EndOfInput token if at end.</returns>
     private ToonToken Peek()
     {
         return _position < _tokens.Count ? _tokens[_position] : new ToonToken(ToonTokenType.EndOfInput, ReadOnlyMemory<char>.Empty, 0, 0);
     }
 
+    /// <summary>
+    ///     Advances to the next token and returns the current token.
+    /// </summary>
+    /// <returns>The current token before advancing.</returns>
     private ToonToken Advance()
     {
         var token = Peek();
 
         if (_position < _tokens.Count)
+        {
             _position++;
+        }
+
         return token;
     }
 
+    /// <summary>
+    ///     Checks if the parser has reached the end of tokens.
+    /// </summary>
+    /// <returns>True if at end of tokens or at EndOfInput token; otherwise, false.</returns>
     private bool IsAtEnd()
     {
         return _position >= _tokens.Count || Peek().Type == ToonTokenType.EndOfInput;

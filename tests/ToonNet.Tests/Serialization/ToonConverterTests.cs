@@ -1,14 +1,12 @@
-using System;
 using ToonNet.Core;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace ToonNet.Tests.Serialization;
 
 /// <summary>
-/// Tests for ToonConverter&lt;T&gt; base class and custom converters.
+///     Tests for ToonConverter&lt;T&gt; base class and custom converters.
 /// </summary>
 public class ToonConverterTests
 {
@@ -24,18 +22,26 @@ public class ToonConverterTests
     // Example: Custom Point converter
     private class Point
     {
-        public int X { get; set; }
-        public int Y { get; set; }
-
         public Point() { }
-        public Point(int x, int y) { X = x; Y = y; }
+
+        public Point(int x, int y)
+        {
+            X = x;
+            Y = y;
+        }
+
+        public int X { get; }
+        public int Y { get; }
 
         public override bool Equals(object? obj)
         {
             return obj is Point p && p.X == X && p.Y == Y;
         }
 
-        public override int GetHashCode() => HashCode.Combine(X, Y);
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(X, Y);
+        }
     }
 
     // Custom converter: Point as "x,y" string
@@ -43,32 +49,39 @@ public class ToonConverterTests
     {
         public override ToonValue Write(Point? value, ToonSerializerOptions options)
         {
-            if (value == null) return ToonNull.Instance;
+            if (value == null)
+            {
+                return ToonNull.Instance;
+            }
+
             return new ToonString($"{value.X},{value.Y}");
         }
 
         public override Point? Read(ToonValue value, ToonSerializerOptions options)
         {
-            if (value is ToonNull) return null;
-            
+            if (value is ToonNull)
+            {
+                return null;
+            }
+
             if (value is not ToonString str)
-                throw ToonSerializationException.Create(
-                    "Expected string for Point conversion",
-                    value: value,
-                    suggestion: "Use format: 'x,y' (e.g., '10,20')");
+            {
+                throw ToonSerializationException.Create("Expected string for Point conversion", value: value,
+                                                        suggestion: "Use format: 'x,y' (e.g., '10,20')");
+            }
 
             var parts = str.Value.Split(',');
-            if (parts.Length != 2)
-                throw ToonSerializationException.Create(
-                    "Invalid Point format",
-                    value: str.Value,
-                    suggestion: "Use format: 'x,y' (e.g., '10,20')");
 
-            if (!int.TryParse(parts[0], out int x) || !int.TryParse(parts[1], out int y))
-                throw ToonSerializationException.Create(
-                    "Invalid Point coordinates",
-                    value: str.Value,
-                    suggestion: "Both x and y must be valid integers");
+            if (parts.Length != 2)
+            {
+                throw ToonSerializationException.Create("Invalid Point format", value: str.Value, suggestion: "Use format: 'x,y' (e.g., '10,20')");
+            }
+
+            if (!int.TryParse(parts[0], out var x) || !int.TryParse(parts[1], out var y))
+            {
+                throw ToonSerializationException.Create("Invalid Point coordinates", value: str.Value,
+                                                        suggestion: "Both x and y must be valid integers");
+            }
 
             return new Point(x, y);
         }
@@ -77,19 +90,28 @@ public class ToonConverterTests
     // Example: Custom Color converter
     private class Color
     {
-        public byte R { get; set; }
-        public byte G { get; set; }
-        public byte B { get; set; }
-
         public Color() { }
-        public Color(byte r, byte g, byte b) { R = r; G = g; B = b; }
+
+        public Color(byte r, byte g, byte b)
+        {
+            R = r;
+            G = g;
+            B = b;
+        }
+
+        public byte R { get; }
+        public byte G { get; }
+        public byte B { get; }
 
         public override bool Equals(object? obj)
         {
             return obj is Color c && c.R == R && c.G == G && c.B == B;
         }
 
-        public override int GetHashCode() => HashCode.Combine(R, G, B);
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(R, G, B);
+        }
     }
 
     // Custom converter: Color as hex string
@@ -97,26 +119,34 @@ public class ToonConverterTests
     {
         public override ToonValue Write(Color? value, ToonSerializerOptions options)
         {
-            if (value == null) return ToonNull.Instance;
+            if (value == null)
+            {
+                return ToonNull.Instance;
+            }
+
             return new ToonString($"#{value.R:X2}{value.G:X2}{value.B:X2}");
         }
 
         public override Color? Read(ToonValue value, ToonSerializerOptions options)
         {
-            if (value is ToonNull) return null;
-            
+            if (value is ToonNull)
+            {
+                return null;
+            }
+
             if (value is not ToonString str)
-                throw ToonSerializationException.Create(
-                    "Expected string for Color conversion",
-                    value: value,
-                    suggestion: "Use hex format: '#RRGGBB' (e.g., '#FF5733')");
+            {
+                throw ToonSerializationException.Create("Expected string for Color conversion", value: value,
+                                                        suggestion: "Use hex format: '#RRGGBB' (e.g., '#FF5733')");
+            }
 
             var hex = str.Value;
+
             if (!hex.StartsWith("#") || hex.Length != 7)
-                throw ToonSerializationException.Create(
-                    "Invalid Color format",
-                    value: hex,
-                    suggestion: "Use hex format: '#RRGGBB' (e.g., '#FF5733')");
+            {
+                throw ToonSerializationException.Create("Invalid Color format", value: hex,
+                                                        suggestion: "Use hex format: '#RRGGBB' (e.g., '#FF5733')");
+            }
 
             try
             {
@@ -127,10 +157,8 @@ public class ToonConverterTests
             }
             catch (Exception)
             {
-                throw ToonSerializationException.Create(
-                    "Failed to parse Color hex value",
-                    value: hex,
-                    suggestion: "Ensure each RGB component is a valid hex value (00-FF)");
+                throw ToonSerializationException.Create("Failed to parse Color hex value", value: hex,
+                                                        suggestion: "Ensure each RGB component is a valid hex value (00-FF)");
             }
         }
     }
@@ -138,20 +166,26 @@ public class ToonConverterTests
     // Example: Temperature converter with unit conversion
     private class Temperature
     {
-        public double Value { get; set; }
-        public string Unit { get; set; } = "C"; // C or F
-
         public Temperature() { }
-        public Temperature(double value, string unit) { Value = value; Unit = unit; }
+
+        public Temperature(double value, string unit)
+        {
+            Value = value;
+            Unit = unit;
+        }
+
+        public double Value { get; }
+        public string Unit { get; } = "C"; // C or F
 
         public override bool Equals(object? obj)
         {
-            return obj is Temperature t && 
-                   Math.Abs(t.Value - Value) < 0.001 && 
-                   t.Unit == Unit;
+            return obj is Temperature t && Math.Abs(t.Value - Value) < 0.001 && t.Unit == Unit;
         }
 
-        public override int GetHashCode() => HashCode.Combine(Value, Unit);
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Value, Unit);
+        }
     }
 
     // Custom converter: Always store as Celsius
@@ -159,12 +193,13 @@ public class ToonConverterTests
     {
         public override ToonValue Write(Temperature? value, ToonSerializerOptions options)
         {
-            if (value == null) return ToonNull.Instance;
+            if (value == null)
+            {
+                return ToonNull.Instance;
+            }
 
             // Convert to Celsius for storage
-            var celsius = value.Unit == "F" 
-                ? (value.Value - 32) * 5 / 9 
-                : value.Value;
+            var celsius = value.Unit == "F" ? (value.Value - 32) * 5 / 9 : value.Value;
 
             var obj = new ToonObject();
             obj["value"] = new ToonNumber(celsius);
@@ -174,17 +209,20 @@ public class ToonConverterTests
 
         public override Temperature? Read(ToonValue value, ToonSerializerOptions options)
         {
-            if (value is ToonNull) return null;
-            
+            if (value is ToonNull)
+            {
+                return null;
+            }
+
             if (value is not ToonObject obj)
-                throw ToonSerializationException.Create(
-                    "Expected object for Temperature conversion",
-                    value: value);
+            {
+                throw ToonSerializationException.Create("Expected object for Temperature conversion", value: value);
+            }
 
             if (!obj.Properties.TryGetValue("value", out var valueNode) || valueNode is not ToonNumber num)
-                throw ToonSerializationException.Create(
-                    "Temperature object must have 'value' field",
-                    value: value);
+            {
+                throw ToonSerializationException.Create("Temperature object must have 'value' field", value: value);
+            }
 
             // Always read as Celsius (stored format)
             return new Temperature(num.Value, "C");
@@ -384,9 +422,8 @@ public class ToonConverterTests
         var options = new ToonSerializerOptions();
 
         // Act & Assert
-        var ex = Assert.Throws<ToonSerializationException>(() => 
-            converter.Read(value, options));
-        
+        var ex = Assert.Throws<ToonSerializationException>(() => converter.Read(value, options));
+
         Assert.Contains("Expected string", ex.Message);
         Assert.Contains("'x,y'", ex.ToString()); // Suggestion is in ToString()
     }
@@ -400,9 +437,8 @@ public class ToonConverterTests
         var options = new ToonSerializerOptions();
 
         // Act & Assert
-        var ex = Assert.Throws<ToonSerializationException>(() => 
-            converter.Read(value, options));
-        
+        var ex = Assert.Throws<ToonSerializationException>(() => converter.Read(value, options));
+
         Assert.Contains("Invalid Point format", ex.Message);
         Assert.Contains("x,y", ex.ToString()); // Suggestion is in ToString()
     }
@@ -416,9 +452,8 @@ public class ToonConverterTests
         var options = new ToonSerializerOptions();
 
         // Act & Assert
-        var ex = Assert.Throws<ToonSerializationException>(() => 
-            converter.Read(value, options));
-        
+        var ex = Assert.Throws<ToonSerializationException>(() => converter.Read(value, options));
+
         Assert.Contains("Invalid Point coordinates", ex.Message);
     }
 
@@ -449,9 +484,8 @@ public class ToonConverterTests
         var options = new ToonSerializerOptions();
 
         // Act & Assert
-        var ex = Assert.Throws<ToonSerializationException>(() => 
-            converter.Read(value, options));
-        
+        var ex = Assert.Throws<ToonSerializationException>(() => converter.Read(value, options));
+
         Assert.Contains("Invalid Color format", ex.Message);
         Assert.Contains("#RRGGBB", ex.ToString()); // Suggestion is in ToString()
     }
@@ -465,9 +499,8 @@ public class ToonConverterTests
         var options = new ToonSerializerOptions();
 
         // Act & Assert
-        var ex = Assert.Throws<ToonSerializationException>(() => 
-            converter.Read(value, options));
-        
+        var ex = Assert.Throws<ToonSerializationException>(() => converter.Read(value, options));
+
         Assert.Contains("Failed to parse Color", ex.Message);
     }
 
@@ -500,9 +533,8 @@ public class ToonConverterTests
         var options = new ToonSerializerOptions();
 
         // Act & Assert
-        var ex = Assert.Throws<ToonSerializationException>(() => 
-            converter.Read(obj, options));
-        
+        var ex = Assert.Throws<ToonSerializationException>(() => converter.Read(obj, options));
+
         Assert.Contains("must have 'value' field", ex.Message);
     }
 

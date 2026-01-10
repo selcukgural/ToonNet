@@ -1,6 +1,5 @@
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
-using Xunit;
 
 namespace ToonNet.Tests.Encoding;
 
@@ -61,7 +60,7 @@ public class ToonEncoderTests
         array.Items.Add(new ToonString("admin"));
         array.Items.Add(new ToonString("user"));
         array.Items.Add(new ToonString("guest"));
-        
+
         var root = new ToonObject
         {
             ["tags"] = array
@@ -101,7 +100,7 @@ public class ToonEncoderTests
         };
         array.Items.Add(user1);
         array.Items.Add(user2);
-        
+
         var root = new ToonObject
         {
             ["users"] = array

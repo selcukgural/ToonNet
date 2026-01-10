@@ -1,18 +1,16 @@
 using System.Text.Json;
-using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
-using ToonNet.Core.Parsing;
 
 namespace ToonNet.Core.Interop;
 
 /// <summary>
-/// Provides bidirectional conversion between JSON and TOON formats.
-/// Supports System.Text.Json integration for seamless interoperability.
+///     Provides bidirectional conversion between JSON and TOON formats.
+///     Supports System.Text.Json integration for seamless interoperability.
 /// </summary>
 public static class ToonJsonConverter
 {
     /// <summary>
-    /// Converts a JSON string to a TOON document.
+    ///     Converts a JSON string to a TOON document.
     /// </summary>
     /// <param name="json">The JSON string to convert.</param>
     /// <returns>A ToonDocument representing the JSON data.</returns>
@@ -21,14 +19,16 @@ public static class ToonJsonConverter
     public static ToonDocument FromJson(string json)
     {
         if (json == null)
+        {
             throw new ArgumentNullException(nameof(json));
+        }
 
         using var doc = JsonDocument.Parse(json);
         return FromJson(doc.RootElement);
     }
 
     /// <summary>
-    /// Converts a JsonElement to a TOON document.
+    ///     Converts a JsonElement to a TOON document.
     /// </summary>
     /// <param name="element">The JsonElement to convert.</param>
     /// <returns>A ToonDocument representing the JSON data.</returns>
@@ -39,7 +39,7 @@ public static class ToonJsonConverter
     }
 
     /// <summary>
-    /// Converts a TOON document to a JSON string.
+    ///     Converts a TOON document to a JSON string.
     /// </summary>
     /// <param name="document">The TOON document to convert.</param>
     /// <param name="writeIndented">Whether to format the JSON with indentation.</param>
@@ -48,13 +48,15 @@ public static class ToonJsonConverter
     public static string ToJson(ToonDocument document, bool writeIndented = false)
     {
         if (document == null)
+        {
             throw new ArgumentNullException(nameof(document));
+        }
 
         return ToJson(document.Root, writeIndented);
     }
 
     /// <summary>
-    /// Converts a TOON value to a JSON string.
+    ///     Converts a TOON value to a JSON string.
     /// </summary>
     /// <param name="value">The TOON value to convert.</param>
     /// <param name="writeIndented">Whether to format the JSON with indentation.</param>
@@ -63,12 +65,15 @@ public static class ToonJsonConverter
     public static string ToJson(ToonValue value, bool writeIndented = false)
     {
         if (value == null)
+        {
             throw new ArgumentNullException(nameof(value));
+        }
 
         using var stream = new MemoryStream();
-        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions 
-        { 
-            Indented = writeIndented 
+
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions
+        {
+            Indented = writeIndented
         });
 
         WriteToonValueAsJson(writer, value);
@@ -83,15 +88,15 @@ public static class ToonJsonConverter
     {
         return element.ValueKind switch
         {
-            JsonValueKind.Object => ConvertJsonObject(element),
-            JsonValueKind.Array => ConvertJsonArray(element),
-            JsonValueKind.String => new ToonString(element.GetString()!),
-            JsonValueKind.Number => new ToonNumber(element.GetDouble()),
-            JsonValueKind.True => new ToonBoolean(true),
-            JsonValueKind.False => new ToonBoolean(false),
-            JsonValueKind.Null => ToonNull.Instance,
+            JsonValueKind.Object    => ConvertJsonObject(element),
+            JsonValueKind.Array     => ConvertJsonArray(element),
+            JsonValueKind.String    => new ToonString(element.GetString()!),
+            JsonValueKind.Number    => new ToonNumber(element.GetDouble()),
+            JsonValueKind.True      => new ToonBoolean(true),
+            JsonValueKind.False     => new ToonBoolean(false),
+            JsonValueKind.Null      => ToonNull.Instance,
             JsonValueKind.Undefined => ToonNull.Instance,
-            _ => throw new JsonException($"Unsupported JSON value kind: {element.ValueKind}")
+            _                       => throw new JsonException($"Unsupported JSON value kind: {element.ValueKind}")
         };
     }
 

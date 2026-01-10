@@ -1,11 +1,12 @@
 using BenchmarkDotNet.Attributes;
-using ToonNet.Core.Serialization;
 using ToonNet.Benchmarks.Models;
+using ToonNet.Core.Models;
+using ToonNet.Core.Serialization;
 
 namespace ToonNet.Benchmarks;
 
 /// <summary>
-/// Benchmarks for simple model.
+///     Benchmarks for simple model.
 /// </summary>
 [SimpleJob(warmupCount: 3)]
 [MemoryDiagnoser]
@@ -20,13 +21,22 @@ public class SimpleBenchmarks
     }
 
     [Benchmark]
-    public global::ToonNet.Core.Models.ToonDocument SerializeGenerated() => SimpleBenchmarkModel.Serialize(_model);
+    public ToonDocument SerializeGenerated()
+    {
+        return SimpleBenchmarkModel.Serialize(_model);
+    }
 
     [Benchmark]
-    public string SerializeReflection() => ToonSerializer.Serialize(_model);
+    public string SerializeReflection()
+    {
+        return ToonSerializer.Serialize(_model);
+    }
 
     [Benchmark]
-    public SimpleBenchmarkModel DeserializeGenerated() => SimpleBenchmarkModel.Deserialize(SimpleBenchmarkModel.Serialize(_model));
+    public SimpleBenchmarkModel DeserializeGenerated()
+    {
+        return SimpleBenchmarkModel.Deserialize(SimpleBenchmarkModel.Serialize(_model));
+    }
 
     [Benchmark]
     public SimpleBenchmarkModel? DeserializeReflection()
@@ -37,7 +47,7 @@ public class SimpleBenchmarks
 }
 
 /// <summary>
-/// Benchmarks for medium model.
+///     Benchmarks for medium model.
 /// </summary>
 [SimpleJob(warmupCount: 3)]
 [MemoryDiagnoser]
@@ -57,13 +67,22 @@ public class MediumBenchmarks
     }
 
     [Benchmark]
-    public global::ToonNet.Core.Models.ToonDocument SerializeGenerated() => MediumBenchmarkModel.Serialize(_model);
+    public ToonDocument SerializeGenerated()
+    {
+        return MediumBenchmarkModel.Serialize(_model);
+    }
 
     [Benchmark]
-    public string SerializeReflection() => ToonSerializer.Serialize(_model);
+    public string SerializeReflection()
+    {
+        return ToonSerializer.Serialize(_model);
+    }
 
     [Benchmark]
-    public MediumBenchmarkModel DeserializeGenerated() => MediumBenchmarkModel.Deserialize(MediumBenchmarkModel.Serialize(_model));
+    public MediumBenchmarkModel DeserializeGenerated()
+    {
+        return MediumBenchmarkModel.Deserialize(MediumBenchmarkModel.Serialize(_model));
+    }
 
     [Benchmark]
     public MediumBenchmarkModel? DeserializeReflection()
@@ -74,7 +93,7 @@ public class MediumBenchmarks
 }
 
 /// <summary>
-/// Benchmarks for complex model.
+///     Benchmarks for complex model.
 /// </summary>
 [SimpleJob(warmupCount: 3)]
 [MemoryDiagnoser]
@@ -95,13 +114,22 @@ public class ComplexBenchmarks
     }
 
     [Benchmark]
-    public global::ToonNet.Core.Models.ToonDocument SerializeGenerated() => ComplexBenchmarkModel.Serialize(_model);
+    public ToonDocument SerializeGenerated()
+    {
+        return ComplexBenchmarkModel.Serialize(_model);
+    }
 
     [Benchmark]
-    public string SerializeReflection() => ToonSerializer.Serialize(_model);
+    public string SerializeReflection()
+    {
+        return ToonSerializer.Serialize(_model);
+    }
 
     [Benchmark]
-    public ComplexBenchmarkModel DeserializeGenerated() => ComplexBenchmarkModel.Deserialize(ComplexBenchmarkModel.Serialize(_model));
+    public ComplexBenchmarkModel DeserializeGenerated()
+    {
+        return ComplexBenchmarkModel.Deserialize(ComplexBenchmarkModel.Serialize(_model));
+    }
 
     [Benchmark]
     public ComplexBenchmarkModel? DeserializeReflection()

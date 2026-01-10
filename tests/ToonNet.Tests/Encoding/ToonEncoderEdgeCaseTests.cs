@@ -1,9 +1,7 @@
-using System;
 using ToonNet.Core;
 using ToonNet.Core.Encoding;
-using ToonNet.Core.Parsing;
 using ToonNet.Core.Models;
-using Xunit;
+using ToonNet.Core.Parsing;
 
 namespace ToonNet.Tests.Encoding;
 
@@ -29,6 +27,7 @@ public class ToonEncoderEdgeCaseTests
     {
         // Arrange
         var array = new ToonArray();
+
         var root = new ToonObject
         {
             ["items"] = array
@@ -269,7 +268,8 @@ public class ToonEncoderEdgeCaseTests
     {
         // Arrange
         var array = new ToonArray { FieldNames = ["id", "name"] };
-        for (int i = 1; i <= 100; i++)
+
+        for (var i = 1; i <= 100; i++)
         {
             var row = new ToonObject
             {
@@ -278,7 +278,7 @@ public class ToonEncoderEdgeCaseTests
             };
             array.Items.Add(row);
         }
-        
+
         var root = new ToonObject
         {
             ["users"] = array
@@ -326,15 +326,15 @@ public class ToonEncoderEdgeCaseTests
         // Arrange
         var root = new ToonObject();
         var current = root;
-        
+
         // Create 70 levels of nesting (exceeds default max of 64)
-        for (int i = 0; i < 70; i++)
+        for (var i = 0; i < 70; i++)
         {
             var next = new ToonObject();
             current[$"level{i}"] = next;
             current = next;
         }
-        
+
         var doc = new ToonDocument(root);
         var encoder = new ToonEncoder();
 
@@ -358,7 +358,7 @@ public class ToonEncoderEdgeCaseTests
         array.Items.Add(new ToonNumber(1));
         array.Items.Add(new ToonNumber(2));
         original["array"] = array;
-        
+
         var doc = new ToonDocument(original);
         var encoder = new ToonEncoder();
         var parser = new ToonParser();
@@ -373,7 +373,7 @@ public class ToonEncoderEdgeCaseTests
         Assert.Equal(42.0, ((ToonNumber)result["number"]!).Value);
         Assert.True(((ToonBoolean)result["bool"]!).Value);
         Assert.IsType<ToonNull>(result["null"]);
-        
+
         var resultArray = (ToonArray)result["array"]!;
         Assert.Equal(2, resultArray.Count);
     }

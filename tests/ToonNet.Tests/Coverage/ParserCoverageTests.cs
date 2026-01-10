@@ -1,13 +1,12 @@
 using ToonNet.Core;
-using ToonNet.Core.Parsing;
 using ToonNet.Core.Models;
-using Xunit;
+using ToonNet.Core.Parsing;
 
 namespace ToonNet.Tests.Coverage;
 
 /// <summary>
-/// Coverage improvement tests - Target 80%+
-/// Focus on uncovered edge cases and error paths
+///     Coverage improvement tests - Target 80%+
+///     Focus on uncovered edge cases and error paths
 /// </summary>
 public class ParserCoverageTests
 {
@@ -16,7 +15,7 @@ public class ParserCoverageTests
     {
         var options = new ToonOptions { StrictMode = true };
         var parser = new ToonParser(options);
-        
+
         var ex = Assert.Throws<ToonParseException>(() => parser.Parse("items[3]: 1, 2"));
         Assert.Contains("length mismatch", ex.Message);
     }
@@ -26,7 +25,7 @@ public class ParserCoverageTests
     {
         var options = new ToonOptions { StrictMode = false };
         var parser = new ToonParser(options);
-        
+
         var doc = parser.Parse("items[3]: 1, 2");
         var obj = doc.AsObject();
         var items = (ToonArray)obj["items"];
@@ -38,7 +37,7 @@ public class ParserCoverageTests
     {
         var parser = new ToonParser();
         var input = "people{name,age,city}:\n  Alice, 30";
-        
+
         var ex = Assert.Throws<ToonParseException>(() => parser.Parse(input));
         Assert.Contains("expected 3", ex.Message);
     }
@@ -48,7 +47,7 @@ public class ParserCoverageTests
     {
         var parser = new ToonParser();
         var input = "people{name,age}:\n  Alice, 30\n    Bob, 25";
-        
+
         Assert.Throws<ToonParseException>(() => parser.Parse(input));
     }
 
@@ -59,7 +58,7 @@ public class ParserCoverageTests
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
         var tags = (ToonArray)obj["tags"];
-        
+
         Assert.Equal(3, tags.Count);
         Assert.Equal("tag1", ((ToonString)tags[0]).Value);
     }
@@ -71,7 +70,7 @@ public class ParserCoverageTests
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
         var items = (ToonArray)obj["items"];
-        
+
         Assert.Equal(2, items.Items.Count);
         var item1 = (ToonObject)items[0];
         Assert.Equal("value1", ((ToonString)item1["key"]).Value);
@@ -102,7 +101,7 @@ public class ParserCoverageTests
         var input = "a:\n  b:\n    c:\n      d:\n        e: value";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
-        
+
         var a = (ToonObject)obj["a"];
         var b = (ToonObject)a["b"];
         var c = (ToonObject)b["c"];
@@ -120,10 +119,10 @@ dec: 3.14
 bool_t: true
 bool_f: false
 nul: null";
-        
+
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
-        
+
         Assert.IsType<ToonString>(obj["str"]);
         Assert.IsType<ToonNumber>(obj["num"]);
         Assert.IsType<ToonNumber>(obj["dec"]);
@@ -138,7 +137,7 @@ nul: null";
         var input = @"path: ""C:\\Users""";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
-        
+
         var path = ((ToonString)obj["path"]).Value;
         Assert.Contains("\\", path);
     }
@@ -175,7 +174,7 @@ nul: null";
         var options = new ToonOptions { StrictMode = true };
         var parser = new ToonParser(options);
         var input = "items[3]:\n  a\n  b";
-        
+
         var ex = Assert.Throws<ToonParseException>(() => parser.Parse(input));
         Assert.Contains("length mismatch", ex.Message);
     }
@@ -186,7 +185,7 @@ nul: null";
         var options = new ToonOptions { StrictMode = false };
         var parser = new ToonParser(options);
         var input = "items[3]:\n  a\n  b";
-        
+
         var doc = parser.Parse(input);
         var obj = doc.AsObject();
         var items = (ToonArray)obj["items"];

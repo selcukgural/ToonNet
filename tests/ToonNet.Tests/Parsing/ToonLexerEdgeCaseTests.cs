@@ -1,7 +1,6 @@
 using ToonNet.Core;
-using ToonNet.Core.Parsing;
 using ToonNet.Core.Models;
-using Xunit;
+using ToonNet.Core.Parsing;
 
 namespace ToonNet.Tests.Parsing;
 
@@ -33,9 +32,7 @@ public class ToonLexerEdgeCaseTests
         var tokens = lexer.Tokenize();
 
         // Assert
-        var nonWhitespace = tokens.Where(t => 
-            t.Type != ToonTokenType.Newline && 
-            t.Type != ToonTokenType.Indent).ToList();
+        var nonWhitespace = tokens.Where(t => t.Type != ToonTokenType.Newline && t.Type != ToonTokenType.Indent).ToList();
         Assert.Single(nonWhitespace);
         Assert.Equal(ToonTokenType.EndOfInput, nonWhitespace[0].Type);
     }

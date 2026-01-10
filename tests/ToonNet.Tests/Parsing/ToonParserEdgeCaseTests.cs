@@ -1,7 +1,6 @@
 using ToonNet.Core;
-using ToonNet.Core.Parsing;
 using ToonNet.Core.Models;
-using Xunit;
+using ToonNet.Core.Parsing;
 
 namespace ToonNet.Tests.Parsing;
 
@@ -208,7 +207,7 @@ value3: null";
         var obj = doc.AsObject();
         var users = (ToonArray)obj["users"]!;
         Assert.Equal(5, users.Count);
-        
+
         var lastUser = (ToonObject)users[4];
         Assert.Equal(5.0, ((ToonNumber)lastUser["id"]!).Value);
         Assert.Equal("Eve", ((ToonString)lastUser["name"]!).Value);
@@ -253,10 +252,10 @@ departments:
         // Assert
         var obj = doc.AsObject();
         Assert.Equal("Acme Corp", ((ToonString)obj["company"]!).Value);
-        
+
         var employees = (ToonArray)obj["employees"]!;
         Assert.Equal(2, employees.Count);
-        
+
         var depts = (ToonObject)obj["departments"]!;
         var eng = (ToonObject)depts["engineering"]!;
         Assert.Equal("Alice", ((ToonString)eng["manager"]!).Value);

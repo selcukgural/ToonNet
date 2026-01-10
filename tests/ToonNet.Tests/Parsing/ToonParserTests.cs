@@ -1,6 +1,5 @@
-using ToonNet.Core.Parsing;
 using ToonNet.Core.Models;
-using Xunit;
+using ToonNet.Core.Parsing;
 
 namespace ToonNet.Tests.Parsing;
 
@@ -62,7 +61,7 @@ active: true";
         var obj = doc.AsObject();
         Assert.NotNull(obj["user"]);
         Assert.IsType<ToonObject>(obj["user"]);
-        
+
         var user = (ToonObject)obj["user"]!;
         Assert.Equal("Alice", ((ToonString)user["name"]!).Value);
         Assert.Equal(30.0, ((ToonNumber)user["age"]!).Value);
@@ -82,7 +81,7 @@ active: true";
         var obj = doc.AsObject();
         Assert.NotNull(obj["tags"]);
         Assert.IsType<ToonArray>(obj["tags"]);
-        
+
         var array = (ToonArray)obj["tags"]!;
         Assert.Equal(3, array.Count);
         Assert.Equal("admin", ((ToonString)array[0]).Value);
@@ -106,12 +105,12 @@ active: true";
         var obj = doc.AsObject();
         Assert.NotNull(obj["users"]);
         Assert.IsType<ToonArray>(obj["users"]);
-        
+
         var array = (ToonArray)obj["users"]!;
         Assert.Equal(2, array.Count);
         Assert.True(array.IsTabular);
         Assert.Equal(["id", "name", "role"], array.FieldNames);
-        
+
         var firstUser = (ToonObject)array[0];
         Assert.Equal(1.0, ((ToonNumber)firstUser["id"]!).Value);
         Assert.Equal("Alice", ((ToonString)firstUser["name"]!).Value);

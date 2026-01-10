@@ -1,5 +1,4 @@
 using ToonNet.Core.Serialization;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace ToonNet.Tests.Serialization;
@@ -32,7 +31,7 @@ public class ToonSerializerDebugTests
         _output.WriteLine("==================");
 
         var deserialized = ToonSerializer.Deserialize<DebugPerson>(toon);
-        
+
         _output.WriteLine("=== DESERIALIZED ===");
         _output.WriteLine($"Name: {deserialized?.Name}");
         _output.WriteLine($"Age: {deserialized?.Age}");

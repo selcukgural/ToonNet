@@ -3,7 +3,7 @@ using ToonNet.Core.Serialization.Attributes;
 namespace ToonNet.Benchmarks.Models;
 
 /// <summary>
-/// Simple benchmark model with 5 properties.
+///     Simple benchmark model with 5 properties.
 /// </summary>
 [ToonSerializable]
 public partial class SimpleBenchmarkModel
@@ -16,7 +16,7 @@ public partial class SimpleBenchmarkModel
 }
 
 /// <summary>
-/// Medium complexity model with 10 properties.
+///     Medium complexity model with 10 properties.
 /// </summary>
 [ToonSerializable]
 public partial class MediumBenchmarkModel
@@ -34,7 +34,7 @@ public partial class MediumBenchmarkModel
 }
 
 /// <summary>
-/// Complex model with 15 properties and various types.
+///     Complex model with 15 properties and various types.
 /// </summary>
 [ToonSerializable]
 public partial class ComplexBenchmarkModel
@@ -57,7 +57,7 @@ public partial class ComplexBenchmarkModel
 }
 
 /// <summary>
-/// Model with nullable properties for testing null handling.
+///     Model with nullable properties for testing null handling.
 /// </summary>
 [ToonSerializable]
 public partial class NullableBenchmarkModel

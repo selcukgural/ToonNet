@@ -1,6 +1,5 @@
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
-using Xunit;
 
 namespace ToonNet.Tests.Serialization;
 
@@ -289,14 +288,11 @@ public class PersonWithAddress
 
 public class PersonWithCustomNames
 {
-    [ToonProperty("first_name")]
-    public string FirstName { get; set; } = "";
+    [ToonProperty("first_name")] public string FirstName { get; set; } = "";
 
-    [ToonProperty("last_name")]
-    public string LastName { get; set; } = "";
+    [ToonProperty("last_name")] public string LastName { get; set; } = "";
 
-    [ToonProperty("age")]
-    public int YearsOld { get; set; }
+    [ToonProperty("age")] public int YearsOld { get; set; }
 }
 
 public class PersonWithIgnored
@@ -304,8 +300,7 @@ public class PersonWithIgnored
     public string Name { get; set; } = "";
     public int Age { get; set; }
 
-    [ToonIgnore]
-    public string Password { get; set; } = "";
+    [ToonIgnore] public string Password { get; set; } = "";
 }
 
 #endregion

@@ -1,35 +1,40 @@
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 using ToonNet.Core.Parsing;
-using ToonNet.Core.Serialization;
 
 namespace ToonNet.Tests.SpecCompliance;
 
 /// <summary>
-/// Comprehensive TOON Specification v3.0 Compliance Tests
-/// 
-/// These tests ensure ToonNet fully supports all TOON spec features:
-/// - All data types (string, number, boolean, null)
-/// - Objects with proper key ordering
-/// - Arrays (inline, tabular, list-style)
-/// - Escape sequences and string handling
-/// - Number formatting (no exponents, no leading zeros)
-/// - Delimiters (comma, tab, pipe)
-/// - Indentation and nesting
-/// - Null handling
-/// - Complex real-world scenarios
+///     Comprehensive TOON Specification v3.0 Compliance Tests
+///     These tests ensure ToonNet fully supports all TOON spec features:
+///     - All data types (string, number, boolean, null)
+///     - Objects with proper key ordering
+///     - Arrays (inline, tabular, list-style)
+///     - Escape sequences and string handling
+///     - Number formatting (no exponents, no leading zeros)
+///     - Delimiters (comma, tab, pipe)
+///     - Indentation and nesting
+///     - Null handling
+///     - Complex real-world scenarios
 /// </summary>
 public class ToonSpecComplianceTests
 {
-    private readonly ToonParser _parser = new();
     private readonly ToonEncoder _encoder = new();
+    private readonly ToonParser _parser = new();
 
-    private ToonDocument ParseToon(string input) => _parser.Parse(input);
-    private string EncodeToon(ToonDocument doc) => _encoder.Encode(doc);
+    private ToonDocument ParseToon(string input)
+    {
+        return _parser.Parse(input);
+    }
+
+    private string EncodeToon(ToonDocument doc)
+    {
+        return _encoder.Encode(doc);
+    }
 
     /// <summary>
-    /// Test all primitive types supported by TOON spec.
-    /// Spec §2: Data Model (Primitives: string, number, boolean, null)
+    ///     Test all primitive types supported by TOON spec.
+    ///     Spec §2: Data Model (Primitives: string, number, boolean, null)
     /// </summary>
     [Fact]
     public void AllPrimitiveTypes_RoundTrip_Succeeds()
@@ -57,7 +62,7 @@ smallDecimal: 0.00001";
         Assert.NotNull(obj["booleanTrue"]);
         Assert.NotNull(obj["booleanFalse"]);
         Assert.IsType<ToonNull>(obj["nullValue"]);
-        
+
         // Verify types
         Assert.IsType<ToonString>(obj["stringValue"]);
         Assert.IsType<ToonNumber>(obj["numberValue"]);
@@ -73,12 +78,12 @@ smallDecimal: 0.00001";
     }
 
     /// <summary>
-    /// Test number formatting compliance with TOON spec.
-    /// Spec §2.1: Canonical Number Format
-    /// - No exponent notation
-    /// - No leading zeros
-    /// - No trailing zeros
-    /// ⚠️ PARTIAL - Encoder may not always produce canonical format
+    ///     Test number formatting compliance with TOON spec.
+    ///     Spec §2.1: Canonical Number Format
+    ///     - No exponent notation
+    ///     - No leading zeros
+    ///     - No trailing zeros
+    ///     ⚠️ PARTIAL - Encoder may not always produce canonical format
     /// </summary>
     [Fact]
     public void NumberFormatting_NoExponents_NoLeadingZeros_NoTrailingZeros()
@@ -107,14 +112,17 @@ tinyval: 0.00001";
         // Check that no numbers are in scientific notation
         // Numbers should be in decimal form, not "e" notation
         var lines = encoded.Split('\n');
+
         foreach (var line in lines)
         {
             if (line.Contains(':'))
             {
                 var parts = line.Split(':', 2);
+
                 if (parts.Length == 2)
                 {
                     var numPart = parts[1].Trim();
+
                     // Verify number part doesn't have 'e' (scientific notation)
                     if (double.TryParse(numPart, out _))
                     {
@@ -126,13 +134,13 @@ tinyval: 0.00001";
     }
 
     /// <summary>
-    /// Test escape sequences in strings.
-    /// Spec §7: Strings & Keys
-    /// - Newline: \n
-    /// - Tab: \t
-    /// - Carriage return: \r
-    /// - Quote: \"
-    /// - Backslash: \\
+    ///     Test escape sequences in strings.
+    ///     Spec §7: Strings & Keys
+    ///     - Newline: \n
+    ///     - Tab: \t
+    ///     - Carriage return: \r
+    ///     - Quote: \"
+    ///     - Backslash: \\
     /// </summary>
     [Fact]
     public void EscapeSequences_AllTypes_Preserved()
@@ -173,9 +181,9 @@ combined: ""line1\nline2\twith\ttabs\r\nend""";
     }
 
     /// <summary>
-    /// Test object key ordering is preserved.
-    /// Spec §2: Data Model
-    /// "Object key order: order of first occurrence in document"
+    ///     Test object key ordering is preserved.
+    ///     Spec §2: Data Model
+    ///     "Object key order: order of first occurrence in document"
     /// </summary>
     [Fact]
     public void ObjectKeyOrdering_PreservedAsInDocument()
@@ -196,9 +204,9 @@ fox: 5";
     }
 
     /// <summary>
-    /// Test inline arrays (comma-separated).
-    /// Spec §9: Arrays
-    /// Format: key[length]: value1, value2, value3
+    ///     Test inline arrays (comma-separated).
+    ///     Spec §9: Arrays
+    ///     Format: key[length]: value1, value2, value3
     /// </summary>
     [Fact]
     public void InlineArrays_CommaSeparated_Parsed()
@@ -214,17 +222,17 @@ mixed[4]: 42, true, hello, null";
         // Verify arrays are parsed
         var numbers = (ToonArray)obj["numbers"];
         Assert.Equal(5, numbers.Items.Count);
-        
+
         var words = (ToonArray)obj["words"];
         Assert.Equal(3, words.Items.Count);
-        
+
         var mixed = (ToonArray)obj["mixed"];
         Assert.Equal(4, mixed.Items.Count);
     }
 
     /// <summary>
-    /// Test tabular arrays (CSV-style with headers).
-    /// Spec §9.3: Tabular Arrays
+    ///     Test tabular arrays (CSV-style with headers).
+    ///     Spec §9.3: Tabular Arrays
     /// </summary>
     [Fact]
     public void TabularArrays_WithHeaders_Parsed()
@@ -252,9 +260,9 @@ people{name,age,city}:
     }
 
     /// <summary>
-    /// Test nested objects.
-    /// Spec §8: Objects
-    /// Format: indentation creates nesting
+    ///     Test nested objects.
+    ///     Spec §8: Objects
+    ///     Format: indentation creates nesting
     /// </summary>
     [Fact]
     public void NestedObjects_WithProperIndentation_Parsed()
@@ -276,17 +284,17 @@ user:
         // Verify nesting
         var user = (ToonObject)obj["user"];
         Assert.Equal("Alice", ((ToonString)user["name"]).Value);
-        
+
         var profile = (ToonObject)user["profile"];
         Assert.Equal("Software Engineer", ((ToonString)profile["bio"]).Value);
-        
+
         var social = (ToonObject)profile["social"];
         Assert.Equal("@alice", ((ToonString)social["twitter"]).Value);
     }
 
     /// <summary>
-    /// Test arrays of objects.
-    /// Spec §10: Objects as List Items
+    ///     Test arrays of objects.
+    ///     Spec §10: Objects as List Items
     /// </summary>
     [Fact]
     public void ArraysOfObjects_ListItemFormat_Parsed()
@@ -316,9 +324,9 @@ products:
     }
 
     /// <summary>
-    /// Test quoted string keys and values with special characters.
-    /// Spec §7: Strings & Keys
-    /// ⚠️ NOT YET SUPPORTED - Parser doesn't handle quoted key syntax
+    ///     Test quoted string keys and values with special characters.
+    ///     Spec §7: Strings & Keys
+    ///     ⚠️ NOT YET SUPPORTED - Parser doesn't handle quoted key syntax
     /// </summary>
     [Fact]
     public void QuotedStrings_SpecialCharacters_PreservedExactly()
@@ -340,8 +348,8 @@ products:
     }
 
     /// <summary>
-    /// Test null values in various contexts.
-    /// Spec §2: Data Model (null is primitive)
+    ///     Test null values in various contexts.
+    ///     Spec §2: Data Model (null is primitive)
     /// </summary>
     [Fact]
     public void NullValues_InMultipleContexts_Handled()
@@ -370,8 +378,8 @@ arrayWithNulls[3]: first, null, third";
     }
 
     /// <summary>
-    /// Test deep nesting (multiple indentation levels).
-    /// Spec §12: Indentation & Whitespace
+    ///     Test deep nesting (multiple indentation levels).
+    ///     Spec §12: Indentation & Whitespace
     /// </summary>
     [Fact]
     public void DeepNesting_MultipleIndentationLevels_Handled()
@@ -400,10 +408,10 @@ level1:
     }
 
     /// <summary>
-    /// Test complex real-world document (API response format).
-    /// Combines all TOON features.
-    /// Complex real-world test combining multiple features.
-    /// Tests nested objects, arrays, list items, and various value types.
+    ///     Test complex real-world document (API response format).
+    ///     Combines all TOON features.
+    ///     Complex real-world test combining multiple features.
+    ///     Tests nested objects, arrays, list items, and various value types.
     /// </summary>
     [Fact]
     public void ComplexRealWorld_APIResponse_RoundTrip()
@@ -443,7 +451,7 @@ data:
 
         // Parse
         var doc = ParseToon(toonString);
-        
+
         // Verify structure
         var root = (ToonObject)doc.Root;
         Assert.Equal("success", ((ToonString)root["status"]).Value);
@@ -455,7 +463,7 @@ data:
 
         var firstUser = (ToonObject)users.Items[0];
         Assert.Equal("alice_dev", ((ToonString)firstUser["username"]).Value);
-        
+
         var roles = (ToonArray)firstUser["roles"];
         Assert.Equal(2, roles.Items.Count);
 
@@ -471,17 +479,17 @@ data:
         // Encode and re-parse to verify round-trip
         var encoded = EncodeToon(doc);
         var reparsed = ParseToon(encoded);
-        
+
         var reparseRoot = (ToonObject)reparsed.Root;
         var reparseData = (ToonObject)reparseRoot["data"];
         var reparseUsers = (ToonArray)reparseData["users"];
-        
+
         Assert.Equal(2, reparseUsers.Items.Count);
     }
 
     /// <summary>
-    /// Test boolean case sensitivity.
-    /// Spec: true/false are lowercase keywords
+    ///     Test boolean case sensitivity.
+    ///     Spec: true/false are lowercase keywords
     /// </summary>
     [Fact]
     public void BooleanKeywords_Lowercase_Required()
@@ -500,8 +508,8 @@ falseValue: false";
     }
 
     /// <summary>
-    /// Test that property names are case-sensitive.
-    /// Spec: Keys are case-sensitive
+    ///     Test that property names are case-sensitive.
+    ///     Spec: Keys are case-sensitive
     /// </summary>
     [Fact]
     public void PropertyNamesCaseSensitive()
@@ -520,7 +528,7 @@ NAME: ALICE";
     }
 
     /// <summary>
-    /// Test empty strings, empty arrays, empty objects.
+    ///     Test empty strings, empty arrays, empty objects.
     /// </summary>
     [Fact]
     public void EmptyCollections_Handled()
@@ -547,7 +555,7 @@ emptyObject:";
     }
 
     /// <summary>
-    /// Test very large numbers (within double precision).
+    ///     Test very large numbers (within double precision).
     /// </summary>
     [Fact]
     public void LargeNumbers_WithinDoublePrecision_Handled()
@@ -567,8 +575,8 @@ veryLarge: 999999999999999";
     }
 
     /// <summary>
-    /// Test that unquoted strings with special chars are quoted when re-encoded.
-    /// ⚠️ PARTIAL - Some edge cases in escape handling
+    ///     Test that unquoted strings with special chars are quoted when re-encoded.
+    ///     ⚠️ PARTIAL - Some edge cases in escape handling
     /// </summary>
     [Fact]
     public void SpecialCharactersInStrings_RoundTrip()
@@ -589,11 +597,11 @@ url: ""https://example.com/path?query=value""";
         var originalPath = ((ToonString)original["path"]).Value;
         var reparesedPath = ((ToonString)reparsed_obj["path"]).Value;
         Assert.Equal(originalPath, reparesedPath);
-        
+
         var originalEmail = ((ToonString)original["email"]).Value;
         var reparesedEmail = ((ToonString)reparsed_obj["email"]).Value;
         Assert.Equal(originalEmail, reparesedEmail);
-        
+
         var originalUrl = ((ToonString)original["url"]).Value;
         var reparesedUrl = ((ToonString)reparsed_obj["url"]).Value;
         Assert.Equal(originalUrl, reparesedUrl);

@@ -1,6 +1,4 @@
-using System;
 using ToonNet.Core.Models;
-using Xunit;
 
 namespace ToonNet.Tests.Models;
 

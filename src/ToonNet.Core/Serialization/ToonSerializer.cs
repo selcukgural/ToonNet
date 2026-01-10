@@ -1,18 +1,20 @@
+using System.Collections;
+using System.Reflection;
+using System.Text;
+using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 using ToonNet.Core.Parsing;
-using ToonNet.Core.Encoding;
-using System.Reflection;
 using ToonNet.Core.Serialization.Attributes;
 
 namespace ToonNet.Core.Serialization;
 
 /// <summary>
-/// Main serializer for converting between C# objects and TOON format.
+///     Main serializer for converting between C# objects and TOON format.
 /// </summary>
 public static class ToonSerializer
 {
     /// <summary>
-    /// Serializes an object to TOON format string.
+    ///     Serializes an object to TOON format string.
     /// </summary>
     /// <typeparam name="T">The type of object to serialize.</typeparam>
     /// <param name="value">The value to serialize.</param>
@@ -31,7 +33,7 @@ public static class ToonSerializer
     }
 
     /// <summary>
-    /// Deserializes a TOON format string to an object.
+    ///     Deserializes a TOON format string to an object.
     /// </summary>
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="toonString">The TOON format string to deserialize.</param>
@@ -44,7 +46,7 @@ public static class ToonSerializer
     }
 
     /// <summary>
-    /// Deserializes a TOON format string to an object of the specified type.
+    ///     Deserializes a TOON format string to an object of the specified type.
     /// </summary>
     /// <param name="toonString">The TOON format string to deserialize.</param>
     /// <param name="type">The target type to deserialize to.</param>
@@ -64,7 +66,7 @@ public static class ToonSerializer
     #region Serialization
 
     /// <summary>
-    /// Serializes a value to its TOON representation.
+    ///     Serializes a value to its TOON representation.
     /// </summary>
     /// <param name="value">The value to serialize.</param>
     /// <param name="type">The type of the value.</param>
@@ -78,11 +80,12 @@ public static class ToonSerializer
         {
             throw new ToonEncodingException($"Maximum depth of {options.MaxDepth} exceeded during serialization");
         }
-        
+
         if (value == null)
         {
             return options.IgnoreNullValues ? null : ToonNull.Instance;
         }
+
         // Check for custom converter
         var converter = options.GetConverter(type);
 
@@ -110,6 +113,12 @@ public static class ToonSerializer
                    SerializeObject(value, type, options, depth);
     }
 
+    /// <summary>
+    ///     Attempts to serialize a primitive value.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="result">The resulting ToonValue if successful.</param>
+    /// <returns>True if the value was successfully serialized as a primitive; otherwise, false.</returns>
     private static bool TrySerializePrimitive(object value, out ToonValue? result)
     {
         result = null;
@@ -172,15 +181,23 @@ public static class ToonSerializer
         return false;
     }
 
+    /// <summary>
+    ///     Attempts to serialize a collection value.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Serialization options.</param>
+    /// <param name="depth">The current serialization depth.</param>
+    /// <param name="result">The resulting ToonValue if successful.</param>
+    /// <returns>True if the value was successfully serialized as a collection; otherwise, false.</returns>
     private static bool TrySerializeCollection(object value, ToonSerializerOptions options, int depth, out ToonValue? result)
     {
         result = null;
 
-        if (value is not System.Collections.IEnumerable enumerable)
+        if (value is not IEnumerable enumerable)
         {
             return false;
         }
-        
+
         if (value is string) // String is IEnumerable but shouldn't be treated as a collection
         {
             return false;
@@ -202,18 +219,26 @@ public static class ToonSerializer
         return true;
     }
 
+    /// <summary>
+    ///     Attempts to serialize a dictionary value.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Serialization options.</param>
+    /// <param name="depth">The current serialization depth.</param>
+    /// <param name="result">The resulting ToonValue if successful.</param>
+    /// <returns>True if the value was successfully serialized as a dictionary; otherwise, false.</returns>
     private static bool TrySerializeDictionary(object value, ToonSerializerOptions options, int depth, out ToonValue? result)
     {
         result = null;
 
-        if (value is not System.Collections.IDictionary dictionary)
+        if (value is not IDictionary dictionary)
         {
             return false;
         }
 
         var obj = new ToonObject();
 
-        foreach (System.Collections.DictionaryEntry entry in dictionary)
+        foreach (DictionaryEntry entry in dictionary)
         {
             var key = entry.Key.ToString();
 
@@ -234,6 +259,14 @@ public static class ToonSerializer
         return true;
     }
 
+    /// <summary>
+    ///     Serializes an object by reflecting over its properties.
+    /// </summary>
+    /// <param name="value">The object to serialize.</param>
+    /// <param name="type">The type of the object.</param>
+    /// <param name="options">Serialization options.</param>
+    /// <param name="depth">The current serialization depth.</param>
+    /// <returns>A ToonObject containing the serialized properties.</returns>
     private static ToonValue SerializeObject(object value, Type type, ToonSerializerOptions options, int depth)
     {
         var obj = new ToonObject();
@@ -273,6 +306,12 @@ public static class ToonSerializer
         return obj;
     }
 
+    /// <summary>
+    ///     Gets the serialized name for a property based on naming policy and attributes.
+    /// </summary>
+    /// <param name="property">The property to get the name for.</param>
+    /// <param name="options">Serialization options containing naming policy.</param>
+    /// <returns>The name to use in TOON format.</returns>
     private static string GetPropertyName(PropertyInfo property, ToonSerializerOptions options)
     {
         // Check for custom name attribute
@@ -294,6 +333,11 @@ public static class ToonSerializer
         };
     }
 
+    /// <summary>
+    ///     Converts a property name to camelCase format.
+    /// </summary>
+    /// <param name="name">The property name to convert.</param>
+    /// <returns>The property name in camelCase format.</returns>
     private static string ToCamelCase(string name)
     {
         if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
@@ -304,6 +348,11 @@ public static class ToonSerializer
         return char.ToLowerInvariant(name[0]) + name[1..];
     }
 
+    /// <summary>
+    ///     Converts a property name to snake_case format.
+    /// </summary>
+    /// <param name="name">The property name to convert.</param>
+    /// <returns>The property name in snake_case format.</returns>
     private static string ToSnakeCase(string name)
     {
         if (string.IsNullOrEmpty(name))
@@ -311,7 +360,7 @@ public static class ToonSerializer
             return name;
         }
 
-        var result = new System.Text.StringBuilder();
+        var result = new StringBuilder();
         result.Append(char.ToLowerInvariant(name[0]));
 
         for (var i = 1; i < name.Length; i++)
@@ -335,7 +384,7 @@ public static class ToonSerializer
     #region Deserialization
 
     /// <summary>
-    /// Deserializes a ToonValue to a C# object.
+    ///     Deserializes a ToonValue to a C# object.
     /// </summary>
     /// <param name="value">The ToonValue to deserialize.</param>
     /// <param name="targetType">The target C# type.</param>
@@ -385,7 +434,7 @@ public static class ToonSerializer
             {
                 return collectionResult;
             }
-            
+
             return TryDeserializeDictionary(value, targetType, options, depth, out var dictionaryResult)
                        // Handle dictionaries
                        ? dictionaryResult
@@ -516,6 +565,15 @@ public static class ToonSerializer
         return false;
     }
 
+    /// <summary>
+    ///     Attempts to deserialize a TOON array as a collection.
+    /// </summary>
+    /// <param name="value">The TOON value to deserialize.</param>
+    /// <param name="targetType">The target collection type.</param>
+    /// <param name="options">Deserialization options.</param>
+    /// <param name="depth">The current deserialization depth.</param>
+    /// <param name="result">The deserialized collection if successful.</param>
+    /// <returns>True if the value was successfully deserialized as a collection; otherwise, false.</returns>
     private static bool TryDeserializeCollection(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, out object? result)
     {
         result = null;
@@ -524,7 +582,7 @@ public static class ToonSerializer
         {
             return false;
         }
-        
+
         // Determine element type
         Type? elementType = null;
 
@@ -536,10 +594,8 @@ public static class ToonSerializer
         {
             var genericDef = targetType.GetGenericTypeDefinition();
 
-            if (genericDef == typeof(List<>)
-                || genericDef == typeof(IList<>)
-                || genericDef == typeof(ICollection<>)
-                || genericDef == typeof(IEnumerable<>))
+            if (genericDef == typeof(List<>) || genericDef == typeof(IList<>) || genericDef == typeof(ICollection<>) ||
+                genericDef == typeof(IEnumerable<>))
             {
                 elementType = targetType.GetGenericArguments()[0];
             }
@@ -549,7 +605,8 @@ public static class ToonSerializer
         {
             return false;
         }
-        var list = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType))!;
+
+        var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType))!;
 
         foreach (var item in array.Items)
         {
@@ -571,6 +628,15 @@ public static class ToonSerializer
         return true;
     }
 
+    /// <summary>
+    ///     Attempts to deserialize a TOON object as a dictionary.
+    /// </summary>
+    /// <param name="value">The TOON value to deserialize.</param>
+    /// <param name="targetType">The target dictionary type.</param>
+    /// <param name="options">Deserialization options.</param>
+    /// <param name="depth">The current deserialization depth.</param>
+    /// <param name="result">The deserialized dictionary if successful.</param>
+    /// <returns>True if the value was successfully deserialized as a dictionary; otherwise, false.</returns>
     private static bool TryDeserializeDictionary(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, out object? result)
     {
         result = null;
@@ -579,17 +645,19 @@ public static class ToonSerializer
         {
             return false;
         }
+
         if (!targetType.IsGenericType)
         {
             return false;
         }
+
         var genericDef = targetType.GetGenericTypeDefinition();
 
         if (genericDef != typeof(Dictionary<,>) && genericDef != typeof(IDictionary<,>))
         {
             return false;
         }
-        
+
         var keyType = targetType.GetGenericArguments()[0];
         var valueType = targetType.GetGenericArguments()[1];
 
@@ -597,8 +665,8 @@ public static class ToonSerializer
         {
             return false; // TOON only supports string keys
         }
-        
-        var dict = (System.Collections.IDictionary)Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(keyType, valueType))!;
+
+        var dict = (IDictionary)Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(keyType, valueType))!;
 
         foreach (var (key, toonValue) in obj.Properties)
         {
@@ -610,20 +678,29 @@ public static class ToonSerializer
         return true;
     }
 
+    /// <summary>
+    ///     Deserializes a TOON object to a C# object by reflecting over properties.
+    /// </summary>
+    /// <param name="value">The TOON object to deserialize.</param>
+    /// <param name="targetType">The target C# type.</param>
+    /// <param name="options">Deserialization options.</param>
+    /// <param name="depth">The current deserialization depth.</param>
+    /// <returns>The deserialized C# object.</returns>
+    /// <exception cref="ToonParseException">Thrown when the value is not an object or instance creation fails.</exception>
     private static object DeserializeObject(ToonValue value, Type targetType, ToonSerializerOptions options, int depth)
     {
         if (value is not ToonObject obj)
         {
             throw new ToonParseException($"Expected object but got {value.ValueType}", 0, 0);
         }
-        
+
         var instance = Activator.CreateInstance(targetType);
 
         if (instance == null)
         {
             throw new ToonParseException($"Cannot create instance of {targetType.Name}", 0, 0);
         }
-        
+
         var properties = targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
         foreach (var prop in properties)
@@ -633,11 +710,13 @@ public static class ToonSerializer
             {
                 continue;
             }
+
             // Skip read-only properties
             if (!prop.CanWrite)
             {
                 continue;
             }
+
             var propName = GetPropertyName(prop, options);
 
             if (!obj.Properties.TryGetValue(propName, out var toonValue))
