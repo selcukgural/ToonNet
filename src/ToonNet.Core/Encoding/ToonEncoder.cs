@@ -31,7 +31,8 @@ namespace ToonNet.Core.Encoding;
 public sealed class ToonEncoder(ToonOptions? options = null)
 {
     // Cache for indent strings to avoid allocations in hot paths
-    private static readonly string[] IndentCache = Enumerable.Range(0, 32).Select(i => new string(' ', i * 2)).ToArray();
+    // Expanded to support MaxDepth=100 (51 levels = 0-100 spaces)
+    private static readonly string[] IndentCache = Enumerable.Range(0, 51).Select(i => new string(' ', i * 2)).ToArray();
 
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
     private readonly StringBuilder _sb = new();
