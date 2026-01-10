@@ -35,6 +35,12 @@ internal sealed record PropertyInfo
     public int Order { get; init; }
 
     /// <summary>
+    /// Custom converter type from [ToonConverter(typeof(...))] attribute.
+    /// If specified, this converter is used instead of default serialization.
+    /// </summary>
+    public ITypeSymbol? CustomConverter { get; init; }
+
+    /// <summary>
     /// Gets the name to use when serializing (applies custom name if set).
     /// </summary>
     public string SerializedName => CustomName ?? Name;
@@ -53,4 +59,9 @@ internal sealed record PropertyInfo
     /// Gets a value indicating whether the property has a setter.
     /// </summary>
     public bool HasSetter => Symbol.SetMethod is not null;
+
+    /// <summary>
+    /// Gets a value indicating whether a custom converter is available.
+    /// </summary>
+    public bool HasCustomConverter => CustomConverter is not null;
 }

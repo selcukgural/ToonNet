@@ -34,6 +34,12 @@ internal sealed record ClassInfo
     public required AttributeData? Attribute { get; init; }
 
     /// <summary>
+    /// Custom constructor marked with [ToonConstructor] (if any).
+    /// If specified, this constructor is called during deserialization.
+    /// </summary>
+    public IMethodSymbol? CustomConstructor { get; init; }
+
+    /// <summary>
     /// Gets the fully qualified class name.
     /// </summary>
     public string FullName => $"{Namespace}.{Name}";
@@ -57,6 +63,11 @@ internal sealed record ClassInfo
     /// Gets whether to include XML documentation in generated code.
     /// </summary>
     public bool IncludeDocumentation => GetBooleanAttribute("IncludeDocumentation", true);
+
+    /// <summary>
+    /// Gets a value indicating whether a custom constructor is available.
+    /// </summary>
+    public bool HasCustomConstructor => CustomConstructor is not null;
 
     /// <summary>
     /// Extracts a boolean attribute value from [ToonSerializable].

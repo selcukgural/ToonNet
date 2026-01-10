@@ -45,7 +45,17 @@ internal static class DeserializeMethodGenerator
 
         // Get root object
         code.AppendLine("var obj = (global::ToonNet.Core.Models.ToonObject)doc.Root;");
-        code.AppendLine($"var result = new {classInfo.Name}();");
+        
+        // Use custom constructor or default constructor
+        if (classInfo.HasCustomConstructor && classInfo.CustomConstructor?.Parameters.Length > 0)
+        {
+            // For now, fall back to parameterless constructor (Phase 4 enhancement)
+            code.AppendLine($"var result = new {classInfo.Name}();");
+        }
+        else
+        {
+            code.AppendLine($"var result = new {classInfo.Name}();");
+        }
         code.AppendLine();
 
         // Deserialize each property

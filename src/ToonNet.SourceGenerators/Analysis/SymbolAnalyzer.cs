@@ -14,6 +14,8 @@ internal sealed class SymbolAnalyzer
     private readonly INamedTypeSymbol? _toonIgnoreAttr;
     private readonly INamedTypeSymbol? _toonPropertyAttr;
     private readonly INamedTypeSymbol? _toonPropertyOrderAttr;
+    private readonly INamedTypeSymbol? _toonConverterAttr;
+    private readonly INamedTypeSymbol? _toonConstructorAttr;
 
     public SymbolAnalyzer(Compilation compilation)
     {
@@ -26,6 +28,10 @@ internal sealed class SymbolAnalyzer
             "ToonNet.Core.Serialization.Attributes.ToonPropertyAttribute");
         _toonPropertyOrderAttr = compilation.GetTypeByMetadataName(
             "ToonNet.Core.Serialization.Attributes.ToonPropertyOrderAttribute");
+        _toonConverterAttr = compilation.GetTypeByMetadataName(
+            "ToonNet.Core.Serialization.Attributes.ToonConverterAttribute");
+        _toonConstructorAttr = compilation.GetTypeByMetadataName(
+            "ToonNet.Core.Serialization.Attributes.ToonConstructorAttribute");
     }
 
     /// <summary>
@@ -36,6 +42,7 @@ internal sealed class SymbolAnalyzer
         var properties = ExtractProperties(classSymbol);
         var attribute = GetToonSerializableAttribute(classSymbol);
         var isPartial = syntax?.Modifiers.Any(m => m.Text == "partial") ?? false;
+        var customConstructor = FindCustomConstructor(classSymbol);
 
         return new ClassInfo
         {
@@ -44,7 +51,8 @@ internal sealed class SymbolAnalyzer
             Symbol = classSymbol,
             Properties = properties,
             Attribute = attribute,
-            IsPartial = isPartial
+            IsPartial = isPartial,
+            CustomConstructor = customConstructor
         };
     }
 
@@ -62,6 +70,7 @@ internal sealed class SymbolAnalyzer
                 continue;
 
             var isIgnored = HasAttribute(member, _toonIgnoreAttr);
+            var customConverter = GetCustomConverter(member);
             
             var info = new PropertyInfo
             {
@@ -70,7 +79,8 @@ internal sealed class SymbolAnalyzer
                 Type = member.Type,
                 CustomName = GetCustomPropertyName(member),
                 Order = GetPropertyOrder(member),
-                IsIgnored = isIgnored
+                IsIgnored = isIgnored,
+                CustomConverter = customConverter
             };
 
             properties.Add(info);
@@ -93,6 +103,21 @@ internal sealed class SymbolAnalyzer
         {
             var value = attr.ConstructorArguments[0].Value;
             return value as string;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the custom converter type from [ToonConverter(typeof(...))] attribute.
+    /// </summary>
+    private ITypeSymbol? GetCustomConverter(IPropertySymbol prop)
+    {
+        var attr = FindAttribute(prop, _toonConverterAttr);
+        if (attr?.ConstructorArguments.Length > 0)
+        {
+            var value = attr.ConstructorArguments[0].Value;
+            if (value is ITypeSymbol converterType)
+                return converterType;
         }
         return null;
     }
@@ -138,5 +163,14 @@ internal sealed class SymbolAnalyzer
         if (attributeType is null) return null;
         return symbol.GetAttributes()
             .FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
+    }
+
+    /// <summary>
+    /// Finds the constructor marked with [ToonConstructor] attribute.
+    /// </summary>
+    private IMethodSymbol? FindCustomConstructor(INamedTypeSymbol classSymbol)
+    {
+        return classSymbol.Constructors
+            .FirstOrDefault(c => HasAttribute(c, _toonConstructorAttr));
     }
 }
