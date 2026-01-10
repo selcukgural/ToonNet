@@ -17,20 +17,29 @@ internal static class DeserializeMethodGenerator
         var code = new CodeBuilder();
 
         // Method signature
-        code.AppendLine("/// <summary>");
-        code.AppendLine("/// Deserializes a TOON document to an instance (generated code).");
-        code.AppendLine("/// </summary>");
-        code.AppendLine("/// <param name=\"doc\">The TOON document to deserialize.</param>");
-        code.AppendLine("/// <param name=\"options\">Deserialization options (uses defaults if null).</param>");
-        code.AppendLine("/// <returns>A new instance populated from the document.</returns>");
-        code.AppendLine("/// <exception cref=\"global::System.ArgumentNullException\">Thrown if doc is null.</exception>");
-        code.AppendLine($"public static {classInfo.Name} Deserialize(");
+        if (classInfo.IncludeDocumentation)
+        {
+            code.AppendLine("/// <summary>");
+            code.AppendLine("/// Deserializes a TOON document to an instance (generated code).");
+            code.AppendLine("/// </summary>");
+            code.AppendLine("/// <param name=\"doc\">The TOON document to deserialize.</param>");
+            code.AppendLine("/// <param name=\"options\">Deserialization options (uses defaults if null).</param>");
+            code.AppendLine("/// <returns>A new instance populated from the document.</returns>");
+            code.AppendLine("/// <exception cref=\"global::System.ArgumentNullException\">Thrown if doc is null.</exception>");
+        }
+
+        var accessibility = classInfo.GeneratePublicMethods ? "public" : "internal";
+        code.AppendLine($"{accessibility} static {classInfo.Name} Deserialize(");
         code.AppendLine("    global::ToonNet.Core.Models.ToonDocument doc,");
         code.AppendLine("    global::ToonNet.Core.Serialization.ToonSerializerOptions? options = null)");
         code.BeginBlock("");
 
-        // Null check
-        code.AppendLine("global::System.ArgumentNullException.ThrowIfNull(doc);");
+        // Null check (if enabled)
+        if (classInfo.IncludeNullChecks)
+        {
+            code.AppendLine("global::System.ArgumentNullException.ThrowIfNull(doc);");
+        }
+
         code.AppendLine("options ??= new global::ToonNet.Core.Serialization.ToonSerializerOptions();");
         code.AppendLine();
 

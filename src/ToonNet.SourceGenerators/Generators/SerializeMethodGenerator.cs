@@ -17,19 +17,28 @@ internal static class SerializeMethodGenerator
         var code = new CodeBuilder();
 
         // Method signature
-        code.AppendLine("/// <summary>");
-        code.AppendLine("/// Serializes this instance to a TOON document (generated code).");
-        code.AppendLine("/// </summary>");
-        code.AppendLine("/// <param name=\"value\">The instance to serialize.</param>");
-        code.AppendLine("/// <param name=\"options\">Serialization options (uses defaults if null).</param>");
-        code.AppendLine("/// <returns>A ToonDocument containing the serialized data.</returns>");
-        code.AppendLine("public static global::ToonNet.Core.Models.ToonDocument Serialize(");
+        if (classInfo.IncludeDocumentation)
+        {
+            code.AppendLine("/// <summary>");
+            code.AppendLine("/// Serializes this instance to a TOON document (generated code).");
+            code.AppendLine("/// </summary>");
+            code.AppendLine("/// <param name=\"value\">The instance to serialize.</param>");
+            code.AppendLine("/// <param name=\"options\">Serialization options (uses defaults if null).</param>");
+            code.AppendLine("/// <returns>A ToonDocument containing the serialized data.</returns>");
+        }
+
+        var accessibility = classInfo.GeneratePublicMethods ? "public" : "internal";
+        code.AppendLine($"{accessibility} static global::ToonNet.Core.Models.ToonDocument Serialize(");
         code.AppendLine($"    {classInfo.Name} value,");
         code.AppendLine("    global::ToonNet.Core.Serialization.ToonSerializerOptions? options = null)");
         code.BeginBlock("");
 
-        // Null check
-        code.AppendLine("global::System.ArgumentNullException.ThrowIfNull(value);");
+        // Null check (if enabled)
+        if (classInfo.IncludeNullChecks)
+        {
+            code.AppendLine("global::System.ArgumentNullException.ThrowIfNull(value);");
+        }
+
         code.AppendLine("options ??= new global::ToonNet.Core.Serialization.ToonSerializerOptions();");
         code.AppendLine();
 
@@ -74,7 +83,7 @@ internal static class SerializeMethodGenerator
             code.BeginBlock("");
             GeneratePropertyValueSerialization(code, prop, serializedName, propName);
             code.EndBlock();
-            code.AppendLine("else");
+            code.AppendLine("else if (!options.IgnoreNullValues)");
             code.BeginBlock("");
             code.AppendLine($"obj[\"{serializedName}\"] = global::ToonNet.Core.Models.ToonNull.Instance;");
             code.EndBlock();

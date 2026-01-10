@@ -42,4 +42,35 @@ internal sealed record ClassInfo
     /// Gets a value indicating whether the class is declared as partial.
     /// </summary>
     public bool IsPartial { get; init; }
+
+    /// <summary>
+    /// Gets whether to generate public methods (vs internal).
+    /// </summary>
+    public bool GeneratePublicMethods => GetBooleanAttribute("GeneratePublicMethods", true);
+
+    /// <summary>
+    /// Gets whether to include null-check guards in generated code.
+    /// </summary>
+    public bool IncludeNullChecks => GetBooleanAttribute("IncludeNullChecks", true);
+
+    /// <summary>
+    /// Gets whether to include XML documentation in generated code.
+    /// </summary>
+    public bool IncludeDocumentation => GetBooleanAttribute("IncludeDocumentation", true);
+
+    /// <summary>
+    /// Extracts a boolean attribute value from [ToonSerializable].
+    /// </summary>
+    private bool GetBooleanAttribute(string attributeName, bool defaultValue)
+    {
+        if (Attribute is null) return defaultValue;
+
+        foreach (var namedArg in Attribute.NamedArguments)
+        {
+            if (namedArg.Key == attributeName && namedArg.Value.Value is bool value)
+                return value;
+        }
+
+        return defaultValue;
+    }
 }
