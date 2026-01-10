@@ -50,24 +50,14 @@ internal static class DeserializeMethodGenerator
         // Create instance using custom constructor or default constructor
         if (classInfo.HasCustomConstructor && classInfo.CustomConstructor?.Parameters.Length > 0)
         {
-            // Build constructor parameters
+            // Build constructor parameters using parameter names
             var ctor = classInfo.CustomConstructor;
             var parameterStrings = new List<string>();
 
             foreach (var param in ctor.Parameters)
             {
-                // Find matching property
-                var matchingProp = classInfo.Properties.FirstOrDefault(p => 
-                    p.Name.Equals(param.Name, StringComparison.OrdinalIgnoreCase));
-
-                if (matchingProp is not null)
-                {
-                    parameterStrings.Add($"{matchingProp.Name}: default");
-                }
-                else
-                {
-                    parameterStrings.Add($"{param.Name}: default");
-                }
+                // Use the actual constructor parameter name (not property name)
+                parameterStrings.Add($"{param.Name}: default");
             }
 
             var ctorParams = string.Join(", ", parameterStrings);
@@ -147,8 +137,9 @@ internal static class DeserializeMethodGenerator
         // Check for nested [ToonSerializable] class
         if (prop.IsNestedSerializable)
         {
+            var nestedTypeName = GetTypeNameForNested(prop.Type);
             code.AppendLine($"var {propName}Doc = new global::ToonNet.Core.Models.ToonDocument({propName}Value);");
-            code.AppendLine($"result.{prop.Name} = {typeName}.Deserialize({propName}Doc, options);");
+            code.AppendLine($"result.{prop.Name} = {nestedTypeName}.Deserialize({propName}Doc, options);");
             return;
         }
 
@@ -403,5 +394,17 @@ internal static class DeserializeMethodGenerator
     private static bool IsNullableType(ITypeSymbol type)
     {
         return type.IsValueType && type.NullableAnnotation == NullableAnnotation.Annotated;
+    }
+
+    /// <summary>
+    /// Gets the simple type name for nested [ToonSerializable] classes (they're in same namespace).
+    /// </summary>
+    private static string GetTypeNameForNested(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol namedType)
+        {
+            return namedType.Name;
+        }
+        return type.ToDisplayString();
     }
 }

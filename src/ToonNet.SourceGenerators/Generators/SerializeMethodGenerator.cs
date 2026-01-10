@@ -120,7 +120,8 @@ internal static class SerializeMethodGenerator
         // Check for nested [ToonSerializable] class
         if (prop.IsNestedSerializable)
         {
-            code.AppendLine($"var {propName}Doc = {typeName}.Serialize(value.{propName}, options);");
+            var nestedTypeName = GetTypeNameForNested(prop.Type);
+            code.AppendLine($"var {propName}Doc = {nestedTypeName}.Serialize(value.{propName}, options);");
             code.AppendLine($"obj[\"{serializedName}\"] = {propName}Doc.Root;");
             return;
         }
@@ -288,6 +289,18 @@ internal static class SerializeMethodGenerator
     private static bool IsNullableType(ITypeSymbol type)
     {
         return type.IsValueType && type.NullableAnnotation == NullableAnnotation.Annotated;
+    }
+
+    /// <summary>
+    /// Gets the simple type name for nested [ToonSerializable] classes (they're in same namespace).
+    /// </summary>
+    private static string GetTypeNameForNested(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol namedType)
+        {
+            return namedType.Name;
+        }
+        return type.ToDisplayString();
     }
 }
 
