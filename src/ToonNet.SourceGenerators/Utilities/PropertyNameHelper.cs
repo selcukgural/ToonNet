@@ -19,7 +19,7 @@ internal static class PropertyNameHelper
             return name;
         }
 
-        return char.ToLowerInvariant(name[0]) + name.Substring(1);
+        return char.ToLowerInvariant(name[0]) + name[1..];
     }
 
     /// <summary>

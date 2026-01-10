@@ -53,7 +53,7 @@ internal static class CollectionTypeHelper
         }
 
         // Generic type: get first type argument
-        if (type is INamedTypeSymbol namedType && namedType.TypeArguments.Length > 0)
+        if (type is INamedTypeSymbol { TypeArguments.Length: > 0 } namedType)
         {
             return namedType.TypeArguments[0];
         }
@@ -92,7 +92,7 @@ internal static class CollectionTypeHelper
     /// </summary>
     public static (ITypeSymbol? KeyType, ITypeSymbol? ValueType) GetDictionaryTypes(ITypeSymbol type)
     {
-        if (type is INamedTypeSymbol namedType && namedType.TypeArguments.Length >= 2)
+        if (type is INamedTypeSymbol { TypeArguments.Length: >= 2 } namedType)
         {
             return (namedType.TypeArguments[0], namedType.TypeArguments[1]);
         }

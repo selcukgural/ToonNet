@@ -1,12 +1,14 @@
 <Solution>
     <Folder Name="/benchmark/">
-        <Project Path="src/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj"/>
+        <Project Path="src/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj" />
     </Folder>
     <Folder Name="/src/">
-        <Project Path="src/ToonNet.Core/ToonNet.Core.csproj"/>
-        <Project Path="src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj"/>
+        <Project Path="src/ToonNet.Core/ToonNet.Core.csproj" />
+        <Project Path="src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj" />
+        <Project Path="src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj" />
+        <Project Path="src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj" />
     </Folder>
     <Folder Name="/test/">
-        <Project Path="tests/ToonNet.Tests/ToonNet.Tests.csproj"/>
+        <Project Path="tests/ToonNet.Tests/ToonNet.Tests.csproj" />
     </Folder>
 </Solution>

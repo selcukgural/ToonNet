@@ -5,17 +5,27 @@ namespace ToonNet.Core.Models;
 /// <summary>
 ///     Represents a value in TOON format.
 /// </summary>
+/// <remarks>
+///     This is the base class for all TOON value types, such as null, boolean, number, string, object, and array.
+///     It provides a common interface for accessing the type of the value.
+/// </remarks>
 public abstract class ToonValue
 {
     /// <summary>
     ///     Gets the type of this value.
     /// </summary>
+    /// <value>
+    ///     A <see cref="ToonValueType"/> enumeration value indicating the specific type of this TOON value.
+    /// </value>
     public abstract ToonValueType ValueType { get; }
 }
 
 /// <summary>
-///     Specifies the type of a TOON value.
+///     Specifies the type of TOON value.
 /// </summary>
+/// <remarks>
+///     This enumeration defines the possible types of values that can exist in the TOON format.
+/// </remarks>
 public enum ToonValueType
 {
     /// <summary>
@@ -52,6 +62,9 @@ public enum ToonValueType
 /// <summary>
 ///     Represents a null value in TOON format.
 /// </summary>
+/// <remarks>
+///     This class is a singleton, meaning only one instance of it exists.
+/// </remarks>
 public sealed class ToonNull : ToonValue
 {
     /// <summary>
@@ -79,6 +92,7 @@ public sealed class ToonNull : ToonValue
 /// <summary>
 ///     Represents a boolean value in TOON format.
 /// </summary>
+/// <param name="value">The boolean value to be represented.</param>
 public sealed class ToonBoolean(bool value) : ToonValue
 {
     /// <summary>
@@ -104,6 +118,7 @@ public sealed class ToonBoolean(bool value) : ToonValue
 /// <summary>
 ///     Represents a numeric value in TOON format.
 /// </summary>
+/// <param name="value">The numeric value to be represented.</param>
 public sealed class ToonNumber(double value) : ToonValue
 {
     /// <summary>
@@ -129,6 +144,7 @@ public sealed class ToonNumber(double value) : ToonValue
 /// <summary>
 ///     Represents a string value in TOON format.
 /// </summary>
+/// <param name="value">The string value to be represented.</param>
 public sealed class ToonString(string value) : ToonValue
 {
     /// <summary>
@@ -154,6 +170,7 @@ public sealed class ToonString(string value) : ToonValue
 /// <summary>
 ///     Represents an object (key-value pairs) in TOON format.
 /// </summary>
+/// <param name="properties">The dictionary of properties to initialize the object with.</param>
 public sealed class ToonObject(Dictionary<string, ToonValue> properties) : ToonValue
 {
     /// <summary>
@@ -192,6 +209,8 @@ public sealed class ToonObject(Dictionary<string, ToonValue> properties) : ToonV
 /// <summary>
 ///     Represents an array of values in TOON format.
 /// </summary>
+/// <param name="items">The list of items to initialize the array with.</param>
+/// <param name="fieldNames">Optional field names for tabular arrays.</param>
 public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null) : ToonValue
 {
     /// <summary>

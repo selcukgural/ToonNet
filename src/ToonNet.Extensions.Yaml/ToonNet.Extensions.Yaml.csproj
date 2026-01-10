@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    
+    <!-- Package Information -->
+    <PackageId>ToonNet.Extensions.Yaml</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>ToonNet Contributors</Authors>
+    <Description>YAML interoperability extension for ToonNet. Provides seamless conversion between YAML and TOON formats using YamlDotNet.</Description>
+    <PackageTags>toon;yaml;serialization;converter;interop</PackageTags>
+    <PackageProjectUrl>https://github.com/yourusername/ToonNet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/yourusername/ToonNet</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    
+    <!-- Documentation -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="16.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ToonNet.Core\ToonNet.Core.csproj" />
+  </ItemGroup>
+
+</Project>

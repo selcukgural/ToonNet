@@ -10,57 +10,57 @@ namespace ToonNet.Core.Models;
 internal enum ToonTokenType
 {
     /// <summary>
-    ///     A field name or key (e.g., "name" in "name: value")
+    ///     A field name or key (e.g., "name" in "name: value").
     /// </summary>
     Key,
 
     /// <summary>
-    ///     A colon separator (:)
+    ///     A colon separator (:).
     /// </summary>
     Colon,
 
     /// <summary>
-    ///     A simple value (string, number, boolean, null)
+    ///     A simple value (string, number, boolean, null).
     /// </summary>
     Value,
 
     /// <summary>
-    ///     A quoted string value
+    ///     A quoted string value.
     /// </summary>
     QuotedString,
 
     /// <summary>
-    ///     Array length indicator (e.g., "[3]" in "tags[3]:")
+    ///     Array length indicator (e.g., "[3]" in "tags[3]:").
     /// </summary>
     ArrayLength,
 
     /// <summary>
-    ///     Array field definition (e.g., "{id,name,role}" in "users[2]{id,name,role}:")
+    ///     Array field definition (e.g., "{id,name,role}" in "users[2]{id,name,role}:").
     /// </summary>
     ArrayFields,
 
     /// <summary>
-    ///     Comma separator in arrays or field definitions
+    ///     Comma separator in arrays or field definitions.
     /// </summary>
     Comma,
 
     /// <summary>
-    ///     Indentation (spaces) indicating nesting level
+    ///     Indentation (spaces) indicating nesting level.
     /// </summary>
     Indent,
 
     /// <summary>
-    ///     Newline character
+    ///     Newline character.
     /// </summary>
     Newline,
 
     /// <summary>
-    ///     List item indicator (hyphen followed by space)
+    ///     List item indicator (hyphen followed by space).
     /// </summary>
     ListItem,
 
     /// <summary>
-    ///     End of input
+    ///     End of input.
     /// </summary>
     EndOfInput
 }

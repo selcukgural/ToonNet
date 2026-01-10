@@ -49,7 +49,7 @@ internal static class TypeHelper
         }
 
         // Check if it's a value type with nullable annotation (C# 8+)
-        return type.IsValueType && type.NullableAnnotation == NullableAnnotation.Annotated;
+        return type is { IsValueType: true, NullableAnnotation: NullableAnnotation.Annotated };
     }
 
     /// <summary>
@@ -57,7 +57,7 @@ internal static class TypeHelper
     /// </summary>
     public static ITypeSymbol? GetUnderlyingNullableType(ITypeSymbol type)
     {
-        if (IsNullableType(type) && type is INamedTypeSymbol namedType && namedType.TypeArguments.Length > 0)
+        if (IsNullableType(type) && type is INamedTypeSymbol { TypeArguments.Length: > 0 } namedType)
         {
             return namedType.TypeArguments[0];
         }

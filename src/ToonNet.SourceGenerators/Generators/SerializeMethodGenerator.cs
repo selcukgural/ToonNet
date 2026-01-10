@@ -13,6 +13,13 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Generates a complete Serialize method implementation.
     /// </summary>
+    /// <param name="classInfo">
+    ///     Metadata about the class to generate the Serialize method for, including its properties,
+    ///     null-check preferences, and naming policies.
+    /// </param>
+    /// <returns>
+    ///     A string containing the generated C# code for the Serialize method.
+    /// </returns>
     public static string Generate(ClassInfo classInfo)
     {
         var code = new CodeBuilder();
@@ -43,7 +50,7 @@ internal static class SerializeMethodGenerator
         code.AppendLine("options ??= new global::ToonNet.Core.Serialization.ToonSerializerOptions();");
         code.AppendLine();
 
-        // Create root object
+        // Create a root object
         code.AppendLine("var obj = new global::ToonNet.Core.Models.ToonObject();");
         code.AppendLine();
 
@@ -55,7 +62,7 @@ internal static class SerializeMethodGenerator
 
         code.AppendLine();
 
-        // Create and return document
+        // Create and return a document
         code.AppendLine("return new global::ToonNet.Core.Models.ToonDocument(obj);");
 
         code.EndBlock();
@@ -66,20 +73,24 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Generates serialization code for a single property.
     /// </summary>
+    /// <param name="code">The <see cref="CodeBuilder"/> instance to append the generated code to.</param>
+    /// <param name="prop">Metadata about the property to serialize.</param>
+    /// <param name="classInfo">Metadata about the class containing the property.</param>
     private static void GeneratePropertySerialization(CodeBuilder code, PropertyInfo prop, ClassInfo classInfo)
     {
         var propName = prop.Name;
         var serializedName = GetSerializedPropertyName(prop, classInfo);
-        var typeName = prop.Type.ToDisplayString();
 
         code.AppendLine($"// Serialize {propName}");
 
-        // Check if property value is null
+        // Check if the property value is null
         if (prop.Type.IsReferenceType)
         {
             code.AppendLine($"if (value.{propName} != null)");
             code.BeginBlock("");
+            
             GeneratePropertyValueSerialization(code, prop, serializedName, propName);
+            
             code.EndBlock();
             code.AppendLine("else if (!options.IgnoreNullValues)");
             code.BeginBlock("");
@@ -97,11 +108,13 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Generates the actual property serialization logic.
     /// </summary>
+    /// <param name="code">The <see cref="CodeBuilder"/> instance to append the generated code to.</param>
+    /// <param name="prop">Metadata about the property to serialize.</param>
+    /// <param name="serializedName">The name to use for the serialized property.</param>
+    /// <param name="propName">The name of the property in the source class.</param>
     private static void GeneratePropertyValueSerialization(CodeBuilder code, PropertyInfo prop, string serializedName, string propName)
     {
-        var typeName = prop.Type.ToDisplayString();
-
-        // Check for custom converter first
+        // Check for the custom converter first
         if (prop.HasCustomConverter)
         {
             var converterName = prop.CustomConverter!.ToDisplayString();
@@ -136,6 +149,10 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Generates serialization for simple types (string, int, double, bool, etc).
     /// </summary>
+    /// <param name="code">The <see cref="CodeBuilder"/> instance to append the generated code to.</param>
+    /// <param name="prop">Metadata about the property to serialize.</param>
+    /// <param name="serializedName">The name to use for the serialized property.</param>
+    /// <param name="propName">The name of the property in the source class.</param>
     private static void GenerateSimpleTypeSerialization(CodeBuilder code, PropertyInfo prop, string serializedName, string propName)
     {
         var typeName = prop.Type.ToDisplayString();
@@ -162,6 +179,9 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Gets the serialized property name (respecting naming policy and custom names).
     /// </summary>
+    /// <param name="prop">Metadata about the property to serialize.</param>
+    /// <param name="classInfo">Metadata about the class containing the property.</param>
+    /// <returns>The name to use for the serialized property.</returns>
     private static string GetSerializedPropertyName(PropertyInfo prop, ClassInfo classInfo)
     {
         // Custom name takes priority
@@ -178,6 +198,8 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Extracts the naming policy from the [ToonSerializable] attribute.
     /// </summary>
+    /// <param name="attribute">The attribute data containing the naming policy.</param>
+    /// <returns>The extracted naming policy, or the default policy if none is specified.</returns>
     private static PropertyNamingPolicy GetNamingPolicy(AttributeData? attribute)
     {
         if (attribute is null)
@@ -189,7 +211,7 @@ internal static class SerializeMethodGenerator
 
         foreach (var arg in namedArgs)
         {
-            if (arg.Key == "NamingPolicy" && arg.Value.Value is int policy)
+            if (arg is { Key: "NamingPolicy", Value.Value: int policy })
             {
                 return (PropertyNamingPolicy)policy;
             }
@@ -201,6 +223,9 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Applies a naming policy to a property name.
     /// </summary>
+    /// <param name="name">The original property name.</param>
+    /// <param name="policy">The naming policy to apply.</param>
+    /// <returns>The property name after applying the naming policy.</returns>
     private static string ApplyNamingPolicy(string name, PropertyNamingPolicy policy)
     {
         return policy switch
@@ -219,7 +244,7 @@ internal static class SerializeMethodGenerator
             return name;
         }
 
-        return char.ToLowerInvariant(name[0]) + name.Substring(1);
+        return char.ToLowerInvariant(name[0]) + name[1..];
     }
 
     private static string ToSnakeCase(string name)
@@ -247,6 +272,8 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Checks if a type is a simple/primitive type.
     /// </summary>
+    /// <param name="type">The type to check.</param>
+    /// <returns>True if the type is a simple/primitive type; otherwise, false.</returns>
     private static bool IsSimpleType(ITypeSymbol type)
     {
         var name = type.ToDisplayString();
@@ -259,6 +286,8 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Checks if a type is a numeric type.
     /// </summary>
+    /// <param name="typeName">The name of the type to check.</param>
+    /// <returns>True if the type is numeric; otherwise, false.</returns>
     private static bool IsNumericType(string typeName)
     {
         return typeName is "int" or "long" or "double" or "decimal" or "float" or "byte" or "short" or "uint" or "ulong" or "System.Int32"
@@ -269,6 +298,8 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Checks if a type is a collection type (array, List, IEnumerable, etc).
     /// </summary>
+    /// <param name="type">The type to check.</param>
+    /// <returns>True if the type is a collection type; otherwise, false.</returns>
     private static bool IsCollectionType(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol)
@@ -284,14 +315,16 @@ internal static class SerializeMethodGenerator
         }
 
         // Check interfaces
-        if (type is INamedTypeSymbol namedType)
+        if (type is not INamedTypeSymbol namedType)
         {
-            foreach (var iface in namedType.AllInterfaces)
+            return false;
+        }
+
+        foreach (var namedTypeSymbol in namedType.AllInterfaces)
+        {
+            if (namedTypeSymbol.Name is "IEnumerable" or "ICollection" or "IList")
             {
-                if (iface.Name is "IEnumerable" or "ICollection" or "IList")
-                {
-                    return true;
-                }
+                return true;
             }
         }
 
@@ -301,14 +334,18 @@ internal static class SerializeMethodGenerator
     /// <summary>
     ///     Checks if a type is nullable (T?).
     /// </summary>
+    /// <param name="type">The type to check.</param>
+    /// <returns>True if the type is nullable; otherwise, false.</returns>
     private static bool IsNullableType(ITypeSymbol type)
     {
-        return type.IsValueType && type.NullableAnnotation == NullableAnnotation.Annotated;
+        return type is { IsValueType: true, NullableAnnotation: NullableAnnotation.Annotated };
     }
 
     /// <summary>
-    ///     Gets the simple type name for nested [ToonSerializable] classes (they're in same namespace).
+    ///     Gets the simple type name for nested [ToonSerializable] classes (they're in the same namespace).
     /// </summary>
+    /// <param name="type">The type to get the name for.</param>
+    /// <returns>The simple type name for the nested class.</returns>
     private static string GetTypeNameForNested(ITypeSymbol type)
     {
         if (type is INamedTypeSymbol namedType)

@@ -100,6 +100,6 @@ public class ToonLexerTests
         var tokens = lexer.Tokenize();
 
         // Assert
-        Assert.Contains(tokens, t => t.Type == ToonTokenType.Indent && t.Value.Length == 2);
+        Assert.Contains(tokens, t => t is { Type: ToonTokenType.Indent, Value.Length: 2 });
     }
 }

@@ -10,18 +10,20 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="coverlet.collector" Version="6.0.0"/>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
-        <PackageReference Include="xunit" Version="2.5.3"/>
-        <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3"/>
+        <PackageReference Include="coverlet.collector" Version="6.0.0" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+        <PackageReference Include="xunit" Version="2.5.3" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
     </ItemGroup>
 
     <ItemGroup>
-        <Using Include="Xunit"/>
+        <Using Include="Xunit" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\ToonNet.Core\ToonNet.Core.csproj"/>
+        <ProjectReference Include="..\..\src\ToonNet.Core\ToonNet.Core.csproj" />
+        <ProjectReference Include="..\..\src\ToonNet.Extensions.Json\ToonNet.Extensions.Json.csproj" />
+        <ProjectReference Include="..\..\src\ToonNet.Extensions.Yaml\ToonNet.Extensions.Yaml.csproj" />
     </ItemGroup>
 
 </Project>

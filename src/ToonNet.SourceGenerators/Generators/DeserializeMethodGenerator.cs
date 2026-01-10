@@ -11,13 +11,20 @@ namespace ToonNet.SourceGenerators.Generators;
 internal static class DeserializeMethodGenerator
 {
     /// <summary>
-    ///     Generates a complete Deserialize method implementation.
+    ///     Generates a complete Deserialize method implementation for a given class.
     /// </summary>
+    /// <param name="classInfo">
+    ///     Metadata about the class for which the Deserialize method is being generated.
+    ///     Includes information such as class name, properties, constructors, and serialization options.
+    /// </param>
+    /// <returns>
+    ///     A string containing the generated C# code for the Deserialize method.
+    /// </returns>
     public static string Generate(ClassInfo classInfo)
     {
         var code = new CodeBuilder();
 
-        // Method signature
+        // Add method signature and XML documentation if enabled
         if (classInfo.IncludeDocumentation)
         {
             code.AppendLine("/// <summary>");
@@ -29,27 +36,29 @@ internal static class DeserializeMethodGenerator
             code.AppendLine("/// <exception cref=\"global::System.ArgumentNullException\">Thrown if doc is null.</exception>");
         }
 
+        // Determine method accessibility (public/internal)
         var accessibility = classInfo.GeneratePublicMethods ? "public" : "internal";
         code.AppendLine($"{accessibility} static {classInfo.Name} Deserialize(");
         code.AppendLine("    global::ToonNet.Core.Models.ToonDocument doc,");
         code.AppendLine("    global::ToonNet.Core.Serialization.ToonSerializerOptions? options = null)");
         code.BeginBlock("");
 
-        // Null check (if enabled)
+        // Add null check for the document if enabled
         if (classInfo.IncludeNullChecks)
         {
             code.AppendLine("global::System.ArgumentNullException.ThrowIfNull(doc);");
         }
 
+        // Initialize options if null
         code.AppendLine("options ??= new global::ToonNet.Core.Serialization.ToonSerializerOptions();");
         code.AppendLine();
 
-        // Get root object
+        // Retrieve the root object from the document
         code.AppendLine("var obj = (global::ToonNet.Core.Models.ToonObject)doc.Root;");
         code.AppendLine();
 
-        // Create instance using custom constructor or default constructor
-        if (classInfo.HasCustomConstructor && classInfo.CustomConstructor?.Parameters.Length > 0)
+        // Create an instance of the class using either a custom or default constructor
+        if (classInfo is { HasCustomConstructor: true, CustomConstructor.Parameters.Length: > 0 })
         {
             // Build constructor parameters using parameter names
             var ctor = classInfo.CustomConstructor;
@@ -71,7 +80,7 @@ internal static class DeserializeMethodGenerator
 
         code.AppendLine();
 
-        // Deserialize each property
+        // Generate deserialization logic for each property in the class
         foreach (var prop in classInfo.Properties)
         {
             GeneratePropertyDeserialization(code, prop, classInfo);
@@ -86,18 +95,28 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Generates deserialization code for a single property.
+    ///     Generates the deserialization logic for a single property of the class.
     /// </summary>
+    /// <param name="code">
+    ///     The <see cref="CodeBuilder"/> instance used to append the generated code.
+    /// </param>
+    /// <param name="prop">
+    ///     Metadata about the property being deserialized, including its name, type, and serialization details.
+    /// </param>
+    /// <param name="classInfo">
+    ///     Metadata about the class containing the property, including naming policies and serialization options.
+    /// </param>
     private static void GeneratePropertyDeserialization(CodeBuilder code, PropertyInfo prop, ClassInfo classInfo)
     {
         var propName = prop.Name;
         var serializedName = GetSerializedPropertyName(prop, classInfo);
-        var typeName = prop.Type.ToDisplayString();
 
+        // Add code to check if the property exists in the serialized object
         code.AppendLine($"// Deserialize {propName}");
         code.AppendLine($"if (obj.Properties.TryGetValue(\"{serializedName}\", out var {propName}Value))");
         code.BeginBlock("");
 
+        // Handle reference types with null checks
         if (prop.Type.IsReferenceType)
         {
             code.AppendLine($"if ({propName}Value is not global::ToonNet.Core.Models.ToonNull)");
@@ -107,6 +126,7 @@ internal static class DeserializeMethodGenerator
         }
         else
         {
+            // Directly generate deserialization logic for value types
             GeneratePropertyValueDeserialization(code, prop, propName);
         }
 
@@ -115,13 +135,22 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Generates the actual property deserialization logic.
+    ///     Generates the actual property deserialization logic for a given property.
     /// </summary>
+    /// <param name="code">
+    ///     The <see cref="CodeBuilder"/> instance used to append the generated code.
+    /// </param>
+    /// <param name="prop">
+    ///     Metadata about the property being deserialized, including its name, type, and serialization details.
+    /// </param>
+    /// <param name="propName">
+    ///     The name of the property being deserialized, used as a variable name in the generated code.
+    /// </param>
     private static void GeneratePropertyValueDeserialization(CodeBuilder code, PropertyInfo prop, string propName)
     {
         var typeName = prop.Type.ToDisplayString();
 
-        // Check for custom converter first
+        // Check for the custom converter first
         if (prop.HasCustomConverter)
         {
             var converterName = prop.CustomConverter!.ToDisplayString();
@@ -161,8 +190,17 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Generates deserialization for simple types (string, int, double, bool, etc).
+    ///     Generates deserialization logic for simple types such as string, int, double, bool, etc.
     /// </summary>
+    /// <param name="code">
+    ///  The <see cref="CodeBuilder"/> instance used to append the generated code.
+    /// </param>
+    /// <param name="prop">
+    ///     Metadata about the property being deserialized, including its name, type, and serialization details.
+    /// </param>
+    /// <param name="propName">
+    ///     The name of the property being deserialized, used as a variable name in the generated code.
+    /// </param>
     private static void GenerateSimpleTypeDeserialization(CodeBuilder code, PropertyInfo prop, string propName)
     {
         var typeName = prop.Type.ToDisplayString();
@@ -237,8 +275,17 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Generates deserialization for collection types (array, List, IEnumerable).
+    ///     Generates deserialization logic for collection types such as arrays, lists, or IEnumerable.
     /// </summary>
+    /// <param name="code">
+    ///     The <see cref="CodeBuilder"/> instance used to append the generated code.
+    /// </param>
+    /// <param name="prop">
+    ///     Metadata about the property being deserialized, including its name, type, and serialization details.
+    /// </param>
+    /// <param name="propName">
+    ///     The name of the property being deserialized, used as a variable name in the generated code.
+    /// </param>
     private static void GenerateCollectionDeserialization(CodeBuilder code, PropertyInfo prop, string propName)
     {
         code.AppendLine($"var arrayString = {propName}Value.ToString();");
@@ -248,8 +295,17 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Generates deserialization for nullable types (T?).
+    ///     Generates deserialization logic for nullable types (e.g., T?).
     /// </summary>
+    /// <param name="code">
+    ///     The <see cref="CodeBuilder"/> instance used to append the generated code.
+    /// </param>
+    /// <param name="prop">
+    ///     Metadata about the property being deserialized, including its name, type, and serialization details.
+    /// </param>
+    /// <param name="propName">
+    ///     The name of the property being deserialized, used as a variable name in the generated code.
+    /// </param>
     private static void GenerateNullableTypeDeserialization(CodeBuilder code, PropertyInfo prop, string propName)
     {
         var underlyingType = ((INamedTypeSymbol)prop.Type).TypeArguments[0].ToDisplayString();
@@ -272,8 +328,19 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Gets the serialized property name (respecting naming policy and custom names).
+    ///     Gets the serialized property name for a given property, respecting naming policy and custom names.
     /// </summary>
+    /// <param name="prop">
+    ///     Metadata about the property for which the serialized name is being determined.
+    ///     Includes details such as the property's name, type, and any custom serialization attributes.
+    /// </param>
+    /// <param name="classInfo">
+    ///     Metadata about the class containing the property, including serialization options and naming policies.
+    /// </param>
+    /// <returns>
+    ///     The serialized property name as a string, either the custom name (if specified) or the name transformed
+    ///     according to the class's naming policy.
+    /// </returns>
     private static string GetSerializedPropertyName(PropertyInfo prop, ClassInfo classInfo)
     {
         // Custom name takes priority
@@ -288,8 +355,15 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Extracts the naming policy from the [ToonSerializable] attribute.
+    ///     Extracts the naming policy from the [ToonSerializable] attribute, if present.
     /// </summary>
+    /// <param name="attribute">
+    ///     The attribute data representing the [ToonSerializable] attribute applied to the class.
+    ///     May be null if the attribute is not present.
+    /// </param>
+    /// <returns>
+    ///     The naming policy specified in the attribute, or the default naming policy if none is specified.
+    /// </returns>
     private static PropertyNamingPolicy GetNamingPolicy(AttributeData? attribute)
     {
         if (attribute is null)
@@ -301,7 +375,7 @@ internal static class DeserializeMethodGenerator
 
         foreach (var arg in namedArgs)
         {
-            if (arg.Key == "NamingPolicy" && arg.Value.Value is int policy)
+            if (arg is { Key: "NamingPolicy", Value.Value: int policy })
             {
                 return (PropertyNamingPolicy)policy;
             }
@@ -311,8 +385,17 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Applies a naming policy to a property name.
+    ///     Applies a naming policy to a given property name.
     /// </summary>
+    /// <param name="name">
+    ///     The original property name to which the naming policy will be applied.
+    /// </param>
+    /// <param name="policy">
+    ///     The naming policy to apply, such as CamelCase, SnakeCase, or LowerCase.
+    /// </param>
+    /// <returns>
+    ///     The transformed property name as a string, based on the specified naming policy.
+    /// </returns>
     private static string ApplyNamingPolicy(string name, PropertyNamingPolicy policy)
     {
         return policy switch
@@ -324,6 +407,15 @@ internal static class DeserializeMethodGenerator
         };
     }
 
+    /// <summary>
+    ///     Converts a given string to camelCase.
+    /// </summary>
+    /// <param name="name">
+    ///     The string to convert to camelCase.
+    /// </param>
+    /// <returns>
+    ///     The camelCase version of the input string.
+    /// </returns>
     private static string ToCamelCase(string name)
     {
         if (string.IsNullOrEmpty(name))
@@ -331,9 +423,18 @@ internal static class DeserializeMethodGenerator
             return name;
         }
 
-        return char.ToLowerInvariant(name[0]) + name.Substring(1);
+        return char.ToLowerInvariant(name[0]) + name[1..];
     }
 
+    /// <summary>
+    ///     Converts a given string to snake_case.
+    /// </summary>
+    /// <param name="name">
+    ///     The string to convert to snake_case.
+    /// </param>
+    /// <returns>
+    ///     The snake_case version of the input string.
+    /// </returns>
     private static string ToSnakeCase(string name)
     {
         if (string.IsNullOrEmpty(name))
@@ -357,8 +458,14 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Checks if a type is a simple/primitive type.
+    ///     Determines whether a given type is a simple or primitive type.
     /// </summary>
+    /// <param name="type">
+    ///     The type to check, represented as an <see cref="ITypeSymbol"/>.
+    /// </param>
+    /// <returns>
+    ///     True if the type is a simple or primitive type (e.g., string, int, bool); otherwise, false.
+    /// </returns>
     private static bool IsSimpleType(ITypeSymbol type)
     {
         var name = type.ToDisplayString();
@@ -369,8 +476,14 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Checks if a type is a numeric type.
+    ///     Determines whether a given type name represents a numeric type.
     /// </summary>
+    /// <param name="typeName">
+    ///     The name of the type to check, as a string.
+    /// </param>
+    /// <returns>
+    ///     True if the type name represents a numeric type (e.g., int, double, decimal); otherwise, false.
+    /// </returns>
     private static bool IsNumericType(string typeName)
     {
         return typeName is "int" or "long" or "double" or "decimal" or "float" or "byte" or "short" or "uint" or "ulong" or "System.Int32"
@@ -379,8 +492,14 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Checks if a type is a collection type (array, List, IEnumerable, etc).
+    ///     Determines whether a given type is a collection type (e.g., array, List, IEnumerable).
     /// </summary>
+    /// <param name="type">
+    ///     The type to check, represented as an <see cref="ITypeSymbol"/>.
+    /// </param>
+    /// <returns>
+    ///     True if the type is a collection type; otherwise, false.
+    /// </returns>
     private static bool IsCollectionType(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol)
@@ -411,16 +530,28 @@ internal static class DeserializeMethodGenerator
     }
 
     /// <summary>
-    ///     Checks if a type is nullable (T?).
+    ///     Determines whether a given type is nullable (e.g., T?).
     /// </summary>
+    /// <param name="type">
+    ///     The type to check, represented as an <see cref="ITypeSymbol"/>.
+    /// </param>
+    /// <returns>
+    ///     True if the type is nullable; otherwise, false.
+    /// </returns>
     private static bool IsNullableType(ITypeSymbol type)
     {
-        return type.IsValueType && type.NullableAnnotation == NullableAnnotation.Annotated;
+        return type is { IsValueType: true, NullableAnnotation: NullableAnnotation.Annotated };
     }
 
     /// <summary>
-    ///     Gets the simple type name for nested [ToonSerializable] classes (they're in same namespace).
+    ///     Gets the simple type name for a nested [ToonSerializable] class.
     /// </summary>
+    /// <param name="type">
+    ///     The type to retrieve the name for, represented as an <see cref="ITypeSymbol"/>.
+    /// </param>
+    /// <returns>
+    ///     The simple type name of the nested class, or the full type name if the type is not named.
+    /// </returns>
     private static string GetTypeNameForNested(ITypeSymbol type)
     {
         if (type is INamedTypeSymbol namedType)

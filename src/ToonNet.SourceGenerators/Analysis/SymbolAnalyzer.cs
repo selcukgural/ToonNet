@@ -7,26 +7,14 @@ namespace ToonNet.SourceGenerators.Analysis;
 /// <summary>
 ///     Analyzes Roslyn symbols to extract serialization metadata.
 /// </summary>
-internal sealed class SymbolAnalyzer
+internal sealed class SymbolAnalyzer(Compilation compilation)
 {
-    private readonly Compilation _compilation;
-    private readonly INamedTypeSymbol? _toonConstructorAttr;
-    private readonly INamedTypeSymbol? _toonConverterAttr;
-    private readonly INamedTypeSymbol? _toonIgnoreAttr;
-    private readonly INamedTypeSymbol? _toonPropertyAttr;
-    private readonly INamedTypeSymbol? _toonPropertyOrderAttr;
-    private readonly INamedTypeSymbol? _toonSerializableAttr;
-
-    public SymbolAnalyzer(Compilation compilation)
-    {
-        _compilation = compilation;
-        _toonSerializableAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonSerializableAttribute");
-        _toonIgnoreAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonIgnoreAttribute");
-        _toonPropertyAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonPropertyAttribute");
-        _toonPropertyOrderAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonPropertyOrderAttribute");
-        _toonConverterAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonConverterAttribute");
-        _toonConstructorAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonConstructorAttribute");
-    }
+    private readonly INamedTypeSymbol? _toonConstructorAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonConstructorAttribute");
+    private readonly INamedTypeSymbol? _toonConverterAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonConverterAttribute");
+    private readonly INamedTypeSymbol? _toonIgnoreAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonIgnoreAttribute");
+    private readonly INamedTypeSymbol? _toonPropertyAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonPropertyAttribute");
+    private readonly INamedTypeSymbol? _toonPropertyOrderAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonPropertyOrderAttribute");
+    private readonly INamedTypeSymbol? _toonSerializableAttr = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.Attributes.ToonSerializableAttribute");
 
     /// <summary>
     ///     Analyzes a class symbol and extracts serialization metadata.
@@ -94,13 +82,14 @@ internal sealed class SymbolAnalyzer
     {
         var attr = FindAttribute(prop, _toonPropertyAttr);
 
-        if (attr?.ConstructorArguments.Length > 0)
+        if (!(attr?.ConstructorArguments.Length > 0))
         {
-            var value = attr.ConstructorArguments[0].Value;
-            return value as string;
+            return null;
         }
 
-        return null;
+        var value = attr.ConstructorArguments[0].Value;
+        return value as string;
+
     }
 
     /// <summary>
@@ -110,14 +99,16 @@ internal sealed class SymbolAnalyzer
     {
         var attr = FindAttribute(prop, _toonConverterAttr);
 
-        if (attr?.ConstructorArguments.Length > 0)
+        if (!(attr?.ConstructorArguments.Length > 0))
         {
-            var value = attr.ConstructorArguments[0].Value;
+            return null;
+        }
 
-            if (value is ITypeSymbol converterType)
-            {
-                return converterType;
-            }
+        var value = attr.ConstructorArguments[0].Value;
+
+        if (value is ITypeSymbol converterType)
+        {
+            return converterType;
         }
 
         return null;
@@ -130,14 +121,16 @@ internal sealed class SymbolAnalyzer
     {
         var attr = FindAttribute(prop, _toonPropertyOrderAttr);
 
-        if (attr?.ConstructorArguments.Length > 0)
+        if (!(attr?.ConstructorArguments.Length > 0))
         {
-            var value = attr.ConstructorArguments[0].Value;
+            return int.MaxValue;
+        }
 
-            if (value is int order)
-            {
-                return order;
-            }
+        var value = attr.ConstructorArguments[0].Value;
+
+        if (value is int order)
+        {
+            return order;
         }
 
         return int.MaxValue;
@@ -146,7 +139,7 @@ internal sealed class SymbolAnalyzer
     /// <summary>
     ///     Gets the [ToonSerializable] attribute from a class.
     /// </summary>
-    private AttributeData? GetToonSerializableAttribute(INamedTypeSymbol classSymbol)
+    private static AttributeData? GetToonSerializableAttribute(INamedTypeSymbol classSymbol)
     {
         return classSymbol.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "ToonSerializableAttribute");
     }
@@ -154,7 +147,7 @@ internal sealed class SymbolAnalyzer
     /// <summary>
     ///     Checks if a symbol has a specific attribute.
     /// </summary>
-    private bool HasAttribute(ISymbol symbol, INamedTypeSymbol? attributeType)
+    private static bool HasAttribute(ISymbol symbol, INamedTypeSymbol? attributeType)
     {
         return attributeType is not null && symbol.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
     }
@@ -162,18 +155,13 @@ internal sealed class SymbolAnalyzer
     /// <summary>
     ///     Finds an attribute by type.
     /// </summary>
-    private AttributeData? FindAttribute(ISymbol symbol, INamedTypeSymbol? attributeType)
+    private static AttributeData? FindAttribute(ISymbol symbol, INamedTypeSymbol? attributeType)
     {
-        if (attributeType is null)
-        {
-            return null;
-        }
-
-        return symbol.GetAttributes().FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
+        return attributeType is null ? null : symbol.GetAttributes().FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
     }
 
     /// <summary>
-    ///     Finds the constructor marked with [ToonConstructor] attribute.
+    ///     Finds the constructor marked with the [ToonConstructor] attribute.
     /// </summary>
     private IMethodSymbol? FindCustomConstructor(INamedTypeSymbol classSymbol)
     {

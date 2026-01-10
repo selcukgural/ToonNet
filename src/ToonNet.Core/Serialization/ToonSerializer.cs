@@ -267,7 +267,7 @@ public static class ToonSerializer
     /// <param name="options">Serialization options.</param>
     /// <param name="depth">The current serialization depth.</param>
     /// <returns>A ToonObject containing the serialized properties.</returns>
-    private static ToonValue SerializeObject(object value, Type type, ToonSerializerOptions options, int depth)
+    private static ToonObject SerializeObject(object value, Type type, ToonSerializerOptions options, int depth)
     {
         var obj = new ToonObject();
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -443,6 +443,34 @@ public static class ToonSerializer
         }
     }
 
+    /// <summary>
+    /// Attempts to deserialize a primitive value from a <see cref="ToonValue"/> to the specified target type.
+    /// </summary>
+    /// <param name="value">
+    /// The <see cref="ToonValue"/> to deserialize. This value must represent a primitive type such as a string, number, or boolean.
+    /// </param>
+    /// <param name="targetType">
+    /// The target C# type to which the value should be deserialized. Supported types include primitive types, enums, 
+    /// <see cref="DateTime"/>, <see cref="DateTimeOffset"/>, and <see cref="Guid"/>.
+    /// </param>
+    /// <param name="result">
+    /// When this method returns, contains the deserialized object if the operation was successful; otherwise, null.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if the value was successfully deserialized as a primitive; otherwise, <c>false</c>.
+    /// </returns>
+    /// <remarks>
+    /// This method supports deserialization of the following types:
+    /// <list type="bullet">
+    /// <item><description>String</description></item>
+    /// <item><description>Boolean</description></item>
+    /// <item><description>Numeric types (e.g., byte, int, long, float, double, decimal)</description></item>
+    /// <item><description>DateTime and DateTimeOffset (parsed from ISO 8601 strings)</description></item>
+    /// <item><description>Guid</description></item>
+    /// <item><description>Enums (parsed from their string representation)</description></item>
+    /// </list>
+    /// If the <paramref name="value"/> does not match the expected type or cannot be converted, the method returns <c>false</c>.
+    /// </remarks>
     private static bool TryDeserializePrimitive(ToonValue value, Type targetType, out object? result)
     {
         result = null;

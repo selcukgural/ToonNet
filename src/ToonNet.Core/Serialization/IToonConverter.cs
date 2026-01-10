@@ -13,22 +13,22 @@ public interface IToonConverter
     /// <param name="type">The type to check.</param>
     /// <returns>True if this converter can handle the type; otherwise, false.</returns>
     bool CanConvert(Type type);
-    
+
     /// <summary>
     ///     Writes an object to its TOON representation.
     /// </summary>
-    /// <param name="value">The value to write.</param>
-    /// <param name="options">The serialization options.</param>
-    /// <returns>The TOON representation of the value.</returns>
+    /// <param name="value">The value to write. Can be null.</param>
+    /// <param name="options">The serialization options to use.</param>
+    /// <returns>The TOON representation of the value, or null if the value cannot be serialized.</returns>
     ToonValue? Write(object? value, ToonSerializerOptions options);
-    
+
     /// <summary>
     ///     Reads a TOON value and converts it to a C# object.
     /// </summary>
     /// <param name="value">The TOON value to read.</param>
     /// <param name="targetType">The target type to convert to.</param>
-    /// <param name="options">The deserialization options.</param>
-    /// <returns>The deserialized object.</returns>
+    /// <param name="options">The deserialization options to use.</param>
+    /// <returns>The deserialized object, or null if the value cannot be deserialized.</returns>
     object? Read(ToonValue value, Type targetType, ToonSerializerOptions options);
 }
 
@@ -41,17 +41,17 @@ public interface IToonConverter<T> : IToonConverter
     /// <summary>
     ///     Writes a strongly typed value to its TOON representation.
     /// </summary>
-    /// <param name="value">The value to write.</param>
-    /// <param name="options">The serialization options.</param>
-    /// <returns>The TOON representation of the value.</returns>
+    /// <param name="value">The value to write. Can be null.</param>
+    /// <param name="options">The serialization options to use.</param>
+    /// <returns>The TOON representation of the value, or null if the value cannot be serialized.</returns>
     ToonValue? Write(T? value, ToonSerializerOptions options);
-    
+
     /// <summary>
     ///     Reads a TOON value and converts it to a strongly typed object.
     /// </summary>
     /// <param name="value">The TOON value to read.</param>
-    /// <param name="options">The deserialization options.</param>
-    /// <returns>The deserialized object.</returns>
+    /// <param name="options">The deserialization options to use.</param>
+    /// <returns>The deserialized object, or null if the value cannot be deserialized.</returns>
     T? Read(ToonValue value, ToonSerializerOptions options);
 }
 
@@ -74,25 +74,25 @@ public abstract class ToonConverter<T> : IToonConverter<T>
     /// <summary>
     ///     Writes a strongly typed value to its TOON representation.
     /// </summary>
-    /// <param name="value">The value to write.</param>
-    /// <param name="options">The serialization options.</param>
-    /// <returns>The TOON representation of the value.</returns>
+    /// <param name="value">The value to write. Can be null.</param>
+    /// <param name="options">The serialization options to use.</param>
+    /// <returns>The TOON representation of the value, or null if the value cannot be serialized.</returns>
     public abstract ToonValue? Write(T? value, ToonSerializerOptions options);
 
     /// <summary>
     ///     Reads a TOON value and converts it to a strongly typed object.
     /// </summary>
     /// <param name="value">The TOON value to read.</param>
-    /// <param name="options">The deserialization options.</param>
-    /// <returns>The deserialized object.</returns>
+    /// <param name="options">The deserialization options to use.</param>
+    /// <returns>The deserialized object, or null if the value cannot be deserialized.</returns>
     public abstract T? Read(ToonValue value, ToonSerializerOptions options);
 
     /// <summary>
     ///     Non-generic write implementation that delegates to the strongly typed version.
     /// </summary>
-    /// <param name="value">The value to write.</param>
-    /// <param name="options">The serialization options.</param>
-    /// <returns>The TOON representation of the value.</returns>
+    /// <param name="value">The value to write. Can be null.</param>
+    /// <param name="options">The serialization options to use.</param>
+    /// <returns>The TOON representation of the value, or null if the value cannot be serialized.</returns>
     ToonValue? IToonConverter.Write(object? value, ToonSerializerOptions options)
     {
         return Write((T?)value, options);
@@ -103,8 +103,8 @@ public abstract class ToonConverter<T> : IToonConverter<T>
     /// </summary>
     /// <param name="value">The TOON value to read.</param>
     /// <param name="targetType">The target type (ignored, T is used).</param>
-    /// <param name="options">The deserialization options.</param>
-    /// <returns>The deserialized object.</returns>
+    /// <param name="options">The deserialization options to use.</param>
+    /// <returns>The deserialized object, or null if the value cannot be deserialized.</returns>
     object? IToonConverter.Read(ToonValue value, Type targetType, ToonSerializerOptions options)
     {
         return Read(value, options);

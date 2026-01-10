@@ -1,8 +1,8 @@
 using System.Text.Json;
 using ToonNet.Core.Encoding;
-using ToonNet.Core.Interop;
 using ToonNet.Core.Models;
 using ToonNet.Core.Parsing;
+using ToonNet.Extensions.Json;
 
 namespace ToonNet.Tests.Interop;
 

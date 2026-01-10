@@ -193,7 +193,7 @@ public sealed class ToonParser(ToonOptions? options = null)
 
                 if (arrayLength.HasValue || fieldNames != null)
                 {
-                    // Peek to see if next content is a list (Indent followed by ListItem)
+                    // Peek to see if the next content is a list (Indent followed by ListItem)
                     var peekPos = _position;
 
                     while (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Newline)
@@ -461,7 +461,7 @@ public sealed class ToonParser(ToonOptions? options = null)
 
             if (currentIndent < indentLevel)
             {
-                // Dedented - end of list
+                // Demented - end of a list
                 break;
             }
 
@@ -486,7 +486,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 else if (Peek().Type == ToonTokenType.Key)
                 {
                     // Inline first field: - key: value
-                    // Parse as object with first field inline, rest indented
+                    // Parse as an object with the first field inline, rest indented
                     var itemObject = new ToonObject();
 
                     // Parse inline first field
@@ -536,7 +536,7 @@ public sealed class ToonParser(ToonOptions? options = null)
 
                         var propIndent = Peek().Value.Length;
 
-                        // If dedented to list level or below, stop parsing this object
+                        // If demented to the list level or below, stop parsing this object
                         if (propIndent <= indentLevel)
                         {
                             break;
@@ -682,7 +682,7 @@ public sealed class ToonParser(ToonOptions? options = null)
 
                         var propIndent = Peek().Value.Length;
 
-                        // If dedented to list level or below, stop parsing this object
+                        // If demented to the list level or below, stop parsing this object
                         if (propIndent <= indentLevel)
                         {
                             break;
@@ -695,7 +695,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                         {
                             var key = Advance().Value.ToString();
 
-                            // Check for array notation (same as inline first field case)
+                            // Check for array notation (same as an inline first field case)
                             int? arrayLength = null;
                             string[]? fieldNames = null;
 
@@ -755,16 +755,10 @@ public sealed class ToonParser(ToonOptions? options = null)
                                         }
                                     }
 
-                                    if (!isListArray)
-                                    {
-                                        // Tabular array
-                                        value = ParseTabularArray(propIndent + _options.IndentSize, arrayLength, fieldNames);
-                                    }
-                                    else
-                                    {
-                                        // List array
-                                        value = ParseValue(propIndent + _options.IndentSize);
-                                    }
+                                    // Tabular array
+                                    value = !isListArray ? ParseTabularArray(propIndent + _options.IndentSize, arrayLength, fieldNames) :
+                                                // List array
+                                                ParseValue(propIndent + _options.IndentSize);
                                 }
                                 else
                                 {
@@ -809,7 +803,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             }
             else
             {
-                // Not a list item - end of list
+                // Not a list item - end of a list
                 break;
             }
 
@@ -922,7 +916,7 @@ public sealed class ToonParser(ToonOptions? options = null)
     /// <summary>
     ///     Checks if the parser has reached the end of tokens.
     /// </summary>
-    /// <returns>True if at end of tokens or at EndOfInput token; otherwise, false.</returns>
+    /// <returns>True if at the end of tokens or at EndOfInput token; otherwise, false.</returns>
     private bool IsAtEnd()
     {
         return _position >= _tokens.Count || Peek().Type == ToonTokenType.EndOfInput;

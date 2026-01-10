@@ -55,7 +55,7 @@ public sealed class ToonSerializableAttribute : Attribute
 
     /// <summary>
     ///     Gets or sets the property naming policy for generated serialization code.
-    ///     This policy is applied to all properties, but can be overridden per-property
+    ///     This policy is applied to all properties but can be overridden per-property
     ///     using the [ToonProperty(name)] attribute.
     /// </summary>
     /// <remarks>
