@@ -71,6 +71,7 @@ internal sealed class SymbolAnalyzer
 
             var isIgnored = HasAttribute(member, _toonIgnoreAttr);
             var customConverter = GetCustomConverter(member);
+            var isNestedSerializable = HasAttribute(member.Type, _toonSerializableAttr);
             
             var info = new PropertyInfo
             {
@@ -80,7 +81,8 @@ internal sealed class SymbolAnalyzer
                 CustomName = GetCustomPropertyName(member),
                 Order = GetPropertyOrder(member),
                 IsIgnored = isIgnored,
-                CustomConverter = customConverter
+                CustomConverter = customConverter,
+                IsNestedSerializable = isNestedSerializable
             };
 
             properties.Add(info);

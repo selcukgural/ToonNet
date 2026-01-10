@@ -144,6 +144,14 @@ internal static class DeserializeMethodGenerator
             return;
         }
 
+        // Check for nested [ToonSerializable] class
+        if (prop.IsNestedSerializable)
+        {
+            code.AppendLine($"var {propName}Doc = new global::ToonNet.Core.Models.ToonDocument({propName}Value);");
+            code.AppendLine($"result.{prop.Name} = {typeName}.Deserialize({propName}Doc, options);");
+            return;
+        }
+
         // Check nullable first, before checking if it's a simple type
         if (IsNullableType(prop.Type))
         {

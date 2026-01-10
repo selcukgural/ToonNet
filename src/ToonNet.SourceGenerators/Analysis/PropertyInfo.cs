@@ -41,6 +41,11 @@ internal sealed record PropertyInfo
     public ITypeSymbol? CustomConverter { get; init; }
 
     /// <summary>
+    /// Whether this property's type has [ToonSerializable] attribute (nested serialization).
+    /// </summary>
+    public bool IsNestedSerializable { get; init; }
+
+    /// <summary>
     /// Gets the name to use when serializing (applies custom name if set).
     /// </summary>
     public string SerializedName => CustomName ?? Name;

@@ -117,6 +117,14 @@ internal static class SerializeMethodGenerator
             return;
         }
 
+        // Check for nested [ToonSerializable] class
+        if (prop.IsNestedSerializable)
+        {
+            code.AppendLine($"var {propName}Doc = {typeName}.Serialize(value.{propName}, options);");
+            code.AppendLine($"obj[\"{serializedName}\"] = {propName}Doc.Root;");
+            return;
+        }
+
         if (IsSimpleType(prop.Type))
         {
             GenerateSimpleTypeSerialization(code, prop, serializedName, propName);
