@@ -45,12 +45,33 @@ internal static class DeserializeMethodGenerator
 
         // Get root object
         code.AppendLine("var obj = (global::ToonNet.Core.Models.ToonObject)doc.Root;");
-        
-        // Use custom constructor or default constructor
+        code.AppendLine();
+
+        // Create instance using custom constructor or default constructor
         if (classInfo.HasCustomConstructor && classInfo.CustomConstructor?.Parameters.Length > 0)
         {
-            // For now, fall back to parameterless constructor (Phase 4 enhancement)
-            code.AppendLine($"var result = new {classInfo.Name}();");
+            // Build constructor parameters
+            var ctor = classInfo.CustomConstructor;
+            var parameterStrings = new List<string>();
+
+            foreach (var param in ctor.Parameters)
+            {
+                // Find matching property
+                var matchingProp = classInfo.Properties.FirstOrDefault(p => 
+                    p.Name.Equals(param.Name, StringComparison.OrdinalIgnoreCase));
+
+                if (matchingProp is not null)
+                {
+                    parameterStrings.Add($"{matchingProp.Name}: default");
+                }
+                else
+                {
+                    parameterStrings.Add($"{param.Name}: default");
+                }
+            }
+
+            var ctorParams = string.Join(", ", parameterStrings);
+            code.AppendLine($"var result = new {classInfo.Name}({ctorParams});");
         }
         else
         {
@@ -113,6 +134,15 @@ internal static class DeserializeMethodGenerator
         string propName)
     {
         var typeName = prop.Type.ToDisplayString();
+
+        // Check for custom converter first
+        if (prop.HasCustomConverter)
+        {
+            var converterName = prop.CustomConverter!.ToDisplayString();
+            code.AppendLine($"var {propName}Converter = new {converterName}();");
+            code.AppendLine($"result.{prop.Name} = {propName}Converter.Read({propName}Value, options);");
+            return;
+        }
 
         // Check nullable first, before checking if it's a simple type
         if (IsNullableType(prop.Type))

@@ -107,6 +107,16 @@ internal static class SerializeMethodGenerator
     {
         var typeName = prop.Type.ToDisplayString();
 
+        // Check for custom converter first
+        if (prop.HasCustomConverter)
+        {
+            var converterName = prop.CustomConverter!.ToDisplayString();
+            code.AppendLine($"var {propName}Converter = new {converterName}();");
+            code.AppendLine($"var {propName}Serialized = {propName}Converter.Write(value.{propName}, options);");
+            code.AppendLine($"obj[\"{serializedName}\"] = {propName}Serialized ?? global::ToonNet.Core.Models.ToonNull.Instance;");
+            return;
+        }
+
         if (IsSimpleType(prop.Type))
         {
             GenerateSimpleTypeSerialization(code, prop, serializedName, propName);
