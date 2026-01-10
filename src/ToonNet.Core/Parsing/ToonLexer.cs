@@ -116,9 +116,9 @@ internal sealed class ToonLexer
                     return ReadArrayLength();
                 case '{':
                     return ReadArrayFields();
-                // Quoted string
+                // Quoted string - could be key or value
                 case '"':
-                    return ReadQuotedString();
+                    return ReadQuotedStringToken();
                 default:
                     // Key or value
                     return ReadKeyOrValue();
@@ -202,14 +202,34 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    /// Reads a quoted string token with escape sequence handling.
+    /// Reads a quoted string token and determines if it's a key or value.
     /// </summary>
-    /// <returns>A quoted string token.</returns>
-    /// <exception cref="ToonParseException">Thrown when string is not properly terminated.</exception>
-    private ToonToken ReadQuotedString()
+    /// <returns>A key or quoted string token depending on what follows.</returns>
+    private ToonToken ReadQuotedStringToken()
     {
         var startLine = _line;
         var startColumn = _column;
+        var stringValue = ReadQuotedStringValue();
+        
+        // Check what comes after the quoted string to determine if it's a key
+        SkipWhitespace();
+        var next = Peek();
+        var isKey = next is ':' or '[' or '{';
+        
+        return new ToonToken(
+            isKey ? ToonTokenType.Key : ToonTokenType.QuotedString,
+            stringValue.AsMemory(),
+            startLine,
+            startColumn);
+    }
+
+    /// <summary>
+    /// Reads the content of a quoted string (without determining token type).
+    /// </summary>
+    /// <returns>The unescaped string content.</returns>
+    /// <exception cref="ToonParseException">Thrown when string is not properly terminated.</exception>
+    private string ReadQuotedStringValue()
+    {
         var sb = new StringBuilder();
         
         Advance(); // opening "
@@ -249,10 +269,9 @@ internal sealed class ToonLexer
         }        
         Advance(); // closing "
         
-        // Skip any whitespace after the closing quote for proper token positioning
-        var result = sb.ToString();
-        return new ToonToken(ToonTokenType.QuotedString, result.AsMemory(), startLine, startColumn);
+        return sb.ToString();
     }
+
 
     private ToonToken ReadKeyOrValue()
     {
@@ -266,10 +285,10 @@ internal sealed class ToonLexer
             startColumn = _column;
         }
         
-        // If we hit a quoted string after skipping whitespace, parse it
+        // If we hit a quoted string after skipping whitespace, parse it as a quoted string token
         if (Peek() == '"')
         {
-            return ReadQuotedString();
+            return ReadQuotedStringToken();
         }
         
         var startPos = _position;

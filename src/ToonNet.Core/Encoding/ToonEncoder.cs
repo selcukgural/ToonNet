@@ -85,7 +85,8 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             
             WriteIndent(indentLevel);
             
-            _sb.Append(key);
+            // Quote key if it contains special characters
+            _sb.Append(QuoteKeyIfNeeded(key));
 
             if (value is ToonArray array)
             {
@@ -225,13 +226,86 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
     private static string FormatNumber(double value)
     {
-        // Handle integers without a decimal point
-        if (Math.Abs(value - Math.Floor(value)) < 0.1 && !double.IsInfinity(value))
+        if (double.IsNaN(value) || double.IsInfinity(value))
         {
-            return ((long)value).ToString();
+            throw new ToonEncodingException("NaN and Infinity are not allowed in TOON");
         }
 
-        return value.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+        // Normalize -0 to 0
+        if (value == 0)
+        {
+            return "0";
+        }
+
+        // Check if we need to use scientific notation based on the actual exponent
+        var needsScientific = CheckNeedsScientific(value);
+        
+        // Use appropriate format based on whether we need scientific notation
+        var str = needsScientific 
+            ? value.ToString("E17", System.Globalization.CultureInfo.InvariantCulture)
+            : value.ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
+
+        // If G17 already produced scientific notation but we don't need it, convert to decimal
+        if (!needsScientific && (str.Contains('e') || str.Contains('E')))
+        {
+            str = value.ToString("F17", System.Globalization.CultureInfo.InvariantCulture).TrimEnd('0');
+            if (str.EndsWith('.'))
+            {
+                str += '0';
+            }
+            return str;
+        }
+
+        // If we're using scientific notation, normalize it
+        if (str.Contains('e') || str.Contains('E'))
+        {
+            // Use lowercase 'e'
+            str = str.Replace('E', 'e');
+            
+            // Remove leading zeros in exponent and remove '+' sign
+            var eIndex = str.IndexOf('e');
+            var mantissa = str.Substring(0, eIndex);
+            var exponentPart = str.Substring(eIndex + 1);
+            
+            // Parse and reformat exponent
+            if (int.TryParse(exponentPart, out var expValue))
+            {
+                str = $"{mantissa}e{expValue}";
+            }
+        }
+        else if (str.Contains('.'))
+        {
+            // Remove trailing zeros after decimal point
+            str = str.TrimEnd('0');
+            // If we end up with just a decimal point, add a zero
+            if (str.EndsWith('.'))
+            {
+                str += '0';
+            }
+        }
+
+        return str;
+    }
+
+    private static bool CheckNeedsScientific(double value)
+    {
+        // Determine if scientific notation is needed based on exponent
+        // TOON spec: scientific notation MUST be used when exponent >= 21
+        
+        if (value == 0)
+            return false;
+
+        var absValue = Math.Abs(value);
+        
+        // For very large numbers (exponent >= 21)
+        if (absValue >= 1e21)
+            return true;
+        
+        // For very small numbers (exponent <= -21)
+        if (absValue > 0 && absValue < 1e-20)
+            return true;
+        
+        return false;
     }
 
     private string QuoteIfNeeded(string value)
@@ -242,6 +316,17 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
         
         return NeedsQuoting(value) ? $"\"{EscapeString(value)}\"" : value;
+    }
+
+    private string QuoteKeyIfNeeded(string key)
+    {
+        // Keys need quoting if they contain any special characters
+        if (string.IsNullOrEmpty(key))
+        {
+            return "\"\"";
+        }
+        
+        return NeedsQuoting(key) ? $"\"{EscapeString(key)}\"" : key;
     }
 
     private static bool NeedsQuoting(string value)

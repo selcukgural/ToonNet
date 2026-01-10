@@ -54,6 +54,20 @@ public sealed class ToonParser(ToonOptions? options = null)
         }
 
         var token = Peek();
+        
+        // STEP 1.2: Detect list items (Indent followed by ListItem)
+        // This handles: key:\n  - item1\n  - item2
+        if (token.Type == ToonTokenType.Indent)
+        {
+            var nextIdx = _position + 1;
+            var hasListItems = nextIdx < _tokens.Count && _tokens[nextIdx].Type == ToonTokenType.ListItem;
+            
+            if (hasListItems)
+            {
+                // It's a list of items - parse as array
+                return ParseList(indentLevel);
+            }
+        }
 
         return token.Type switch
         {
@@ -380,34 +394,113 @@ public sealed class ToonParser(ToonOptions? options = null)
                 break;
             }
 
+            // Check for indentation
             var currentIndent = GetCurrentIndent();
 
             if (currentIndent < indentLevel)
             {
+                // Dedented - end of list
                 break;
             }
 
+            // Consume indent token if present
+            if (Peek().Type == ToonTokenType.Indent)
+            {
+                Advance();
+            }
+
+            // Now expect a list item (- marker)
             if (Peek().Type == ToonTokenType.ListItem)
             {
-                Advance(); // consume list marker
+                Advance(); // consume list marker (-)
 
+                // STEP 1.4: Parse the item (scalar value or nested object)
                 if (IsValueToken(Peek().Type))
                 {
+                    // Scalar list item: - value
                     var valueToken = Advance();
                     array.Items.Add(ParseValueToken(valueToken));
                 }
                 else if (Peek().Type == ToonTokenType.Newline)
                 {
-                    // Nested object
-                    Advance();
-                    array.Items.Add(ParseValue(indentLevel + _options.IndentSize));
+                    // Object list item: - \n properties
+                    Advance(); // consume newline
+                    
+                    // Parse nested object properties at higher indentation
+                    var itemObject = new ToonObject();
+                    
+                    while (!IsAtEnd())
+                    {
+                        SkipNewlines();
+                        
+                        if (IsAtEnd())
+                            break;
+                        
+                        // Check indentation
+                        if (Peek().Type != ToonTokenType.Indent)
+                        {
+                            // No indent token - we're back at list level or less
+                            break;
+                        }
+                        
+                        var propIndent = Peek().Value.Length;
+                        
+                        // If dedented to list level or below, stop parsing this object
+                        if (propIndent <= indentLevel)
+                        {
+                            break;
+                        }
+                        
+                        Advance(); // consume indent
+                        
+                        // Parse key-value pair for this object
+                        if (Peek().Type == ToonTokenType.Key)
+                        {
+                            var key = Advance().Value.ToString();
+                            
+                            if (Peek().Type != ToonTokenType.Colon)
+                            {
+                                throw new ToonParseException($"Expected ':' after key '{key}'", Peek().Line, Peek().Column);
+                            }
+                            
+                            Advance(); // consume colon
+                            SkipWhitespace();
+                            
+                            // Parse value
+                            ToonValue value;
+                            if (IsValueToken(Peek().Type))
+                            {
+                                var valueToken = Advance();
+                                value = ParseValueToken(valueToken);
+                            }
+                            else
+                            {
+                                throw new ToonParseException($"Expected value after ':'", Peek().Line, Peek().Column);
+                            }
+                            
+                            itemObject.Properties[key] = value;
+                            
+                            if (Peek().Type == ToonTokenType.Newline)
+                            {
+                                Advance();
+                            }
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    
+                    array.Items.Add(itemObject);
                 }
             }
             else
             {
+                // Not a list item - end of list
                 break;
             }
 
+            // Consume trailing newline
             if (Peek().Type == ToonTokenType.Newline)
             {
                 Advance();
