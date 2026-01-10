@@ -19,6 +19,8 @@ public sealed class ToonParser(ToonOptions? options = null)
     private ToonToken _currentToken;
     private int _currentTokenPosition = -1;
 
+    #region Public API
+
     /// <summary>
     ///     Parses a TOON format string into a document.
     /// </summary>
@@ -56,6 +58,10 @@ public sealed class ToonParser(ToonOptions? options = null)
         var root = ParseValue(0);
         return new ToonDocument(root);
     }
+
+    #endregion
+
+    #region Core Parsing Methods
 
     /// <summary>
     ///     Parses a value at the specified indentation level.
@@ -142,7 +148,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             var currentIndent = 0;
             var hasIndent = false;
 
-            if (Peek().Type == ToonTokenType.Indent)
+            if (ExpectToken(ToonTokenType.Indent))
             {
                 currentIndent = Peek().Value.Length;
                 hasIndent = true;
@@ -227,10 +233,9 @@ public sealed class ToonParser(ToonOptions? options = null)
             // Get and consume indent if present
             var currentIndent = 0;
 
-            if (Peek().Type == ToonTokenType.Indent)
+            if (ExpectToken(ToonTokenType.Indent))
             {
-                currentIndent = Peek().Value.Length;
-                Advance(); // consume indent
+                currentIndent = GetCurrentIndentAndAdvance();
             }
 
             if (currentIndent < indentLevel)
@@ -253,7 +258,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 rowValues.Add(ParseValueToken(firstToken));
 
                 // Read the remaining values
-                while (Peek().Type == ToonTokenType.Comma)
+                while (ExpectToken(ToonTokenType.Comma))
                 {
                     Advance(); // consume comma
 
@@ -297,7 +302,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 break;
             }
 
-            if (Peek().Type == ToonTokenType.Newline)
+            if (ExpectToken(ToonTokenType.Newline))
             {
                 Advance();
             }
@@ -529,8 +534,12 @@ public sealed class ToonParser(ToonOptions? options = null)
         };
     }
 
+    #endregion
+
+    #region Helper Methods
+
     /// <summary>
-    ///     Gets the current indentation level.
+    /// Gets the current indentation level.
     /// </summary>
     /// <returns>The number of spaces of indentation, or 0 if not at an indent token.</returns>
     /// <remarks>
@@ -636,6 +645,38 @@ public sealed class ToonParser(ToonOptions? options = null)
     private bool IsAtEnd()
     {
         return _position >= _tokens.Count || (_position < _tokens.Count && _tokens[_position].Type == ToonTokenType.EndOfInput);
+    }
+
+    /// <summary>
+    ///     Checks if the current token is of the expected type.
+    /// </summary>
+    /// <param name="expectedType">The expected token type.</param>
+    /// <returns>True if the current token matches the expected type; otherwise, false.</returns>
+    /// <remarks>
+    ///     Helper method to simplify repeated token type checks throughout the parser.
+    ///     Uses a cached Peek() result for optimal performance.
+    /// </remarks>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private bool ExpectToken(ToonTokenType expectedType)
+    {
+        return Peek().Type == expectedType;
+    }
+
+    /// <summary>
+    ///     Gets the current token's indent level and advances the parser position.
+    /// </summary>
+    /// <returns>The indent level of the current token before advancing.</returns>
+    /// <remarks>
+    ///     Helper method that combines a common pattern of reading indent level and consuming the token.
+    ///     Optimized for frequent indent processing in nested structures.
+    /// </remarks>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private int GetCurrentIndentAndAdvance()
+    {
+        var token = Peek();
+        var indentLevel = token.Type == ToonTokenType.Indent ? token.Value.Length : 0;
+        Advance();
+        return indentLevel;
     }
 
     /// <summary>
@@ -845,4 +886,6 @@ public sealed class ToonParser(ToonOptions? options = null)
             }
         }
     }
+
+    #endregion
 }

@@ -154,7 +154,7 @@ internal sealed class ToonLexer
     ///     Reads an array length token (e.g., "[3]").
     /// </summary>
     /// <returns>An array length token.</returns>
-    /// <exception cref="ToonParseException">Thrown when array length is not properly terminated.</exception>
+    /// <exception cref="ToonParseException">Thrown when the array length is not properly terminated.</exception>
     private ToonToken ReadArrayLength()
     {
         var startLine = _line;
@@ -226,10 +226,10 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Reads the content of a quoted string (without determining token type).
+    ///     Reads the content of a quoted string (without determining the token type).
     /// </summary>
     /// <returns>The unescaped string content.</returns>
-    /// <exception cref="ToonParseException">Thrown when string is not properly terminated.</exception>
+    /// <exception cref="ToonParseException">Thrown when the string is not properly terminated.</exception>
     private string ReadQuotedStringValue()
     {
         var sb = new StringBuilder();
@@ -360,7 +360,7 @@ internal sealed class ToonLexer
     /// <summary>
     ///     Checks if the previous character was a newline.
     /// </summary>
-    /// <returns>True if the previous character was a newline or at start; otherwise, false.</returns>
+    /// <returns>True if the previous character was a newline or at the start; otherwise, false.</returns>
     private bool PreviousWasNewline()
     {
         if (_position == 0)
@@ -375,7 +375,7 @@ internal sealed class ToonLexer
     /// <summary>
     ///     Peeks at the current character without advancing.
     /// </summary>
-    /// <returns>The current character, or '\0' if at end.</returns>
+    /// <returns>The current character, or '\0' if at the end.</returns>
     private char Peek()
     {
         return IsAtEnd() ? '\0' : _input.Span[_position];
@@ -384,7 +384,7 @@ internal sealed class ToonLexer
     /// <summary>
     ///     Peeks at the next character without advancing.
     /// </summary>
-    /// <returns>The next character, or '\0' if beyond end.</returns>
+    /// <returns>The next character, or '\0' if beyond the end.</returns>
     private char PeekNext()
     {
         return _position + 1 >= _input.Length ? '\0' : _input.Span[_position + 1];
@@ -407,7 +407,7 @@ internal sealed class ToonLexer
     /// <summary>
     ///     Checks if the lexer has reached the end of input.
     /// </summary>
-    /// <returns>True if at end of input; otherwise, false.</returns>
+    /// <returns>True if at the end of input; otherwise, false.</returns>
     private bool IsAtEnd()
     {
         return _position >= _input.Length;
