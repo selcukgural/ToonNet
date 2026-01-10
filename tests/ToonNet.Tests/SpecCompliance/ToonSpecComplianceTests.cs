@@ -225,13 +225,12 @@ mixed[4]: 42, true, hello, null";
     /// <summary>
     /// Test tabular arrays (CSV-style with headers).
     /// Spec §9.3: Tabular Arrays
-    /// ⚠️ NOT YET SUPPORTED - Parser doesn't recognize tabular syntax
     /// </summary>
-    [Fact(Skip = "Tabular array parsing not yet implemented")]
+    [Fact]
     public void TabularArrays_WithHeaders_Parsed()
     {
         var toonString = @"
-people{name,age,city}
+people{name,age,city}:
   Alice, 30, New York
   Bob, 25, Los Angeles
   Charlie, 35, Chicago";
@@ -288,9 +287,8 @@ user:
     /// <summary>
     /// Test arrays of objects.
     /// Spec §10: Objects as List Items
-    /// ⚠️ NOT YET SUPPORTED - List items not creating arrays properly
     /// </summary>
-    [Fact(Skip = "List items parsing not yet implemented")]
+    [Fact]
     public void ArraysOfObjects_ListItemFormat_Parsed()
     {
         var toonString = @"
@@ -404,9 +402,11 @@ level1:
     /// <summary>
     /// Test complex real-world document (API response format).
     /// Combines all TOON features.
-    /// ⚠️ FAILS - Due to list item array and quoted key issues
+    /// Complex real-world test combining multiple features.
+    /// Tests nested objects, arrays, list items, and various value types.
+    /// ⚠️ KNOWN ISSUE: Nested objects within list items with multiple sibling nested objects
     /// </summary>
-    [Fact(Skip = "Tabular array and list items parsing not yet implemented")]
+    [Fact(Skip = "Complex nested list items - needs debugging")]
     public void ComplexRealWorld_APIResponse_RoundTrip()
     {
         var toonString = @"

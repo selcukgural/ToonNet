@@ -174,14 +174,35 @@ public sealed class ToonParser(ToonOptions? options = null)
             {
                 Advance(); // consume newline
 
+                // Check if this is actually a list by peeking ahead for list items
+                var isListArray = false;
                 if (arrayLength.HasValue || fieldNames != null)
+                {
+                    // Peek to see if next content is a list (Indent followed by ListItem)
+                    var peekPos = _position;
+                    while (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Newline)
+                    {
+                        peekPos++;
+                    }
+                    
+                    if (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Indent)
+                    {
+                        var nextPos = peekPos + 1;
+                        if (nextPos < _tokens.Count && _tokens[nextPos].Type == ToonTokenType.ListItem)
+                        {
+                            isListArray = true;
+                        }
+                    }
+                }
+
+                if ((arrayLength.HasValue || fieldNames != null) && !isListArray)
                 {
                     // Tabular array
                     value = ParseTabularArray(indentLevel + _options.IndentSize, arrayLength, fieldNames);
                 }
                 else
                 {
-                    // Nested object
+                    // Nested object or list array
                     value = ParseValue(indentLevel + _options.IndentSize);
                 }
             }
@@ -414,12 +435,185 @@ public sealed class ToonParser(ToonOptions? options = null)
             {
                 Advance(); // consume list marker (-)
 
-                // STEP 1.4: Parse the item (scalar value or nested object)
+                // STEP 1.4: Parse the item (scalar value, inline first field, or nested object)
                 if (IsValueToken(Peek().Type))
                 {
                     // Scalar list item: - value
                     var valueToken = Advance();
                     array.Items.Add(ParseValueToken(valueToken));
+                }
+                else if (Peek().Type == ToonTokenType.Key)
+                {
+                    // Inline first field: - key: value
+                    // Parse as object with first field inline, rest indented
+                    var itemObject = new ToonObject();
+                    
+                    // Parse inline first field
+                    var firstKey = Advance().Value.ToString();
+                    
+                    if (Peek().Type != ToonTokenType.Colon)
+                    {
+                        throw new ToonParseException($"Expected ':' after key '{firstKey}'", Peek().Line, Peek().Column);
+                    }
+                    
+                    Advance(); // consume colon
+                    SkipWhitespace();
+                    
+                    // Parse first value
+                    if (IsValueToken(Peek().Type))
+                    {
+                        var valueToken = Advance();
+                        itemObject.Properties[firstKey] = ParseValueToken(valueToken);
+                    }
+                    else
+                    {
+                        throw new ToonParseException($"Expected value after ':' for key '{firstKey}'", Peek().Line, Peek().Column);
+                    }
+                    
+                    // Consume trailing newline
+                    if (Peek().Type == ToonTokenType.Newline)
+                    {
+                        Advance();
+                    }
+                    
+                    // Parse remaining fields at higher indentation
+                    while (!IsAtEnd())
+                    {
+                        SkipNewlines();
+                        
+                        if (IsAtEnd())
+                            break;
+                        
+                        // Check indentation
+                        if (Peek().Type != ToonTokenType.Indent)
+                        {
+                            // No indent token - we're back at list level or less
+                            break;
+                        }
+                        
+                        var propIndent = Peek().Value.Length;
+                        
+                        // If dedented to list level or below, stop parsing this object
+                        if (propIndent <= indentLevel)
+                        {
+                            break;
+                        }
+                        
+                        Advance(); // consume indent
+                        
+                        // Parse key-value pair
+                        if (Peek().Type == ToonTokenType.Key)
+                        {
+                            var key = Advance().Value.ToString();
+                            
+                            // Check for array notation (same as ParseObject)
+                            int? arrayLength = null;
+                            string[]? fieldNames = null;
+
+                            if (Peek().Type == ToonTokenType.ArrayLength)
+                            {
+                                var lengthToken = Advance();
+                                var lengthStr = lengthToken.Value.ToString().Trim('[', ']');
+
+                                if (int.TryParse(lengthStr, out var len))
+                                {
+                                    arrayLength = len;
+                                }
+                            }
+
+                            if (Peek().Type == ToonTokenType.ArrayFields)
+                            {
+                                var fieldsToken = Advance();
+                                var fieldsStr = fieldsToken.Value.ToString().Trim('{', '}');
+                                fieldNames = fieldsStr.Split(',').Select(f => f.Trim()).ToArray();
+                            }
+                            
+                            if (Peek().Type != ToonTokenType.Colon)
+                            {
+                                throw new ToonParseException($"Expected ':' after key '{key}'", Peek().Line, Peek().Column);
+                            }
+                            
+                            Advance(); // consume colon
+                            SkipWhitespace();
+                            
+                            // Parse value
+                            ToonValue value;
+                            
+                            // Check if value is on next line (nested object/array)
+                            if (Peek().Type == ToonTokenType.Newline)
+                            {
+                                Advance(); // consume newline
+                                
+                                // Determine if this is a tabular array or nested structure
+                                if ((arrayLength.HasValue || fieldNames != null))
+                                {
+                                    // Check if it's actually a list array by peeking ahead
+                                    var isListArray = false;
+                                    var peekPos = _position;
+                                    while (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Newline)
+                                    {
+                                        peekPos++;
+                                    }
+                                    
+                                    if (peekPos < _tokens.Count && _tokens[peekPos].Type == ToonTokenType.Indent)
+                                    {
+                                        var nextPos = peekPos + 1;
+                                        if (nextPos < _tokens.Count && _tokens[nextPos].Type == ToonTokenType.ListItem)
+                                        {
+                                            isListArray = true;
+                                        }
+                                    }
+                                    
+                                    if (!isListArray)
+                                    {
+                                        // Tabular array
+                                        value = ParseTabularArray(propIndent + _options.IndentSize, arrayLength, fieldNames);
+                                    }
+                                    else
+                                    {
+                                        // List array
+                                        value = ParseValue(propIndent + _options.IndentSize);
+                                    }
+                                }
+                                else
+                                {
+                                    // Nested object or array
+                                    value = ParseValue(propIndent + _options.IndentSize);
+                                }
+                            }
+                            else if (IsValueToken(Peek().Type))
+                            {
+                                // Inline value or inline array
+                                if (arrayLength.HasValue)
+                                {
+                                    // Inline primitive array: roles[2]: admin, user
+                                    value = ParseInlinePrimitiveArray(arrayLength.Value);
+                                }
+                                else
+                                {
+                                    var valueToken = Advance();
+                                    value = ParseValueToken(valueToken);
+                                }
+                            }
+                            else
+                            {
+                                throw new ToonParseException($"Expected value after ':'", Peek().Line, Peek().Column);
+                            }
+                            
+                            itemObject.Properties[key] = value;
+                            
+                            if (Peek().Type == ToonTokenType.Newline)
+                            {
+                                Advance();
+                            }
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    
+                    array.Items.Add(itemObject);
                 }
                 else if (Peek().Type == ToonTokenType.Newline)
                 {
