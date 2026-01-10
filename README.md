@@ -114,12 +114,11 @@ var user = new User
     Tags = new List<string> { "dev", "admin" }
 };
 
-// Serialize to TOON string
-var serializer = new ToonSerializer();
-var toonString = serializer.Serialize(user);
+// Serialize to TOON string (static method, like JsonSerializer)
+var toonString = ToonSerializer.Serialize(user);
 
 // Deserialize back to object
-var restored = serializer.Deserialize<User>(toonString);
+var restored = ToonSerializer.Deserialize<User>(toonString);
 ```
 
 **Output:**
@@ -264,8 +263,7 @@ var options = new ToonSerializerOptions
 };
 
 var user = new UserDto { FirstName = "Alice", LastName = "Smith" };
-var serializer = new ToonSerializer(options);
-var toonString = serializer.Serialize(user);
+var toonString = ToonSerializer.Serialize(user, options);
 ```
 
 **Output:**
@@ -411,6 +409,47 @@ ToonNet is **fast**. Source-generated code is 3-5x faster than reflection:
 | 10 properties | 2.0 µs | 12.5 µs | **6.2x** |
 | 15 properties | 2.8 µs | 18.2 µs | **6.5x** |
 | Memory | 64 B | 512 B | **87% less** |
+
+---
+
+## 🎨 Design Philosophy
+
+### Static API (Like JsonSerializer)
+
+ToonSerializer follows the same design pattern as `System.Text.Json.JsonSerializer`:
+
+```csharp
+// ✅ Correct: Static methods (no instantiation needed)
+var toonString = ToonSerializer.Serialize(user);
+var user = ToonSerializer.Deserialize<User>(toonString);
+
+// With options
+var options = new ToonSerializerOptions { /* ... */ };
+var toonString = ToonSerializer.Serialize(user, options);
+```
+
+**Why static?**
+- 🎯 **Familiar**: Same pattern as JsonSerializer
+- ⚡ **Performance**: No instance allocation overhead
+- 🔒 **Thread-safe**: Stateless design, safe for concurrent use
+- 🧹 **Clean**: No object lifecycle management needed
+
+### Thread Safety
+
+All ToonNet APIs are thread-safe:
+- ✅ `ToonSerializer` - Static, stateless
+- ✅ `ToonParser` - Immutable state per parse operation
+- ✅ `ToonEncoder` - Immutable state per encode operation
+- ✅ `ToonSerializerOptions` - Immutable configuration
+
+```csharp
+// Safe to use from multiple threads
+Parallel.For(0, 1000, i =>
+{
+    var toon = ToonSerializer.Serialize(data[i]);
+    var result = ToonSerializer.Deserialize<MyType>(toon);
+});
+```
 
 ---
 
