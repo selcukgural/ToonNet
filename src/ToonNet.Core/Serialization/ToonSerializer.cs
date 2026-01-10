@@ -931,6 +931,39 @@ public static class ToonSerializer
     }
 
     /// <summary>
+    ///     Asynchronously deserializes a stream of TOON objects from a file using multi-document options.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="filePath">The file path to read from.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="multiDocumentOptions">Options that control how multiple TOON documents are delimited.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>An async enumerable of deserialized objects.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when filePath or multiDocumentOptions is null.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This overload supports both legacy blank-line separation and deterministic explicit separator lines (for example: <c>---</c>).
+    /// </remarks>
+    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options,
+                                                                       ToonMultiDocumentReadOptions multiDocumentOptions,
+                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filePath);
+        ArgumentNullException.ThrowIfNull(multiDocumentOptions);
+
+        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+        using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
+
+        await foreach (var item in DeserializeStreamAsync<T>(reader, options, multiDocumentOptions, cancellationToken))
+        {
+            yield return item;
+        }
+    }
+
+    /// <summary>
     ///     Asynchronously deserializes a stream of TOON objects from a StreamReader.
     /// </summary>
     /// <typeparam name="T">The type to deserialize to.</typeparam>
@@ -951,14 +984,49 @@ public static class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(reader);
 
+        await foreach (var item in DeserializeStreamAsync<T>(reader, options, ToonMultiDocumentReadOptions.BlankLine, cancellationToken))
+        {
+            yield return item;
+        }
+    }
+
+    /// <summary>
+    ///     Asynchronously deserializes a stream of TOON objects from a StreamReader using multi-document options.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="reader">The StreamReader to read from.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="multiDocumentOptions">Options that control how multiple TOON documents are delimited.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>An async enumerable of deserialized objects.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the reader or multiDocumentOptions is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     When using <see cref="ToonMultiDocumentSeparatorMode.ExplicitSeparator"/>, a separator line is recognized only when the line matches exactly.
+    /// </remarks>
+    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options,
+                                                                       ToonMultiDocumentReadOptions multiDocumentOptions,
+                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(multiDocumentOptions);
+
         var currentObject = new StringBuilder();
 
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // If we hit a blank line, process the current object
-            if (string.IsNullOrWhiteSpace(line))
+            var isBoundary = multiDocumentOptions.Mode switch
+            {
+                ToonMultiDocumentSeparatorMode.BlankLine => string.IsNullOrWhiteSpace(line),
+                ToonMultiDocumentSeparatorMode.ExplicitSeparator => line == multiDocumentOptions.DocumentSeparator,
+                _ => string.IsNullOrWhiteSpace(line)
+            };
+
+            if (isBoundary)
             {
                 if (currentObject.Length <= 0)
                 {
@@ -968,14 +1036,13 @@ public static class ToonSerializer
                 var toonString = currentObject.ToString();
                 currentObject.Clear();
 
-                // Parse and yield the object
                 var obj = await DeserializeAsync<T>(toonString, options, cancellationToken);
                 yield return obj;
+
+                continue;
             }
-            else
-            {
-                currentObject.AppendLine(line);
-            }
+
+            currentObject.AppendLine(line);
         }
 
         if (currentObject.Length <= 0)
@@ -983,7 +1050,6 @@ public static class ToonSerializer
             yield break;
         }
 
-        // Process the last object if the file doesn't end with a blank line
         var lastToonString = currentObject.ToString();
         var lastObj = await DeserializeAsync<T>(lastToonString, options, cancellationToken);
         yield return lastObj;
@@ -1025,7 +1091,7 @@ public static class ToonSerializer
             if (!isFirst)
             {
                 await writer.WriteLineAsync(); // End previous object
-                await writer.WriteLineAsync(); // End previous object // Add blank line
+                await writer.WriteLineAsync(); // Add blank line
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken);

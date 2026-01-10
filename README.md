@@ -757,16 +757,34 @@ var user = await ToonSerializer.DeserializeFromStreamAsync<User>(stream, cancell
 ```
 
 ### Streaming Deserialization
-Perfect for processing large files with multiple TOON documents:
+Perfect for processing large files with multiple TOON documents.
+
+**Default mode:** documents separated by blank lines (legacy behavior).
 
 ```csharp
-// Stream through multiple objects efficiently
-await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("large-file.toon", ct))
+// Stream through multiple objects efficiently (blank-line separation)
+await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("large-file.toon", cancellationToken: ct))
 {
     if (user != null)
     {
         Console.WriteLine($"Processing user: {user.Name}");
-        // Process each user without loading entire file into memory
+    }
+}
+```
+
+**Deterministic mode (recommended):** explicit separator line (for example: <c>---</c>).
+
+```csharp
+// Explicit separator mode (---)
+await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>(
+    "multi-doc.toon",
+    options: null,
+    multiDocumentOptions: ToonMultiDocumentReadOptions.ExplicitSeparator,
+    cancellationToken: ct))
+{
+    if (user != null)
+    {
+        Console.WriteLine($"Processing user: {user.Name}");
     }
 }
 ```

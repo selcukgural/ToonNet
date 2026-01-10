@@ -218,6 +218,54 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
+    public async Task DeserializeStreamAsync_ExplicitSeparator_YieldsAllObjects()
+    {
+        // Arrange
+        var toonData = """
+                      Name: User1
+                      Age: 20
+                      Email: user1@test.com
+                      ---
+                      Name: User2
+                      Age: 30
+                      Email: user2@test.com
+                      ---
+                      Name: User3
+                      Age: 40
+                      Email: user3@test.com
+                      """;
+        var filePath = Path.GetTempFileName();
+
+        try
+        {
+            await File.WriteAllTextAsync(filePath, toonData);
+
+            // Act
+            var users = new List<TestUser>();
+            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options, ToonMultiDocumentReadOptions.ExplicitSeparator))
+            {
+                if (user != null)
+                {
+                    users.Add(user);
+                }
+            }
+
+            // Assert
+            Assert.Equal(3, users.Count);
+            Assert.Equal("User1", users[0].Name);
+            Assert.Equal("User2", users[1].Name);
+            Assert.Equal("User3", users[2].Name);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    [Fact]
     public async Task SerializeCollectionToFileAsync_MultipleObjects_WritesCorrectFormat()
     {
         // Arrange
