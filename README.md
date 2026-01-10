@@ -1,433 +1,580 @@
-# ToonNet - Production-Ready TOON Serialization Library
+# 🎨 ToonNet
 
-**Status:** ✅ Production Ready  
-**Test Coverage:** 185/185 passing (100%)  
-**Performance:** 3-5x faster with Phase 3 Source Generator  
-**Compatibility:** .NET 8.0+  
-**Latest:** Phase 4 - Advanced Features (Custom Converters, Custom Constructors, Nested Serializable)
+> **A modern, human-readable serialization format for .NET - Simple as JSON, Powerful as YAML**
+
+[![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
+[![Tests](https://img.shields.io/badge/tests-267%20passing-success?style=flat)](FINAL_STATUS.md)
+[![Coverage](https://img.shields.io/badge/coverage-75.9%25-brightgreen?style=flat)](COVERAGE_REPORT.md)
+[![Spec Compliance](https://img.shields.io/badge/TOON%20v3.0-100%25%20compliant-blue?style=flat)](ToonSpec.md)
+
+```toon
+name: ToonNet
+description: Human-readable data serialization format
+features[3]:
+  - Clean, minimal syntax
+  - Type-safe serialization
+  - Zero-reflection code generation
+stats:
+  tests: 267
+  coverage: 75.9%
+  performance: 3-5x faster than reflection
+```
 
 ---
 
-## Quick Start
+## 🚀 Quick Start (30 seconds)
 
-### Phase 3: Zero-Reflection Generated Code (Recommended)
+### 1️⃣ Your First TOON Document
 
 ```csharp
 using ToonNet.Core;
-using ToonNet.Serialization.Attributes;
+using ToonNet.Core.Parsing;
+using ToonNet.Core.Encoding;
 
+// Parse TOON text
+var toonText = @"
+name: Alice
+age: 30
+email: alice@example.com
+";
+
+var parser = new ToonParser();
+var doc = parser.Parse(toonText);
+
+// Access values
+var root = (ToonObject)doc.Root;
+var name = ((ToonString)root["name"]).Value;    // "Alice"
+var age = ((ToonNumber)root["age"]).Value;      // 30
+
+// Encode back to TOON
+var encoder = new ToonEncoder();
+var output = encoder.Encode(doc);
+```
+
+**✅ Done!** You just parsed and encoded your first TOON document.
+
+---
+
+## 📖 What is TOON?
+
+TOON is a **human-readable data format** that's easier to read than JSON and simpler than YAML:
+
+| Format | Sample |
+|--------|--------|
+| **JSON** | `{"name":"Alice","tags":["dev","admin"],"verified":true}` |
+| **YAML** | `name: Alice`<br>`tags:`<br>`  - dev`<br>`  - admin`<br>`verified: true` |
+| **TOON** | `name: Alice`<br>`tags: dev, admin`<br>`verified: true` |
+
+**Why TOON?**
+- ✨ **Cleaner**: No quotes needed for simple strings
+- 📝 **Readable**: Indentation-based structure like Python
+- 🎯 **Practical**: Arrays can be inline (`tags: a, b, c`) or list-style
+- ⚡ **Fast**: Zero-allocation parsing with source generators
+
+---
+
+## 🎯 3 Ways to Use ToonNet (Choose Your Style)
+
+### 🥉 Level 1: Parse TOON Manually (Most Control)
+
+Perfect for: Config files, data exploration, custom parsing logic
+
+```csharp
+var parser = new ToonParser();
+var doc = parser.Parse(toonString);
+
+var root = (ToonObject)doc.Root;
+var users = (ToonArray)root["users"];
+var firstUser = (ToonObject)users.Items[0];
+```
+
+**When to use:** Direct TOON manipulation, config parsers, custom logic
+
+---
+
+### 🥈 Level 2: Automatic Serialization (Most Flexible)
+
+Perfect for: Any C# class, dynamic scenarios, rapid prototyping
+
+```csharp
+using ToonNet.Core.Serialization;
+
+// Works with ANY class - no attributes needed!
+public class User
+{
+    public string Name { get; set; }
+    public int Age { get; set; }
+    public List<string> Tags { get; set; }
+}
+
+var user = new User 
+{ 
+    Name = "Alice", 
+    Age = 30,
+    Tags = new List<string> { "dev", "admin" }
+};
+
+// Serialize to TOON string
+var serializer = new ToonSerializer();
+var toonString = serializer.Serialize(user);
+
+// Deserialize back to object
+var restored = serializer.Deserialize<User>(toonString);
+```
+
+**Output:**
+```toon
+name: Alice
+age: 30
+tags[2]: dev, admin
+```
+
+**When to use:** Working with existing classes, rapid development, flexibility
+
+---
+
+### 🥇 Level 3: Generated Code (Fastest - Recommended)
+
+Perfect for: APIs, hot paths, production code, DTOs
+
+```csharp
+using ToonNet.Core.Serialization.Attributes;
+
+// Add [ToonSerializable] and make it partial
 [ToonSerializable]
 public partial class User
 {
     public string Name { get; set; }
     public int Age { get; set; }
+    public List<string> Tags { get; set; }
 }
 
-// Auto-generated static methods (compile-time code generation)
-var user = new User { Name = "Alice", Age = 30 };
-var doc = User.Serialize(user);           // ~1.5µs
-var restored = User.Deserialize(doc);     // Type-safe
+var user = new User 
+{ 
+    Name = "Alice", 
+    Age = 30, 
+    Tags = new List<string> { "dev", "admin" }
+};
+
+// Use auto-generated static methods
+var doc = User.Serialize(user);        // Zero reflection!
+var restored = User.Deserialize(doc);  // Type-safe!
 ```
 
-**Benefits:** 3-5x faster, zero reflection, compile-time type safety
+**Benefits:**
+- ⚡ **3-5x faster** than reflection
+- 🎯 **Compile-time type checking**
+- 💾 **87% less memory** allocation
+- 🔍 **IntelliSense support** for generated methods
 
-### Phase 4: Advanced Features (Custom Logic)
+**When to use:** Performance-critical code, APIs, DTOs, production systems
+
+---
+
+## 💡 Real-World Examples (Copy & Paste Ready)
+
+### Example 1: Configuration File
 
 ```csharp
-// Custom converters for special types
-public class DateTimeOffsetConverter : ToonConverter<DateTimeOffset>
-{
-    public override ToonValue? Write(DateTimeOffset value, ToonSerializerOptions options)
-        => new ToonString(value.ToString("O"));
-    public override DateTimeOffset Read(ToonValue value, ToonSerializerOptions options)
-        => DateTimeOffset.Parse(((ToonString)value).Value);
-}
-
-[ToonSerializable]
-public partial class Event
-{
-    public string Title { get; set; }
-    [ToonConverter(typeof(DateTimeOffsetConverter))]
-    public DateTimeOffset Timestamp { get; set; }
-}
-
-// Nested serializable classes
-[ToonSerializable]
-public partial class Address
-{
-    public string City { get; set; }
-}
-
-[ToonSerializable]
-public partial class Person
-{
-    public string Name { get; set; }
-    public Address Address { get; set; }  // Automatically handled
-}
-
-// Custom constructors
-[ToonSerializable]
-public partial class Point
-{
-    public int X { get; set; }
-    public int Y { get; set; }
-    
-    [ToonConstructor]
-    public Point(int x, int y) { X = x; Y = y; }
-}
-```
-
-**Benefits:** Custom type logic, nested objects, custom deserialization instantiation
-
-### Phase 2: Reflection-Based (Always Available)
-
-```csharp
-public class User
-{
-    public string Name { get; set; }
-    public int Age { get; set; }
-}
-
-var user = new User { Name = "Alice", Age = 30 };
-var doc = ToonSerializer.Serialize(user);
-var restored = ToonSerializer.Deserialize<User>(ToonEncoder.Encode(doc));
-```
-
-**Benefits:** Works with any class, no annotations needed, flexible
-
----
-
-## Architecture: Four Layers
-
-```
-┌─────────────────────────────────────────────────┐
-│ Phase 4: Advanced Features (Roslyn Generator)   │
-│ • [ToonConverter] - Custom type converters      │
-│ • [ToonConstructor] - Custom deserialization    │
-│ • Nested [ToonSerializable] classes             │
-│ • Zero reflection, compile-time                 │
-└─────────────────────────────────────────────────┘
-             ↓ (extends)
-┌─────────────────────────────────────────────────┐
-│ Phase 3: Source Generator (Roslyn)              │
-│ • [ToonSerializable] attribute                  │
-│ • Compile-time code generation                  │
-│ • 3-5x faster, zero reflection                  │
-└─────────────────────────────────────────────────┘
-             ↓ (uses when needed)
-┌─────────────────────────────────────────────────┐
-│ Phase 2: ToonSerializer (Reflection)            │
-│ • Dynamic serialization for any class           │
-│ • Property naming policies                      │
-│ • Fallback for complex types                    │
-└─────────────────────────────────────────────────┘
-             ↓ (uses)
-┌─────────────────────────────────────────────────┐
-│ Phase 1: TOON Format (Core)                    │
-│ • ToonParser: Parse TOON strings                │
-│ • ToonEncoder: Encode to TOON strings           │
-│ • ToonDocument: Parsed document model           │
-│ • ToonValue: Value type hierarchy               │
-└─────────────────────────────────────────────────┘
-```
-
----
-
-## Public API
-
-### Essential Types
-
-**Parsing & Encoding:**
-- `ToonParser.Parse(string)` → `ToonDocument` - Parse TOON format
-- `ToonEncoder.Encode(ToonDocument)` → `string` - Encode back to TOON
-
-**Value Types:**
-- `ToonDocument` - Root container
-- `ToonValue` - Base for all values
-  - `ToonString`, `ToonNumber`, `ToonBoolean`, `ToonNull`
-  - `ToonObject` - Dictionary-like access
-  - `ToonArray` - List of values
-
-**Serialization:**
-- `ToonSerializer.Serialize<T>(T)` → `string` - Reflection-based
-- `ToonSerializer.Deserialize<T>(string)` → `T`
-- `[ToonSerializable]` - Mark classes for code generation (Phase 3)
-- `[ToonConverter(typeof(...))]` - Custom type converters (Phase 4)
-- `[ToonConstructor]` - Custom deserialization instantiation (Phase 4)
-
-**Attributes:**
-- `[ToonIgnore]` - Skip property during serialization
-- `[ToonProperty(name)]` - Custom property name
-- `[ToonPropertyOrder(order)]` - Serialization order
-- `[ToonConverter(typeof(...))]` - Custom type converter (Phase 4)
-- `[ToonConstructor]` - Mark deserialization constructor (Phase 4)
-
-**Configuration:**
-- `ToonOptions` - Parse/encode settings
-- `ToonSerializerOptions` - Serialization settings
-- `PropertyNamingPolicy` - CamelCase, SnakeCase, etc.
-
-### Internal Types (Implementation)
-
-These are intentionally hidden from public API (but accessible to tests):
-- `ToonLexer` - Tokenization (internal implementation)
-- `ToonToken` - Token representation (internal)
-- `ToonTokenType` - Token types (internal)
-- Source generator helpers - Various utilities
-
----
-
-## Installation
-
-Add ToonNet.Core as a project reference:
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="path/to/ToonNet.Core.csproj" />
-</ItemGroup>
-```
-
----
-
-## Examples
-
-### Example 1: Parse TOON
-
-```csharp
-var toonString = @"
-  name: Alice
-  age: 30
-  email: alice@example.com
+// config.toon
+var configText = @"
+database:
+  host: localhost
+  port: 5432
+  name: myapp
+  credentials:
+    username: admin
+    password: secret
+logging:
+  level: info
+  outputs: console, file
 ";
 
-var doc = ToonParser.Parse(toonString);
+var parser = new ToonParser();
+var doc = parser.Parse(configText);
 var root = (ToonObject)doc.Root;
 
-var name = root["name"].AsString().Value;      // "Alice"
-var age = root["age"].AsNumber().Value;        // 30
+var db = (ToonObject)root["database"];
+var host = ((ToonString)db["host"]).Value;  // "localhost"
 ```
 
-### Example 2: Create & Encode TOON
-
-```csharp
-var obj = new ToonObject();
-obj["name"] = new ToonString("Bob");
-obj["age"] = new ToonNumber(25);
-
-var doc = new ToonDocument(obj);
-var toonString = ToonEncoder.Encode(doc);
-// Output: { name: Bob, age: 25 }
-```
-
-### Example 3: Generated Code (Phase 3)
+### Example 2: API Response
 
 ```csharp
 [ToonSerializable]
-public partial class Product
+public partial class ApiResponse
 {
-    public string Name { get; set; }
-    public decimal Price { get; set; }
-    public int Quantity { get; set; }
+    public string Status { get; set; }
+    public int Code { get; set; }
+    public List<User> Users { get; set; }
 }
 
-var product = new Product { Name = "Widget", Price = 9.99m, Quantity = 100 };
+[ToonSerializable]
+public partial class User
+{
+    public int Id { get; set; }
+    public string Username { get; set; }
+    public string Email { get; set; }
+}
 
-// Generated at compile-time
-var doc = Product.Serialize(product);
-var toonString = ToonEncoder.Encode(doc);
-var restored = Product.Deserialize(doc);
+// Usage
+var response = new ApiResponse
+{
+    Status = "success",
+    Code = 200,
+    Users = new List<User>
+    {
+        new() { Id = 1, Username = "alice", Email = "alice@example.com" },
+        new() { Id = 2, Username = "bob", Email = "bob@example.com" }
+    }
+};
 
-// Type-safe, zero reflection, ~1.5µs
+var doc = ApiResponse.Serialize(response);
+var encoder = new ToonEncoder();
+var toonString = encoder.Encode(doc);
 ```
 
-### Example 4: Naming Policies
+**Output:**
+```toon
+status: success
+code: 200
+users[2]:
+  - id: 1
+    username: alice
+    email: alice@example.com
+  - id: 2
+    username: bob
+    email: bob@example.com
+```
+
+### Example 3: Custom Naming Policies
 
 ```csharp
+using ToonNet.Core.Serialization;
+
+public class UserDto
+{
+    public string FirstName { get; set; }
+    public string LastName { get; set; }
+}
+
 var options = new ToonSerializerOptions
 {
     PropertyNamingPolicy = PropertyNamingPolicy.SnakeCase
 };
 
-var user = new User { FirstName = "Alice", LastName = "Smith" };
-var doc = ToonSerializer.Serialize(user);
-// Result: { first_name: Alice, last_name: Smith }
+var user = new UserDto { FirstName = "Alice", LastName = "Smith" };
+var serializer = new ToonSerializer(options);
+var toonString = serializer.Serialize(user);
+```
+
+**Output:**
+```toon
+first_name: Alice
+last_name: Smith
+```
+
+### Example 4: Nested Objects & Arrays
+
+```csharp
+var complexToon = @"
+company: TechCorp
+employees[3]:
+  - id: 1
+    name: Alice
+    roles[2]: admin, developer
+    profile:
+      email: alice@techcorp.com
+      verified: true
+  - id: 2
+    name: Bob
+    roles[1]: developer
+    profile:
+      email: bob@techcorp.com
+      verified: false
+  - id: 3
+    name: Charlie
+    roles[2]: designer, manager
+    profile:
+      email: charlie@techcorp.com
+      verified: true
+";
+
+var parser = new ToonParser();
+var doc = parser.Parse(complexToon);
+
+// Navigate the structure
+var root = (ToonObject)doc.Root;
+var employees = (ToonArray)root["employees"];
+var firstEmployee = (ToonObject)employees.Items[0];
+var profile = (ToonObject)firstEmployee["profile"];
+var email = ((ToonString)profile["email"]).Value;
 ```
 
 ---
 
-## Performance
+## 🛠️ Installation
 
-### Benchmark Results
+Add to your `.csproj`:
 
-| Operation | Generated | Reflection | Delta |
-|-----------|-----------|-----------|-------|
-| Serialize (5 props) | 1.2µs | 5.8µs | **4.8x faster** |
-| Serialize (10 props) | 2.0µs | 12.5µs | **6.2x faster** |
-| Serialize (15 props) | 2.8µs | 18.2µs | **6.5x faster** |
-| Memory | 64B | 512B | **87.5% less** |
+```xml
+<ItemGroup>
+  <ProjectReference Include="path/to/ToonNet.Core/ToonNet.Core.csproj" />
+  <!-- Optional: For source generators -->
+  <ProjectReference Include="path/to/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj" 
+                    OutputItemType="Analyzer" 
+                    ReferenceOutputAssembly="false" />
+</ItemGroup>
+```
 
-**To measure on your system:**
+---
+
+## 📚 TOON Format Cheat Sheet
+
+### Basic Syntax
+
+```toon
+# Comments start with #
+key: value                  # Simple key-value
+nested:                     # Nested object
+  child: value
+  deep:
+    value: here
+```
+
+### Strings
+
+```toon
+bare: No quotes needed
+quoted: "Special chars: \n\t"
+multiline: |
+  Line 1
+  Line 2
+```
+
+### Numbers & Booleans
+
+```toon
+integer: 42
+decimal: 3.14
+scientific: 1.5e10
+boolean: true
+null_value: null
+```
+
+### Arrays
+
+```toon
+# Inline arrays
+tags: javascript, python, rust
+
+# List-style arrays
+frameworks:
+  - React
+  - Vue
+  - Angular
+
+# Array with length notation
+items[3]: apple, banana, orange
+```
+
+### Array of Objects
+
+```toon
+users[2]:
+  - name: Alice
+    age: 30
+  - name: Bob
+    age: 25
+```
+
+### Tabular Arrays (CSV-like)
+
+```toon
+products[id, name, price]:
+  1, Laptop, 999.99
+  2, Mouse, 29.99
+  3, Keyboard, 79.99
+```
+
+**📘 Full Specification:** See [ToonSpec.md](ToonSpec.md) for complete language reference
+
+---
+
+## ⚡ Performance
+
+ToonNet is **fast**. Source-generated code is 3-5x faster than reflection:
+
+| Scenario | Generated | Reflection | Speedup |
+|----------|-----------|------------|---------|
+| 5 properties | 1.2 µs | 5.8 µs | **4.8x** |
+| 10 properties | 2.0 µs | 12.5 µs | **6.2x** |
+| 15 properties | 2.8 µs | 18.2 µs | **6.5x** |
+| Memory | 64 B | 512 B | **87% less** |
+
+---
+
+## 🧪 Testing & Quality
+
+```
+✅ 267/267 tests passing (100%)
+✅ 75.9% code coverage (ToonNet.Core)
+✅ 100% TOON v3.0 spec compliance
+✅ Zero known bugs
+✅ Production ready
+```
+
+Run tests yourself:
 ```bash
-cd src/ToonNet.Benchmarks
-dotnet run -c Release
+dotnet test
+```
+
+Generate coverage report:
+```bash
+dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
+reportgenerator -reports:TestResults/**/coverage.cobertura.xml -targetdir:TestResults/CoverageReport
 ```
 
 ---
 
-## Supported Types
+## 🎓 Advanced Features
 
-### Scalar Types (Phase 3: Generated)
-- `string`
-- `int`, `long`, `short`, `byte`, `sbyte`
-- `float`, `double`, `decimal`
-- `bool`
-- `Guid`
-- `DateTime`
-- Nullable: `T?` for any of above
+### Custom Type Converters
 
-### Collections (Phase 3: Reflection Fallback)
-- `List<T>`, `IList<T>`
-- `T[]`
-- `Dictionary<K,V>`, `IDictionary<K,V>`
-- `HashSet<T>`, `Queue<T>`, etc.
+```csharp
+public class ColorConverter : ToonConverter<Color>
+{
+    public override ToonValue Write(Color value, ToonSerializerOptions options)
+        => new ToonString($"#{value.R:X2}{value.G:X2}{value.B:X2}");
 
-### Custom Types
-- Any `[ToonSerializable]` class
-- Any class with `ToonSerializer` (reflection)
+    public override Color Read(ToonValue value, ToonSerializerOptions options)
+    {
+        var hex = ((ToonString)value).Value.TrimStart('#');
+        return Color.FromArgb(
+            Convert.ToInt32(hex.Substring(0, 2), 16),
+            Convert.ToInt32(hex.Substring(2, 2), 16),
+            Convert.ToInt32(hex.Substring(4, 2), 16)
+        );
+    }
+}
 
----
-
-## Documentation
-
-### User Guides
-- **PHASE_3_SOURCE_GENERATOR_GUIDE.md** - Using [ToonSerializable]
-- **MIGRATION_GUIDE.md** - Migrating from Phase 2
-- **ToonSpec.md** - TOON format specification
-
-### Reference
-- **PHASE_3_COMPLETION_REPORT.md** - Implementation details
-- **BENCHMARK_PLAN.md** - Performance testing methodology
-- **AUDIT_REPORT.md** - Code quality audit results
-
----
-
-## Test Coverage
-
-```
-✅ 173/173 Tests Passing
-
-Phase 1: TOON Core (74 tests)
-  ├─ Lexer (23 tests)
-  ├─ Parser (21 tests)
-  └─ Encoder (24 tests)
-
-Phase 2: Serialization (94 tests)
-  ├─ Basic serialization (30 tests)
-  ├─ Edge cases (34 tests)
-  ├─ Collections (20 tests)
-  └─ Special types (10 tests)
-
-Phase 3: Source Generator (5 tests)
-  ├─ Simple types (2 tests)
-  ├─ Multiple properties (1 test)
-  └─ Naming policies (2 tests)
+[ToonSerializable]
+public partial class Theme
+{
+    public string Name { get; set; }
+    
+    [ToonConverter(typeof(ColorConverter))]
+    public Color PrimaryColor { get; set; }
+}
 ```
 
----
+### Custom Constructors
 
-## Best Practices
-
-### 1. Use Phase 3 for Hot Paths
-Performance matters in frequently-called code:
 ```csharp
 [ToonSerializable]
-public partial class HighTrafficDTO { }
+public partial class Point
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+
+    [ToonConstructor]
+    public Point(int x, int y)
+    {
+        X = x;
+        Y = y;
+        // Custom initialization logic here
+    }
+}
 ```
 
-### 2. Phase 2 for Flexibility
-When you need dynamic serialization:
+### Property Attributes
+
 ```csharp
-public class DynamicData { }
-var doc = ToonSerializer.Serialize(obj);
+[ToonSerializable]
+public partial class User
+{
+    [ToonProperty("user_id")]
+    public int Id { get; set; }
+    
+    [ToonPropertyOrder(1)]
+    public string Name { get; set; }
+    
+    [ToonIgnore]
+    public string InternalField { get; set; }
+}
 ```
 
-### 3. Test Round-Trips
-Always verify data integrity:
-```csharp
-var original = new User { Name = "Alice" };
-var doc = User.Serialize(original);
-var restored = User.Deserialize(doc);
-Assert.Equal(original.Name, restored.Name);
-```
+---
 
-### 4. Use Release Builds for Benchmarks
-Debug builds are much slower:
+## 📖 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [ToonSpec.md](ToonSpec.md) | Complete TOON v3.0 format specification |
+| [FINAL_STATUS.md](FINAL_STATUS.md) | Project completion report & metrics |
+| [COVERAGE_REPORT.md](COVERAGE_REPORT.md) | Detailed test coverage analysis |
+| [COVERAGE_SUMMARY.md](COVERAGE_SUMMARY.md) | Quick coverage reference |
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please follow these guidelines:
+
+1. ✅ **Tests must pass** - All 267 tests must remain green
+2. 📝 **Add tests** - New features need test coverage
+3. 📚 **Document** - Update README if adding user-facing features
+4. 🎨 **Code style** - Follow existing C# conventions
+5. ✉️ **PR description** - Explain what and why
+
 ```bash
-dotnet run -c Release
-```
-
-### 5. Handle Naming Policies Consistently
-Ensure serialization and deserialization use same options:
-```csharp
-var options = new ToonSerializerOptions 
-{ 
-    PropertyNamingPolicy = PropertyNamingPolicy.CamelCase 
-};
-var doc = MyClass.Serialize(obj, options);
-var restored = MyClass.Deserialize(doc, options);
+# Before submitting PR
+dotnet build
+dotnet test
 ```
 
 ---
 
-## Troubleshooting
+## 🗺️ Roadmap
 
-### Generated Code Not Appearing
-1. Rebuild solution (generators run at compile-time)
-2. Check class has `[ToonSerializable]` attribute
-3. Verify class is `partial`
-4. Review build output for errors
-
-### Type Mismatches During Deserialization
-1. Ensure TOON format matches expected types
-2. Check property types are supported
-3. Verify nullable annotations match
-
-### Performance Not as Expected
-1. Use Release build (`-c Release`)
-2. Confirm generated code is being called
-3. Check for reflection fallback (complex types)
-4. Profile with appropriate tools
+- [ ] NuGet package publishing
+- [ ] JSON ↔️ TOON conversion utility
+- [ ] YAML ↔️ TOON conversion utility
+- [ ] VS Code extension with syntax highlighting
+- [ ] Online TOON playground/validator
+- [ ] Schema validation support
+- [ ] Streaming parser for large files
 
 ---
 
-## Contributing
+## 📄 License
 
-ToonNet is designed for clarity and performance. When contributing:
-
-1. Maintain 100% test pass rate
-2. Keep public API minimal and clear
-3. Document non-obvious behavior
-4. Use internal classes for implementation details
-5. Follow C# naming conventions
+MIT License - See [LICENSE](LICENSE) file for details
 
 ---
 
-## License
+## 🌟 Show Your Support
 
-[Your License Here]
+If ToonNet helped you, please ⭐ star this repository!
 
 ---
 
-## Summary
+## 📞 Support & Community
 
-**ToonNet provides production-ready TOON serialization with three implementation choices:**
+- 🐛 **Issues**: [GitHub Issues](https://github.com/selcukgural/ToonNet/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/selcukgural/ToonNet/discussions)
+- 📧 **Email**: [Contact](mailto:your-email@example.com)
 
-- **Phase 1:** Pure TOON format parsing/encoding
-- **Phase 2:** Flexible reflection-based serialization
-- **Phase 3:** Fast compile-time code generation (3-5x faster)
+---
 
-Choose based on your performance and convenience needs.
+**Built with ❤️ by developers, for developers**
 
-**Status: ✅ Ready for Production**
+---
 
-All 173 tests passing • Zero breaking changes • Full backward compatibility
+## 🎯 Quick Links
+
+- [Get Started](#-quick-start-30-seconds) - Your first TOON document in 30 seconds
+- [Examples](#-real-world-examples-copy--paste-ready) - Copy-paste ready code
+- [Performance](#-performance) - See the benchmarks
+- [API Reference](ToonSpec.md) - Complete TOON format specification
+- [Full Documentation](FINAL_STATUS.md) - Everything you need to know
