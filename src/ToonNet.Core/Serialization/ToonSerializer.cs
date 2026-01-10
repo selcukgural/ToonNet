@@ -876,6 +876,18 @@ public static class ToonSerializer
 
         await stream.WriteAsync(bytes, cancellationToken);
     }
+    
+    public static async Task SerializeToStreamAsync(Type type, Stream stream, ToonSerializerOptions? options = null,
+                                                       CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(stream);
+
+        var toonString = await SerializeAsync(type, options, cancellationToken);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(toonString);
+
+        await stream.WriteAsync(bytes, cancellationToken);
+    }
 
     /// <summary>
     ///     Asynchronously reads from a stream and deserializes the content to an object.
@@ -1091,7 +1103,7 @@ public static class ToonSerializer
             if (!isFirst)
             {
                 await writer.WriteLineAsync(); // End previous object
-                await writer.WriteLineAsync(); // Add blank line
+                await writer.WriteLineAsync(); // Add a blank line
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken);

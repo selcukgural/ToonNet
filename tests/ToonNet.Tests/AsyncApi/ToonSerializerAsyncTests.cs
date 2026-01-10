@@ -1,8 +1,5 @@
 using ToonNet.Core.Serialization;
 using ToonNet.Core;
-using Xunit;
-using System.Text;
-using ToonNet.Core.Models;
 
 namespace ToonNet.Tests.AsyncApi;
 

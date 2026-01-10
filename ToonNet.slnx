@@ -3,6 +3,8 @@
         <Project Path="src/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj" />
     </Folder>
     <Folder Name="/src/">
+        <Project Path="src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj" />
+        <Project Path="src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj" />
         <Project Path="src/ToonNet.Core/ToonNet.Core.csproj" />
         <Project Path="src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj" />
         <Project Path="src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj" />

@@ -1,9 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ToonNet.Core.Serialization;
 
 /// <summary>
 ///     Configuration options for TOON serialization.
 /// </summary>
-public sealed class ToonSerializerOptions
+public sealed class ToonSerializerOptions : IValidatableObject
 {
     private int _maxDepth = 100;
     private const int DefaultMaxDepth = 200;
@@ -18,6 +20,7 @@ public sealed class ToonSerializerOptions
     /// <exception cref="ArgumentNullException">
     ///     Thrown when the value is null.
     /// </exception>
+    [Required]
     public ToonOptions ToonOptions
     {
         get => _toonOptions;
@@ -67,6 +70,7 @@ public sealed class ToonSerializerOptions
     ///     TOON specification §15 recommends 100 for security considerations.
     ///     Standard limit is 200. Enable <see cref="AllowExtendedLimits"/> to allow up to 1000.
     /// </remarks>
+    [Range(1, 1000)]
     public int MaxDepth
     {
         get => _maxDepth;
@@ -140,6 +144,24 @@ public sealed class ToonSerializerOptions
     public IToonConverter? GetConverter(Type type)
     {
         return Converters.FirstOrDefault(c => c.CanConvert(type));
+    }
+
+    /// <summary>
+    ///     Validates the current instance using DataAnnotations rules.
+    /// </summary>
+    /// <param name="validationContext">The validation context.</param>
+    /// <returns>A sequence of validation results.</returns>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        var maxAllowed = AllowExtendedLimits ? ExtendedMaxDepth : DefaultMaxDepth;
+        if (MaxDepth > maxAllowed)
+        {
+            yield return new ValidationResult(
+                AllowExtendedLimits
+                    ? $"{nameof(MaxDepth)} cannot exceed {ExtendedMaxDepth} even with extended limits enabled"
+                    : $"{nameof(MaxDepth)} cannot exceed {DefaultMaxDepth}. Set {nameof(AllowExtendedLimits)} = true to allow up to {ExtendedMaxDepth}",
+                [nameof(MaxDepth), nameof(AllowExtendedLimits)]);
+        }
     }
 }
 

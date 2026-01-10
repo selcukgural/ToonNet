@@ -1,6 +1,5 @@
 using System.Globalization;
 using ToonNet.Core.Models;
-using System.Text;
 
 namespace ToonNet.Core.Parsing;
 

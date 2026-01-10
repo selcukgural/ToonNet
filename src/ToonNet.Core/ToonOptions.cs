@@ -1,9 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ToonNet.Core;
 
 /// <summary>
 ///     Configuration options for TOON parsing and encoding.
 /// </summary>
-public sealed class ToonOptions
+public sealed class ToonOptions : IValidatableObject
 {
     private int _indentSize = 2;
     private int _maxDepth = 100;
@@ -21,26 +23,25 @@ public sealed class ToonOptions
     ///     TOON specification §12 requires indentation to be a multiple of 2 spaces.
     ///     The recommended value is 2 for consistency with the specification.
     /// </remarks>
+    [Range(2, 100)]
     public int IndentSize
     {
         get => _indentSize;
         set
         {
-            // Check range first (more specific error messages)
-            if (value < 2)
+            switch (value)
             {
-                throw new ArgumentOutOfRangeException(
-                    nameof(value),
-                    value,
-                    "IndentSize must be at least 2 per TOON specification §12");
-            }
-
-            if (value > 100)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(value),
-                    value,
-                    "IndentSize cannot exceed 100 for readability and performance");
+                // Check range first (more specific error messages)
+                case < 2:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        value,
+                        "IndentSize must be at least 2 per TOON specification §12");
+                case > 100:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        value,
+                        "IndentSize cannot exceed 100 for readability and performance");
             }
 
             // Then check if even (spec requirement)
@@ -72,7 +73,7 @@ public sealed class ToonOptions
         get => _delimiter;
         set
         {
-            // Check for newline/tab first (more specific message)
+            // Check for the newline/tab first (more specific message)
             if (value is '\n' or '\r' or '\t')
             {
                 throw new ArgumentException(
@@ -113,7 +114,7 @@ public sealed class ToonOptions
     ///     Enable this only when you need to process deeply nested structures.
     ///     Extended limits may increase memory usage and stack depth.
     /// </remarks>
-    public bool AllowExtendedLimits { get; set; } = false;
+    public bool AllowExtendedLimits { get; set; }
 
     /// <summary>
     ///     Gets or sets the maximum nesting depth allowed during parsing.
@@ -129,6 +130,7 @@ public sealed class ToonOptions
     ///     Standard limit is 200. Enable <see cref="AllowExtendedLimits"/> to allow up to 1000.
     ///     Very high values may cause stack overflow issues.
     /// </remarks>
+    [Range(1, 1000)]
     public int MaxDepth
     {
         get => _maxDepth;
@@ -154,6 +156,50 @@ public sealed class ToonOptions
             }
 
             _maxDepth = value;
+        }
+    }
+
+    /// <summary>
+    ///     Validates the current instance using DataAnnotations rules.
+    /// </summary>
+    /// <param name="validationContext">The validation context.</param>
+    /// <returns>A sequence of validation results.</returns>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (IndentSize % 2 != 0)
+        {
+            yield return new ValidationResult(
+                "IndentSize must be an even number (2, 4, 6, ...) per TOON specification §12",
+                [nameof(IndentSize)]);
+        }
+
+        var maxAllowed = AllowExtendedLimits ? 1000 : 200;
+        if (MaxDepth > maxAllowed)
+        {
+            yield return new ValidationResult(
+                AllowExtendedLimits
+                    ? "MaxDepth cannot exceed 1000 even with extended limits enabled"
+                    : "MaxDepth cannot exceed 200. Set AllowExtendedLimits = true to allow up to 1000",
+                [nameof(MaxDepth), nameof(AllowExtendedLimits)]);
+        }
+
+        if (Delimiter is '\n' or '\r' or '\t')
+        {
+            yield return new ValidationResult(
+                $"Delimiter cannot be a newline or tab character (U+{(int)Delimiter:X4})",
+                [nameof(Delimiter)]);
+        }
+        else if (char.IsWhiteSpace(Delimiter))
+        {
+            yield return new ValidationResult(
+                $"Delimiter cannot be a whitespace character (U+{(int)Delimiter:X4})",
+                [nameof(Delimiter)]);
+        }
+        else if (char.IsControl(Delimiter))
+        {
+            yield return new ValidationResult(
+                $"Delimiter cannot be a control character (U+{(int)Delimiter:X4})",
+                [nameof(Delimiter)]);
         }
     }
 

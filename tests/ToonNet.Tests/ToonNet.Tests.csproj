@@ -10,7 +10,14 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="coverlet.collector" Version="6.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.0" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
         <PackageReference Include="xunit" Version="2.5.3" />
         <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
@@ -24,6 +31,8 @@
         <ProjectReference Include="..\..\src\ToonNet.Core\ToonNet.Core.csproj" />
         <ProjectReference Include="..\..\src\ToonNet.Extensions.Json\ToonNet.Extensions.Json.csproj" />
         <ProjectReference Include="..\..\src\ToonNet.Extensions.Yaml\ToonNet.Extensions.Yaml.csproj" />
+        <ProjectReference Include="..\..\src\ToonNet.AspNetCore\ToonNet.AspNetCore.csproj" />
+        <ProjectReference Include="..\..\src\ToonNet.AspNetCore.Mvc\ToonNet.AspNetCore.Mvc.csproj" />
     </ItemGroup>
 
 </Project>
