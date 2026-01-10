@@ -224,7 +224,7 @@ public sealed class ToonLexer
         
         // Skip any whitespace after the closing quote for proper token positioning
         var result = sb.ToString();
-        return new ToonToken(ToonTokenType.Value, result.AsMemory(), startLine, startColumn);
+        return new ToonToken(ToonTokenType.QuotedString, result.AsMemory(), startLine, startColumn);
     }
 
     private ToonToken ReadKeyOrValue()

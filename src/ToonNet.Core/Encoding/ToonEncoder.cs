@@ -215,7 +215,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             return ((long)value).ToString();
         }
 
-        return value.ToString("G");
+        return value.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private string QuoteIfNeeded(string value)

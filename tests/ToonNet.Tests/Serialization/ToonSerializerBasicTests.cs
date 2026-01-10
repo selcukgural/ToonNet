@@ -136,7 +136,7 @@ IsActive: true";
         Assert.Contains("  City: Boston", toon);
     }
 
-    [Fact(Skip = "Investigating nested object deserialization issue")]
+    [Fact]
     public void RoundTrip_NestedObject_PreservesStructure()
     {
         // Arrange

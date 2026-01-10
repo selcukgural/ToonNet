@@ -84,7 +84,7 @@ public class ToonLexerTests
         var tokens = lexer.Tokenize();
 
         // Assert
-        var valueToken = tokens.First(t => t.Type == ToonTokenType.Value);
+        var valueToken = tokens.First(t => t.Type == ToonTokenType.QuotedString);
         // Lexer preserves the unescaped content without quotes
         Assert.Equal("Alice Smith", valueToken.Value.ToString());
     }

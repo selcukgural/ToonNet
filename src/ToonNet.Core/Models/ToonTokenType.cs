@@ -21,6 +21,10 @@ public enum ToonTokenType
     Value,
     
     /// <summary>
+    /// A quoted string value
+    /// </summary>
+    QuotedString,
+    /// <summary>
     /// Array length indicator (e.g., "[3]" in "tags[3]:")
     /// </summary>
     ArrayLength,

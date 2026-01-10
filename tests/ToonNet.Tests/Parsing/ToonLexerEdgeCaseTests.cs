@@ -146,7 +146,7 @@ public class ToonLexerEdgeCaseTests
         var tokens = lexer.Tokenize();
 
         // Assert
-        var valueToken = tokens.First(t => t.Type == ToonTokenType.Value);
+        var valueToken = tokens.First(t => t.Type == ToonTokenType.QuotedString);
         var value = valueToken.Value.ToString();
         Assert.Contains("\n", value);
         Assert.Contains("\t", value);
@@ -163,7 +163,7 @@ public class ToonLexerEdgeCaseTests
         var tokens = lexer.Tokenize();
 
         // Assert
-        var valueToken = tokens.First(t => t.Type == ToonTokenType.Value);
+        var valueToken = tokens.First(t => t.Type == ToonTokenType.QuotedString);
         Assert.Contains("\"", valueToken.Value.ToString());
     }
 
@@ -178,7 +178,7 @@ public class ToonLexerEdgeCaseTests
         var tokens = lexer.Tokenize();
 
         // Assert
-        var valueToken = tokens.First(t => t.Type == ToonTokenType.Value);
+        var valueToken = tokens.First(t => t.Type == ToonTokenType.QuotedString);
         Assert.Contains("\\", valueToken.Value.ToString());
     }
 
