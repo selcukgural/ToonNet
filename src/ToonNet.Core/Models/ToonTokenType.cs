@@ -3,7 +3,11 @@ namespace ToonNet.Core.Models;
 /// <summary>
 /// Represents the type of token in TOON format.
 /// </summary>
-public enum ToonTokenType
+/// <remarks>
+/// This is an internal implementation detail used by the lexer and parser.
+/// Users should interact with parsed TOON documents through <see cref="ToonDocument"/> and <see cref="ToonValue"/>.
+/// </remarks>
+internal enum ToonTokenType
 {
     /// <summary>
     /// A field name or key (e.g., "name" in "name: value")

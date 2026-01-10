@@ -34,7 +34,7 @@ public sealed class ToonParser(ToonOptions? options = null)
     /// <param name="tokens">The tokens to parse.</param>
     /// <returns>A ToonDocument representing the parsed tokens.</returns>
     /// <exception cref="ToonParseException">Thrown when the tokens are invalid.</exception>
-    public ToonDocument Parse(List<ToonToken> tokens)
+    internal ToonDocument Parse(List<ToonToken> tokens)
     {
         _tokens.Clear();
         _tokens.AddRange(tokens);

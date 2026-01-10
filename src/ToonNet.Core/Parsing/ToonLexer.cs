@@ -6,7 +6,10 @@ namespace ToonNet.Core.Parsing;
 /// <summary>
 /// Tokenizes TOON format input into a stream of tokens.
 /// </summary>
-public sealed class ToonLexer
+/// <remarks>
+/// This is an internal implementation detail. Users should use <see cref="ToonParser"/> instead.
+/// </remarks>
+internal sealed class ToonLexer
 {
     private readonly ReadOnlyMemory<char> _input;
     private int _position;
