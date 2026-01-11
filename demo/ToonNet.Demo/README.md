@@ -21,24 +21,32 @@ ToonNet'in TOON spec'te tanımlanan tüm tipleri desteklediğini ve JSON ↔ TOO
 - Integer-backed enums
 - Enum serialization/deserialization
 
-### 4. Collections
+### 4. Anonymous Tipler ✨
+- Simple anonymous types (`new { Name = "John", Age = 30 }`)
+- Nested anonymous types
+- Arrays of anonymous types
+- Complex anonymous types with dictionaries
+- LINQ query result anonymous types
+- ⚠️ **Not**: Deserialization desteklenmez (compiler-generated, no constructor)
+
+### 5. Collections
 - `List<T>`
 - `Array` (`T[]`)
 - `HashSet<T>`
 - `Dictionary<TKey, TValue>`
 - Nested collections (`List<List<T>>`)
 
-### 5. Complex Nested Types
+### 6. Complex Nested Types
 - Sınıflar içinde sınıflar (5+ seviye derinlik)
 - List içinde custom objeler
 - Dictionary içinde complex tipler
 
-### 6. Struct Tipler
+### 7. Struct Tipler
 - Regular structs
 - Nested structs
 - Struct içinde properties
 
-### 7. Record Tipler
+### 8. Record Tipler
 - ⚠️ **Not**: Primary constructor'lı recordlar deserialization için özel handling gerektirir
 - Serialization tam desteklenir
 
@@ -79,7 +87,43 @@ Record ve struct tiplerinin davranışını gösterir.
 - Struct serialization/deserialization
 - Nested struct içinde struct
 
-### Demo 5: Format Conversions
+### Demo 5: Anonymous Types ✨
+Anonymous (anonim) tiplerin serialization desteğini gösterir.
+
+**Özellikler:**
+- Simple anonymous types
+- Nested anonymous types
+- Array of anonymous types
+- Complex anonymous with Dictionary
+- LINQ query-style anonymous types
+
+**Senaryolar:**
+```csharp
+// Simple
+new { Name = "John", Age = 30 }
+
+// Nested
+new { 
+    Company = "Tech", 
+    CEO = new { Name = "Alice", Age = 35 }
+}
+
+// Array
+new[] { 
+    new { Id = 1, Name = "Product1" },
+    new { Id = 2, Name = "Product2" }
+}
+
+// Complex with Dictionary
+new {
+    Metrics = new { Sales = 125000m },
+    Regions = new Dictionary<string, decimal> {
+        { "North", 45000m }
+    }
+}
+```
+
+### Demo 6: Format Conversions
 TOON ↔ JSON ↔ YAML dönüşümlerini gösterir.
 
 **Dönüşümler:**
@@ -94,6 +138,7 @@ TOON ↔ JSON ↔ YAML dönüşümlerini gösterir.
 
 ### ✅ Başarılı Testler
 - ✓ Primitive type serialization/deserialization
+- ✓ Anonymous types serialization (5 scenarios)
 - ✓ Collections (List, Array, Dictionary, HashSet)
 - ✓ Nested objects (5 seviye derinlik)
 - ✓ Enums (string representation)
@@ -105,6 +150,7 @@ TOON ↔ JSON ↔ YAML dönüşümlerini gösterir.
 - ✓ Round-trip verification
 
 ### ⚠️ Bilinen Sınırlamalar
+- **Anonymous Types**: Deserialization desteklenmez (compiler-generated, no public constructor)
 - **Records with Primary Constructors**: Parameterless constructor olmadığı için deserialization özel handling gerektirir
 - **Struct Deserialization**: Bazı durumlarda default values alınabiliyor (araştırılması gerekiyor)
 

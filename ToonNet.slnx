@@ -2,6 +2,9 @@
     <Folder Name="/benchmark/">
         <Project Path="src/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj" />
     </Folder>
+    <Folder Name="/demo/">
+        <Project Path="demo/ToonNet.Demo/ToonNet.Demo.csproj" />
+    </Folder>
     <Folder Name="/src/">
         <Project Path="src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj" />
         <Project Path="src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj" />
