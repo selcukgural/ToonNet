@@ -100,7 +100,7 @@ public static class ToonSerializer
 
                 validProps.Add(prop);
 
-                // Cache property attribute (but not the final name, as it depends on naming policy)
+                // Cache property attribute (but not the final name, as it depends on the naming policy)
                 var nameAttr = prop.GetCustomAttribute<ToonPropertyAttribute>();
                 propertyAttributes[prop] = nameAttr;
 
@@ -140,9 +140,24 @@ public static class ToonSerializer
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     public static string Serialize<T>(T? value, ToonSerializerOptions? options = null)
     {
+        return Serialize(value, typeof(T), options);
+    }
+
+    /// <summary>
+    ///     Serializes an object to TOON format string (non-generic overload).
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="type">The type of object to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <returns>The TOON format string representation of the object.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when type is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    public static string Serialize(object? value, Type type, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(type);
         options ??= ToonSerializerOptions.Default;
 
-        var toonValue = SerializeValue(value, typeof(T), options, 0);
+        var toonValue = SerializeValue(value, type, options, 0);
         var document = new ToonDocument(toonValue ?? ToonNull.Instance);
         var encoder = new ToonEncoder(options.ToonOptions);
 
@@ -233,9 +248,10 @@ public static class ToonSerializer
     }
 
     /// <summary>
-    ///     Asynchronously serializes a type object and writes it to a stream.
+    ///     Asynchronously serializes an object and writes it to a stream (non-generic overload).
     /// </summary>
     /// <param name="type">The type of object to serialize.</param>
+    /// <param name="value">The value to serialize.</param>
     /// <param name="stream">The stream to write the serialized data to.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
@@ -244,13 +260,13 @@ public static class ToonSerializer
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task SerializeToStreamAsync(Type type, Stream stream, ToonSerializerOptions? options = null,
+    public static async Task SerializeToStreamAsync(Type type, object? value, Stream stream, ToonSerializerOptions? options = null,
                                                     CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(stream);
 
-        var toonString = await SerializeAsync(type, options, cancellationToken);
+        var toonString = Serialize(value, type, options);
         var bytes = System.Text.Encoding.UTF8.GetBytes(toonString);
 
         await stream.WriteAsync(bytes, cancellationToken);

@@ -38,21 +38,13 @@ public sealed class ToonInputFormatter : TextInputFormatter
             var httpContext = context.HttpContext;
             var request = httpContext.Request;
             
-            var method = typeof(ToonSerializer).GetMethod(nameof(ToonSerializer.DeserializeFromStreamAsync), 
-                [typeof(Stream), typeof(ToonSerializerOptions), typeof(CancellationToken)]);
-                
-            if (method == null)
-            {
-                return await InputFormatterResult.FailureAsync();
-            }
-
-            var genericMethod = method.MakeGenericMethod(context.ModelType);
-            
-            var task = (Task)genericMethod.Invoke(null, [request.Body, _options, httpContext.RequestAborted])!;
-            await task.ConfigureAwait(false);
-            
-            var resultProperty = task.GetType().GetProperty("Result");
-            var model = resultProperty?.GetValue(task);
+            // Use helper method to avoid reflection - much faster!
+            var model = await DeserializeFromStreamInternalAsync(
+                context.ModelType, 
+                request.Body, 
+                _options, 
+                httpContext.RequestAborted
+            ).ConfigureAwait(false);
 
             return await InputFormatterResult.SuccessAsync(model);
         }
@@ -61,5 +53,22 @@ public sealed class ToonInputFormatter : TextInputFormatter
             context.ModelState.TryAddModelError(string.Empty, ex.Message);
             return await InputFormatterResult.FailureAsync();
         }
+    }
+
+    /// <summary>
+    ///     Internal helper to deserialize without reflection.
+    /// </summary>
+    private static async Task<object?> DeserializeFromStreamInternalAsync(
+        Type type, 
+        Stream stream, 
+        ToonSerializerOptions options, 
+        CancellationToken cancellationToken)
+    {
+        // Read stream to string
+        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+        var content = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        
+        // Use non-generic Deserialize method (no reflection needed)
+        return ToonSerializer.Deserialize(content, type, options);
     }
 }

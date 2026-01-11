@@ -53,19 +53,14 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
             return;
         }
 
+        // Use non-generic overload to avoid reflection - much faster!
         var objectType = context.Object.GetType();
-        
-        var serializeMethod = typeof(ToonSerializer)
-            .GetMethods()
-            .FirstOrDefault(m => m.Name == nameof(ToonSerializer.SerializeToStreamAsync) 
-                               && m.GetParameters().Length == 4 
-                               && m.GetParameters()[0].ParameterType.IsGenericMethodParameter); 
-
-        if (serializeMethod != null)
-        {
-            var genericMethod = serializeMethod.MakeGenericMethod(objectType);
-            var task = (Task)genericMethod.Invoke(null, [context.Object, response.Body, _options, httpContext.RequestAborted])!;
-            await task.ConfigureAwait(false);
-        }
+        await ToonSerializer.SerializeToStreamAsync(
+            objectType,
+            context.Object,
+            response.Body,
+            _options,
+            httpContext.RequestAborted
+        ).ConfigureAwait(false);
     }
 }
