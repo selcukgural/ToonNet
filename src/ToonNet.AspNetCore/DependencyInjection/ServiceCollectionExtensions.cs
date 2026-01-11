@@ -14,7 +14,7 @@ namespace ToonNet.AspNetCore.DependencyInjection;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Represents the default configuration section name used for binding ToonNet options.
+    /// Represents the default section name used for binding configuration options related to ToonNet.
     /// </summary>
     private const string DefaultSectionName = "ToonNet";
 
@@ -53,9 +53,11 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers ToonNet services and binds default options from configuration.
+    /// Registers ToonNet services and binds options from configuration.
     /// </summary>
     /// <param name="services">The service collection.</param>
+    /// <param name="configureToonOptions">An optional action to configure Toon options.</param>
+    /// <param name="configureSerializerOptions">An optional action to configure serialization options.</param>
     /// <returns>The same service collection to allow chaining.</returns>
     public static IServiceCollection AddToonNet(this IServiceCollection services, Action<ToonOptions>? configureToonOptions,
                                                 Action<ToonSerializerOptions>? configureSerializerOptions)
@@ -100,6 +102,7 @@ public static class ServiceCollectionExtensions
         }
 
         var allowExtendedLimits = section.GetValue<bool?>(nameof(ToonOptions.AllowExtendedLimits));
+
         if (allowExtendedLimits.HasValue)
         {
             options.AllowExtendedLimits = allowExtendedLimits.Value;
@@ -143,6 +146,7 @@ public static class ServiceCollectionExtensions
         }
 
         var allowExtendedLimits = section.GetValue<bool?>(nameof(ToonSerializerOptions.AllowExtendedLimits));
+
         if (allowExtendedLimits.HasValue)
         {
             options.AllowExtendedLimits = allowExtendedLimits.Value;

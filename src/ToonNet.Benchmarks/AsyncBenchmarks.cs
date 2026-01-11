@@ -1,3 +1,6 @@
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using ToonNet.Benchmarks.Models;
 using ToonNet.Core.Encoding;

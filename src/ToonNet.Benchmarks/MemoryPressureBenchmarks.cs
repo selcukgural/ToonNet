@@ -1,3 +1,4 @@
+using System.Linq;
 using BenchmarkDotNet.Attributes;
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
