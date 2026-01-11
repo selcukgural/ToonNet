@@ -194,6 +194,61 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     }
 
     /// <summary>
+    ///     Encodes an object inline (first property on the same line, rest indented).
+    /// </summary>
+    /// <param name="obj">
+    ///     The object to encode. This parameter must not be null.
+    /// </param>
+    /// <param name="indentLevel">
+    ///     The base indentation level for subsequent properties.
+    /// </param>
+    /// <remarks>
+    ///     This method is used when encoding objects as array items. The first property
+    ///     appears on the same line as the array marker ('-'), while subsequent properties
+    ///     are indented at the appropriate level.
+    /// </remarks>
+    private void EncodeObjectInline(ToonObject obj, int indentLevel)
+    {
+        var isFirst = true;
+
+        foreach (var (key, value) in obj.Properties)
+        {
+            if (!isFirst)
+            {
+                _sb!.AppendLine();
+                WriteIndent(indentLevel + _options.IndentSize);
+            }
+
+            // Quote the key if it contains special characters
+            _sb!.Append(QuoteKeyIfNeeded(key));
+
+            if (value is ToonArray array)
+            {
+                EncodeArrayHeader(array);
+            }
+
+            _sb!.Append(':');
+
+            switch (value)
+            {
+                case ToonObject:
+                    _sb!.AppendLine();
+                    EncodeValue(value, indentLevel + _options.IndentSize * 2);
+                    break;
+                case ToonArray arr:
+                    EncodeValue(arr, indentLevel + _options.IndentSize * 2);
+                    break;
+                default:
+                    _sb!.Append(' ');
+                    EncodeValue(value, indentLevel + _options.IndentSize);
+                    break;
+            }
+
+            isFirst = false;
+        }
+    }
+
+    /// <summary>
     ///     Encodes the array header with length and optional field names.
     /// </summary>
     /// <param name="array">
@@ -341,10 +396,14 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             WriteIndent(indentLevel);
             _sb!.Append("- ");
 
-            if (item is ToonObject or ToonArray)
+            if (item is ToonObject obj)
             {
+                EncodeObjectInline(obj, indentLevel);
                 _sb!.AppendLine();
-                EncodeValue(item, indentLevel + _options.IndentSize);
+            }
+            else if (item is ToonArray arr)
+            {
+                EncodeValue(arr, indentLevel + _options.IndentSize);
                 _sb!.AppendLine();
             }
             else

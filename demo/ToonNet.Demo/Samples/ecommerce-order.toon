@@ -1,0 +1,118 @@
+OrderId: ORD-2026-00142857
+OrderDate: "2026-01-11T15:30:00.0000000Z"
+Status: Processing
+Customer:
+  CustomerId: CUST-98765
+  FirstName: Sarah
+  LastName: Johnson
+  Email: sarah.johnson@example.com
+  Phone: "+1-555-123-4567"
+  MembershipLevel: Gold
+  MemberSince: "2022-03-15T00:00:00.0000000"
+  LoyaltyPoints: 2450
+ShippingAddress:
+  Street: "742 Evergreen Terrace"
+  City: Springfield
+  State: IL
+  PostalCode: "62701"
+  Country: USA
+  IsDefault: true
+  Coordinates:
+    Latitude: 39.7817
+    Longitude: -89.6501
+BillingAddress:
+  Street: "742 Evergreen Terrace"
+  City: Springfield
+  State: IL
+  PostalCode: "62701"
+  Country: USA
+  IsDefault: true
+  Coordinates:
+    Latitude: 39.7817
+    Longitude: -89.6501
+Items[3]:
+  - ProductId: PROD-12345
+    Name: "Premium Wireless Headphones"
+    Category: Electronics
+    SKU: WH-1000XM5-BLK
+    Quantity: 2
+    UnitPrice: 349.99
+    Discount: 35.00
+    TaxRate: 0.08
+    Total: 664.98
+    Attributes:
+      Color: Black
+      Warranty: "2 years"
+      InStock: "true"
+    Reviews[2]:
+      - Rating: 5
+        Comment: "Excellent sound quality!"
+        Verified: true
+      - Rating: 4
+        Comment: "Great but a bit pricey"
+        Verified: true
+  - ProductId: PROD-67890
+    Name: "USB-C Charging Cable (3-Pack)"
+    Category: Accessories
+    SKU: CABLE-USBC-3PK
+    Quantity: 1
+    UnitPrice: 24.99
+    Discount: 0
+    TaxRate: 0.08
+    Total: 24.99
+    Attributes:
+      Length: "2 meters"
+      Color: White
+      InStock: "true"
+    Reviews[0]:
+  - ProductId: PROD-11111
+    Name: "Laptop Stand - Aluminum"
+    Category: Office
+    SKU: STAND-ALU-ADJ
+    Quantity: 1
+    UnitPrice: 79.99
+    Discount: 8.00
+    TaxRate: 0.08
+    Total: 71.99
+    Attributes:
+      Material: Aluminum
+      Adjustable: "true"
+      InStock: "true"
+    Reviews[1]:
+      - Rating: 5
+        Comment: "Sturdy and elegant design"
+        Verified: true
+PaymentInfo:
+  Method: CreditCard
+  CardType: Visa
+  Last4Digits: "4242"
+  ExpiryDate: "2028-12-31T00:00:00.0000000"
+  TransactionId: TXN-2026-ABC123XYZ
+  AuthorizationCode: AUTH-789456
+  ProcessedAt: "2026-01-11T15:31:45.0000000Z"
+  IsSuccessful: true
+Shipping:
+  Method: Express
+  Carrier: FedEx
+  TrackingNumber: "1Z999AA10123456784"
+  EstimatedDelivery: "2026-01-13T18:00:00.0000000Z"
+  Cost: 15.99
+  IsFreeShipping: false
+Pricing:
+  Subtotal: 804.96
+  TotalDiscount: 43.00
+  TaxAmount: 60.96
+  ShippingCost: 15.99
+  GrandTotal: 838.91
+  Currency: USD
+Metadata:
+  Source: WebApp
+  DeviceType: Desktop
+  Browser: Chrome
+  IPAddress: "192.168.1.100"
+  SessionId: SESS-2026-XYZ789ABC
+  ReferralCode: WINTER2026
+  CouponCodes[2]: WELCOME10,FREESHIP
+  IsGiftOrder: false
+  GiftMessage: null
+  Notes: "Please leave at front door if no answer"

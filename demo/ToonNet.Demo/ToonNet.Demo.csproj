@@ -2,11 +2,19 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ToonNet.Core\ToonNet.Core.csproj" />
+    <ProjectReference Include="..\..\src\ToonNet.Extensions.Json\ToonNet.Extensions.Json.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="10.0.1" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Samples\*.toon" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Samples\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Samples\*.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Samples\*.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
