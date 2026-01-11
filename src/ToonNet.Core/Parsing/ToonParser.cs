@@ -145,7 +145,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 // List item
                 ToonTokenType.ListItem => ParseList(indentLevel),
                 // Quoted string - always return as string
-                ToonTokenType.QuotedString => new ToonString(Advance().Value.ToString()),
+                ToonTokenType.QuotedString => new ToonString(new string(Advance().Value.Span)),
                 // Simple value
                 ToonTokenType.Value => ParsePrimitiveValue(Advance().Value),
                 // End of input - return an empty object
@@ -170,7 +170,7 @@ public sealed class ToonParser(ToonOptions? options = null)
             // List item
             ToonTokenType.ListItem => ParseList(indentLevel),
             // Quoted string - always return as string
-            ToonTokenType.QuotedString => new ToonString(Advance().Value.ToString()),
+            ToonTokenType.QuotedString => new ToonString(new string(Advance().Value.Span)),
             // Simple value
             ToonTokenType.Value => ParsePrimitiveValue(Advance().Value),
             // End of input - return an empty object
@@ -235,7 +235,7 @@ public sealed class ToonParser(ToonOptions? options = null)
 
             Advance(); // consume key
 
-            var key = keyToken.Value.ToString();
+            var key = new string(keyToken.Value.Span);
 
             // Parse array notation (if present)
             var (arrayLength, fieldNames) = ParseArrayNotation();
@@ -498,7 +498,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                     var itemObject = new ToonObject();
 
                     // Parse inline first field
-                    var firstKey = Advance().Value.ToString();
+                    var firstKey = new string(Advance().Value.Span);
 
                     if (Peek().Type != ToonTokenType.Colon)
                     {
@@ -565,7 +565,7 @@ public sealed class ToonParser(ToonOptions? options = null)
     /// <returns>A ToonValue representing the token.</returns>
     private static ToonValue ParseValueToken(ToonToken token)
     {
-        return token.Type == ToonTokenType.QuotedString ? new ToonString(token.Value.ToString()) : ParsePrimitiveValue(token.Value);
+        return token.Type == ToonTokenType.QuotedString ? new ToonString(new string(token.Value.Span)) : ParsePrimitiveValue(token.Value);
     }
 
     /// <summary>
@@ -575,17 +575,33 @@ public sealed class ToonParser(ToonOptions? options = null)
     /// <returns>A ToonValue representing the primitive (null, boolean, number, or string).</returns>
     private static ToonValue ParsePrimitiveValue(ReadOnlyMemory<char> valueMemory)
     {
-        var value = valueMemory.ToString().Trim();
+        var span = valueMemory.Span.Trim();
 
-        return value switch
+        // Check for null
+        if (span.SequenceEqual("null"))
         {
-            "null"  => ToonNull.Instance,
-            "true"  => new ToonBoolean(true),
-            "false" => new ToonBoolean(false),
-            _ => double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var number)
-                     ? new ToonNumber(number)
-                     : new ToonString(value)
-        };
+            return ToonNull.Instance;
+        }
+
+        // Check for boolean
+        if (span.SequenceEqual("true"))
+        {
+            return new ToonBoolean(true);
+        }
+
+        if (span.SequenceEqual("false"))
+        {
+            return new ToonBoolean(false);
+        }
+
+        // Try parse as number
+        if (double.TryParse(span, NumberStyles.Any, CultureInfo.InvariantCulture, out var number))
+        {
+            return new ToonNumber(number);
+        }
+
+        // Fallback to string
+        return new ToonString(new string(span));
     }
 
     #endregion
@@ -779,8 +795,13 @@ public sealed class ToonParser(ToonOptions? options = null)
         if (Peek().Type == ToonTokenType.ArrayLength)
         {
             var lengthToken = Advance();
-            var lengthStr = lengthToken.Value.ToString().Trim('[', ']');
-            if (int.TryParse(lengthStr, out var len))
+            var span = lengthToken.Value.Span;
+            // Trim '[' and ']' manually
+            if (span.Length >= 2 && span[0] == '[' && span[^1] == ']')
+            {
+                span = span[1..^1];
+            }
+            if (int.TryParse(span, out var len))
             {
                 arrayLength = len;
             }
@@ -793,8 +814,14 @@ public sealed class ToonParser(ToonOptions? options = null)
         }
 
         var fieldsToken = Advance();
-        var fieldsStr = fieldsToken.Value.ToString().Trim('{', '}');
-        fieldNames = fieldsStr.Split(',').Select(f => f.Trim()).ToArray();
+        var fieldsSpan = fieldsToken.Value.Span;
+        // Trim '{' and '}' manually
+        if (fieldsSpan.Length >= 2 && fieldsSpan[0] == '{' && fieldsSpan[^1] == '}')
+        {
+            fieldsSpan = fieldsSpan[1..^1];
+        }
+        // Need to convert to string for Split() - no way around this for now
+        fieldNames = new string(fieldsSpan).Split(',').Select(f => f.Trim()).ToArray();
 
         return (arrayLength, fieldNames);
     }
@@ -915,7 +942,7 @@ public sealed class ToonParser(ToonOptions? options = null)
                 break;
             }
 
-            var key = Advance().Value.ToString();
+            var key = new string(Advance().Value.Span);
 
             // Parse array notation (if present)
             var (arrayLength, fieldNames) = ParseArrayNotation();
