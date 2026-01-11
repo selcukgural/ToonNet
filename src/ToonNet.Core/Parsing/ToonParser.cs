@@ -4,9 +4,12 @@ using ToonNet.Core.Models;
 namespace ToonNet.Core.Parsing;
 
 /// <summary>
-///     Parses TOON tokens into a document structure.
+/// Parses TOON tokens into a document structure.
 /// </summary>
-public sealed class ToonParser(ToonOptions? options = null)
+/// <remarks>
+/// This is an internal implementation detail. Users should use <see cref="ToonSerializer"/> instead.
+/// </remarks>
+internal sealed class ToonParser(ToonOptions? options = null)
 {
     // Cached EndOfInput token to avoid repeated allocations
     private static readonly ToonToken EndOfInputToken = new(ToonTokenType.EndOfInput, ReadOnlyMemory<char>.Empty, 0, 0);
