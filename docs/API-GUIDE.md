@@ -24,6 +24,7 @@ Person p = JsonSerializer.Deserialize<Person>(json, options);
 ### ToonNet API (Identical Pattern!)
 ```csharp
 using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;  // For JSON conversion methods
 
 // Serialize to TOON
 string toon = ToonSerializer.Serialize(person);
@@ -33,9 +34,9 @@ string toon = ToonSerializer.Serialize(person, options);
 Person p = ToonSerializer.Deserialize<Person>(toon);
 Person p = ToonSerializer.Deserialize<Person>(toon, options);
 
-// 🆕 JSON ↔ TOON Conversion (NEW!)
-string toon = ToonSerializer.FromJson(jsonString);  // JSON → TOON
-string json = ToonSerializer.ToJson(toonString);    // TOON → JSON
+// 🆕 JSON ↔ TOON Conversion (Extension Package!)
+string toon = ToonSerializerExtensions.FromJson(jsonString);  // JSON → TOON
+string json = ToonSerializerExtensions.ToJson(toonString);    // TOON → JSON
 ```
 
 ---
@@ -64,7 +65,7 @@ Console.WriteLine(person.Age);  // 30
 ### 3. **JSON String → TOON String** (🆕 NEW!)
 ```csharp
 string json = """{"name": "John", "age": 30}""";
-string toon = ToonSerializer.FromJson(json);
+string toon = ToonSerializerExtensions.FromJson(json);
 
 // Output:
 // name: John
@@ -74,7 +75,7 @@ string toon = ToonSerializer.FromJson(json);
 ### 4. **TOON String → JSON String** (🆕 NEW!)
 ```csharp
 string toon = "name: John\nage: 30";
-string json = ToonSerializer.ToJson(toon);
+string json = ToonSerializerExtensions.ToJson(toon);
 
 // Output: {"name":"John","age":30}
 ```
@@ -82,13 +83,13 @@ string json = ToonSerializer.ToJson(toon);
 ### 5. **JSON String → C# Object** (via TOON)
 ```csharp
 string json = """{"name": "John", "age": 30}""";
-var person = ToonSerializer.DeserializeFromJson<Person>(json);
+var person = ToonSerializerExtensions.DeserializeFromJson<Person>(json);
 ```
 
 ### 6. **C# Object → JSON String**
 ```csharp
 var person = new Person { Name = "John", Age = 30 };
-string json = ToonSerializer.SerializeToJson(person);
+string json = ToonSerializerExtensions.SerializeToJson(person);
 
 // Output: {"name":"John","age":30}
 ```
@@ -103,7 +104,7 @@ string json = ToonSerializer.SerializeToJson(person);
 var response = await httpClient.GetStringAsync("https://api.example.com/users/123");
 
 // Convert to TOON format (more readable for logs/debugging)
-string toonLog = ToonSerializer.FromJson(response);
+string toonLog = ToonSerializerExtensions.FromJson(response);
 
 // Log it
 logger.LogInformation($"User data:\n{toonLog}");
@@ -122,7 +123,7 @@ logger.LogInformation($"User data:\n{toonLog}");
 string toonConfig = await File.ReadAllTextAsync("appsettings.toon");
 
 // Convert to JSON for System.Text.Json consumers
-string jsonConfig = ToonSerializer.ToJson(toonConfig);
+string jsonConfig = ToonSerializerExtensions.ToJson(toonConfig);
 
 // Now you can use it with IConfiguration, etc.
 var config = JsonSerializer.Deserialize<AppSettings>(jsonConfig);
@@ -139,7 +140,7 @@ foreach (var jsonFile in jsonFiles)
     string json = await File.ReadAllTextAsync(jsonFile);
     
     // Convert to TOON (smaller, faster to parse)
-    string toon = ToonSerializer.FromJson(json);
+    string toon = ToonSerializerExtensions.FromJson(json);
     
     // Save as TOON
     var toonFile = Path.ChangeExtension(jsonFile, ".toon");
@@ -158,7 +159,7 @@ app.MapPost("/webhook", async (HttpRequest request) =>
     string jsonPayload = await reader.ReadToEndAsync();
     
     // Convert to TOON for readable logs
-    string toonPayload = ToonSerializer.FromJson(jsonPayload);
+    string toonPayload = ToonSerializerExtensions.FromJson(jsonPayload);
     
     // Log (TOON is more readable than JSON in logs!)
     logger.LogInformation($"Webhook received:\n{toonPayload}");
@@ -184,8 +185,8 @@ That's it! No additional packages needed for JSON ↔ TOON conversion.
 ### ✅ **DO: Like System.Text.Json**
 ```csharp
 // ✅ Familiar, clean, simple
-string toon = ToonSerializer.FromJson(json);
-string json = ToonSerializer.ToJson(toon);
+string toon = ToonSerializerExtensions.FromJson(json);
+string json = ToonSerializerExtensions.ToJson(toon);
 ```
 
 ### ❌ **DON'T: Unfamiliar patterns**
@@ -211,7 +212,7 @@ string toon = encoder.Encode(toonDoc);
 **After (Simple):**
 ```csharp
 // Developer already knows this pattern!
-string toon = ToonSerializer.FromJson(json);
+string toon = ToonSerializerExtensions.FromJson(json);
 ```
 
 **Impact:**
@@ -228,10 +229,10 @@ string toon = ToonSerializer.FromJson(json);
 |------|-----|--------|---------|
 | **C# Object** | **TOON** | `Serialize()` | `ToonSerializer.Serialize(person)` |
 | **TOON** | **C# Object** | `Deserialize<T>()` | `ToonSerializer.Deserialize<Person>(toon)` |
-| **JSON** | **TOON** | `FromJson()` | `ToonSerializer.FromJson(json)` |
-| **TOON** | **JSON** | `ToJson()` | `ToonSerializer.ToJson(toon)` |
-| **JSON** | **C# Object** | `DeserializeFromJson<T>()` | `ToonSerializer.DeserializeFromJson<Person>(json)` |
-| **C# Object** | **JSON** | `SerializeToJson()` | `ToonSerializer.SerializeToJson(person)` |
+| **JSON** | **TOON** | `FromJson()` | `ToonSerializerExtensions.FromJson(json)` |
+| **TOON** | **JSON** | `ToJson()` | `ToonSerializerExtensions.ToJson(toon)` |
+| **JSON** | **C# Object** | `DeserializeFromJson<T>()` | `ToonSerializerExtensions.DeserializeFromJson<Person>(json)` |
+| **C# Object** | **JSON** | `SerializeToJson()` | `ToonSerializerExtensions.SerializeToJson(person)` |
 
 ---
 
@@ -253,13 +254,13 @@ string toon = encoder.Encode(toonDoc);
 // ✅ Simple!
 using ToonNet.Core.Serialization;
 
-string toon = ToonSerializer.FromJson(json);
+string toon = ToonSerializerExtensions.FromJson(json);
 ```
 
 **Migration Steps:**
 1. Remove `using ToonNet.Extensions.Json;` (if only used for JSON conversion)
 2. Remove `using ToonNet.Core.Encoding;` (if only used for encoding)
-3. Replace `ToonJsonConverter.FromJson()` + `ToonEncoder` → `ToonSerializer.FromJson()`
+3. Replace `ToonJsonConverter.FromJson()` + `ToonEncoder` → `ToonSerializerExtensions.FromJson()`
 4. That's it! ✅
 
 ---
@@ -278,8 +279,8 @@ string toon = ToonSerializer.FromJson(json);
 using ToonNet.Core.Serialization;
 
 // Just like JsonSerializer!
-string toon = ToonSerializer.FromJson(json);
-string json = ToonSerializer.ToJson(toon);
+string toon = ToonSerializerExtensions.FromJson(json);
+string json = ToonSerializerExtensions.ToJson(toon);
 var obj = ToonSerializer.Deserialize<Person>(toon);
 ```
 
@@ -327,8 +328,8 @@ When using **format conversion** between JSON/TOON strings, **semantic equivalen
 string json = @"{ ""discount"": 35.00 }";
 
 // Convert: JSON → TOON → JSON
-string toon = ToonSerializer.FromJson(json);   // Discount: 35.00
-string json2 = ToonSerializer.ToJson(toon);    // {"discount": 35}
+string toon = ToonSerializerExtensions.FromJson(json);   // Discount: 35.00
+string json2 = ToonSerializerExtensions.ToJson(toon);    // {"discount": 35}
 
 // ⚠️ Format changed: 35.00 → 35
 // ✅ Semantically equivalent: 35.00 == 35 (same value)
@@ -388,7 +389,7 @@ string toon = ToonSerializer.Serialize(modified);
 ```csharp
 // ⚠️ USE CASE: Converting between formats (files, APIs)
 string json = await File.ReadAllTextAsync("order.json");
-string toon = ToonSerializer.FromJson(json);
+string toon = ToonSerializerExtensions.FromJson(json);
 await File.WriteAllTextAsync("order.toon", toon);
 // Data preserved, format details may change (this is OK for data exchange)
 ```
@@ -398,7 +399,7 @@ await File.WriteAllTextAsync("order.toon", toon);
 ```csharp
 // ❌ BAD: String comparison will fail due to format differences
 string json1 = @"{ ""discount"": 35.00 }";
-string json2 = ToonSerializer.ToJson(ToonSerializer.FromJson(json1));
+string json2 = ToonSerializerExtensions.ToJson(ToonSerializerExtensions.FromJson(json1));
 Assert.Equal(json1, json2);  // ❌ FAILS: "35.00" vs "35"
 
 // ✅ GOOD: Semantic comparison

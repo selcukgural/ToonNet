@@ -164,7 +164,7 @@ public sealed class ToonParser(ToonOptions? options = null)
 
         if (hasListItems)
         {
-            // It's a list of items - parse as array
+            // It's a list of items - parse as an array
             return ParseList(indentLevel);
         }
 
@@ -582,24 +582,19 @@ public sealed class ToonParser(ToonOptions? options = null)
     {
         var span = valueMemory.Span.Trim();
 
-        // Check for null
-        if (span.SequenceEqual("null"))
+        switch (span)
         {
-            return ToonNull.Instance;
+            // Check for null
+            case "null":
+                return ToonNull.Instance;
+            // Check for boolean
+            case "true":
+                return new ToonBoolean(true);
+            case "false":
+                return new ToonBoolean(false);
         }
 
-        // Check for boolean
-        if (span.SequenceEqual("true"))
-        {
-            return new ToonBoolean(true);
-        }
-
-        if (span.SequenceEqual("false"))
-        {
-            return new ToonBoolean(false);
-        }
-
-        // Try parse as number
+        // Try to parse as number
         if (double.TryParse(span, NumberStyles.Any, CultureInfo.InvariantCulture, out var number))
         {
             return new ToonNumber(number);

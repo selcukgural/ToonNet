@@ -1,4 +1,5 @@
 using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;
 
 namespace ToonNet.Demo;
 
@@ -76,16 +77,16 @@ static class Program
             Console.WriteLine("Testing Format Conversions:");
             
             // TOON → JSON
-            var jsonFromToon = ToonSerializer.ToJson(toonContent);
+            var jsonFromToon = ToonSerializerExtensions.ToJson(toonContent);
             Console.WriteLine($"   TOON -> JSON: {jsonFromToon.Length} chars");
             
             // JSON → TOON
             var jsonContent = File.ReadAllText(jsonFile);
-            var toonFromJson = ToonSerializer.FromJson(jsonContent);
+            var toonFromJson = ToonSerializerExtensions.FromJson(jsonContent);
             Console.WriteLine($"   JSON -> TOON: {toonFromJson.Length} chars");
             
             // Verify roundtrip: JSON -> TOON -> JSON should match original JSON
-            var roundtripJson = ToonSerializer.ToJson(toonFromJson);
+            var roundtripJson = ToonSerializerExtensions.ToJson(toonFromJson);
             var jsonNormalized = System.Text.Json.JsonSerializer.Serialize(
                 System.Text.Json.JsonSerializer.Deserialize<object>(jsonContent),
                 new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
@@ -205,16 +206,16 @@ static class Program
             Console.WriteLine("Testing Format Conversions:");
             
             // TOON → JSON
-            var jsonFromToon = ToonSerializer.ToJson(toonContent);
+            var jsonFromToon = ToonSerializerExtensions.ToJson(toonContent);
             Console.WriteLine($"   TOON -> JSON: {jsonFromToon.Length} chars");
             
             // JSON → TOON
             var jsonContent = File.ReadAllText(jsonFile);
-            var toonFromJson = ToonSerializer.FromJson(jsonContent);
+            var toonFromJson = ToonSerializerExtensions.FromJson(jsonContent);
             Console.WriteLine($"   JSON -> TOON: {toonFromJson.Length} chars");
             
             // Verify roundtrip: JSON -> TOON -> JSON should match original JSON
-            var roundtripJson = ToonSerializer.ToJson(toonFromJson);
+            var roundtripJson = ToonSerializerExtensions.ToJson(toonFromJson);
             var jsonNormalized = System.Text.Json.JsonSerializer.Serialize(
                 System.Text.Json.JsonSerializer.Deserialize<object>(jsonContent),
                 new System.Text.Json.JsonSerializerOptions { WriteIndented = false });

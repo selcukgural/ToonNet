@@ -4,10 +4,10 @@ using ToonNet.Core.Models;
 namespace ToonNet.Core.Parsing;
 
 /// <summary>
-///     Tokenizes TOON format input into a stream of tokens.
+/// Tokenizes TOON format input into a stream of tokens.
 /// </summary>
 /// <remarks>
-///     This is an internal implementation detail. Users should use <see cref="ToonParser" /> instead.
+/// This is an internal implementation detail. Users should use <see cref="ToonParser" /> instead.
 /// </remarks>
 internal sealed class ToonLexer
 {
@@ -17,29 +17,33 @@ internal sealed class ToonLexer
     private int _position;
 
     /// <summary>
-    ///     Creates a new lexer for the specified input string.
+    /// Creates a new lexer for the specified input string.
     /// </summary>
     /// <param name="input">The TOON format string to tokenize.</param>
     /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
     public ToonLexer(string input)
     {
         ArgumentNullException.ThrowIfNull(input);
+
         _input = input.AsMemory();
     }
 
     /// <summary>
-    ///     Creates a new lexer for the specified input memory.
+    /// Creates a new lexer for processing TOON format input.
     /// </summary>
-    /// <param name="input">The TOON format memory to tokenize.</param>
+    /// <remarks>
+    /// Represents a low-level implementation for tokenizing TOON format data.
+    /// For higher-level parsing, refer to <see cref="ToonParser" />.
+    /// </remarks>
     public ToonLexer(ReadOnlyMemory<char> input)
     {
         _input = input;
     }
 
     /// <summary>
-    ///     Tokenizes the input into a list of TOON tokens.
+    /// Tokenizes the input into a list of TOON tokens.
     /// </summary>
-    /// <returns>A list of tokens representing the input.</returns>
+    /// <returns>A list of tokens representing the parsed input, including an end-of-input token.</returns>
     public List<ToonToken> Tokenize()
     {
         var tokens = new List<ToonToken>();
@@ -59,10 +63,10 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Reads the next token from the input stream.
+    /// Reads the next token from the input stream.
     /// </summary>
-    /// <returns>The next token.</returns>
-    /// <exception cref="ToonParseException">Thrown when an unexpected character is encountered.</exception>
+    /// <returns>An instance of <see cref="ToonToken"/> representing the next token in the stream.</returns>
+    /// <exception cref="ToonParseException">Thrown when an unexpected character or invalid sequence is encountered during parsing.</exception>
     private ToonToken NextToken()
     {
         while (true)
@@ -133,9 +137,9 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Reads indentation (spaces) from the input.
+    /// Reads an indentation (sequence of spaces) from the input string at the current position.
     /// </summary>
-    /// <returns>An indentation token.</returns>
+    /// <returns>A token representing the indentation, including the number of spaces and their position in the input.</returns>
     private ToonToken ReadIndentation()
     {
         var startColumn = _column;
@@ -151,10 +155,12 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Reads an array length token (e.g., "[3]").
+    /// Reads an array length token (e.g., "[3]") from the input.
     /// </summary>
-    /// <returns>An array length token.</returns>
-    /// <exception cref="ToonParseException">Thrown when the array length is not properly terminated.</exception>
+    /// <returns>A token representing the array length.</returns>
+    /// <exception cref="ToonParseException">
+    /// Thrown when the array length is not properly terminated with a closing bracket.
+    /// </exception>
     private ToonToken ReadArrayLength()
     {
         var startLine = _line;
@@ -181,6 +187,16 @@ internal sealed class ToonLexer
         return new ToonToken(ToonTokenType.ArrayLength, value, startLine, startColumn);
     }
 
+    /// <summary>
+    /// Reads the fields of an array from the input and returns a token representing the content.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="ToonToken"/> of type <c>ArrayFields</c> containing the array fields content
+    /// as well as the starting line and column of the token in the input.
+    /// </returns>
+    /// <exception cref="ToonParseException">
+    /// Thrown when the array fields are not properly terminated in the input.
+    /// </exception>
     private ToonToken ReadArrayFields()
     {
         var startLine = _line;
@@ -208,9 +224,9 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Reads a quoted string token and determines if it's a key or value.
+    /// Reads a quoted string token and determines if it represents a key or value based on the subsequent content.
     /// </summary>
-    /// <returns>A key or quoted string token depending on what follows.</returns>
+    /// <returns>A token of type Key or QuotedString, depending on the context of the parsed content.</returns>
     private ToonToken ReadQuotedStringToken()
     {
         var startLine = _line;
@@ -226,10 +242,12 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Reads the content of a quoted string (without determining the token type).
+    /// Reads the content of a quoted string from the input while handling escape sequences.
     /// </summary>
-    /// <returns>The unescaped string content.</returns>
-    /// <exception cref="ToonParseException">Thrown when the string is not properly terminated.</exception>
+    /// <returns>The unescaped content of the quoted string.</returns>
+    /// <exception cref="ToonParseException">
+    /// Thrown when a quoted string is not properly terminated in the input.
+    /// </exception>
     private string ReadQuotedStringValue()
     {
         var sb = new StringBuilder();
@@ -281,9 +299,11 @@ internal sealed class ToonLexer
 
 
     /// <summary>
-    ///     Reads a key or value token based on what follows it.
+    /// Reads the next token from the input, identifying it as either a key or a value.
     /// </summary>
-    /// <returns>A key or value token.</returns>
+    /// <returns>
+    /// A <see cref="ToonToken"/> representing either a key or a value, based on the parsed input.
+    /// </returns>
     private ToonToken ReadKeyOrValue()
     {
         var startLine = _line;
@@ -347,8 +367,11 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Skips whitespace characters (spaces only, not newlines).
+    /// Skips whitespace characters (spaces only, not including newlines) in the input.
     /// </summary>
+    /// <remarks>
+    /// Moves the position forward until a non-whitespace character is encountered or the end of input is reached.
+    /// </remarks>
     private void SkipWhitespace()
     {
         while (!IsAtEnd() && Peek() == ' ')
@@ -358,9 +381,12 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Checks if the previous character was a newline.
+    /// Checks if the previous character was a newline.
     /// </summary>
-    /// <returns>True if the previous character was a newline or at the start; otherwise, false.</returns>
+    /// <returns>
+    /// True if the previous character was a newline, or if the current position is at the start of the input;
+    /// otherwise, false.
+    /// </returns>
     private bool PreviousWasNewline()
     {
         if (_position == 0)
@@ -373,26 +399,30 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Peeks at the current character without advancing.
+    /// Peeks at the current character in the input stream without advancing the position.
     /// </summary>
-    /// <returns>The current character, or '\0' if at the end.</returns>
+    /// <returns>The current character, or '\0' if the end of the input stream is reached.</returns>
     private char Peek()
     {
         return IsAtEnd() ? '\0' : _input.Span[_position];
     }
 
     /// <summary>
-    ///     Peeks at the next character without advancing.
+    /// Peeks at the character following the current position without advancing the lexer.
     /// </summary>
-    /// <returns>The next character, or '\0' if beyond the end.</returns>
+    /// <returns>The character after the current position, or '\0' if beyond the end of the input.</returns>
     private char PeekNext()
     {
         return _position + 1 >= _input.Length ? '\0' : _input.Span[_position + 1];
     }
 
     /// <summary>
-    ///     Advances the position by one character.
+    /// Advances the current position within the input string by one character.
     /// </summary>
+    /// <remarks>
+    /// Updates the internal position and column counters.
+    /// No operation is performed if the end of the input has been reached.
+    /// </remarks>
     private void Advance()
     {
         if (IsAtEnd())
@@ -405,9 +435,9 @@ internal sealed class ToonLexer
     }
 
     /// <summary>
-    ///     Checks if the lexer has reached the end of input.
+    /// Checks if the lexer has reached the end of the input.
     /// </summary>
-    /// <returns>True if at the end of input; otherwise, false.</returns>
+    /// <returns>True if the current position is at or beyond the end of the input; otherwise, false.</returns>
     private bool IsAtEnd()
     {
         return _position >= _input.Length;

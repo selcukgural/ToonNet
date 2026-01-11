@@ -29,7 +29,7 @@ public class ToonException : Exception
     public string? CodeSnippet { get; init; }
 
     /// <summary>
-    ///     Returns a string representation of the exception including suggestions and code snippets.
+    ///     Returns a string representation of the exception, including suggestions and code snippets.
     /// </summary>
     /// <returns>A formatted string containing exception details, suggestions, and code snippets.</returns>
     public override string ToString()

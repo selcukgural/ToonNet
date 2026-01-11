@@ -14,7 +14,7 @@
 *AI-Optimized • Token-Efficient • Developer-Friendly*
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Tests](https://img.shields.io/badge/tests-427%20passing-success?style=flat)](#)
+[![Tests](https://img.shields.io/badge/tests-444%20passing-success?style=flat)](#)
 [![Spec](https://img.shields.io/badge/TOON%20v3.0-100%25-blue?style=flat)](ToonSpec.md)
 
 [Quick Start](#-quick-start) • [AI Examples](#-ai-token-optimization) • [API Reference](docs/API-GUIDE.md) • [Samples](demo/ToonNet.Demo/Samples)
@@ -62,7 +62,7 @@ var products = new List<Product>
     new() { Id = 3, Name = "Keyboard", Price = 89.99m, InStock = false }
 };
 
-string json = ToonSerializer.SerializeToJson(products);
+string json = ToonSerializerExtensions.SerializeToJson(products);
 string toon = ToonSerializer.Serialize(products);
 
 Console.WriteLine($"JSON tokens: ~{json.Length / 4}");  // ~150 tokens
@@ -167,14 +167,18 @@ dotnet add package ToonNet.SourceGenerators
 ### Installation
 
 ```bash
-# Coming soon to NuGet
+# Core package (required)
 dotnet add package ToonNet.Core
+
+# For JSON conversion (AI/LLM use cases)
+dotnet add package ToonNet.Extensions.Json
 ```
 
 ### Basic Usage - AI Prompt Context
 
 ```csharp
 using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;  // For JSON conversion
 
 // Your C# class for AI prompt context (no attributes needed)
 public class UserContext
@@ -252,18 +256,20 @@ var obj = ToonSerializer.Deserialize<MyClass>(toonString);
 
 ### Format Conversion (String-based)
 
+> **Note:** JSON conversion methods are in `ToonNet.Extensions.Json` package. Add `using ToonNet.Extensions.Json;`
+
 ```csharp
 // Convert JSON string to TOON string
-string toon = ToonSerializer.FromJson(jsonString);
+string toon = ToonSerializerExtensions.FromJson(jsonString);
 
 // Convert TOON string to JSON string
-string json = ToonSerializer.ToJson(toonString);
+string json = ToonSerializerExtensions.ToJson(toonString);
 
 // Parse JSON directly to C# object (via TOON)
-var obj = ToonSerializer.DeserializeFromJson<MyClass>(jsonString);
+var obj = ToonSerializerExtensions.DeserializeFromJson<MyClass>(jsonString);
 
 // Serialize C# object directly to JSON
-string json = ToonSerializer.SerializeToJson(myObject);
+string json = ToonSerializerExtensions.SerializeToJson(myObject);
 ```
 
 ### YAML Conversion (Extension Package)
@@ -423,13 +429,13 @@ UseSSL: true
 ```csharp
 // Convert existing JSON to token-efficient TOON for AI prompts
 var jsonResponse = await httpClient.GetStringAsync("https://api.example.com/data");
-var toonData = ToonSerializer.FromJson(jsonResponse);
+var toonData = ToonSerializerExtensions.FromJson(jsonResponse);
 
 // Use TOON data in AI prompt (fewer tokens)
 var aiPrompt = $"Analyze this data:\n{toonData}";
 
 // Or convert back to JSON for other APIs
-var jsonForExport = ToonSerializer.ToJson(toonData);
+var jsonForExport = ToonSerializerExtensions.ToJson(toonData);
 ```
 
 ---
@@ -581,8 +587,8 @@ var restored = ToonSerializer.Deserialize<Order>(toon);
 
 ```csharp
 string json = @"{""total"": 35.00}";
-string toon = ToonSerializer.FromJson(json);
-string jsonBack = ToonSerializer.ToJson(toon); // {"total": 35}
+string toon = ToonSerializerExtensions.FromJson(json);
+string jsonBack = ToonSerializerExtensions.ToJson(toon); // {"total": 35}
 // 35.00 vs 35 - semantically equal, format differs
 ```
 
@@ -644,6 +650,31 @@ dotnet run --project demo/ToonNet.Demo
 
 ---
 
+## ⚠️ Breaking Changes (v2.0)
+
+**JSON methods moved from Core to Extensions.Json** - for cleaner architecture and modularity:
+
+**Before (v1.x):**
+```csharp
+using ToonNet.Core.Serialization;
+
+string toon = ToonSerializer.FromJson(jsonString);
+string json = ToonSerializer.ToJson(toonString);
+```
+
+**After (v2.0+):**
+```csharp
+using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;  // Add this
+
+string toon = ToonSerializerExtensions.FromJson(jsonString);
+string json = ToonSerializerExtensions.ToJson(toonString);
+```
+
+**Migration:** Install `ToonNet.Extensions.Json` package and add `using ToonNet.Extensions.Json;` to files using JSON conversion.
+
+---
+
 ## 🗺️ Roadmap
 
 **Current Status:**
@@ -653,7 +684,7 @@ dotnet run --project demo/ToonNet.Demo
 - [x] ASP.NET Core integration (AspNetCore packages)
 - [x] Source generators (zero-allocation)
 - [x] System.Text.Json-compatible API
-- [x] Comprehensive test coverage (427 tests)
+- [x] Comprehensive test coverage (444 tests passing)
 - [x] Real-world samples (Healthcare, E-Commerce)
 
 **Coming Soon:**

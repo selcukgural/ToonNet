@@ -52,7 +52,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     ///     The encoded TOON format string.
     /// </returns>
     /// <exception cref="ArgumentNullException">
-    ///     Thrown when document is null or document.Root is null.
+    ///     Thrown when a document is null or document.Root is null.
     /// </exception>
     /// <exception cref="ToonEncodingException">
     ///     Thrown when encoding exceeds the maximum depth specified in the options.
@@ -63,7 +63,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// </remarks>
     public string Encode(ToonDocument document)
     {
-        ArgumentNullException.ThrowIfNull(document, nameof(document));
+        ArgumentNullException.ThrowIfNull(document);
 
         if (document.Root == null)
         {
@@ -445,7 +445,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// "true"/"false" for <see cref="ToonBoolean"/>, a formatted number for <see cref="ToonNumber"/>,
     /// a quoted string for <see cref="ToonString"/>, or the result of <see cref="object.ToString"/> for other types.
     /// </returns>
-    private string FormatValue(ToonValue? value)
+    private static string FormatValue(ToonValue? value)
     {
         return value switch
         {
@@ -714,7 +714,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <param name="document">The document to encode.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous encoding operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when document is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when a document is null.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     public async Task<string> EncodeAsync(ToonDocument document, CancellationToken cancellationToken = default)
     {
@@ -732,7 +732,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <param name="filePath">The file path to write to.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous encoding and write operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when document or filePath is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when a document or filePath is null.</exception>
     /// <exception cref="IOException">Thrown when file I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     public async Task EncodeToFileAsync(ToonDocument document, string filePath, CancellationToken cancellationToken = default)
@@ -750,7 +750,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <param name="stream">The stream to write to.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous encoding and write operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when document or stream is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when a document or stream is null.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     public async Task EncodeToStreamAsync(ToonDocument document, Stream stream, CancellationToken cancellationToken = default)
