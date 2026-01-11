@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 using ToonNet.Core.Encoding;
@@ -13,6 +14,65 @@ namespace ToonNet.Core.Serialization;
 /// </summary>
 public static class ToonSerializer
 {
+    #region Reflection Cache
+
+    /// <summary>
+    ///     Cached type metadata for fast serialization/deserialization.
+    /// </summary>
+    private sealed class TypeMetadata
+    {
+        public PropertyInfo[] Properties { get; init; } = [];
+        public Dictionary<PropertyInfo, ToonPropertyAttribute?> PropertyAttributes { get; init; } = new();
+    }
+
+    /// <summary>
+    ///     Thread-safe cache for type metadata.
+    /// </summary>
+    private static readonly ConcurrentDictionary<(Type Type, bool IncludeReadOnly), TypeMetadata> TypeMetadataCache = new();
+
+    /// <summary>
+    ///     Gets or creates cached type metadata for the specified type.
+    /// </summary>
+    private static TypeMetadata GetTypeMetadata(Type type, bool includeReadOnly)
+    {
+        return TypeMetadataCache.GetOrAdd((type, includeReadOnly), key =>
+        {
+            var (t, includeReadOnlyProps) = key;
+            var properties = t.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            var validProps = new List<PropertyInfo>();
+            var propertyAttributes = new Dictionary<PropertyInfo, ToonPropertyAttribute?>();
+
+            foreach (var prop in properties)
+            {
+                // Check if ignored
+                if (prop.GetCustomAttribute<ToonIgnoreAttribute>() != null)
+                {
+                    continue;
+                }
+
+                // Skip write-only properties
+                if (!prop.CanRead) continue;
+
+                // Skip read-only if configured
+                if (!includeReadOnlyProps && !prop.CanWrite) continue;
+
+                validProps.Add(prop);
+
+                // Cache property attribute (but not the final name, as it depends on naming policy)
+                var nameAttr = prop.GetCustomAttribute<ToonPropertyAttribute>();
+                propertyAttributes[prop] = nameAttr;
+            }
+
+            return new TypeMetadata
+            {
+                Properties = validProps.ToArray(),
+                PropertyAttributes = propertyAttributes
+            };
+        });
+    }
+
+    #endregion
+
     #region public serialization methods
 
     /// <summary>
@@ -463,31 +523,24 @@ public static class ToonSerializer
     private static ToonObject SerializeObject(object value, Type type, ToonSerializerOptions options, int depth)
     {
         var obj = new ToonObject();
-        var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        
+        // Use cached type metadata (properties and attributes)
+        var metadata = GetTypeMetadata(type, options.IncludeReadOnlyProperties);
 
-        foreach (var prop in properties)
+        foreach (var prop in metadata.Properties)
         {
-            // Skip ignored properties
-            if (prop.GetCustomAttribute<ToonIgnoreAttribute>() != null)
+            // Get property name (use cached attribute if available)
+            string propName;
+            if (metadata.PropertyAttributes.TryGetValue(prop, out var attr) && attr != null)
             {
-                continue;
+                propName = attr.Name;
+            }
+            else
+            {
+                propName = GetPropertyName(prop, options);
             }
 
-            // Skip write-only properties
-            if (!prop.CanRead)
-            {
-                continue;
-            }
-
-            // Skip read-only if configured
-            if (!options.IncludeReadOnlyProperties && !prop.CanWrite)
-            {
-                continue;
-            }
-
-            var propName = GetPropertyName(prop, options);
             var propValue = prop.GetValue(value);
-
             var toonValue = SerializeValue(propValue, prop.PropertyType, options, depth + 1);
 
             if (toonValue != null || !options.IgnoreNullValues)
@@ -922,23 +975,21 @@ public static class ToonSerializer
             throw new ToonParseException($"Cannot create instance of {targetType.Name}", 0, 0);
         }
 
-        var properties = targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        // Use cached type metadata
+        var metadata = GetTypeMetadata(targetType, includeReadOnly: false);
 
-        foreach (var prop in properties)
+        foreach (var prop in metadata.Properties)
         {
-            // Skip ignored properties
-            if (prop.GetCustomAttribute<ToonIgnoreAttribute>() != null)
+            // Get property name (use cached attribute if available)
+            string propName;
+            if (metadata.PropertyAttributes.TryGetValue(prop, out var attr) && attr != null)
             {
-                continue;
+                propName = attr.Name;
             }
-
-            // Skip read-only properties
-            if (!prop.CanWrite)
+            else
             {
-                continue;
+                propName = GetPropertyName(prop, options);
             }
-
-            var propName = GetPropertyName(prop, options);
 
             if (!obj.Properties.TryGetValue(propName, out var toonValue))
             {
