@@ -1,253 +1,426 @@
 # ToonNet.AspNetCore
 
-Bu proje, ToonNet’i ASP.NET Core uygulamalarına **IServiceCollection** üzerinden entegre etmek için DI (Dependency Injection) ve **Options + Configuration Binding + Validation** altyapısını sağlar.
+**ASP.NET Core integration for ToonNet serialization**
 
-Bu README yalnızca `ToonNet.AspNetCore` projesi içindir.
+[![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
+[![Package](https://img.shields.io/badge/package-ToonNet.AspNetCore-blue)](#)
+[![Status](https://img.shields.io/badge/status-stable-success)](#)
 
 ---
 
-## 1) Kurulum
+## 📦 What is ToonNet.AspNetCore?
 
-### Seçenek A: Bu repo içinde ProjectReference
+ToonNet.AspNetCore provides **seamless integration** of ToonNet serialization with ASP.NET Core:
 
-Uygulama projenize aşağıdaki referansı ekleyin:
+- ✅ **Dependency Injection** - Register ToonParser, ToonEncoder, and options
+- ✅ **Configuration Binding** - Load settings from appsettings.json
+- ✅ **Options Validation** - Fail-fast on invalid configuration
+- ✅ **TOON Configuration Provider** - Read TOON files as configuration source
+- ✅ **Middleware Ready** - Foundation for MVC formatters and middleware
 
-```xml
-<ItemGroup>
-  <ProjectReference Include="path/to/src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj" />
-</ItemGroup>
+**Perfect for:**
+- 🌐 **Web APIs** - Serve TOON-formatted responses
+- ⚙️ **Configuration** - Load TOON config files
+- 🔧 **DI Integration** - Inject ToonParser/Encoder into services
+- 📊 **Options Pattern** - Configure ToonNet via appsettings.json
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Core package (required)
+dotnet add package ToonNet.Core
+
+# ASP.NET Core integration
+dotnet add package ToonNet.AspNetCore
+
+# For MVC formatters (optional)
+dotnet add package ToonNet.AspNetCore.Mvc
 ```
 
-### Seçenek B: (İleride) NuGet
-
-Bu repo şu an ProjectReference kullanımına uygun yapıdadır. NuGet yayımlanırsa buraya paket adı/versiyonu eklenebilir.
-
----
-
-## 2) En Hızlı Başlangıç (default options)
-
-`Program.cs`:
+### Basic Setup - Default Options
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
+using ToonNet.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Registers ToonParser, ToonEncoder and options (default values)
-builder.Services.AddToonNet();
+// Register ToonNet services with default options
+builder.Services.AddToon();
 
 var app = builder.Build();
 app.Run();
 ```
 
-Bu kullanım:
-- `ToonParser` ve `ToonEncoder`’ı DI’a ekler.
-- `ToonOptions` ve `ToonSerializerOptions` için `IOptions<T>` altyapısını hazırlar.
+This registers:
+- `ToonParser` (singleton)
+- `ToonEncoder` (singleton)
+- `ToonOptions` (IOptions<ToonOptions>)
+- `ToonSerializerOptions` (IOptions<ToonSerializerOptions>)
 
 ---
 
-## 3) Configuration Binding ile Kullanım (önerilen)
+## ⚙️ Configuration
 
-### appsettings.json
+### Using appsettings.json (Recommended)
 
-`ToonNet` root section altında iki alt bölüm beklenir:
-- `ToonOptions`
-- `ToonSerializerOptions`
-
-Örnek:
-
+**appsettings.json:**
 ```json
 {
   "ToonNet": {
     "ToonOptions": {
-      "IndentSize": 4,
-      "MaxDepth": 100,
+      "IndentSize": 2,
+      "MaxDepth": 64,
+      "PreferInlineArrays": true,
+      "PreferInlineObjects": false,
+      "MaxInlineArrayLength": 80,
       "Delimiter": ",",
-      "StrictMode": true,
+      "StrictMode": false,
       "AllowExtendedLimits": false
     },
     "ToonSerializerOptions": {
-      "IgnoreNullValues": true,
-      "PropertyNamingPolicy": "CamelCase",
-      "IncludeTypeInformation": false,
-      "PublicOnly": true,
-      "IncludeReadOnlyProperties": true,
-      "MaxDepth": 100,
+      "IncludeReadOnlyProperties": false,
+      "MaxDepth": 64,
       "AllowExtendedLimits": false
     }
   }
 }
 ```
 
-### Program.cs
-
+**Program.cs:**
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddToonNet(builder.Configuration);
+// Bind configuration from appsettings.json
+builder.Services.AddToon(builder.Configuration);
 
 var app = builder.Build();
 app.Run();
 ```
 
-Notlar:
-- `Delimiter` config’te `string` olarak okunur; ilk karakter kullanılır.
-- `ValidateDataAnnotations()` ve `ValidateOnStart()` aktif olduğu için hatalı config, uygulama start’ında fail-fast şekilde ortaya çıkar.
-
----
-
-## 4) Delegate ile Options Konfigürasyonu
-
-Config yerine kodla ayarlamak istersen:
+### Using Delegate Configuration
 
 ```csharp
-var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddToon(toonOptions =>
+{
+    toonOptions.IndentSize = 4;
+    toonOptions.PreferInlineArrays = true;
+    toonOptions.MaxDepth = 100;
+}, serializerOptions =>
+{
+    serializerOptions.IncludeReadOnlyProperties = false;
+    serializerOptions.MaxDepth = 100;
+});
+```
 
-builder.Services.AddToonNet(
-    configureToonOptions: o =>
+### Hybrid Approach (Configuration + Delegate)
+
+```csharp
+// Load from config + override specific values
+builder.Services.AddToon(
+    builder.Configuration,
+    toonOptions =>
     {
-        o.IndentSize = 2;
-        o.StrictMode = true;
+        // Override specific settings
+        toonOptions.IndentSize = 4;
     },
-    configureSerializerOptions: o =>
+    serializerOptions =>
     {
-        o.IgnoreNullValues = true;
-        o.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase;
-    });
-
-var app = builder.Build();
-app.Run();
+        serializerOptions.IncludeReadOnlyProperties = true;
+    }
+);
 ```
 
 ---
 
-## 5) Controller/Minimal API içinde Kullanım
+## 📖 Configuration Options
 
-### DI ile ToonParser/ToonEncoder kullanımı
+### ToonOptions
+
+Controls TOON format encoding behavior:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `IndentSize` | `int` | `2` | Number of spaces per indentation level |
+| `MaxDepth` | `int` | `64` | Maximum nesting depth |
+| `PreferInlineArrays` | `bool` | `true` | Use inline format for simple arrays |
+| `PreferInlineObjects` | `bool` | `false` | Use inline format for simple objects |
+| `MaxInlineArrayLength` | `int` | `80` | Max character length for inline arrays |
+| `Delimiter` | `char` | `,` | Array item delimiter |
+| `StrictMode` | `bool` | `false` | Enable strict parsing rules |
+| `AllowExtendedLimits` | `bool` | `false` | Allow depths beyond 64 levels |
+
+### ToonSerializerOptions
+
+Controls C# object serialization behavior:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `IncludeReadOnlyProperties` | `bool` | `false` | Include read-only properties |
+| `MaxDepth` | `int` | `64` | Maximum object graph depth |
+| `AllowExtendedLimits` | `bool` | `false` | Allow depths beyond 64 levels |
+
+---
+
+## 🎯 Usage Patterns
+
+### Pattern 1: Inject ToonParser/Encoder
 
 ```csharp
-using Microsoft.AspNetCore.Mvc;
-using ToonNet.Core.Encoding;
-using ToonNet.Core.Parsing;
-
-[ApiController]
-[Route("toon")]
-public sealed class ToonController : ControllerBase
+public class ToonService
 {
     private readonly ToonParser _parser;
     private readonly ToonEncoder _encoder;
+    private readonly ILogger<ToonService> _logger;
 
-    public ToonController(ToonParser parser, ToonEncoder encoder)
+    public ToonService(
+        ToonParser parser, 
+        ToonEncoder encoder,
+        ILogger<ToonService> logger)
     {
         _parser = parser;
         _encoder = encoder;
+        _logger = logger;
     }
 
-    [HttpPost("roundtrip")]
-    public ActionResult<string> RoundTrip([FromBody] string toon)
+    public ToonDocument ParseToon(string toonString)
     {
-        var doc = _parser.Parse(toon);
-        var normalized = _encoder.Encode(doc);
-        return Ok(normalized);
+        try
+        {
+            return _parser.Parse(toonString);
+        }
+        catch (ToonParseException ex)
+        {
+            _logger.LogError(ex, "Failed to parse TOON");
+            throw;
+        }
+    }
+
+    public string EncodeToon(ToonDocument document)
+    {
+        return _encoder.Encode(document);
     }
 }
+
+// Register service
+builder.Services.AddScoped<ToonService>();
 ```
 
-### Options okuma
+### Pattern 2: Inject Options
 
 ```csharp
 using Microsoft.Extensions.Options;
-using ToonNet.Core;
 
-public sealed class SomeService
+public class ConfigAnalyzer
 {
     private readonly ToonOptions _toonOptions;
-
-    public SomeService(IOptions<ToonOptions> toonOptions)
-    {
-        _toonOptions = toonOptions.Value;
-    }
-}
-```
-
----
-
-## 6) ToonSerializer ile Kullanım (statik API)
-
-`ToonSerializer` statik olduğundan DI kaydı gerekmez; fakat **options** DI üzerinden yönetilebilir.
-
-```csharp
-using Microsoft.Extensions.Options;
-using ToonNet.Core.Serialization;
-
-public sealed class UserToonService
-{
     private readonly ToonSerializerOptions _serializerOptions;
 
-    public UserToonService(IOptions<ToonSerializerOptions> serializerOptions)
+    public ConfigAnalyzer(
+        IOptions<ToonOptions> toonOptions,
+        IOptions<ToonSerializerOptions> serializerOptions)
     {
+        _toonOptions = toonOptions.Value;
         _serializerOptions = serializerOptions.Value;
     }
 
-    public string SerializeUser(User user)
+    public void LogConfiguration()
     {
-        return ToonSerializer.Serialize(user, _serializerOptions);
+        Console.WriteLine($"Indent Size: {_toonOptions.IndentSize}");
+        Console.WriteLine($"Max Depth: {_toonOptions.MaxDepth}");
+        Console.WriteLine($"Include Read-Only: {_serializerOptions.IncludeReadOnlyProperties}");
     }
 }
 ```
 
-Async kullanım:
+### Pattern 3: Use with ToonSerializer
 
 ```csharp
-public async Task<string> SerializeUserAsync(User user, CancellationToken ct)
+using ToonNet.Core.Serialization;
+using Microsoft.Extensions.Options;
+
+public class DataService
 {
-    return await ToonSerializer.SerializeAsync(user, _serializerOptions, ct);
+    private readonly ToonSerializerOptions _options;
+
+    public DataService(IOptions<ToonSerializerOptions> options)
+    {
+        _options = options.Value;
+    }
+
+    public string SerializeData<T>(T data)
+    {
+        // Use configured options
+        return ToonSerializer.Serialize(data, _options);
+    }
+
+    public T DeserializeData<T>(string toonString)
+    {
+        return ToonSerializer.Deserialize<T>(toonString, _options);
+    }
 }
 ```
 
 ---
 
-## 7) Validation Davranışı ve Hata Senaryoları
+## 📂 TOON Configuration Provider
 
-Bu paket:
-- `ToonOptions` ve `ToonSerializerOptions` üzerinde DataAnnotations doğrulaması uygular.
-- Ayrıca ToonNet.Core tarafındaki runtime guard’lar (ör. `IndentSize` çift sayı olmalı) korunur.
+Load TOON files as ASP.NET Core configuration sources:
 
-Örnek hata:
-- `IndentSize = 3` gibi bir değer, `ArgumentOutOfRangeException` ile fail eder.
+### Create TOON Configuration File
 
-Üretimde öneri:
-- Configuration binding kullanıyorsanız, invalid config’i CI/CD’de yakalamak için uygulamayı startup aşamasında çalıştıran smoke test ekleyin.
+**appsettings.toon:**
+```toon
+Database:
+  ConnectionString: Server=localhost;Database=mydb
+  Timeout: 30
+  EnableRetry: true
 
----
+Logging:
+  Level: Information
+  Console:
+    Enabled: true
+  File:
+    Path: logs/app.log
+    MaxSize: 10485760
 
-## 8) Konfigürasyon Şeması Özeti
-
-Root: `ToonNet`
-- `ToonOptions`
-  - `IndentSize` (int)
-  - `MaxDepth` (int)
-  - `Delimiter` (string, ilk karakter)
-  - `StrictMode` (bool)
-  - `AllowExtendedLimits` (bool)
-- `ToonSerializerOptions`
-  - `IgnoreNullValues` (bool)
-  - `PropertyNamingPolicy` (string: `Default`, `CamelCase`, `SnakeCase`, `LowerCase`)
-  - `IncludeTypeInformation` (bool)
-  - `PublicOnly` (bool)
-  - `IncludeReadOnlyProperties` (bool)
-  - `MaxDepth` (int)
-  - `AllowExtendedLimits` (bool)
-
----
-
-## 9) Geliştirme / Test
-
-Repo kökünde:
-
-```bash
-dotnet test ToonNet.sln
+Features:
+  EnableCache: true
+  CacheExpiry: 3600
 ```
 
-AspNetCore DI entegrasyonu için testler:
-- `tests/ToonNet.Tests/AspNetCore/ToonNetServiceCollectionExtensionsTests.cs`
+### Register TOON Configuration Provider
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Add TOON file as configuration source
+builder.Configuration.AddToonFile("appsettings.toon", optional: false, reloadOnChange: true);
+
+// Register ToonNet services
+builder.Services.AddToon(builder.Configuration);
+
+var app = builder.Build();
+
+// Access configuration
+var connectionString = builder.Configuration["Database:ConnectionString"];
+var logLevel = builder.Configuration["Logging:Level"];
+```
+
+### Configuration Provider Features
+
+```csharp
+// Multiple TOON files
+builder.Configuration
+    .AddToonFile("appsettings.toon")
+    .AddToonFile($"appsettings.{env}.toon", optional: true);
+
+// With environment variables
+builder.Configuration
+    .AddToonFile("config.toon")
+    .AddEnvironmentVariables();
+
+// Reload on change
+builder.Configuration.AddToonFile(
+    "settings.toon",
+    optional: false,
+    reloadOnChange: true  // Auto-reload when file changes
+);
+```
+
+---
+
+## ✅ Validation
+
+ToonNet.AspNetCore uses **Options Validation** to ensure configuration is valid:
+
+### Automatic Validation
+
+```csharp
+// Validation happens at startup
+builder.Services.AddToon(builder.Configuration);
+
+// If configuration is invalid, app will fail to start with clear error message
+```
+
+### Custom Validation
+
+```csharp
+builder.Services.AddToon(builder.Configuration)
+    .Validate(options => 
+    {
+        if (options.IndentSize < 1 || options.IndentSize > 8)
+            return false;
+        return true;
+    }, "IndentSize must be between 1 and 8");
+```
+
+### Validation Rules (Built-in)
+
+- `IndentSize`: Must be 1-8
+- `MaxDepth`: Must be 1-1024 (or 1-64 if AllowExtendedLimits=false)
+- `MaxInlineArrayLength`: Must be 1-1024
+- `Delimiter`: Must be a valid character
+
+---
+
+## 🔗 Related Packages
+
+**Core:**
+- [`ToonNet.Core`](../ToonNet.Core) - Core serialization (required)
+
+**Extensions:**
+- [`ToonNet.Extensions.Json`](../ToonNet.Extensions.Json) - JSON ↔ TOON conversion
+- [`ToonNet.Extensions.Yaml`](../ToonNet.Extensions.Yaml) - YAML ↔ TOON conversion
+
+**Web Integration:**
+- [`ToonNet.AspNetCore.Mvc`](../ToonNet.AspNetCore.Mvc) - MVC input/output formatters
+
+**Development:**
+- [`ToonNet.Demo`](../../demo/ToonNet.Demo) - Sample applications
+- [`ToonNet.Tests`](../../tests/ToonNet.Tests) - Test suite
+
+---
+
+## 📚 Documentation
+
+- [Main Documentation](../../README.md) - Complete ToonNet guide
+- [API Guide](../../docs/API-GUIDE.md) - Detailed API reference
+- [Samples](../../demo/ToonNet.Demo/Samples) - Real-world examples
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run ASP.NET Core integration tests
+cd tests/ToonNet.Tests
+dotnet test --filter "Category=AspNetCore"
+```
+
+---
+
+## 📋 Requirements
+
+- .NET 8.0 or later
+- ASP.NET Core 8.0+
+- ToonNet.Core
+
+---
+
+## 📄 License
+
+MIT License - See [LICENSE](../../LICENSE) file for details.
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) first.
+
+---
+
+**Part of the [ToonNet](../../README.md) serialization library family.**
