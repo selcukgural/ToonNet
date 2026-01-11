@@ -57,19 +57,9 @@ public sealed class ToonResult : IResult
         // Resolve options from DI if not provided
         var options = _options ?? httpContext.RequestServices.GetService<IOptions<ToonSerializerOptions>>()?.Value ?? ToonSerializerOptions.Default;
 
-        // Use generic serialization method via reflection (until non-generic is available)
+        // Use non-generic SerializeToStreamAsync overload (eliminates reflection overhead)
         var objectType = _value.GetType();
-        var serializeMethod = typeof(ToonSerializer)
-            .GetMethods()
-            .FirstOrDefault(m => m.Name == nameof(ToonSerializer.SerializeToStreamAsync) 
-                               && m.GetParameters().Length == 4 
-                               && m.GetParameters()[0].ParameterType.IsGenericMethodParameter); 
-
-        if (serializeMethod != null)
-        {
-            var genericMethod = serializeMethod.MakeGenericMethod(objectType);
-            var task = (Task)genericMethod.Invoke(null, [_value, httpContext.Response.Body, options, httpContext.RequestAborted])!;
-            await task.ConfigureAwait(false);
-        }
+        await ToonSerializer.SerializeToStreamAsync(objectType, _value, httpContext.Response.Body, options, httpContext.RequestAborted)
+            .ConfigureAwait(false);
     }
 }

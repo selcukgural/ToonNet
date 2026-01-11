@@ -208,13 +208,13 @@ public static class ToonSerializer
     /// <param name="stream">The stream to write to.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the stream is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task SerializeToStreamAsync<T>(T? value, Stream stream, ToonSerializerOptions? options = null,
-                                                       CancellationToken cancellationToken = default)
+    public static async ValueTask SerializeToStreamAsync<T>(T? value, Stream stream, ToonSerializerOptions? options = null,
+                                                            CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
@@ -232,13 +232,13 @@ public static class ToonSerializer
     /// <param name="filePath">The file path to write to.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when file I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task SerializeToFileAsync<T>(T? value, string filePath, ToonSerializerOptions? options = null,
-                                                     CancellationToken cancellationToken = default)
+    public static async ValueTask SerializeToFileAsync<T>(T? value, string filePath, ToonSerializerOptions? options = null,
+                                                          CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
@@ -255,13 +255,13 @@ public static class ToonSerializer
     /// <param name="stream">The stream to write the serialized data to.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the <paramref name="type"/> or <paramref name="stream"/> is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task SerializeToStreamAsync(Type type, object? value, Stream stream, ToonSerializerOptions? options = null,
-                                                    CancellationToken cancellationToken = default)
+    public static async ValueTask SerializeToStreamAsync(Type type, object? value, Stream stream, ToonSerializerOptions? options = null,
+                                                         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(stream);
@@ -280,7 +280,7 @@ public static class ToonSerializer
     /// <param name="filePath">The file path to write to.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when values or filePath is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when file I/O fails.</exception>
@@ -289,8 +289,8 @@ public static class ToonSerializer
     ///     This method writes each object as a separate TOON document, separated by blank lines.
     ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
     /// </remarks>
-    public static async Task SerializeCollectionToFileAsync<T>(IEnumerable<T> values, string filePath, ToonSerializerOptions? options = null,
-                                                               CancellationToken cancellationToken = default)
+    public static async ValueTask SerializeCollectionToFileAsync<T>(IEnumerable<T> values, string filePath, ToonSerializerOptions? options = null,
+                                                                    CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(filePath);
@@ -327,7 +327,7 @@ public static class ToonSerializer
     /// <param name="stream">The stream to write to.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous serialization and write operation.</returns>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when values or stream is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
@@ -336,8 +336,8 @@ public static class ToonSerializer
     ///     This method writes each object as a separate TOON document, separated by blank lines.
     ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
     /// </remarks>
-    public static async Task SerializeCollectionToStreamAsync<T>(IEnumerable<T> values, Stream stream, ToonSerializerOptions? options = null,
-                                                                 CancellationToken cancellationToken = default)
+    public static async ValueTask SerializeCollectionToStreamAsync<T>(IEnumerable<T> values, Stream stream, ToonSerializerOptions? options = null,
+                                                                      CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(stream);
@@ -1156,8 +1156,8 @@ public static class ToonSerializer
     /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task<T?> DeserializeFromFileAsync<T>(string filePath, ToonSerializerOptions? options = null,
-                                                             CancellationToken cancellationToken = default)
+    public static async ValueTask<T?> DeserializeFromFileAsync<T>(string filePath, ToonSerializerOptions? options = null,
+                                                                   CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
@@ -1178,8 +1178,8 @@ public static class ToonSerializer
     /// <exception cref="ArgumentNullException">Thrown when the stream is null.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task<T?> DeserializeFromStreamAsync<T>(Stream stream, ToonSerializerOptions? options = null,
-                                                               CancellationToken cancellationToken = default)
+    public static async ValueTask<T?> DeserializeFromStreamAsync<T>(Stream stream, ToonSerializerOptions? options = null,
+                                                                     CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
