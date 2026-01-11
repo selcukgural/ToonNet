@@ -174,29 +174,16 @@ public static class ToonSerializer
     /// <returns>A ValueTask that represents the asynchronous serialization operation.</returns>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method performs CPU-bound synchronous serialization with an async signature for API consistency
+    ///     and cancellation support. The ValueTask optimization ensures zero allocation in the common case.
+    ///     For I/O-bound operations, use <see cref="SerializeToFileAsync{T}"/> or <see cref="SerializeToStreamAsync{T}"/>.
+    /// </remarks>
     public static ValueTask<string> SerializeAsync<T>(T? value, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
     {
-        // Fast path: If no cancellation requested, do sync
-        if (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                var result = Serialize(value, options);
-                return new ValueTask<string>(result);
-            }
-            catch
-            {
-                // If sync fails, let it throw (don't allocate Task)
-                throw;
-            }
-        }
-
-        // Slow path: Cancellation requested, use Task
-        return new ValueTask<string>(Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Serialize(value, options);
-        }, cancellationToken));
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = Serialize(value, options);
+        return new ValueTask<string>(result);
     }
 
 
@@ -218,10 +205,10 @@ public static class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        var toonString = await SerializeAsync(value, options, cancellationToken);
+        var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
         var bytes = System.Text.Encoding.UTF8.GetBytes(toonString);
 
-        await stream.WriteAsync(bytes, cancellationToken);
+        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -242,9 +229,9 @@ public static class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
-        var toonString = await SerializeAsync(value, options, cancellationToken);
+        var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
 
-        await File.WriteAllTextAsync(filePath, toonString, System.Text.Encoding.UTF8, cancellationToken);
+        await File.WriteAllTextAsync(filePath, toonString, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -266,10 +253,11 @@ public static class ToonSerializer
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(stream);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var toonString = Serialize(value, type, options);
         var bytes = System.Text.Encoding.UTF8.GetBytes(toonString);
 
-        await stream.WriteAsync(bytes, cancellationToken);
+        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -307,12 +295,12 @@ public static class ToonSerializer
             // Add a blank line separator between objects (but not before the first)
             if (!isFirst)
             {
-                await writer.WriteLineAsync(); // End previous object
-                await writer.WriteLineAsync(); // Add a blank line
+                await writer.WriteLineAsync().ConfigureAwait(false); // End previous object
+                await writer.WriteLineAsync().ConfigureAwait(false); // Add a blank line
             }
 
-            var toonString = await SerializeAsync(value, options, cancellationToken);
-            await writer.WriteAsync(toonString);
+            var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(toonString).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -353,11 +341,11 @@ public static class ToonSerializer
             // Add a blank line separator between objects (but not before the first)
             if (!isFirst)
             {
-                await writer.WriteLineAsync(); // End previous object
+                await writer.WriteLineAsync().ConfigureAwait(false); // End previous object
             }
 
-            var toonString = await SerializeAsync(value, options, cancellationToken);
-            await writer.WriteAsync(toonString);
+            var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(toonString).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -1117,30 +1105,17 @@ public static class ToonSerializer
     /// <returns>A ValueTask that represents the asynchronous deserialization operation.</returns>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method performs CPU-bound synchronous deserialization with an async signature for API consistency
+    ///     and cancellation support. The ValueTask optimization ensures zero allocation in the common case.
+    ///     For I/O-bound operations, use <see cref="DeserializeFromFileAsync{T}"/> or <see cref="DeserializeFromStreamAsync{T}"/>.
+    /// </remarks>
     public static ValueTask<T?> DeserializeAsync<T>(string toonString, ToonSerializerOptions? options = null,
                                                      CancellationToken cancellationToken = default)
     {
-        // Fast path: If no cancellation requested, do sync
-        if (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                var result = Deserialize<T>(toonString, options);
-                return new ValueTask<T?>(result);
-            }
-            catch
-            {
-                // If sync fails, let it throw
-                throw;
-            }
-        }
-
-        // Slow path: Cancellation requested, use Task
-        return new ValueTask<T?>(Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Deserialize<T>(toonString, options);
-        }, cancellationToken));
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = Deserialize<T>(toonString, options);
+        return new ValueTask<T?>(result);
     }
 
 
@@ -1161,9 +1136,9 @@ public static class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
-        var toonString = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken);
+        var toonString = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
 
-        return await DeserializeAsync<T>(toonString, options, cancellationToken);
+        return await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -1184,9 +1159,9 @@ public static class ToonSerializer
         ArgumentNullException.ThrowIfNull(stream);
 
         using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
-        var toonString = await reader.ReadToEndAsync(cancellationToken);
+        var toonString = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
-        return await DeserializeAsync<T>(toonString, options, cancellationToken);
+        return await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1305,7 +1280,7 @@ public static class ToonSerializer
 
         var currentObject = new StringBuilder();
 
-        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -1326,7 +1301,7 @@ public static class ToonSerializer
                 var toonString = currentObject.ToString();
                 currentObject.Clear();
 
-                var obj = await DeserializeAsync<T>(toonString, options, cancellationToken);
+                var obj = await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
                 yield return obj;
 
                 continue;
@@ -1341,7 +1316,7 @@ public static class ToonSerializer
         }
 
         var lastToonString = currentObject.ToString();
-        var lastObj = await DeserializeAsync<T>(lastToonString, options, cancellationToken);
+        var lastObj = await DeserializeAsync<T>(lastToonString, options, cancellationToken).ConfigureAwait(false);
         yield return lastObj;
     }
 
