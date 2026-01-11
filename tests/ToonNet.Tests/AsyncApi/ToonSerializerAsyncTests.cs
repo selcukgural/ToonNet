@@ -310,10 +310,10 @@ public sealed class ToonSerializerAsyncTests
 
         // Act & Assert
         var ex1 = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => ToonSerializer.SerializeAsync(user, _options, cts.Token));
+            () => ToonSerializer.SerializeAsync(user, _options, cts.Token).AsTask());
             
         var ex2 = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => ToonSerializer.DeserializeAsync<TestUser>("Name: Test", _options, cts.Token));
+            () => ToonSerializer.DeserializeAsync<TestUser>("Name: Test", _options, cts.Token).AsTask());
     }
 
     [Fact]

@@ -156,16 +156,32 @@ public static class ToonSerializer
     /// <param name="value">The value to serialize.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous serialization operation.</returns>
+    /// <returns>A ValueTask that represents the asynchronous serialization operation.</returns>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task<string> SerializeAsync<T>(T? value, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
+    public static ValueTask<string> SerializeAsync<T>(T? value, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
     {
-        return await Task.Run(() =>
+        // Fast path: If no cancellation requested, do sync
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var result = Serialize(value, options);
+                return new ValueTask<string>(result);
+            }
+            catch
+            {
+                // If sync fails, let it throw (don't allocate Task)
+                throw;
+            }
+        }
+
+        // Slow path: Cancellation requested, use Task
+        return new ValueTask<string>(Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Serialize(value, options);
-        }, cancellationToken);
+        }, cancellationToken));
     }
 
 
@@ -1082,17 +1098,33 @@ public static class ToonSerializer
     /// <param name="toonString">The TOON format string to deserialize.</param>
     /// <param name="options">Optional deserialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous deserialization operation.</returns>
+    /// <returns>A ValueTask that represents the asynchronous deserialization operation.</returns>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
-    public static async Task<T?> DeserializeAsync<T>(string toonString, ToonSerializerOptions? options = null,
+    public static ValueTask<T?> DeserializeAsync<T>(string toonString, ToonSerializerOptions? options = null,
                                                      CancellationToken cancellationToken = default)
     {
-        return await Task.Run(() =>
+        // Fast path: If no cancellation requested, do sync
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var result = Deserialize<T>(toonString, options);
+                return new ValueTask<T?>(result);
+            }
+            catch
+            {
+                // If sync fails, let it throw
+                throw;
+            }
+        }
+
+        // Slow path: Cancellation requested, use Task
+        return new ValueTask<T?>(Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Deserialize<T>(toonString, options);
-        }, cancellationToken);
+        }, cancellationToken));
     }
 
 
