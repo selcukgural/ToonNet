@@ -6,6 +6,11 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     
+    <!-- Performance: Enable Profile-Guided Optimization -->
+    <TieredCompilation>true</TieredCompilation>
+    <TieredPGO>true</TieredPGO>
+    <DynamicPGO>true</DynamicPGO>
+    
     <!-- Package Information -->
     <PackageId>ToonNet.Extensions.Json</PackageId>
     <Version>1.0.0</Version>
