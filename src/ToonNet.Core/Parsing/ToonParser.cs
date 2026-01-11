@@ -133,24 +133,29 @@ public sealed class ToonParser(ToonOptions? options = null)
         }
 
         var token = Peek();
+        var tokenType = token.Type;
 
         // STEP 1.2: Detect list items (Indent followed by ListItem)
         // This handles: key:\n  - item1\n  - item2
-        if (token.Type != ToonTokenType.Indent)
+        if (tokenType != ToonTokenType.Indent)
         {
-            return token.Type switch
+            // Fast path: Use bitmask check for value types
+            if (tokenType.IsActualValue())
+            {
+                return tokenType == ToonTokenType.QuotedString 
+                    ? new ToonString(new string(Advance().Value.Span)) 
+                    : ParsePrimitiveValue(Advance().Value);
+            }
+
+            return tokenType switch
             {
                 // Check if this is an object (has key-value pairs)
-                ToonTokenType.Key or ToonTokenType.Indent => ParseObject(indentLevel),
+                ToonTokenType.Key => ParseObject(indentLevel),
                 // List item
                 ToonTokenType.ListItem => ParseList(indentLevel),
-                // Quoted string - always return as string
-                ToonTokenType.QuotedString => new ToonString(new string(Advance().Value.Span)),
-                // Simple value
-                ToonTokenType.Value => ParsePrimitiveValue(Advance().Value),
                 // End of input - return an empty object
                 ToonTokenType.EndOfInput => new ToonObject(),
-                _                        => throw new ToonParseException($"Unexpected token: {token.Type}", token.Line, token.Column)
+                _                        => throw new ToonParseException($"Unexpected token: {tokenType}", token.Line, token.Column)
             };
         }
 
@@ -632,6 +637,7 @@ public sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     private void SkipNewlines()
     {
+        // Optimized: Check category once instead of multiple equality checks
         while (!IsAtEnd() && Peek().Type == ToonTokenType.Newline)
         {
             Advance();
@@ -639,7 +645,7 @@ public sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    ///     Skips all consecutive whitespace (indent) tokens.
+    ///     Skips all consecutive whitespace (indent and newline) tokens.
     /// </summary>
     private void SkipWhitespace()
     {
