@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.Extensions.ObjectPool;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Encoding;
@@ -34,8 +35,11 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     // Expanded to support MaxDepth=100 (51 levels = 0-100 spaces)
     private static readonly string[] IndentCache = Enumerable.Range(0, 51).Select(i => new string(' ', i * 2)).ToArray();
 
+    // StringBuilder pool for reducing allocations
+    private static readonly ObjectPool<StringBuilder> StringBuilderPool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
-    private readonly StringBuilder _sb = new();
+    private StringBuilder? _sb;
     private int _depth;
 
     /// <summary>
@@ -54,9 +58,8 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     ///     Thrown when encoding exceeds the maximum depth specified in the options.
     /// </exception>
     /// <remarks>
-    ///     This method clears the internal string builder and resets the depth counter before
-    ///     encoding the root value of the provided document. The resulting string is returned
-    ///     as the TOON format representation of the document.
+    ///     This method gets a StringBuilder from the pool, encodes the document,
+    ///     and returns the StringBuilder to the pool after use.
     /// </remarks>
     public string Encode(ToonDocument document)
     {
@@ -67,12 +70,18 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             throw new ArgumentNullException(nameof(document), "Document root cannot be null");
         }
 
-        _sb.Clear();
-        _depth = 0;
-
-        EncodeValue(document.Root, 0);
-
-        return _sb.ToString();
+        _sb = StringBuilderPool.Get();
+        try
+        {
+            _depth = 0;
+            EncodeValue(document.Root, 0);
+            return _sb.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Return(_sb);
+            _sb = null;
+        }
     }
 
     /// <summary>
@@ -105,16 +114,16 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         switch (value)
         {
             case ToonNull:
-                _sb.Append("null");
+                _sb!.Append("null");
                 break;
             case ToonBoolean b:
-                _sb.Append(b.Value ? "true" : "false");
+                _sb!.Append(b.Value ? "true" : "false");
                 break;
             case ToonNumber n:
-                _sb.Append(FormatNumber(n.Value));
+                _sb!.Append(FormatNumber(n.Value));
                 break;
             case ToonString s:
-                _sb.Append(QuoteIfNeeded(s.Value));
+                _sb!.Append(QuoteIfNeeded(s.Value));
                 break;
             case ToonObject o:
                 EncodeObject(o, indentLevel);
@@ -150,32 +159,32 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         {
             if (!isFirst)
             {
-                _sb.AppendLine();
+                _sb!.AppendLine();
             }
 
             WriteIndent(indentLevel);
 
             // Quote the key if it contains special characters
-            _sb.Append(QuoteKeyIfNeeded(key));
+            _sb!.Append(QuoteKeyIfNeeded(key));
 
             if (value is ToonArray array)
             {
                 EncodeArrayHeader(array);
             }
 
-            _sb.Append(':');
+            _sb!.Append(':');
 
             switch (value)
             {
                 case ToonObject:
-                    _sb.AppendLine();
+                    _sb!.AppendLine();
                     EncodeValue(value, indentLevel + _options.IndentSize);
                     break;
                 case ToonArray arr:
                     EncodeValue(arr, indentLevel + _options.IndentSize);
                     break;
                 default:
-                    _sb.Append(' ');
+                    _sb!.Append(' ');
                     EncodeValue(value, indentLevel);
                     break;
             }
@@ -196,16 +205,16 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// </remarks>
     private void EncodeArrayHeader(ToonArray array)
     {
-        _sb.Append($"[{array.Count}]");
+        _sb!.Append($"[{array.Count}]");
 
         if (!array.IsTabular || array.FieldNames == null)
         {
             return;
         }
 
-        _sb.Append('{');
-        _sb.Append(string.Join(",", array.FieldNames));
-        _sb.Append('}');
+        _sb!.Append('{');
+        _sb!.Append(string.Join(",", array.FieldNames));
+        _sb!.Append('}');
     }
 
     /// <summary>
@@ -234,19 +243,19 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         // Check if it's a tabular array (array of objects with same fields)
         if (array is { IsTabular: true, FieldNames: not null })
         {
-            _sb.AppendLine();
+            _sb!.AppendLine();
             EncodeTabularArray(array, indentLevel);
         }
         // Check if it's a primitive array that can be inline
         else if (IsPrimitiveArray(array))
         {
-            _sb.Append(' ');
+            _sb!.Append(' ');
             EncodePrimitiveArrayInline(array);
         }
         else
         {
             // Mixed array - use list notation
-            _sb.AppendLine();
+            _sb!.AppendLine();
             EncodeListArray(array, indentLevel);
         }
     }
@@ -283,14 +292,14 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                     values.Add(FormatValue(fieldValue));
                 }
 
-                _sb.Append(string.Join(",", values));
+                _sb!.Append(string.Join(",", values));
             }
             else
             {
-                _sb.Append(FormatValue(item));
+                _sb!.Append(FormatValue(item));
             }
 
-            _sb.AppendLine();
+            _sb!.AppendLine();
         }
     }
 
@@ -308,7 +317,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     private void EncodePrimitiveArrayInline(ToonArray array)
     {
         var values = array.Items.Select(FormatValue);
-        _sb.Append(string.Join(",", values));
+        _sb!.Append(string.Join(",", values));
     }
 
     /// <summary>
@@ -330,18 +339,18 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         foreach (var item in array.Items)
         {
             WriteIndent(indentLevel);
-            _sb.Append("- ");
+            _sb!.Append("- ");
 
             if (item is ToonObject or ToonArray)
             {
-                _sb.AppendLine();
+                _sb!.AppendLine();
                 EncodeValue(item, indentLevel + _options.IndentSize);
-                _sb.AppendLine();
+                _sb!.AppendLine();
             }
             else
             {
                 EncodeValue(item, indentLevel);
-                _sb.AppendLine();
+                _sb!.AppendLine();
             }
         }
     }
@@ -626,18 +635,18 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
             if (cacheIndex > 0 && cacheIndex < IndentCache.Length)
             {
-                _sb.Append(IndentCache[cacheIndex]);
+                _sb!.Append(IndentCache[cacheIndex]);
 
                 if (indentLevel % 2 == 1)
                 {
-                    _sb.Append(' ');
+                    _sb!.Append(' ');
                 }
 
                 return;
             }
         }
 
-        _sb.Append(new string(' ', indentLevel));
+        _sb!.Append(new string(' ', indentLevel));
     }
 
     /// <summary>
