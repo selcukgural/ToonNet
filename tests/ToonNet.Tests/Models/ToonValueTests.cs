@@ -185,7 +185,7 @@ public class ToonValueTests
     public void ToonArray_Indexer_Get_ReturnsItem()
     {
         var arr = new ToonArray();
-        arr.Items.Add(new ToonString("first"));
+        arr.Add(new ToonString("first"));
         Assert.Equal("first", ((ToonString)arr[0]).Value);
     }
 
@@ -193,7 +193,7 @@ public class ToonValueTests
     public void ToonArray_Indexer_Set_UpdatesItem()
     {
         var arr = new ToonArray();
-        arr.Items.Add(new ToonString("old"));
+        arr.Add(new ToonString("old"));
         arr[0] = new ToonString("new");
         Assert.Equal("new", ((ToonString)arr[0]).Value);
     }
@@ -223,9 +223,9 @@ public class ToonValueTests
     public void ToonArray_MixedTypes_IsValid()
     {
         var arr = new ToonArray();
-        arr.Items.Add(new ToonNumber(42));
-        arr.Items.Add(new ToonString("text"));
-        arr.Items.Add(new ToonBoolean(true));
+        arr.Add(new ToonNumber(42));
+        arr.Add(new ToonString("text"));
+        arr.Add(new ToonBoolean(true));
         Assert.Equal(3, arr.Count);
     }
 

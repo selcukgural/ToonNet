@@ -55,7 +55,7 @@ string jsonString = """
 }
 """;
 
-string toonString = ToonSerializerExtensions.FromJson(jsonString);
+string toonString = ToonConvert.FromJson(jsonString);
 
 // Output (TOON format):
 // name: Alice
@@ -63,7 +63,7 @@ string toonString = ToonSerializerExtensions.FromJson(jsonString);
 // hobbies[2]: reading, coding
 
 // TOON → JSON string conversion
-string jsonBack = ToonSerializerExtensions.ToJson(toonString);
+string jsonBack = ToonConvert.ToJson(toonString);
 ```
 
 ### Object Serialization via JSON
@@ -86,13 +86,13 @@ var person = new Person
 };
 
 // Serialize C# object to JSON
-string json = ToonSerializerExtensions.SerializeToJson(person);
+string json = ToonConvert.SerializeToJson(person);
 
 // Deserialize JSON to C# object
-var personBack = ToonSerializerExtensions.DeserializeFromJson<Person>(json);
+var personBack = ToonConvert.DeserializeFromJson<Person>(json);
 
 // One-step: JSON string → C# object via TOON
-var person2 = ToonSerializerExtensions.ParseJson<Person>(jsonString);
+var person2 = ToonConvert.ParseJson<Person>(jsonString);
 ```
 
 ---
@@ -103,12 +103,12 @@ var person2 = ToonSerializerExtensions.ParseJson<Person>(jsonString);
 
 ```csharp
 // JSON string → TOON string
-string toon = ToonSerializerExtensions.FromJson(jsonString);
-string toon = ToonSerializerExtensions.FromJson(jsonString, toonOptions);
+string toon = ToonConvert.FromJson(jsonString);
+string toon = ToonConvert.FromJson(jsonString, toonOptions);
 
 // TOON string → JSON string
-string json = ToonSerializerExtensions.ToJson(toonString);
-string json = ToonSerializerExtensions.ToJson(toonString, jsonOptions);
+string json = ToonConvert.ToJson(toonString);
+string json = ToonConvert.ToJson(toonString, jsonOptions);
 ```
 
 ### Document Conversion (Low-level)
@@ -135,16 +135,16 @@ string json = ToonJsonConverter.ToJson(toonValue, writeIndented: false);
 
 ```csharp
 // C# object → JSON string
-string json = ToonSerializerExtensions.SerializeToJson<T>(obj);
-string json = ToonSerializerExtensions.SerializeToJson<T>(obj, jsonOptions);
+string json = ToonConvert.SerializeToJson<T>(obj);
+string json = ToonConvert.SerializeToJson<T>(obj, jsonOptions);
 
 // JSON string → C# object
-T obj = ToonSerializerExtensions.DeserializeFromJson<T>(jsonString);
-T obj = ToonSerializerExtensions.DeserializeFromJson<T>(jsonString, options);
+T obj = ToonConvert.DeserializeFromJson<T>(jsonString);
+T obj = ToonConvert.DeserializeFromJson<T>(jsonString, options);
 
 // JSON string → TOON → C# object (one step)
-T obj = ToonSerializerExtensions.ParseJson<T>(jsonString);
-T obj = ToonSerializerExtensions.ParseJson<T>(jsonString, options);
+T obj = ToonConvert.ParseJson<T>(jsonString);
+T obj = ToonConvert.ParseJson<T>(jsonString, options);
 ```
 
 ---
@@ -161,7 +161,7 @@ using ToonNet.Extensions.Json;
 string apiResponse = await httpClient.GetStringAsync("/api/products");
 
 // Convert to TOON (fewer tokens for LLM)
-string toonData = ToonSerializerExtensions.FromJson(apiResponse);
+string toonData = ToonConvert.FromJson(apiResponse);
 
 // Use in LLM prompt
 string prompt = $"""
@@ -182,7 +182,7 @@ Recommend the best products for a software developer.
 string jsonConfig = File.ReadAllText("appsettings.json");
 
 // Convert to TOON format
-string toonConfig = ToonSerializerExtensions.FromJson(jsonConfig);
+string toonConfig = ToonConvert.FromJson(jsonConfig);
 
 // Save as TOON (more human-readable)
 File.WriteAllText("appsettings.toon", toonConfig);
@@ -199,8 +199,8 @@ var config = ToonSerializer.Deserialize<AppSettings>(toonContent);
 string originalJson = """{"discount": 35.00, "active": true}""";
 
 // JSON → TOON → JSON
-string toonString = ToonSerializerExtensions.FromJson(originalJson);
-string roundtripJson = ToonSerializerExtensions.ToJson(toonString);
+string toonString = ToonConvert.FromJson(originalJson);
+string roundtripJson = ToonConvert.ToJson(toonString);
 
 // Normalize both for comparison
 var original = JsonSerializer.Deserialize<object>(originalJson);

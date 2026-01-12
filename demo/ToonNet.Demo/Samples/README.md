@@ -63,22 +63,22 @@ C# Object (her üç format için)
 ```csharp
 // JSON string → TOON string
 string json = File.ReadAllText("ecommerce-order.json");
-string toon = ToonSerializerExtensions.FromJson(json);
+string toon = ToonConvert.FromJson(json);
 
 // TOON string → JSON string
 string toon = File.ReadAllText("ecommerce-order.toon");
-string json = ToonSerializerExtensions.ToJson(toon);
+string json = ToonConvert.ToJson(toon);
 ```
 
 #### **2. Object-Based Conversions (Type-Safe)**
 ```csharp
 // JSON → C# Object → TOON
-var order = ToonSerializerExtensions.DeserializeFromJson<ECommerceOrder>(jsonString);
+var order = ToonConvert.DeserializeFromJson<ECommerceOrder>(jsonString);
 string toon = ToonSerializer.Serialize(order);
 
 // TOON → C# Object → JSON
 var order = ToonSerializer.Deserialize<ECommerceOrder>(toonString);
-string json = ToonSerializerExtensions.SerializeToJson(order);
+string json = ToonConvert.SerializeToJson(order);
 ```
 
 ---
@@ -130,12 +130,12 @@ using ToonNet.Core.Serialization;
 
 // Örnek 1: JSON dosyası → TOON dosyası
 var jsonContent = await File.ReadAllTextAsync("ecommerce-order.json");
-var toonContent = ToonSerializerExtensions.FromJson(jsonContent);
+var toonContent = ToonConvert.FromJson(jsonContent);
 await File.WriteAllTextAsync("output.toon", toonContent);
 
 // Örnek 2: TOON dosyası → JSON dosyası
 var toonContent = await File.ReadAllTextAsync("ecommerce-order.toon");
-var jsonContent = ToonSerializerExtensions.ToJson(toonContent);
+var jsonContent = ToonConvert.ToJson(toonContent);
 await File.WriteAllTextAsync("output.json", jsonContent);
 ```
 
@@ -147,7 +147,7 @@ using ToonNet.Demo.Samples;
 
 // JSON → C# Object
 var jsonString = await File.ReadAllTextAsync("ecommerce-order.json");
-var order = ToonSerializerExtensions.DeserializeFromJson<ECommerceOrder>(jsonString);
+var order = ToonConvert.DeserializeFromJson<ECommerceOrder>(jsonString);
 
 // C# Object → TOON
 string toonString = ToonSerializer.Serialize(order);
@@ -158,7 +158,7 @@ var toonString = await File.ReadAllTextAsync("ecommerce-order.toon");
 var order = ToonSerializer.Deserialize<ECommerceOrder>(toonString);
 
 // C# Object → JSON
-string jsonString = ToonSerializerExtensions.SerializeToJson(order);
+string jsonString = ToonConvert.SerializeToJson(order);
 ```
 
 ### Senaryo 3: Çift Taraflı Roundtrip Test
@@ -172,13 +172,13 @@ string toon1 = ToonSerializer.Serialize(original);
 var fromToon = ToonSerializer.Deserialize<ECommerceOrder>(toon1);
 
 // Object → JSON → Object  
-string json1 = ToonSerializerExtensions.SerializeToJson(original);
-var fromJson = ToonSerializerExtensions.DeserializeFromJson<ECommerceOrder>(json1);
+string json1 = ToonConvert.SerializeToJson(original);
+var fromJson = ToonConvert.DeserializeFromJson<ECommerceOrder>(json1);
 
 // JSON → TOON → JSON (string-based roundtrip)
 string json2 = await File.ReadAllTextAsync("ecommerce-order.json");
-string toon2 = ToonSerializerExtensions.FromJson(json2);
-string json3 = ToonSerializerExtensions.ToJson(toon2);
+string toon2 = ToonConvert.FromJson(json2);
+string json3 = ToonConvert.ToJson(toon2);
 
 // Verify
 Console.WriteLine($"TOON roundtrip: {original.OrderId == fromToon.OrderId}");
@@ -316,12 +316,12 @@ if (criticalAllergies.Any())
 }
 
 // Export to JSON for API integration
-var jsonData = ToonSerializerExtensions.SerializeToJson(patient);
+var jsonData = ToonConvert.SerializeToJson(patient);
 await File.WriteAllTextAsync("patient-export.json", jsonData);
 
 // Convert between formats (EMR integration)
 var jsonString = await File.ReadAllTextAsync("healthcare-patient.json");
-var toonString = ToonSerializerExtensions.FromJson(jsonString);
+var toonString = ToonConvert.FromJson(jsonString);
 await File.WriteAllTextAsync("patient-converted.toon", toonString);
 ```
 
@@ -374,8 +374,8 @@ Assert.Equal(35.00m, order2.Pricing.GrandTotal);  // Precision korunur
 string json = @"{ ""discount"": 35.00 }";
 
 // Dönüşüm: JSON → TOON → JSON
-string toon = ToonSerializerExtensions.FromJson(json);   // Discount: 35.00
-string json2 = ToonSerializerExtensions.ToJson(toon);    // {"discount": 35}
+string toon = ToonConvert.FromJson(json);   // Discount: 35.00
+string json2 = ToonConvert.ToJson(toon);    // {"discount": 35}
 
 // ⚠️ Format değişti: 35.00 → 35
 // ✅ Semantik olarak eşit: 35.00 == 35 (aynı değer)
@@ -435,7 +435,7 @@ string toon = ToonSerializer.Serialize(order);
 ```csharp
 // ⚠️ KULLANIM: Format dönüşümü (dosya, API)
 string json = await File.ReadAllTextAsync("order.json");
-string toon = ToonSerializerExtensions.FromJson(json);
+string toon = ToonConvert.FromJson(json);
 await File.WriteAllTextAsync("order.toon", toon);
 // Data korunur, format detayları değişebilir (veri dönüşümünde OK)
 ```
@@ -445,7 +445,7 @@ await File.WriteAllTextAsync("order.toon", toon);
 ```csharp
 // ❌ KÖTÜ: String karşılaştırma format farkları yüzünden fail olur
 string json1 = @"{ ""discount"": 35.00 }";
-string json2 = ToonSerializerExtensions.ToJson(ToonSerializerExtensions.FromJson(json1));
+string json2 = ToonConvert.ToJson(ToonConvert.FromJson(json1));
 Assert.Equal(json1, json2);  // ❌ FAIL: "35.00" vs "35"
 
 // ✅ İYİ: Semantik karşılaştırma

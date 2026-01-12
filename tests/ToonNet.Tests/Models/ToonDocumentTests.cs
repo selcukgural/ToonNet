@@ -45,7 +45,7 @@ public class ToonDocumentTests
     public void AsArray_WhenRootIsArray_ReturnsArray()
     {
         var arr = new ToonArray();
-        arr.Items.Add(new ToonNumber(123));
+        arr.Add(new ToonNumber(123));
         var doc = new ToonDocument(arr);
         var result = doc.AsArray();
         Assert.NotNull(result);

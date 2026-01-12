@@ -62,7 +62,7 @@ var products = new List<Product>
     new() { Id = 3, Name = "Keyboard", Price = 89.99m, InStock = false }
 };
 
-string json = ToonSerializerExtensions.SerializeToJson(products);
+string json = ToonConvert.SerializeToJson(products);
 string toon = ToonSerializer.Serialize(products);
 
 Console.WriteLine($"JSON tokens: ~{json.Length / 4}");  // ~150 tokens
@@ -260,16 +260,16 @@ var obj = ToonSerializer.Deserialize<MyClass>(toonString);
 
 ```csharp
 // Convert JSON string to TOON string
-string toon = ToonSerializerExtensions.FromJson(jsonString);
+string toon = ToonConvert.FromJson(jsonString);
 
 // Convert TOON string to JSON string
-string json = ToonSerializerExtensions.ToJson(toonString);
+string json = ToonConvert.ToJson(toonString);
 
 // Parse JSON directly to C# object (via TOON)
-var obj = ToonSerializerExtensions.DeserializeFromJson<MyClass>(jsonString);
+var obj = ToonConvert.DeserializeFromJson<MyClass>(jsonString);
 
 // Serialize C# object directly to JSON
-string json = ToonSerializerExtensions.SerializeToJson(myObject);
+string json = ToonConvert.SerializeToJson(myObject);
 ```
 
 ### YAML Conversion (Extension Package)
@@ -429,13 +429,13 @@ UseSSL: true
 ```csharp
 // Convert existing JSON to token-efficient TOON for AI prompts
 var jsonResponse = await httpClient.GetStringAsync("https://api.example.com/data");
-var toonData = ToonSerializerExtensions.FromJson(jsonResponse);
+var toonData = ToonConvert.FromJson(jsonResponse);
 
 // Use TOON data in AI prompt (fewer tokens)
 var aiPrompt = $"Analyze this data:\n{toonData}";
 
 // Or convert back to JSON for other APIs
-var jsonForExport = ToonSerializerExtensions.ToJson(toonData);
+var jsonForExport = ToonConvert.ToJson(toonData);
 ```
 
 ---
@@ -587,8 +587,8 @@ var restored = ToonSerializer.Deserialize<Order>(toon);
 
 ```csharp
 string json = @"{""total"": 35.00}";
-string toon = ToonSerializerExtensions.FromJson(json);
-string jsonBack = ToonSerializerExtensions.ToJson(toon); // {"total": 35}
+string toon = ToonConvert.FromJson(json);
+string jsonBack = ToonConvert.ToJson(toon); // {"total": 35}
 // 35.00 vs 35 - semantically equal, format differs
 ```
 
@@ -647,31 +647,6 @@ dotnet run --project demo/ToonNet.Demo
 ```
 
 **Requirements:** .NET 8.0 or higher
-
----
-
-## ⚠️ Breaking Changes (v2.0)
-
-**JSON methods moved from Core to Extensions.Json** - for cleaner architecture and modularity:
-
-**Before (v1.x):**
-```csharp
-using ToonNet.Core.Serialization;
-
-string toon = ToonSerializer.FromJson(jsonString);
-string json = ToonSerializer.ToJson(toonString);
-```
-
-**After (v2.0+):**
-```csharp
-using ToonNet.Core.Serialization;
-using ToonNet.Extensions.Json;  // Add this
-
-string toon = ToonSerializerExtensions.FromJson(jsonString);
-string json = ToonSerializerExtensions.ToJson(toonString);
-```
-
-**Migration:** Install `ToonNet.Extensions.Json` package and add `using ToonNet.Extensions.Json;` to files using JSON conversion.
 
 ---
 

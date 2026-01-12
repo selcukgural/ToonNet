@@ -18,6 +18,48 @@ public abstract class ToonValue
     ///     A <see cref="ToonValueType"/> enumeration value indicating the specific type of this TOON value.
     /// </value>
     public abstract ToonValueType ValueType { get; }
+
+    /// <summary>
+    ///     Implicitly converts a boolean value to a ToonValue.
+    /// </summary>
+    /// <param name="value">The boolean value to convert.</param>
+    public static implicit operator ToonValue(bool value) => new ToonBoolean(value);
+
+    /// <summary>
+    ///     Implicitly converts a double value to a ToonValue.
+    /// </summary>
+    /// <param name="value">The double value to convert.</param>
+    public static implicit operator ToonValue(double value) => new ToonNumber(value);
+
+    /// <summary>
+    ///     Implicitly converts an integer value to a ToonValue.
+    /// </summary>
+    /// <param name="value">The integer value to convert.</param>
+    public static implicit operator ToonValue(int value) => new ToonNumber(value);
+
+    /// <summary>
+    ///     Implicitly converts a long value to a ToonValue.
+    /// </summary>
+    /// <param name="value">The long value to convert.</param>
+    public static implicit operator ToonValue(long value) => new ToonNumber(value);
+
+    /// <summary>
+    ///     Implicitly converts a float value to a ToonValue.
+    /// </summary>
+    /// <param name="value">The float value to convert.</param>
+    public static implicit operator ToonValue(float value) => new ToonNumber(value);
+
+    /// <summary>
+    ///     Implicitly converts a decimal value to a ToonValue.
+    /// </summary>
+    /// <param name="value">The decimal value to convert.</param>
+    public static implicit operator ToonValue(decimal value) => new ToonNumber((double)value);
+
+    /// <summary>
+    ///     Implicitly converts a string value to a ToonValue.
+    /// </summary>
+    /// <param name="value">The string value to convert. Null values are converted to ToonNull.</param>
+    public static implicit operator ToonValue?(string? value) => value == null ? ToonNull.Instance : new ToonString(value);
 }
 
 /// <summary>
@@ -113,6 +155,18 @@ public sealed class ToonBoolean(bool value) : ToonValue
     {
         return Value ? "true" : "false";
     }
+
+    /// <summary>
+    ///     Implicitly converts a boolean value to a ToonBoolean.
+    /// </summary>
+    /// <param name="value">The boolean value to convert.</param>
+    public static implicit operator ToonBoolean(bool value) => new(value);
+
+    /// <summary>
+    ///     Implicitly converts a ToonBoolean to a boolean value.
+    /// </summary>
+    /// <param name="toonBoolean">The ToonBoolean to convert.</param>
+    public static implicit operator bool(ToonBoolean toonBoolean) => toonBoolean.Value;
 }
 
 /// <summary>
@@ -139,6 +193,42 @@ public sealed class ToonNumber(double value) : ToonValue
     {
         return Value.ToString(CultureInfo.InvariantCulture);
     }
+
+    /// <summary>
+    ///     Implicitly converts a double value to a ToonNumber.
+    /// </summary>
+    /// <param name="value">The double value to convert.</param>
+    public static implicit operator ToonNumber(double value) => new(value);
+
+    /// <summary>
+    ///     Implicitly converts an integer value to a ToonNumber.
+    /// </summary>
+    /// <param name="value">The integer value to convert.</param>
+    public static implicit operator ToonNumber(int value) => new(value);
+
+    /// <summary>
+    ///     Implicitly converts a long value to a ToonNumber.
+    /// </summary>
+    /// <param name="value">The long value to convert.</param>
+    public static implicit operator ToonNumber(long value) => new(value);
+
+    /// <summary>
+    ///     Implicitly converts a float value to a ToonNumber.
+    /// </summary>
+    /// <param name="value">The float value to convert.</param>
+    public static implicit operator ToonNumber(float value) => new(value);
+
+    /// <summary>
+    ///     Implicitly converts a decimal value to a ToonNumber.
+    /// </summary>
+    /// <param name="value">The decimal value to convert.</param>
+    public static implicit operator ToonNumber(decimal value) => new((double)value);
+
+    /// <summary>
+    ///     Implicitly converts a ToonNumber to a double value.
+    /// </summary>
+    /// <param name="toonNumber">The ToonNumber to convert.</param>
+    public static implicit operator double(ToonNumber toonNumber) => toonNumber.Value;
 }
 
 /// <summary>
@@ -165,6 +255,18 @@ public sealed class ToonString(string value) : ToonValue
     {
         return Value;
     }
+
+    /// <summary>
+    ///     Implicitly converts a string value to a ToonString.
+    /// </summary>
+    /// <param name="value">The string value to convert.</param>
+    public static implicit operator ToonString?(string? value) => value == null ? null : new(value);
+
+    /// <summary>
+    ///     Implicitly converts a ToonString to a string value.
+    /// </summary>
+    /// <param name="toonString">The ToonString to convert.</param>
+    public static implicit operator string(ToonString toonString) => toonString.Value;
 }
 
 /// <summary>
@@ -253,4 +355,10 @@ public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null
         get => Items[index];
         set => Items[index] = value;
     }
+
+    /// <summary>
+    ///     Adds a value to the end of the array.
+    /// </summary>
+    /// <param name="value">The value to add.</param>
+    public void Add(ToonValue value) => Items.Add(value);
 }

@@ -7,35 +7,30 @@ using ToonNet.Core.Serialization;
 namespace ToonNet.Extensions.Json;
 
 /// <summary>
-/// Extension methods for ToonSerializer to provide System.Text.Json-like API for format conversions.
+/// Provides utility methods for converting between JSON, TOON, and .NET objects.
 /// </summary>
 /// <remarks>
-/// These extensions make ToonNet API familiar to developers who use System.Text.Json,
-/// providing seamless conversion between JSON and TOON formats.
+/// This class follows the industry-standard naming convention (like JsonConvert, XmlConvert)
+/// and provides a clean, familiar API for format conversions.
+/// Similar to Newtonsoft.Json's JsonConvert class.
 /// </remarks>
-public static class ToonSerializerExtensions
+public static class ToonConvert
 {
     /// <summary>
-    /// Deserializes a JSON string to a .NET object using TOON as intermediate format.
+    /// Deserializes a JSON string to a .NET object using TOON as the intermediate format.
     /// </summary>
-    /// <typeparam name="T">The type to deserialize to.</typeparam>
-    /// <param name="jsonString">The JSON string to deserialize.</param>
-    /// <param name="options">Optional serialization options.</param>
-    /// <returns>The deserialized object.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when jsonString is null.</exception>
-    /// <exception cref="JsonException">Thrown when JSON parsing fails.</exception>
-    /// <exception cref="ToonDeserializationException">Thrown when TOON deserialization fails.</exception>
-    /// <remarks>
-    /// This method provides a System.Text.Json-like API:
-    /// <code>
-    /// var person = ToonSerializer.DeserializeFromJson&lt;Person&gt;(jsonString);
-    /// </code>
-    /// </remarks>
-    public static T? DeserializeFromJson<T>(string jsonString, ToonSerializerOptions? options = null)
+    /// <typeparam name="T">The type of the object to deserialize to.</typeparam>
+    /// <param name="jsonString">The JSON string to be deserialized.</param>
+    /// <param name="options">Optional serialization options provided for JSON deserialization.</param>
+    /// <returns>The deserialized object of type <typeparamref name="T"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="jsonString"/> is null.</exception>
+    /// <exception cref="JsonException">Thrown if the JSON string cannot be parsed properly.</exception>
+    /// <exception cref="NotSupportedException">Thrown if an error occurs during TOON deserialization.</exception>
+    public static T? DeserializeFromJson<T>(string jsonString, JsonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(jsonString);
 
-        var obj = JsonSerializer.Deserialize<T>(jsonString);
+        var obj = JsonSerializer.Deserialize<T>(jsonString, options);
         return obj;
     }
 
@@ -49,7 +44,7 @@ public static class ToonSerializerExtensions
     /// <remarks>
     /// This method provides a consistent API for format conversion:
     /// <code>
-    /// string json = ToonSerializer.SerializeToJson(person);
+    /// string json = ToonConvert.SerializeToJson(person);
     /// </code>
     /// </remarks>
     public static string SerializeToJson<T>(T value, JsonSerializerOptions? options = null)
@@ -69,7 +64,7 @@ public static class ToonSerializerExtensions
     /// <remarks>
     /// This method provides a simple, developer-friendly API for JSON to TOON conversion:
     /// <code>
-    /// string toonString = ToonSerializer.FromJson(jsonString);
+    /// string toonString = ToonConvert.FromJson(jsonString);
     /// </code>
     /// No need to deal with ToonDocument or ToonEncoder - just like System.Text.Json!
     /// </remarks>
@@ -86,23 +81,27 @@ public static class ToonSerializerExtensions
     /// Converts a TOON format string to JSON format string.
     /// </summary>
     /// <param name="toonString">The TOON string to convert.</param>
-    /// <param name="options">Optional JSON serializer options.</param>
+    /// <param name="writerOptions">Optional JSON writer options to control formatting.</param>
     /// <returns>JSON format string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when toonString is null.</exception>
     /// <exception cref="ToonParseException">Thrown when TOON parsing fails.</exception>
     /// <remarks>
     /// This method provides a simple, developer-friendly API for TOON to JSON conversion:
     /// <code>
-    /// string jsonString = ToonSerializer.ToJson(toonString);
+    /// // Default (no indentation)
+    /// string jsonString = ToonConvert.ToJson(toonString);
+    /// 
+    /// // With indentation
+    /// string jsonString = ToonConvert.ToJson(toonString, new JsonWriterOptions { Indented = true });
     /// </code>
     /// </remarks>
-    public static string ToJson(string toonString, JsonSerializerOptions? options = null)
+    public static string ToJson(string toonString, JsonWriterOptions? writerOptions = null)
     {
         ArgumentNullException.ThrowIfNull(toonString);
 
-        var parser = new ToonNet.Core.Parsing.ToonParser();
+        var parser = new Core.Parsing.ToonParser();
         var toonDocument = parser.Parse(toonString);
-        return ToonJsonConverter.ToJson(toonDocument, options?.WriteIndented ?? true);
+        return ToonJsonConverter.ToJson(toonDocument, writerOptions);
     }
 
     /// <summary>
@@ -115,7 +114,7 @@ public static class ToonSerializerExtensions
     /// <remarks>
     /// This is a convenience method that combines JSON to TOON conversion with deserialization:
     /// <code>
-    /// var person = ToonSerializer.ParseJson&lt;Person&gt;(jsonString);
+    /// var person = ToonConvert.ParseJson&lt;Person&gt;(jsonString);
     /// </code>
     /// Equivalent to: Deserialize&lt;T&gt;(FromJson(jsonString))
     /// </remarks>

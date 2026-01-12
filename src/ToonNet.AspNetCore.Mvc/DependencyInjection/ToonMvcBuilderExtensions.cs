@@ -6,7 +6,7 @@ using ToonNet.Core.Serialization;
 namespace ToonNet.AspNetCore.Mvc.DependencyInjection;
 
 /// <summary>
-/// Contains extension methods for integrating TOON serialization and deserialization functionality with ASP.NET Core MVC.
+/// Provides extension methods for configuring TOON serialization and deserialization with ASP.NET Core MVC.
 /// </summary>
 public static class ToonMvcBuilderExtensions
 {

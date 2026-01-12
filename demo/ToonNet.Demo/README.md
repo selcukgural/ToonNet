@@ -226,11 +226,11 @@ using ToonNet.Extensions.Json;
 
 // TOON → JSON
 string toonString = File.ReadAllText("order.toon");
-string jsonString = ToonSerializerExtensions.ToJson(toonString);
+string jsonString = ToonConvert.ToJson(toonString);
 
 // JSON → TOON
 string jsonContent = File.ReadAllText("order.json");
-string toonString = ToonSerializerExtensions.FromJson(jsonContent);
+string toonString = ToonConvert.FromJson(jsonContent);
 ```
 
 ### 3. Roundtrip Validation
@@ -242,8 +242,8 @@ Verifies data integrity through format conversions:
 string originalJson = File.ReadAllText("order.json");
 
 // JSON → TOON → JSON
-string toonString = ToonSerializerExtensions.FromJson(originalJson);
-string roundtripJson = ToonSerializerExtensions.ToJson(toonString);
+string toonString = ToonConvert.FromJson(originalJson);
+string roundtripJson = ToonConvert.ToJson(toonString);
 
 // Validate semantic equivalence
 bool isEquivalent = CompareJsonSemantically(originalJson, roundtripJson);

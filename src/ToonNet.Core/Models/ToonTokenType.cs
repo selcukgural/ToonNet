@@ -157,7 +157,7 @@ internal static class ToonTokenTypeExtensions
     /// <param name="type">The token type to check.</param>
     /// <param name="category">The category to test for.</param>
     /// <returns>True if the token belongs to the category; otherwise, false.</returns>
-    public static bool Is(this ToonTokenType type, ToonTokenCategory category)
+    private static bool Is(this ToonTokenType type, ToonTokenCategory category)
     {
         return (CategoryLookup[(int)type] & category) != 0;
     }

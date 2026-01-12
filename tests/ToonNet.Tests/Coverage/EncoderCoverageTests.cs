@@ -43,7 +43,7 @@ public class EncoderCoverageTests
             FieldNames = new[] { "name", "age" }
         };
 
-        array.Items.Add(new ToonObject
+        array.Add(new ToonObject
         {
             ["name"] = new ToonString("Alice"),
             ["age"] = new ToonNumber(30)
@@ -213,9 +213,9 @@ public class EncoderCoverageTests
     public void Encode_ArrayOfPrimitives()
     {
         var array = new ToonArray();
-        array.Items.Add(new ToonString("a"));
-        array.Items.Add(new ToonString("b"));
-        array.Items.Add(new ToonString("c"));
+        array.Add(new ToonString("a"));
+        array.Add(new ToonString("b"));
+        array.Add(new ToonString("c"));
 
         var obj = new ToonObject();
         obj["tags"] = array;
@@ -233,7 +233,7 @@ public class EncoderCoverageTests
         var array = new ToonArray();
         var item1 = new ToonObject();
         item1["name"] = new ToonString("Item1");
-        array.Items.Add(item1);
+        array.Add(item1);
 
         var obj = new ToonObject();
         obj["items"] = array;

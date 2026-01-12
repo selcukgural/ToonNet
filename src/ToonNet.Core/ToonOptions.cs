@@ -10,6 +10,8 @@ public sealed class ToonOptions : IValidatableObject
     private int _indentSize = 2;
     private int _maxDepth = 100;
     private char _delimiter = ',';
+    private const int DefaultMaxDepth = 200;
+    private const int ExtendedMaxDepth = 1000;
 
     /// <summary>
     ///     Gets or sets the number of spaces per indentation level.
@@ -144,15 +146,15 @@ public sealed class ToonOptions : IValidatableObject
                     "MaxDepth must be at least 1");
             }
 
-            int maxAllowed = AllowExtendedLimits ? 1000 : 200;
+            var maxAllowed = AllowExtendedLimits ? ExtendedMaxDepth : DefaultMaxDepth;
             if (value > maxAllowed)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(value),
                     value,
                     AllowExtendedLimits
-                        ? "MaxDepth cannot exceed 1000 even with extended limits enabled"
-                        : "MaxDepth cannot exceed 200. Set AllowExtendedLimits = true to allow up to 1000");
+                        ? $"{nameof(MaxDepth)} cannot exceed {ExtendedMaxDepth} even with extended limits enabled"
+                        : $"{nameof(MaxDepth)} cannot exceed {DefaultMaxDepth}. Set AllowExtendedLimits = true to allow up to {ExtendedMaxDepth}");
             }
 
             _maxDepth = value;

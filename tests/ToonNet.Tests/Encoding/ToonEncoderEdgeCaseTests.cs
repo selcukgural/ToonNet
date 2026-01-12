@@ -276,7 +276,7 @@ public class ToonEncoderEdgeCaseTests
                 ["id"] = new ToonNumber(i),
                 ["name"] = new ToonString($"User{i}")
             };
-            array.Items.Add(row);
+            array.Add(row);
         }
 
         var root = new ToonObject
@@ -355,8 +355,8 @@ public class ToonEncoderEdgeCaseTests
         };
 
         var array = new ToonArray();
-        array.Items.Add(new ToonNumber(1));
-        array.Items.Add(new ToonNumber(2));
+        array.Add(new ToonNumber(1));
+        array.Add(new ToonNumber(2));
         original["array"] = array;
 
         var doc = new ToonDocument(original);

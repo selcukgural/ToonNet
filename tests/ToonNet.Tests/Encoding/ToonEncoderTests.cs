@@ -57,9 +57,9 @@ public class ToonEncoderTests
     {
         // Arrange
         var array = new ToonArray();
-        array.Items.Add(new ToonString("admin"));
-        array.Items.Add(new ToonString("user"));
-        array.Items.Add(new ToonString("guest"));
+        array.Add(new ToonString("admin"));
+        array.Add(new ToonString("user"));
+        array.Add(new ToonString("guest"));
 
         var root = new ToonObject
         {
@@ -98,8 +98,8 @@ public class ToonEncoderTests
         {
             FieldNames = ["id", "name", "role"]
         };
-        array.Items.Add(user1);
-        array.Items.Add(user2);
+        array.Add(user1);
+        array.Add(user2);
 
         var root = new ToonObject
         {

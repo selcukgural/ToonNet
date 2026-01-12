@@ -219,7 +219,7 @@ public class ToonJsonConverterTests
         obj["age"] = new ToonNumber(30);
 
         var doc = new ToonDocument(obj);
-        var json = ToonJsonConverter.ToJson(doc, true);
+        var json = ToonJsonConverter.ToJson(doc, new JsonWriterOptions { Indented = true });
 
         Assert.Contains("\n", json);
         Assert.Contains("  ", json); // Check for indentation
@@ -524,7 +524,7 @@ tags: dev, admin
         // TOON → JSON
         var parser = new ToonParser();
         var reparsed = parser.Parse(toonString);
-        var resultJson = ToonJsonConverter.ToJson(reparsed, true);
+        var resultJson = ToonJsonConverter.ToJson(reparsed, new JsonWriterOptions { Indented = true });
 
         // Parse both JSONs and verify structure
         var originalDoc = JsonDocument.Parse(json);
@@ -673,7 +673,7 @@ monitoring:
         // TOON → JSON
         var parser = new ToonParser();
         var doc = parser.Parse(toonConfig);
-        var json = ToonJsonConverter.ToJson(doc, true);
+        var json = ToonJsonConverter.ToJson(doc, new JsonWriterOptions { Indented = true });
 
         // Verify JSON structure
         var jsonDoc = JsonDocument.Parse(json);
