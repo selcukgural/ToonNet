@@ -3,7 +3,8 @@
 **Compile-time code generation for zero-allocation TOON serialization**
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Package](https://img.shields.io/badge/package-ToonNet.SourceGenerators-blue)](#)
+[![NuGet](https://img.shields.io/nuget/v/ToonNet.SourceGenerators.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.SourceGenerators/)
+[![Downloads](https://img.shields.io/nuget/dt/ToonNet.SourceGenerators.svg?style=flat)](https://www.nuget.org/packages/ToonNet.SourceGenerators/)
 [![Status](https://img.shields.io/badge/status-stable-success)](#)
 
 ---

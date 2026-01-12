@@ -3,7 +3,8 @@
 **JSON ↔ TOON format conversion extension**
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Package](https://img.shields.io/badge/package-ToonNet.Extensions.Json-blue)](#)
+[![NuGet](https://img.shields.io/nuget/v/ToonNet.Extensions.Json.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Extensions.Json/)
+[![Downloads](https://img.shields.io/nuget/dt/ToonNet.Extensions.Json.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Extensions.Json/)
 [![Status](https://img.shields.io/badge/status-stable-success)](#)
 
 ---

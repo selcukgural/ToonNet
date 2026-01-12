@@ -4,7 +4,8 @@
 **ASP.NET Core integration for ToonNet serialization**
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Package](https://img.shields.io/badge/package-ToonNet.AspNetCore-blue)](#)
+[![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore/)
+[![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore/)
 [![Status](https://img.shields.io/badge/status-stable-success)](#)
 
 ---

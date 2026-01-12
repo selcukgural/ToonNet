@@ -7,6 +7,8 @@
 *AI-Optimized • Token-Efficient • Developer-Friendly*
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
+[![NuGet](https://img.shields.io/nuget/v/ToonNet.Core.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Core/)
+[![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/)
 [![Tests](https://img.shields.io/badge/tests-444%20passing-success?style=flat)](#)
 [![Spec](https://img.shields.io/badge/TOON%20v3.0-100%25-blue?style=flat)](ToonSpec.md)
 

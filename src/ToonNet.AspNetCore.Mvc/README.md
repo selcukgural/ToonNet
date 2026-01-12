@@ -3,7 +3,8 @@
 **MVC input/output formatters for TOON format**
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![Package](https://img.shields.io/badge/package-ToonNet.AspNetCore.Mvc-blue)](#)
+[![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.Mvc.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/)
+[![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.Mvc.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/)
 [![Status](https://img.shields.io/badge/status-stable-success)](#)
 
 ---
