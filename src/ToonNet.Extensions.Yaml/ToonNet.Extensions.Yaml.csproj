@@ -13,8 +13,9 @@
     
     <!-- Package Information -->
     <PackageId>ToonNet.Extensions.Yaml</PackageId>
-    <Description>YAML interoperability extension for ToonNet. Provides seamless bidirectional conversion between YAML and TOON formats using YamlDotNet. Includes ToonYamlConvert high-level API and ToonYamlConverter low-level engine.</Description>
-    <PackageTags>toon;yaml;serialization;converter;interop;kubernetes;docker;config</PackageTags>
+    <Title>ToonNet YAML Extension</Title>
+    <Description>Bidirectional YAML ↔ TOON conversion with YamlDotNet. Perfect for Kubernetes, Docker configs, and CI/CD files. Includes ToonYamlConvert high-level API and ToonYamlConverter engine.</Description>
+    <PackageTags>toon;yaml;serialization;kubernetes;docker;config;devops;ci-cd</PackageTags>
     <PackageReleaseNotes>Initial 1.0.0 release with layered architecture (ToonYamlConvert + ToonYamlConverter).</PackageReleaseNotes>
   </PropertyGroup>
 

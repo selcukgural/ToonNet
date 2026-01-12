@@ -11,8 +11,9 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.SourceGenerators</PackageId>
-        <Description>Source generators for ToonNet providing compile-time code generation for zero-allocation serialization. Perfect for AOT scenarios, hot paths, and maximum performance. Generates static Serialize/Deserialize methods at compile-time.</Description>
-        <PackageTags>toon;source-generator;aot;performance;zero-allocation;roslyn;codegen</PackageTags>
+        <Title>ToonNet Source Generators</Title>
+        <Description>Compile-time code generation for zero-allocation serialization. AOT-compatible, generates static Serialize/Deserialize methods. Perfect for hot paths and maximum performance.</Description>
+        <PackageTags>toon;source-generator;aot;roslyn;performance;zero-allocation;codegen</PackageTags>
         <PackageReleaseNotes>Initial 1.0.0 release with full attribute support and AOT compatibility.</PackageReleaseNotes>
         <DevelopmentDependency>true</DevelopmentDependency>
     </PropertyGroup>

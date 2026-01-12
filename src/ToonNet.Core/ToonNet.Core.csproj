@@ -7,8 +7,9 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.Core</PackageId>
-        <Description>TOON format serialization library for .NET. Provides high-performance object serialization to TOON format with zero-reflection using expression trees. Perfect for AI/LLM token optimization, configuration files, and data exchange.</Description>
-        <PackageTags>toon;serialization;json;yaml;dotnet;performance;ai;llm;token-efficient</PackageTags>
+        <Title>ToonNet Core Library</Title>
+        <Description>High-performance TOON format serialization for .NET. Expression tree-based with zero reflection overhead. 435+ tests, 100% TOON v3.0 spec compliance. Perfect for AI/LLM token optimization, configuration files, and data exchange.</Description>
+        <PackageTags>toon;serialization;performance;dotnet;ai;llm;token-efficient;expression-trees</PackageTags>
         <PackageReleaseNotes>Initial 1.0.0 release. Full TOON v3.0 spec compliance with 435+ tests.</PackageReleaseNotes>
         
         <!-- Performance: Enable Profile-Guided Optimization -->

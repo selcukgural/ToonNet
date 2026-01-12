@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="icon.png" alt="ToonNet Logo" width="256" height="256">
+
 ```
     ╔══════════════════════════════════════════════════════╗
     ║                                                      ║
@@ -666,16 +668,16 @@ dotnet run --project demo/ToonNet.Demo
 - [x] YAML ↔ TOON conversion (Extensions.Yaml)
 - [x] ASP.NET Core integration (AspNetCore packages)
 - [x] Source generators (zero-allocation)
+- [x] NuGet package publishing
+- [x] Streaming parser for large files
 - [x] System.Text.Json-compatible API
 - [x] Comprehensive test coverage (444 tests passing)
 - [x] Real-world samples (Healthcare, E-Commerce)
 
 **Coming Soon:**
-- [ ] NuGet package publishing
 - [ ] VS Code extension with syntax highlighting
 - [ ] Online TOON playground/validator
 - [ ] Schema validation support
-- [ ] Streaming parser for large files
 - [ ] Benchmarks vs other serializers
 
 ---
