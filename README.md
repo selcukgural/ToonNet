@@ -44,7 +44,7 @@ ToonNet delivers three critical advantages:
 2. **⚡ High Performance** - Expression trees, not reflection (10-100x faster)
 3. **🔧 Zero Learning Curve** - System.Text.Json-compatible API
 
-### Token Efficiency for AI/LLM Applications
+### 🤖 AI Token Optimization
 
 TOON format uses **significantly fewer tokens** than JSON, reducing AI API costs:
 
