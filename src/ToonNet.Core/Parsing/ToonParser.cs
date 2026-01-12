@@ -1,5 +1,6 @@
 using System.Globalization;
 using ToonNet.Core.Models;
+using ToonNet.Core.Serialization;
 
 namespace ToonNet.Core.Parsing;
 

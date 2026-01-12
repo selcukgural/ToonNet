@@ -1,5 +1,6 @@
 # ToonNet.AspNetCore
 
+
 **ASP.NET Core integration for ToonNet serialization**
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)

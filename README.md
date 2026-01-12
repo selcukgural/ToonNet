@@ -1,15 +1,6 @@
 <div align="center">
 
-<img src="icon.png" alt="ToonNet Logo" width="256" height="256">
-
-```
-    ╔══════════════════════════════════════════════════════╗
-    ║                                                      ║
-    ║        ▀█▀ █▀█ █▀█ █▄░█   █▄░█ █▀▀ ▀█▀               ║
-    ║        ░█░ █▄█ █▄█ █░▀█ • █░▀█ ██▄ ░█░               ║
-    ║                                                      ║
-    ╚══════════════════════════════════════════════════════╝
-```
+<img src="icon.png" alt="ToonNet Logo" width="128" height="128">
 
 **TOON Data Format Serialization for .NET**
 

@@ -52,7 +52,7 @@ public sealed class ToonInputFormatter : TextInputFormatter
             var httpContext = context.HttpContext;
             var request = httpContext.Request;
             
-            // Use helper method to avoid reflection - much faster!
+            // Use the helper method to avoid reflection - much faster!
             var model = await DeserializeFromStreamInternalAsync(
                 context.ModelType, 
                 request.Body, 
