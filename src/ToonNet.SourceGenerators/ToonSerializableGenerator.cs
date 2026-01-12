@@ -10,10 +10,11 @@ using ToonNet.SourceGenerators.Utilities;
 namespace ToonNet.SourceGenerators;
 
 /// <summary>
-/// Represents a Roslyn incremental source generator for the ToonSerializable attribute.
-/// Generates compile-time serialization and deserialization methods for classes marked with the ToonSerializable attribute.
+/// Provides a Roslyn incremental source generator for the ToonSerializable attribute.
+/// Facilitates the generation of compile-time methods for serialization and deserialization
+/// of classes that are adorned with the ToonSerializable attribute.
 /// </summary>
-[Generator,ExcludeFromCodeCoverage]
+[Generator, ExcludeFromCodeCoverage]
 public sealed class ToonSerializableGenerator : IIncrementalGenerator
 {
     /// <summary>
@@ -170,7 +171,7 @@ public sealed class ToonSerializableGenerator : IIncrementalGenerator
             context.ReportDiagnostic(Diagnostic.Create(DiagnosticHelper.NoProperties, Location.None, symbol.Name));
         }
 
-        // Generate partial class with serialization methods
+        // Generate a partial class with serialization methods
         var generated = GeneratePartialClass(classInfo);
 
         context.AddSource($"{symbol.Name}.g.cs", generated);

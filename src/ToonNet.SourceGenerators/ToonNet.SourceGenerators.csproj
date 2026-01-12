@@ -8,7 +8,18 @@
         <IsRoslynComponent>true</IsRoslynComponent>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <NoWarn>$(NoWarn);RS2008</NoWarn>
+        
+        <!-- Package Information -->
+        <PackageId>ToonNet.SourceGenerators</PackageId>
+        <Description>Source generators for ToonNet providing compile-time code generation for zero-allocation serialization. Perfect for AOT scenarios, hot paths, and maximum performance. Generates static Serialize/Deserialize methods at compile-time.</Description>
+        <PackageTags>toon;source-generator;aot;performance;zero-allocation;roslyn;codegen</PackageTags>
+        <PackageReleaseNotes>Initial 1.0.0 release with full attribute support and AOT compatibility.</PackageReleaseNotes>
+        <DevelopmentDependency>true</DevelopmentDependency>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4">

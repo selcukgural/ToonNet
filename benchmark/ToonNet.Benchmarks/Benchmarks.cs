@@ -6,7 +6,7 @@ using ToonNet.Core.Serialization;
 namespace ToonNet.Benchmarks;
 
 /// <summary>
-///     Benchmarks for simple model.
+///     Benchmarks for a simple model.
 /// </summary>
 [SimpleJob(warmupCount: 3)]
 [MemoryDiagnoser]

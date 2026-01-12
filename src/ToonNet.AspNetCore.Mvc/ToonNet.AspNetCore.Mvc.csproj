@@ -9,7 +9,17 @@
         <TieredCompilation>true</TieredCompilation>
         <TieredPGO>true</TieredPGO>
         <DynamicPGO>true</DynamicPGO>
+        
+        <!-- Package Information -->
+        <PackageId>ToonNet.AspNetCore.Mvc</PackageId>
+        <Description>ASP.NET Core MVC integration for ToonNet. Provides input/output formatters for TOON format support in MVC controllers and Web APIs.</Description>
+        <PackageTags>toon;aspnetcore;mvc;formatter;web-api;controller</PackageTags>
+        <PackageReleaseNotes>Initial 1.0.0 release with MVC formatters.</PackageReleaseNotes>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\ToonNet.AspNetCore\ToonNet.AspNetCore.csproj" />

@@ -13,19 +13,14 @@
     
     <!-- Package Information -->
     <PackageId>ToonNet.Extensions.Json</PackageId>
-    <Version>1.0.0</Version>
-    <Authors>ToonNet Contributors</Authors>
-    <Description>JSON interoperability extension for ToonNet. Provides seamless conversion between JSON and TOON formats using System.Text.Json.</Description>
-    <PackageTags>toon;json;serialization;converter;interop</PackageTags>
-    <PackageProjectUrl>https://github.com/yourusername/ToonNet</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/yourusername/ToonNet</RepositoryUrl>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    
-    <!-- Documentation -->
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Description>JSON interoperability extension for ToonNet. Provides seamless bidirectional conversion between JSON and TOON formats using System.Text.Json. Includes ToonConvert high-level API and ToonJsonConverter low-level engine.</Description>
+    <PackageTags>toon;json;serialization;converter;interop;system-text-json</PackageTags>
+    <PackageReleaseNotes>Initial 1.0.0 release with layered architecture (ToonConvert + ToonJsonConverter).</PackageReleaseNotes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ToonNet.Core\ToonNet.Core.csproj" />

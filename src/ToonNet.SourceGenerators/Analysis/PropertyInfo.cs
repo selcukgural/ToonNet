@@ -3,70 +3,74 @@ using Microsoft.CodeAnalysis;
 namespace ToonNet.SourceGenerators.Analysis;
 
 /// <summary>
-///     Metadata about a property that will be serialized.
+/// Encapsulates metadata about a property for serialization purposes.
 /// </summary>
 internal sealed record PropertyInfo
 {
     /// <summary>
-    ///     The property name as declared in the C# class.
+    /// The name of the property in the context of serialization metadata.
     /// </summary>
     public required string Name { get; init; }
 
     /// <summary>
-    ///     The Roslyn symbol for the property.
+    /// The symbol representation of the property in the Roslyn compilation model.
     /// </summary>
     public required IPropertySymbol Symbol { get; init; }
 
     /// <summary>
-    ///     The type of the property.
+    /// Represents the type of the property as described by its symbol.
     /// </summary>
     public required ITypeSymbol Type { get; init; }
 
     /// <summary>
-    ///     Custom name from [ToonProperty("name")] attribute, if specified.
-    ///     If null, use <see cref="Name" /> or apply naming policy.
+    /// A custom name for the property as it will appear in serialized output.
+    /// If set, this value will override the default property name during serialization.
     /// </summary>
     public string? CustomName { get; init; }
 
     /// <summary>
-    ///     Order from [ToonPropertyOrder(order)] attribute.
-    ///     Higher values are serialized later.
+    /// The order in which the property should be serialized or processed.
     /// </summary>
     public int Order { get; init; }
 
     /// <summary>
-    ///     Custom converter type from [ToonConverter(typeof(...))] attribute.
-    ///     If specified, this converter is used instead of default serialization.
+    /// Specifies a custom converter to handle the serialization and deserialization
+    /// of the property. If this property is set, the specified converter will be
+    /// used instead of the default serialization logic.
     /// </summary>
     public ITypeSymbol? CustomConverter { get; init; }
 
     /// <summary>
-    ///     Whether this property's type has [ToonSerializable] attribute (nested serialization).
+    /// Indicates whether the property is associated with a nested type marked with
+    /// the ToonSerializable attribute, implying that the type of the property
+    /// should also undergo serialization and deserialization as a nested object.
     /// </summary>
     public bool IsNestedSerializable { get; init; }
 
     /// <summary>
-    ///     Gets the name to use when serializing (applies custom name if set).
+    /// The serialized name of the property, which is either the custom name
+    /// specified by the user or, if not provided, the property name as declared
+    /// in the C# class.
     /// </summary>
     public string SerializedName => CustomName ?? Name;
 
     /// <summary>
-    ///     Gets a value indicating whether this property should be ignored.
+    /// Indicates whether the property is marked as ignored for serialization purposes.
     /// </summary>
     public bool IsIgnored { get; init; }
 
     /// <summary>
-    ///     Gets a value indicating whether the property has a getter.
+    /// Indicates whether the property has a getter defined.
     /// </summary>
     public bool HasGetter => Symbol.GetMethod is not null;
 
     /// <summary>
-    ///     Gets a value indicating whether the property has a setter.
+    /// Indicates whether the property has a setter method defined.
     /// </summary>
     public bool HasSetter => Symbol.SetMethod is not null;
 
     /// <summary>
-    ///     Gets a value indicating whether a custom converter is available.
+    /// Indicates whether the property has a custom converter defined for serialization and deserialization.
     /// </summary>
     public bool HasCustomConverter => CustomConverter is not null;
 }

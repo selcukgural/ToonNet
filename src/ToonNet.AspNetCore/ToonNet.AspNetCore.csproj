@@ -9,7 +9,17 @@
         <TieredCompilation>true</TieredCompilation>
         <TieredPGO>true</TieredPGO>
         <DynamicPGO>true</DynamicPGO>
+        
+        <!-- Package Information -->
+        <PackageId>ToonNet.AspNetCore</PackageId>
+        <Description>ASP.NET Core integration for ToonNet. Provides dependency injection extensions and middleware for TOON format support in web applications.</Description>
+        <PackageTags>toon;aspnetcore;web;api;middleware;di</PackageTags>
+        <PackageReleaseNotes>Initial 1.0.0 release with DI extensions.</PackageReleaseNotes>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\ToonNet.Core\ToonNet.Core.csproj" />

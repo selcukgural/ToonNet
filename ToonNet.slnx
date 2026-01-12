@@ -1,6 +1,6 @@
 <Solution>
     <Folder Name="/benchmark/">
-        <Project Path="src/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj" />
+        <Project Path="benchmark/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj" />
     </Folder>
     <Folder Name="/demo/">
         <Project Path="demo/ToonNet.Demo/ToonNet.Demo.csproj" />

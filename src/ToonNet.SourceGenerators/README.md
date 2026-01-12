@@ -42,7 +42,6 @@ dotnet add package ToonNet.SourceGenerators
 
 ```csharp
 using ToonNet.Core.Serialization.Attributes;
-using ToonNet.SourceGenerators;
 
 // Mark class with [ToonSerializable]
 [ToonSerializable]
@@ -53,7 +52,7 @@ public partial class Person
     public List<string> Hobbies { get; set; }
 }
 
-// Generated code provides IToonSerializable interface
+// Use the class
 var person = new Person 
 { 
     Name = "Alice", 
@@ -61,12 +60,18 @@ var person = new Person
     Hobbies = new List<string> { "Reading", "Coding" }
 };
 
-// Use generated Serialize method (zero-allocation!)
-string toon = person.Serialize();
+// Serialize using ToonSerializer (runtime)
+string toon = ToonSerializer.Serialize(person);
 
-// Use generated Deserialize method
-var personBack = Person.Deserialize(toon);
+// Deserialize using ToonSerializer (runtime)
+var personBack = ToonSerializer.Deserialize<Person>(toon);
+
+// Alternative: Use generated static methods directly
+var doc = Person.Serialize(person);
+var restored = Person.Deserialize(doc);
 ```
+
+**Note:** Source generator creates static `Serialize` and `Deserialize` methods at compile-time. You can use them directly or through `ToonSerializer` for zero-allocation performance.
 
 ---
 
@@ -93,25 +98,37 @@ public partial class Product
 
 **Generated Code** (simplified):
 ```csharp
-public partial class Product : IToonSerializable<Product>
+// Source generator creates static Serialize and Deserialize methods
+public partial class Product
 {
-    public string Serialize(ToonSerializerOptions? options = null)
+    /// <summary>
+    /// Serializes this instance to a TOON document (generated code).
+    /// </summary>
+    public static ToonDocument Serialize(
+        Product value,
+        ToonSerializerOptions? options = null)
     {
-        var sb = new StringBuilder();
-        sb.Append("Id: ").AppendLine(Id.ToString());
-        sb.Append("Name: ").AppendLine(Name);
-        sb.Append("Price: ").AppendLine(Price.ToString());
-        return sb.ToString();
+        // Direct property access with no reflection overhead
+        var obj = new ToonObject();
+        obj["Id"] = new ToonNumber(value.Id);
+        obj["Name"] = new ToonString(value.Name);
+        obj["Price"] = new ToonNumber((double)value.Price);
+        return new ToonDocument(obj);
     }
 
-    public static Product Deserialize(string toonString, ToonSerializerOptions? options = null)
+    /// <summary>
+    /// Deserializes a TOON document to an instance (generated code).
+    /// </summary>
+    public static Product Deserialize(
+        ToonDocument doc,
+        ToonSerializerOptions? options = null)
     {
-        var doc = Parse(toonString);
-        var obj = new Product();
-        obj.Id = GetInt32(doc, "Id");
-        obj.Name = GetString(doc, "Name");
-        obj.Price = GetDecimal(doc, "Price");
-        return obj;
+        var obj = (ToonObject)doc.Root;
+        var result = new Product();
+        result.Id = (int)((ToonNumber)obj["Id"]).Value;
+        result.Name = ((ToonString)obj["Name"]).Value;
+        result.Price = (decimal)((ToonNumber)obj["Price"]).Value;
+        return result;
     }
 }
 ```
@@ -211,7 +228,8 @@ Source Generator is:
 ### Example 1: High-Performance API
 
 ```csharp
-using ToonNet.SourceGenerators;
+using ToonNet.Core.Serialization;
+using ToonNet.Core.Serialization.Attributes;
 
 [ToonSerializable]
 public partial class ApiResponse
@@ -235,8 +253,8 @@ public class DataController : ControllerBase
             Timestamp = DateTime.UtcNow
         };
 
-        // Zero-allocation serialization
-        var toon = response.Serialize();
+        // Zero-allocation serialization (source generator optimized)
+        var toon = ToonSerializer.Serialize(response);
         return Content(toon, "application/toon");
     }
 }
@@ -245,6 +263,9 @@ public class DataController : ControllerBase
 ### Example 2: Gaming/Real-Time Systems
 
 ```csharp
+using ToonNet.Core.Serialization;
+using ToonNet.Core.Serialization.Attributes;
+
 [ToonSerializable]
 public partial class PlayerState
 {
@@ -259,14 +280,14 @@ public class NetworkManager
     public void BroadcastState(PlayerState state)
     {
         // Critical path - zero allocations
-        string data = state.Serialize();
+        string data = ToonSerializer.Serialize(state);
         networkSocket.Send(data);
     }
 
     public PlayerState ReceiveState(string data)
     {
         // Fast deserialization
-        return PlayerState.Deserialize(data);
+        return ToonSerializer.Deserialize<PlayerState>(data);
     }
 }
 ```
@@ -274,6 +295,9 @@ public class NetworkManager
 ### Example 3: IoT/Embedded Systems
 
 ```csharp
+using ToonNet.Core.Serialization;
+using ToonNet.Core.Serialization.Attributes;
+
 [ToonSerializable]
 public partial class SensorReading
 {
@@ -296,7 +320,7 @@ public class SensorDevice
         };
 
         // Minimal memory footprint
-        var payload = reading.Serialize();
+        var payload = ToonSerializer.Serialize(reading);
         mqttClient.Publish("sensors/data", payload);
     }
 }
@@ -305,6 +329,7 @@ public class SensorDevice
 ### Example 4: Native AOT Application
 
 ```csharp
+// Project file configuration
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PublishAot>true</PublishAot>  <!-- Enable Native AOT -->
@@ -316,6 +341,10 @@ public class SensorDevice
   </ItemGroup>
 </Project>
 
+// Code
+using ToonNet.Core.Serialization;
+using ToonNet.Core.Serialization.Attributes;
+
 [ToonSerializable]
 public partial class Config
 {
@@ -325,7 +354,7 @@ public partial class Config
 
 // Works with Native AOT (no reflection!)
 var config = new Config { AppName = "MyApp", MaxConnections = 100 };
-var toon = config.Serialize();
+var toon = ToonSerializer.Serialize(config);
 ```
 
 ---

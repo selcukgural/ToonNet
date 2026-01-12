@@ -157,22 +157,23 @@ internal static class SerializeMethodGenerator
     {
         var typeName = prop.Type.ToDisplayString();
 
-        if (typeName == "string")
+        switch (typeName)
         {
-            code.AppendLine($"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonString(value.{propName});");
-        }
-        else if (typeName is "bool" or "System.Boolean")
-        {
-            code.AppendLine($"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonBoolean(value.{propName});");
-        }
-        else if (IsNumericType(typeName))
-        {
-            code.AppendLine($"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonNumber((double)value.{propName});");
-        }
-        else
-        {
-            // Fallback for other simple types
-            code.AppendLine($"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonString(value.{propName}.ToString() ?? \"\");");
+            case "string":
+                code.AppendLine($"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonString(value.{propName});");
+                break;
+            case "bool" or "System.Boolean":
+                code.AppendLine($"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonBoolean(value.{propName});");
+                break;
+            default:
+            {
+                code.AppendLine(IsNumericType(typeName)
+                                    ? $"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonNumber((double)value.{propName});"
+                                    // Fallback for other simple types
+                                    : $"obj[\"{serializedName}\"] = new global::ToonNet.Core.Models.ToonString(value.{propName}.ToString() ?? \"\");");
+
+                break;
+            }
         }
     }
 
@@ -237,6 +238,15 @@ internal static class SerializeMethodGenerator
         };
     }
 
+    /// <summary>
+    /// Converts the specified string to camel case formatting.
+    /// </summary>
+    /// <param name="name">
+    /// The input string to convert to camel case. This is typically a property or field name.
+    /// </param>
+    /// <returns>
+    /// A string where the first character is converted to lowercase and the remaining characters are unchanged.
+    /// </returns>
     private static string ToCamelCase(string name)
     {
         if (string.IsNullOrEmpty(name))
@@ -247,6 +257,17 @@ internal static class SerializeMethodGenerator
         return char.ToLowerInvariant(name[0]) + name[1..];
     }
 
+    /// <summary>
+    /// Converts a given string to snake_case format by inserting underscores before uppercase letters
+    /// and converting all characters to lowercase.
+    /// </summary>
+    /// <param name="name">
+    /// The string to be converted to snake_case format. Expected to be a non-null string.
+    /// </param>
+    /// <returns>
+    /// A string transformed to snake_case format. If the input is null or empty, the original input
+    /// string is returned.
+    /// </returns>
     private static string ToSnakeCase(string name)
     {
         if (string.IsNullOrEmpty(name))
