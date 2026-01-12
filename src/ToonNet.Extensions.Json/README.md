@@ -24,10 +24,6 @@ ToonNet.Extensions.Json provides **seamless bidirectional conversion** between J
 - 🔗 **Interoperability** - Work with JSON-based systems
 - 📊 **API Integration** - Accept JSON, process as TOON, return JSON
 
-> **Note:** This package was moved from Core in v2.0 for cleaner architecture. See [migration guide](../../README.md#-breaking-changes-v20).
-
----
-
 ## 🚀 Quick Start
 
 ### Installation
@@ -104,11 +100,11 @@ var person2 = ToonConvert.ParseJson<Person>(jsonString);
 ```csharp
 // JSON string → TOON string
 string toon = ToonConvert.FromJson(jsonString);
-string toon = ToonConvert.FromJson(jsonString, toonOptions);
+string toon = ToonConvert.FromJson(jsonString, options);  // ToonOptions
 
 // TOON string → JSON string
 string json = ToonConvert.ToJson(toonString);
-string json = ToonConvert.ToJson(toonString, jsonOptions);
+string json = ToonConvert.ToJson(toonString, writerOptions);  // JsonWriterOptions
 ```
 
 ### Document Conversion (Low-level)
@@ -124,11 +120,11 @@ ToonDocument doc = ToonJsonConverter.FromJson(jsonElement);
 
 // ToonDocument → JSON string
 string json = ToonJsonConverter.ToJson(document);
-string json = ToonJsonConverter.ToJson(document, writeIndented: true);
+string json = ToonJsonConverter.ToJson(document, writerOptions);  // JsonWriterOptions
 
 // ToonValue → JSON string
 string json = ToonJsonConverter.ToJson(toonValue);
-string json = ToonJsonConverter.ToJson(toonValue, writeIndented: false);
+string json = ToonJsonConverter.ToJson(toonValue, writerOptions);  // JsonWriterOptions
 ```
 
 ### Object Serialization
@@ -136,15 +132,15 @@ string json = ToonJsonConverter.ToJson(toonValue, writeIndented: false);
 ```csharp
 // C# object → JSON string
 string json = ToonConvert.SerializeToJson<T>(obj);
-string json = ToonConvert.SerializeToJson<T>(obj, jsonOptions);
+string json = ToonConvert.SerializeToJson<T>(obj, options);  // JsonSerializerOptions
 
 // JSON string → C# object
 T obj = ToonConvert.DeserializeFromJson<T>(jsonString);
-T obj = ToonConvert.DeserializeFromJson<T>(jsonString, options);
+T obj = ToonConvert.DeserializeFromJson<T>(jsonString, options);  // JsonSerializerOptions
 
 // JSON string → TOON → C# object (one step)
 T obj = ToonConvert.ParseJson<T>(jsonString);
-T obj = ToonConvert.ParseJson<T>(jsonString, options);
+T obj = ToonConvert.ParseJson<T>(jsonString, options);  // ToonSerializerOptions
 ```
 
 ---
@@ -261,7 +257,6 @@ This is standard behavior across all serialization libraries (System.Text.Json, 
 
 - [Main Documentation](../../README.md) - Complete ToonNet guide
 - [API Guide](../../docs/API-GUIDE.md) - Detailed API reference
-- [Migration Guide](../../README.md#-breaking-changes-v20) - v1.x → v2.0 migration
 - [Samples](../../demo/ToonNet.Demo/Samples) - Real-world JSON examples
 
 ---

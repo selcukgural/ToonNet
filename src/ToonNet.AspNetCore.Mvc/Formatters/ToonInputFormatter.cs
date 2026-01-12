@@ -31,7 +31,17 @@ public sealed class ToonInputFormatter : TextInputFormatter
         SupportedEncodings.Add(Encoding.Unicode);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Asynchronously reads the request body, deserializes it into a .NET object, and returns the result.
+    /// </summary>
+    /// <param name="context">The context containing information about the request to process.</param>
+    /// <param name="encoding">The character encoding of the request body.</param>
+    /// <returns>
+    /// A <see cref="Task"/> that, when completed, contains an <see cref="InputFormatterResult"/> representing
+    /// the deserialization outcome.
+    /// Returns a successful result with the deserialized object if deserialization is successful;
+    /// otherwise, returns a failure result.
+    /// </returns>
     public override async Task<InputFormatterResult> ReadRequestBodyAsync(InputFormatterContext context, Encoding encoding)
     {
         ArgumentNullException.ThrowIfNull(context);

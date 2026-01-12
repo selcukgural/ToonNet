@@ -272,22 +272,30 @@ var obj = ToonConvert.DeserializeFromJson<MyClass>(jsonString);
 string json = ToonConvert.SerializeToJson(myObject);
 ```
 
+**Architecture Note:** ToonNet uses a layered approach for JSON interop:
+
+- **`ToonJsonConverter`** - Low-level conversion between `JsonElement` ↔ `ToonDocument`/`ToonValue`. Used internally as the core conversion engine.
+- **`ToonConvert`** - High-level, developer-friendly API (similar to Newtonsoft's `JsonConvert`). Provides simple string-based conversions and internally uses `ToonJsonConverter`.
+
+This separation of concerns ensures clean architecture: `ToonJsonConverter` handles the conversion logic, while `ToonConvert` provides an ergonomic interface familiar to .NET developers.
+
 ### YAML Conversion (Extension Package)
 
 ```csharp
 using ToonNet.Extensions.Yaml;
 
-// Convert YAML to TOON
-var toonDoc = ToonYamlConverter.FromYaml(yamlString);
-string toon = new ToonEncoder().Encode(toonDoc);
+// YAML string → TOON string
+string toon = ToonYamlConvert.FromYaml(yamlString);
 
-// Convert TOON to YAML
-var parser = new ToonParser();
-var toonDoc = parser.Parse(toonString);
-string yaml = ToonYamlConverter.ToYaml(toonDoc);
+// TOON string → YAML string
+string yaml = ToonYamlConvert.ToYaml(toonString);
 ```
 
 **Note:** YAML support requires `ToonNet.Extensions.Yaml` package.
+
+**Architecture Note:** Similar to JSON extensions, YAML package uses a layered approach:
+- **`ToonYamlConverter`** - Low-level conversion engine (YAML nodes ↔ ToonDocument)
+- **`ToonYamlConvert`** - High-level string-based API (developer-friendly)
 
 **Complete method reference:**
 
@@ -299,8 +307,8 @@ string yaml = ToonYamlConverter.ToYaml(toonDoc);
 | `ToJson(toon)` | Extensions.Json | TOON string | JSON string | Convert TOON to JSON |
 | `DeserializeFromJson<T>(json)` | Extensions.Json | JSON string | C# Object | Parse JSON via TOON |
 | `SerializeToJson<T>(obj)` | Extensions.Json | C# Object | JSON string | Export as JSON |
-| `FromYaml(yaml)` | Extensions.Yaml | YAML string | ToonDocument | Convert YAML to TOON |
-| `ToYaml(doc)` | Extensions.Yaml | ToonDocument | YAML string | Convert TOON to YAML |
+| `FromYaml(yaml)` | Extensions.Yaml | YAML string | TOON string | Convert YAML to TOON |
+| `ToYaml(toon)` | Extensions.Yaml | TOON string | YAML string | Convert TOON to YAML |
 
 📖 **Full API documentation: [API-GUIDE.md](docs/API-GUIDE.md)**
 

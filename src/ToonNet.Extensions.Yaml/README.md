@@ -67,32 +67,47 @@ var age = ((ToonNumber)root["age"]).Value;   // 30
 var yamlOutput = ToonYamlConverter.ToYaml(toonDoc);
 ```
 
-### String Format Conversion
+### String Format Conversion (High-level API)
 
 ```csharp
-using ToonNet.Core.Serialization;
 using ToonNet.Extensions.Yaml;
 
-// Load YAML config
-string yamlConfig = File.ReadAllText("appsettings.yaml");
+// YAML → TOON string conversion
+string yamlString = """
+name: Alice
+age: 30
+hobbies:
+  - reading
+  - coding
+""";
 
-// Convert to TOON
-var toonDoc = ToonYamlConverter.FromYaml(yamlConfig);
-string toonString = new ToonEncoder().Encode(toonDoc);
+string toonString = ToonYamlConvert.FromYaml(yamlString);
 
-// Work with TOON format...
+// Output (TOON format):
+// name: Alice
+// age: 30
+// hobbies[2]: reading, coding
 
-// Convert back to YAML
-var parser = new ToonParser();
-var doc = parser.Parse(toonString);
-string yamlOutput = ToonYamlConverter.ToYaml(doc);
+// TOON → YAML string conversion
+string yamlBack = ToonYamlConvert.ToYaml(toonString);
 ```
 
 ---
 
 ## 📖 API Reference
 
-### Document Conversion
+### String Format Conversion
+
+```csharp
+// YAML string → TOON string
+string toon = ToonYamlConvert.FromYaml(yamlString);
+string toon = ToonYamlConvert.FromYaml(yamlString, options);  // ToonOptions
+
+// TOON string → YAML string
+string yaml = ToonYamlConvert.ToYaml(toonString);
+```
+
+### Document Conversion (Low-level)
 
 ```csharp
 using ToonNet.Extensions.Yaml;
@@ -106,6 +121,13 @@ string yaml = ToonYamlConverter.ToYaml(document);
 // ToonValue → YAML string
 string yaml = ToonYamlConverter.ToYaml(toonValue);
 ```
+
+**Architecture Note:** ToonNet uses a layered approach for YAML interop:
+
+- **`ToonYamlConverter`** - Low-level conversion between YAML nodes ↔ `ToonDocument`/`ToonValue`. Used internally as the core conversion engine.
+- **`ToonYamlConvert`** - High-level, developer-friendly API (similar to `ToonConvert` for JSON). Provides simple string-based conversions and internally uses `ToonYamlConverter`.
+
+This separation of concerns ensures clean architecture: `ToonYamlConverter` handles the conversion logic, while `ToonYamlConvert` provides an ergonomic interface familiar to .NET developers.
 
 ### Type Support
 
@@ -122,7 +144,45 @@ string yaml = ToonYamlConverter.ToYaml(toonValue);
 
 ## 🎯 Real-World Examples
 
-### Example 1: Kubernetes Manifest Conversion
+### Example 1: Configuration File Conversion
+
+```csharp
+using ToonNet.Extensions.Yaml;
+
+// Load YAML configuration
+string yamlConfig = """
+database:
+  host: localhost
+  port: 5432
+  credentials:
+    username: admin
+    password: secret
+logging:
+  level: info
+  outputs:
+    - console
+    - file
+""";
+
+// Convert to TOON format (more compact)
+string toonConfig = ToonYamlConvert.FromYaml(yamlConfig);
+
+// Output (TOON format):
+// database:
+//   host: localhost
+//   port: 5432
+//   credentials:
+//     username: admin
+//     password: secret
+// logging:
+//   level: info
+//   outputs[2]: console, file
+
+// Convert back to YAML if needed
+string yamlBack = ToonYamlConvert.ToYaml(toonConfig);
+```
+
+### Example 2: Kubernetes Manifest Conversion
 
 ```csharp
 using ToonNet.Extensions.Yaml;
@@ -135,42 +195,18 @@ metadata:
   name: my-service
   labels:
     app: myapp
-    tier: backend
 spec:
   type: LoadBalancer
   ports:
     - port: 80
       targetPort: 8080
-  selector:
-    app: myapp
 """;
 
 // Convert to TOON (more readable for analysis)
-var toonDoc = ToonYamlConverter.FromYaml(k8sYaml);
+string toonManifest = ToonYamlConvert.FromYaml(k8sYaml);
 
-// Work with TOON format
-var root = (ToonObject)toonDoc.Root;
-var serviceName = ((ToonString)root["metadata"]["name"]).Value;
-
-// Convert back to YAML if needed
-var modifiedYaml = ToonYamlConverter.ToYaml(toonDoc);
-```
-
-### Example 2: Docker Compose Transformation
-
-```csharp
-// Load Docker Compose YAML
-var composeYaml = File.ReadAllText("docker-compose.yml");
-
-// Convert to TOON
-var toonDoc = ToonYamlConverter.FromYaml(composeYaml);
-
-// Analyze or modify structure
-var services = (ToonObject)((ToonObject)toonDoc.Root)["services"];
-
-// Save as TOON for easier editing
-File.WriteAllText("docker-compose.toon", 
-    new ToonEncoder().Encode(toonDoc));
+// Analyze with TOON, then convert back
+string modifiedYaml = ToonYamlConvert.ToYaml(toonManifest);
 ```
 
 ### Example 3: Cross-Format Conversion (YAML → JSON)
@@ -184,30 +220,28 @@ var yaml = """
 database:
   host: localhost
   port: 5432
-  credentials:
-    username: admin
-    password: secret
 """;
 
-var toonDoc = ToonYamlConverter.FromYaml(yaml);
-var json = ToonJsonConverter.ToJson(toonDoc, writeIndented: true);
+string toon = ToonYamlConvert.FromYaml(yaml);
+string json = ToonConvert.ToJson(toon);
 
 // JSON → TOON → YAML (reverse)
 var jsonStr = """{"name":"Alice","tags":["dev","admin"]}""";
-var doc = ToonJsonConverter.FromJson(jsonStr);
-var yamlOutput = ToonYamlConverter.ToYaml(doc);
+string toonFromJson = ToonConvert.FromJson(jsonStr);
+string yamlOutput = ToonYamlConvert.ToYaml(toonFromJson);
 ```
 
-### Example 4: GitHub Actions Workflow
+### Example 4: GitHub Actions Workflow Analysis
 
 ```csharp
+using ToonNet.Extensions.Yaml;
+using ToonNet.Core.Serialization;
+
 // Load GitHub Actions workflow
 var workflowYaml = """
 name: CI
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
 jobs:
   build:
@@ -216,16 +250,17 @@ jobs:
       - uses: actions/checkout@v2
       - name: Build
         run: dotnet build
-      - name: Test
-        run: dotnet test
 """;
 
-// Convert to TOON for analysis
-var toonDoc = ToonYamlConverter.FromYaml(workflowYaml);
-var root = (ToonObject)toonDoc.Root;
+// Convert to TOON format
+string toonWorkflow = ToonYamlConvert.FromYaml(workflowYaml);
 
-// Access workflow structure
-var jobs = (ToonObject)root["jobs"];
+// Save as TOON for easier reading/editing
+File.WriteAllText("workflow.toon", toonWorkflow);
+
+// Convert back when needed
+string yamlOutput = ToonYamlConvert.ToYaml(toonWorkflow);
+```
 var buildJob = (ToonObject)jobs["build"];
 var steps = (ToonArray)buildJob["steps"];
 
