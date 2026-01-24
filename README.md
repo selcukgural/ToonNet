@@ -11,8 +11,9 @@
 [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/)
 [![Tests](https://img.shields.io/badge/tests-444%20passing-success?style=flat)](#)
 [![Spec](https://img.shields.io/badge/TOON%20v3.0-100%25-blue?style=flat)](ToonSpec.md)
+[![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
-[Quick Start](#-quick-start) • [AI Examples](#-ai-token-optimization) • [API Reference](docs/API-GUIDE.md) • [Samples](demo/ToonNet.Demo/Samples)
+[Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api/intro) • [Samples](demo/ToonNet.Demo/Samples)
 
 </div>
 
@@ -625,10 +626,13 @@ dotnet test
 
 | Resource | Description |
 |----------|-------------|
-| [API Guide](docs/API-GUIDE.md) | Complete API reference with examples |
-| [TOON Spec](ToonSpec.md) | TOON v3.0 format specification |
-| [Samples](demo/ToonNet.Demo/Samples/README.md) | Real-world usage examples |
-| [Demo App](demo/ToonNet.Demo/) | Interactive demo application |
+| [📖 Documentation Site](https://selcukgural.github.io/ToonNet/) | Complete documentation with API reference |
+| [🚀 Getting Started](https://selcukgural.github.io/ToonNet/docs/intro) | Quick start guide |
+| [📘 API Reference](https://selcukgural.github.io/ToonNet/docs/api/intro) | Auto-generated API documentation |
+| [📄 API Guide](docs/API-GUIDE.md) | Detailed usage guide with examples |
+| [📝 TOON Spec](ToonSpec.md) | TOON v3.0 format specification |
+| [💡 Samples](demo/ToonNet.Demo/Samples/README.md) | Real-world usage examples |
+| [🎮 Demo App](demo/ToonNet.Demo/) | Interactive demo application |
 
 ---
 
@@ -698,6 +702,6 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 **Built for .NET developers**
 
-[Get Started](#-quick-start) • [API Reference](docs/API-GUIDE.md) • [Examples](#-examples)
+[Get Started](https://selcukgural.github.io/ToonNet/) • [Documentation](https://selcukgural.github.io/ToonNet/docs/intro) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api/intro)
 
 </div>

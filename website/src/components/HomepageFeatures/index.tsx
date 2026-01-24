@@ -11,32 +11,35 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
+    title: '⚡ High Performance',
     Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        Expression tree-based serialization with zero reflection overhead.
+        10-100x faster than traditional reflection-based serializers.
+        Object pooling and optimized memory usage.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
+    title: '🤖 AI Token Optimized',
     Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        TOON format uses up to 40% fewer tokens than JSON, reducing AI API costs.
+        Perfect for LLM prompts, AI training data, and agent memory.
+        Human-readable and machine-friendly.
       </>
     ),
   },
   {
-    title: 'Powered by React',
+    title: '🔧 Developer Friendly',
     Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        System.Text.Json-compatible API for zero learning curve.
+        Full .NET 8+ support with nullable reference types.
+        Comprehensive documentation and 444+ passing tests.
       </>
     ),
   },

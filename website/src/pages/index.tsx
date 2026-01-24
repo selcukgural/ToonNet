@@ -21,7 +21,13 @@ function HomepageHeader() {
           <Link
             className="button button--secondary button--lg"
             to="/docs/intro">
-            Docusaurus Tutorial - 5min ⏱️
+            Get Started 🚀
+          </Link>
+          <Link
+            className="button button--outline button--secondary button--lg"
+            to="/docs/api/intro"
+            style={{marginLeft: '1rem'}}>
+            API Reference 📚
           </Link>
         </div>
       </div>
@@ -33,8 +39,8 @@ export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Description will go into a meta tag in <head />">
+      title={`${siteConfig.title} - Documentation`}
+      description="High-performance TOON format serialization for .NET. AI-optimized, token-efficient, developer-friendly.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />
