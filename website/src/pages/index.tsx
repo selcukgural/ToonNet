@@ -35,6 +35,56 @@ function HomepageHeader() {
   );
 }
 
+function QuickExample() {
+  return (
+    <section style={{padding: '4rem 0', backgroundColor: 'var(--ifm-background-surface-color)'}}>
+      <div className="container">
+        <div className="row">
+          <div className="col col--6">
+            <Heading as="h2">Quick Example</Heading>
+            <p>Get started with ToonNet in seconds. No configuration needed.</p>
+            <pre style={{backgroundColor: 'var(--ifm-code-background)', padding: '1rem', borderRadius: '8px', overflow: 'auto'}}>
+              <code className="language-csharp">{`// Install via NuGet
+dotnet add package ToonNet.Core
+
+// Serialize
+var person = new Person 
+{ 
+  Name = "Alice", 
+  Age = 30 
+};
+string toon = ToonSerializer.Serialize(person);
+
+// Deserialize
+var restored = ToonSerializer
+  .Deserialize<Person>(toon);`}</code>
+            </pre>
+          </div>
+          <div className="col col--6">
+            <Heading as="h2">TOON Format Output</Heading>
+            <p>Clean, readable, and token-efficient data format.</p>
+            <pre style={{backgroundColor: 'var(--ifm-code-background)', padding: '1rem', borderRadius: '8px', overflow: 'auto'}}>
+              <code className="language-toon">{`Name: Alice
+Age: 30
+
+// vs JSON (40% more tokens)
+{
+  "Name": "Alice",
+  "Age": 30
+}`}</code>
+            </pre>
+            <div style={{marginTop: '2rem'}}>
+              <Link className="button button--primary" to="/docs/intro">
+                Learn More →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -44,6 +94,7 @@ export default function Home(): ReactNode {
       <HomepageHeader />
       <main>
         <HomepageFeatures />
+        <QuickExample />
       </main>
     </Layout>
   );

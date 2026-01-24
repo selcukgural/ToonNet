@@ -5,28 +5,28 @@ import styles from './styles.module.css';
 
 type FeatureItem = {
   title: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
+  icon: string;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
     title: '⚡ High Performance',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    icon: '🚀',
     description: (
       <>
-        Expression tree-based serialization with zero reflection overhead.
-        10-100x faster than traditional reflection-based serializers.
-        Object pooling and optimized memory usage.
+        Expression tree-based serialization with <strong>zero reflection overhead</strong>.
+        10-100x faster than traditional reflection-based serializers with optimized
+        memory usage and object pooling.
       </>
     ),
   },
   {
     title: '🤖 AI Token Optimized',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    icon: '💰',
     description: (
       <>
-        TOON format uses up to 40% fewer tokens than JSON, reducing AI API costs.
+        TOON format uses <strong>up to 40% fewer tokens</strong> than JSON, reducing AI API costs.
         Perfect for LLM prompts, AI training data, and agent memory.
         Human-readable and machine-friendly.
       </>
@@ -34,10 +34,10 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: '🔧 Developer Friendly',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    icon: '💻',
     description: (
       <>
-        System.Text.Json-compatible API for zero learning curve.
+        <strong>System.Text.Json-compatible API</strong> for zero learning curve.
         Full .NET 8+ support with nullable reference types.
         Comprehensive documentation and 444+ passing tests.
       </>
@@ -45,11 +45,11 @@ const FeatureList: FeatureItem[] = [
   },
 ];
 
-function Feature({title, Svg, description}: FeatureItem) {
+function Feature({title, icon, description}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+      <div className="text--center" style={{fontSize: '4rem', marginBottom: '1rem'}}>
+        {icon}
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>
