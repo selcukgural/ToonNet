@@ -68,15 +68,9 @@ const config: Config = {
       items: [
         {
           type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
+          sidebarId: 'docs',
           position: 'left',
           label: 'Documentation',
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'apiSidebar',
-          position: 'left',
-          label: 'API Reference',
         },
         {
           href: 'https://github.com/selcukgural/ToonNet',
@@ -101,8 +95,8 @@ const config: Config = {
               to: '/docs/intro',
             },
             {
-              label: 'API Reference',
-              to: '/docs/api/intro',
+              label: 'API Guide',
+              to: '/docs/api-guide',
             },
           ],
         },

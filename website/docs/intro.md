@@ -2,93 +2,92 @@
 sidebar_position: 1
 ---
 
-# Getting Started with ToonNet
+# Welcome to ToonNet
 
-**ToonNet** is a high-performance TOON format serialization library for .NET 8+. It provides zero-reflection, expression tree-based serialization with excellent performance characteristics.
+ToonNet is a high-performance .NET library for serializing and deserializing data in **TOON** (Token-Optimized Object Notation) format.
 
 ## What is TOON?
 
-TOON (Token Optimized Object Notation) is a modern data format designed for:
-- 🚀 **AI/LLM Token Optimization** - Minimal token usage for language models
-- ⚡ **High Performance** - Faster parsing and smaller payloads than JSON
-- 📦 **Human Readable** - Clean, intuitive syntax
-- 🔧 **Type Safe** - Strong typing support
+TOON is a human-readable data format designed for:
+- **AI/LLM prompts** - Up to 40% fewer tokens than JSON
+- **Configuration files** - Clean, readable syntax
+- **Data exchange** - Human and machine friendly
 
-## Quick Installation
-
-Install via NuGet Package Manager:
-
-```bash
-dotnet add package ToonNet.Core
-```
-
-Or via Package Manager Console:
-
-```powershell
-Install-Package ToonNet.Core
-```
-
-## Your First Serialization
+## Quick Example
 
 ```csharp
-using ToonNet;
+using ToonNet.Core;
 
-// Define your model
-public class Person
-{
-    public string Name { get; set; }
-    public int Age { get; set; }
-    public List<string> Hobbies { get; set; }
-}
+// Serialize
+var person = new Person { Name = "Alice", Age = 30 };
+string toon = ToonSerializer.Serialize(person);
 
-// Serialize to TOON
-var person = new Person 
-{ 
-    Name = "Alice", 
-    Age = 30, 
-    Hobbies = new List<string> { "Reading", "Gaming" } 
-};
-
-string toonString = ToonConvert.Serialize(person);
-// Output: @Person{Name:Alice Age:30 Hobbies:[@Reading @Gaming]}
-
-// Deserialize from TOON
-var deserialized = ToonConvert.Deserialize<Person>(toonString);
+// Deserialize
+var restored = ToonSerializer.Deserialize<Person>(toon);
 ```
 
-## Available Packages
+## Key Features
 
-ToonNet consists of several packages:
+- 🚀 **High Performance** - Expression trees, not reflection (10-100x faster)
+- 💰 **Token Efficient** - 40% fewer tokens than JSON (lower AI API costs)
+- 💻 **Developer Friendly** - System.Text.Json-compatible API
+- 🔧 **ASP.NET Core** - Input/output formatters, configuration provider
+- 📦 **Format Extensions** - JSON/YAML bidirectional conversion
+- 🎯 **Source Generators** - Compile-time code generation
 
-- **ToonNet.Core** - Core serialization engine (required)
-- **ToonNet.Extensions.Json** - JSON interoperability
-- **ToonNet.Extensions.Yaml** - YAML interoperability
-- **ToonNet.AspNetCore** - ASP.NET Core integration
-- **ToonNet.SourceGenerators** - Compile-time code generation
+## Documentation Guide
 
-## Features
+### 🚀 Getting Started
+Start here if you're new to ToonNet:
+- **[Installation](getting-started/installation)** - NuGet packages and requirements
+- **[Quick Start](getting-started/quick-start)** - 5-minute tutorial
+- **[Basic Serialization](getting-started/basic-serialization)** - Fundamental examples
 
-✅ **435+ Tests** - Comprehensive test coverage  
-✅ **100% TOON v3.0 Spec Compliance** - Full specification support  
-✅ **Zero Reflection** - Expression tree-based for maximum performance  
-✅ **Object Pooling** - Reduced GC pressure  
-✅ **Streaming Support** - Memory-efficient for large data  
-✅ **Source Generators** - AOT-friendly code generation
+### 🎯 Core Features
+Deep dive into ToonNet's core functionality:
+- **[Serialization](core-features/serialization)** - Convert objects to TOON
+- **[Deserialization](core-features/deserialization)** - Convert TOON to objects
+- **[Type System](core-features/type-system)** - ToonValue and subclasses
+- **[Configuration](core-features/configuration)** - ToonSerializerOptions guide
 
-## Next Steps
+### 🔌 Format Extensions
+Convert between different data formats:
+- **[JSON Integration](format-extensions/json-integration)** - JSON ↔ TOON conversion
+- **[YAML Integration](format-extensions/yaml-integration)** - YAML ↔ TOON conversion
+- **[Custom Formats](format-extensions/custom-formats)** - Create custom converters
 
-- 📖 [API Guide](./api-guide.md) - Detailed API documentation
-- 🔧 [TOON Spec Compliance](./toon-spec.md) - Format specification
-- 📚 [API Reference](./api/intro.md) - Complete API reference
+### 🌐 ASP.NET Core
+Integrate ToonNet with ASP.NET Core:
+- **[Dependency Injection](aspnet-core/dependency-injection)** - Service configuration
+- **[Input Formatters](aspnet-core/input-formatters)** - Handle TOON requests
+- **[Output Formatters](aspnet-core/output-formatters)** - Return TOON responses
+- **[Configuration Provider](aspnet-core/configuration-provider)** - TOON config files
 
-## Performance
+### ⚡ Advanced Topics
+Optimization and customization:
+- **[Performance Tuning](advanced/performance-tuning)** - Optimization strategies
+- **[Custom Converters](advanced/custom-converters)** - Type-specific converters
+- **[Source Generators](advanced/source-generators)** - Compile-time code generation
 
-ToonNet is designed for high performance:
-- Expression tree compilation (no reflection overhead)
-- Object pooling for reduced allocations
-- Optimized parsing and serialization paths
-- Efficient memory usage
+### 📚 Reference
+Additional resources:
+- **[API Guide](api-guide)** - Complete API reference
+- **[TOON Spec](toon-spec)** - TOON v3.0 specification
+
+## Quick Links
+
+| Topic | Link |
+|-------|------|
+| Installation | [Getting Started](getting-started/installation) |
+| First Example | [Quick Start](getting-started/quick-start) |
+| API Reference | [API Guide](api-guide) |
+| GitHub Repository | [ToonNet on GitHub](https://github.com/selcukgural/ToonNet) |
+
+## Community & Support
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/selcukgural/ToonNet/issues)
+- **Discussions**: [Ask questions and share ideas](https://github.com/selcukgural/ToonNet/discussions)
 
 ## License
 
-ToonNet is licensed under the [MIT License](https://github.com/selcukgural/ToonNet/blob/main/LICENSE).
+ToonNet is open-source software licensed under the [MIT License](https://github.com/selcukgural/ToonNet/blob/main/LICENSE).

@@ -23,75 +23,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: website/package-lock.json
-      
-      - name: Install DefaultDocumentation tool
-        run: dotnet tool install -g DefaultDocumentation.Console
-      
-      - name: Restore .NET dependencies
-        run: dotnet restore
-      
-      - name: Build .NET projects
-        run: |
-          dotnet build src/ToonNet.Core/ToonNet.Core.csproj -c Release --no-restore
-          dotnet build src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj -c Release --no-restore
-          dotnet build src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj -c Release --no-restore
-          dotnet build src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj -c Release --no-restore
-          dotnet build src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj -c Release --no-restore
-      
-      - name: Generate API documentation
-        run: |
-          defaultdocumentation \
-            --AssemblyFilePath src/ToonNet.Core/bin/Release/net8.0/ToonNet.Core.dll \
-            --DocumentationFilePath src/ToonNet.Core/bin/Release/net8.0/ToonNet.Core.xml \
-            --OutputDirectoryPath website/docs/api/ToonNet.Core
-          
-          defaultdocumentation \
-            --AssemblyFilePath src/ToonNet.Extensions.Json/bin/Release/net8.0/ToonNet.Extensions.Json.dll \
-            --DocumentationFilePath src/ToonNet.Extensions.Json/bin/Release/net8.0/ToonNet.Extensions.Json.xml \
-            --OutputDirectoryPath website/docs/api/ToonNet.Extensions.Json
-          
-          defaultdocumentation \
-            --AssemblyFilePath src/ToonNet.Extensions.Yaml/bin/Release/net8.0/ToonNet.Extensions.Yaml.dll \
-            --DocumentationFilePath src/ToonNet.Extensions.Yaml/bin/Release/net8.0/ToonNet.Extensions.Yaml.xml \
-            --OutputDirectoryPath website/docs/api/ToonNet.Extensions.Yaml
-          
-          defaultdocumentation \
-            --AssemblyFilePath src/ToonNet.AspNetCore/bin/Release/net8.0/ToonNet.AspNetCore.dll \
-            --DocumentationFilePath src/ToonNet.AspNetCore/bin/Release/net8.0/ToonNet.AspNetCore.xml \
-            --OutputDirectoryPath website/docs/api/ToonNet.AspNetCore
-          
-          defaultdocumentation \
-            --AssemblyFilePath src/ToonNet.AspNetCore.Mvc/bin/Release/net8.0/ToonNet.AspNetCore.Mvc.dll \
-            --DocumentationFilePath src/ToonNet.AspNetCore.Mvc/bin/Release/net8.0/ToonNet.AspNetCore.Mvc.xml \
-            --OutputDirectoryPath website/docs/api/ToonNet.AspNetCore.Mvc
-      
-      - name: Fix API documentation files
-        run: |
-          cd website/docs/api
-          # Rename files with # to avoid URL issues
-          find . -name "*#*" -type f | while read file; do
-            newname="${file//#/.}"
-            mv "$file" "$newname" 2>/dev/null || true
-          done
-          # Fix content references
-          find . -name "*.md" -type f -exec sed -i 's/#ctor/.ctor/g' {} \;
-          # Create index files for Extensions packages
-          cp ToonNet.Extensions.Json/ToonNet.Extensions.Json.md ToonNet.Extensions.Json/index.md
-          cp ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.md ToonNet.Extensions.Yaml/index.md
-          # Create index files for AspNetCore packages
-          cp ToonNet.AspNetCore/ToonNet.AspNetCore.md ToonNet.AspNetCore/index.md
-          cp ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.md ToonNet.AspNetCore.Mvc/index.md
       
       - name: Install Docusaurus dependencies
         working-directory: website
