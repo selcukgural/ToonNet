@@ -23,6 +23,16 @@ YAML format interoperability extensions for ToonNet.
 
 [View ToonNet.Extensions.Yaml API →](./ToonNet.Extensions.Yaml/index.md)
 
+### ToonNet.AspNetCore
+ASP.NET Core integration for TOON format serialization.
+
+[View ToonNet.AspNetCore API →](./ToonNet.AspNetCore/index.md)
+
+### ToonNet.AspNetCore.Mvc
+MVC-specific features and formatters for ASP.NET Core.
+
+[View ToonNet.AspNetCore.Mvc API →](./ToonNet.AspNetCore.Mvc/index.md)
+
 ## Quick Links
 
 - [ToonOptions](./ToonNet.Core/ToonNet.Core.ToonOptions.md) - Configuration options

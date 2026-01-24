@@ -46,6 +46,8 @@ jobs:
           dotnet build src/ToonNet.Core/ToonNet.Core.csproj -c Release --no-restore
           dotnet build src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj -c Release --no-restore
           dotnet build src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj -c Release --no-restore
+          dotnet build src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj -c Release --no-restore
+          dotnet build src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj -c Release --no-restore
       
       - name: Generate API documentation
         run: |
@@ -63,6 +65,16 @@ jobs:
             --AssemblyFilePath src/ToonNet.Extensions.Yaml/bin/Release/net8.0/ToonNet.Extensions.Yaml.dll \
             --DocumentationFilePath src/ToonNet.Extensions.Yaml/bin/Release/net8.0/ToonNet.Extensions.Yaml.xml \
             --OutputDirectoryPath website/docs/api/ToonNet.Extensions.Yaml
+          
+          defaultdocumentation \
+            --AssemblyFilePath src/ToonNet.AspNetCore/bin/Release/net8.0/ToonNet.AspNetCore.dll \
+            --DocumentationFilePath src/ToonNet.AspNetCore/bin/Release/net8.0/ToonNet.AspNetCore.xml \
+            --OutputDirectoryPath website/docs/api/ToonNet.AspNetCore
+          
+          defaultdocumentation \
+            --AssemblyFilePath src/ToonNet.AspNetCore.Mvc/bin/Release/net8.0/ToonNet.AspNetCore.Mvc.dll \
+            --DocumentationFilePath src/ToonNet.AspNetCore.Mvc/bin/Release/net8.0/ToonNet.AspNetCore.Mvc.xml \
+            --OutputDirectoryPath website/docs/api/ToonNet.AspNetCore.Mvc
       
       - name: Fix API documentation files
         run: |
@@ -77,6 +89,9 @@ jobs:
           # Create index files for Extensions packages
           cp ToonNet.Extensions.Json/ToonNet.Extensions.Json.md ToonNet.Extensions.Json/index.md
           cp ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.md ToonNet.Extensions.Yaml/index.md
+          # Create index files for AspNetCore packages
+          cp ToonNet.AspNetCore/ToonNet.AspNetCore.md ToonNet.AspNetCore/index.md
+          cp ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.md ToonNet.AspNetCore.Mvc/index.md
       
       - name: Install Docusaurus dependencies
         working-directory: website
