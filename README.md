@@ -127,14 +127,14 @@ var toon2 = ToonSerializer.Serialize(myObject);  // ~0.05ms (hot path)
 
 ToonNet is modular - install only what you need:
 
-| Package | Description | Status |
-|---------|-------------|--------|
-| **ToonNet.Core** | Core serialization API - C# ↔ TOON (uses expression trees) | ✅ Stable |
-| **ToonNet.Extensions.Json** | JSON ↔ TOON conversion | ✅ Stable |
-| **ToonNet.Extensions.Yaml** | YAML ↔ TOON conversion | ✅ Stable |
-| **ToonNet.AspNetCore** | ASP.NET Core middleware & formatters | ✅ Stable |
-| **ToonNet.AspNetCore.Mvc** | MVC input/output formatters | ✅ Stable |
-| **ToonNet.SourceGenerators** | Compile-time code generation (AOT-compatible, zero-allocation) | ✅ Stable |
+| Package | Description | NuGet | Downloads | Status |
+|---------|-------------|-------|-----------|--------|
+| **ToonNet.Core** | Core serialization API - C# ↔ TOON (uses expression trees) | [![NuGet](https://img.shields.io/nuget/v/ToonNet.Core.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Core/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/) | ✅ Stable |
+| **ToonNet.Extensions.Json** | JSON ↔ TOON conversion | [![NuGet](https://img.shields.io/nuget/v/ToonNet.Extensions.Json.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Extensions.Json/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Extensions.Json.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Extensions.Json/) | ✅ Stable |
+| **ToonNet.Extensions.Yaml** | YAML ↔ TOON conversion | [![NuGet](https://img.shields.io/nuget/v/ToonNet.Extensions.Yaml.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Extensions.Yaml/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Extensions.Yaml.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Extensions.Yaml/) | ✅ Stable |
+| **ToonNet.AspNetCore** | ASP.NET Core middleware & formatters | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | ✅ Stable |
+| **ToonNet.AspNetCore.Mvc** | MVC input/output formatters | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.Mvc.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.Mvc.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | ✅ Stable |
+| **ToonNet.SourceGenerators** | Compile-time code generation (AOT-compatible, zero-allocation) | [![NuGet](https://img.shields.io/nuget/v/ToonNet.SourceGenerators.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.SourceGenerators.svg?style=flat)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | ✅ Stable |
 
 ### Quick Install
 
