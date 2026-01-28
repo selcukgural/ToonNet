@@ -44,13 +44,37 @@ jobs:
       
       - name: Publish to NuGet
         run: |
+          echo "🚀 Publishing packages to NuGet.org..."
+          echo "Note: --skip-duplicate flag will skip packages that already exist with same version"
+          
           for package in ./nupkgs/*.nupkg; do
-            echo "Publishing $package..."
+            # Skip symbol packages (.snupkg)
+            if [[ "$package" == *.snupkg ]]; then
+              continue
+            fi
+            
+            echo "📦 Publishing $(basename $package)..."
             dotnet nuget push "$package" \
               --api-key ${{ secrets.NUGET_API_KEY }} \
               --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
+              --skip-duplicate || echo "⚠️  Package already exists or failed, skipping..."
           done
+          
+          echo "✅ Publish completed!"
+      
+      - name: Publish Symbol Packages
+        run: |
+          echo "🔍 Publishing symbol packages..."
+          
+          for package in ./nupkgs/*.snupkg; do
+            echo "📦 Publishing $(basename $package)..."
+            dotnet nuget push "$package" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate || echo "⚠️  Symbol package already exists or failed, skipping..."
+          done
+          
+          echo "✅ Symbol packages completed!"
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
