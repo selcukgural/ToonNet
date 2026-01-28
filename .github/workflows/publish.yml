@@ -35,7 +35,14 @@ jobs:
         run: dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity minimal
       
       - name: Pack NuGet packages
-        run: dotnet pack --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
+        run: |
+          echo "📦 Packing NuGet packages from src/ only..."
+          dotnet pack src/ToonNet.Core/ToonNet.Core.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
+          dotnet pack src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
+          dotnet pack src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
+          dotnet pack src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
+          dotnet pack src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
+          dotnet pack src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
       
       - name: List packages
         run: |
