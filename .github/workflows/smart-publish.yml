@@ -1,0 +1,204 @@
+name: Smart Publish to NuGet
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**/*.csproj'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  CONFIGURATION: Release
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.changed-projects.outputs.projects }}
+      has_changes: ${{ steps.changed-projects.outputs.has_changes }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Detect changed csproj files
+        id: changed-projects
+        run: |
+          # Son commit'te değişen .csproj dosyalarını bul (sadece src/ altında)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manuel tetiklemede tüm projeleri kontrol et
+            CHANGED_CSPROJ=$(find src -name "*.csproj" -type f)
+          else
+            # Push event'te sadece değişenleri al
+            CHANGED_CSPROJ=$(git diff --name-only HEAD~1 HEAD | grep '^src/.*\.csproj$' || true)
+          fi
+          
+          if [ -z "$CHANGED_CSPROJ" ]; then
+            echo "No .csproj files changed in src/"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "projects=[]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          
+          # JSON array oluştur
+          PROJECTS=$(echo "$CHANGED_CSPROJ" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "projects=$PROJECTS" >> $GITHUB_OUTPUT
+          echo "📦 Changed projects: $PROJECTS"
+
+  publish:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        project: ${{ fromJson(needs.detect-changes.outputs.projects) }}
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Extract version and package info from csproj
+        id: version
+        run: |
+          PROJECT_FILE="${{ matrix.project }}"
+          
+          # XML'den Version ve PackageId çıkar
+          VERSION=$(grep -oPm1 "(?<=<Version>)[^<]+" "$PROJECT_FILE" || echo "")
+          PACKAGE_ID=$(grep -oPm1 "(?<=<PackageId>)[^<]+" "$PROJECT_FILE" || echo "")
+          
+          # PackageId yoksa proje adını kullan
+          if [ -z "$PACKAGE_ID" ]; then
+            PACKAGE_ID=$(basename $(dirname "$PROJECT_FILE"))
+          fi
+          
+          # Version yoksa hata ver
+          if [ -z "$VERSION" ]; then
+            echo "❌ Error: No <Version> tag found in $PROJECT_FILE"
+            exit 1
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "package_id=$PACKAGE_ID" >> $GITHUB_OUTPUT
+          echo "📦 Package: $PACKAGE_ID, Version: $VERSION"
+      
+      - name: Check if version exists on NuGet
+        id: check-nuget
+        run: |
+          PACKAGE_ID="${{ steps.version.outputs.package_id }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # NuGet.org'da paketi kontrol et (case-insensitive)
+          PACKAGE_ID_LOWER=$(echo "$PACKAGE_ID" | tr '[:upper:]' '[:lower:]')
+          RESPONSE=$(curl -s "https://api.nuget.org/v3-flatcontainer/$PACKAGE_ID_LOWER/index.json" || echo "{}")
+          
+          # Versiyon listesinde var mı kontrol et
+          if echo "$RESPONSE" | jq -e ".versions[]? | select(. == \"$VERSION\")" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Version $VERSION already exists on NuGet.org for $PACKAGE_ID"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Version $VERSION does not exist on NuGet.org, will publish"
+          fi
+      
+      - name: Check if Git tag exists
+        if: steps.check-nuget.outputs.exists == 'false'
+        id: check-tag
+        run: |
+          TAG="${{ steps.version.outputs.package_id }}-v${{ steps.version.outputs.version }}"
+          
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Tag $TAG already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Tag $TAG will be created"
+          fi
+          
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+      
+      - name: Restore dependencies
+        if: steps.check-nuget.outputs.exists == 'false'
+        run: dotnet restore
+      
+      - name: Build
+        if: steps.check-nuget.outputs.exists == 'false'
+        run: dotnet build --configuration ${{ env.CONFIGURATION }} --no-restore
+      
+      - name: Run tests
+        if: steps.check-nuget.outputs.exists == 'false'
+        run: dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity minimal
+      
+      - name: Pack NuGet package
+        if: steps.check-nuget.outputs.exists == 'false'
+        run: |
+          dotnet pack "${{ matrix.project }}" \
+            --configuration ${{ env.CONFIGURATION }} \
+            --no-build \
+            --output ./nupkgs
+          
+          echo "📦 Package created:"
+          ls -lh ./nupkgs/*.nupkg
+      
+      - name: Publish to NuGet
+        if: steps.check-nuget.outputs.exists == 'false'
+        run: |
+          echo "🚀 Publishing ${{ steps.version.outputs.package_id }} v${{ steps.version.outputs.version }} to NuGet.org..."
+          
+          for package in ./nupkgs/*.nupkg; do
+            # Symbol packages'ı atla
+            if [[ "$package" == *.snupkg ]]; then
+              continue
+            fi
+            
+            echo "📤 Publishing $(basename $package)..."
+            dotnet nuget push "$package" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+          
+          echo "✅ Published ${{ steps.version.outputs.package_id }} v${{ steps.version.outputs.version }}"
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      
+      - name: Create Git Tag
+        if: steps.check-nuget.outputs.exists == 'false' && steps.check-tag.outputs.exists == 'false'
+        run: |
+          TAG="${{ steps.check-tag.outputs.tag }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a "$TAG" -m "Release ${{ steps.version.outputs.package_id }} v${{ steps.version.outputs.version }}"
+          git push origin "$TAG"
+          
+          echo "🏷️  Created and pushed tag: $TAG"
+      
+      - name: Create GitHub Release
+        if: steps.check-nuget.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.check-tag.outputs.tag }}
+          name: ${{ steps.version.outputs.package_id }} v${{ steps.version.outputs.version }}
+          files: ./nupkgs/*.nupkg
+          generate_release_notes: true
+          body: |
+            ## 📦 ${{ steps.version.outputs.package_id }} v${{ steps.version.outputs.version }}
+            
+            Published to NuGet.org: https://www.nuget.org/packages/${{ steps.version.outputs.package_id }}/${{ steps.version.outputs.version }}
