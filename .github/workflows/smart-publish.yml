@@ -87,9 +87,14 @@ jobs:
             PACKAGE_ID=$(basename $(dirname "$PROJECT_FILE"))
           fi
           
-          # Version yoksa hata ver
+          # Version yoksa Directory.Build.props'tan oku
           if [ -z "$VERSION" ]; then
-            echo "❌ Error: No <Version> tag found in $PROJECT_FILE"
+            VERSION=$(grep -oPm1 "(?<=<Version>)[^<]+" "Directory.Build.props" || echo "")
+          fi
+          
+          # Hala version yoksa hata ver
+          if [ -z "$VERSION" ]; then
+            echo "❌ Error: No <Version> tag found in $PROJECT_FILE or Directory.Build.props"
             exit 1
           fi
           
