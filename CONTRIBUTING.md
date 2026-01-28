@@ -194,7 +194,7 @@ public static string Serialize<T>(T value, ToonSerializerOptions? options = null
 
 - **Issues:** [GitHub Issues](https://github.com/selcukgural/ToonNet/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/selcukgural/ToonNet/discussions)
-- **Email:** selcukgural@example.com
+- **Email:** selcukgural@gmail.com
 
 ## License
 
