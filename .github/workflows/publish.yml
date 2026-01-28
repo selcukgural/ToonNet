@@ -12,93 +12,74 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-      
-      - name: Restore dependencies
-        run: dotnet restore
-      
-      - name: Build
-        run: dotnet build --configuration ${{ env.CONFIGURATION }} --no-restore
-      
-      - name: Run tests
-        run: dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity minimal
-      
-      - name: Pack NuGet packages
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Pack and Publish
         run: |
-          echo "📦 Packing NuGet packages from src/ only..."
-          dotnet pack src/ToonNet.Core/ToonNet.Core.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
-          dotnet pack src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
-          dotnet pack src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
-          dotnet pack src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
-          dotnet pack src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
-          dotnet pack src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
-      
-      - name: List packages
-        run: |
-          echo "📦 Created packages:"
-          ls -lh ./nupkgs/*.nupkg
-      
-      - name: Publish to NuGet
-        run: |
-          echo "🚀 Publishing packages to NuGet.org..."
-          echo "Note: --skip-duplicate flag will skip packages that already exist with same version"
+          echo "📦 Packing and publishing version ${{ steps.version.outputs.VERSION }}..."
           
-          for package in ./nupkgs/*.nupkg; do
-            # Skip symbol packages (.snupkg)
-            if [[ "$package" == *.snupkg ]]; then
+          # src/ altındaki tüm .csproj dosyalarını bul
+          for project in src/**/*.csproj; do
+            # Proje adını al
+            project_name=$(basename ${project%.csproj})
+            version="${{ steps.version.outputs.VERSION }}"
+          
+            echo "🔍 Checking if $project_name v$version exists on NuGet.org..."
+          
+            # NuGet'te paket var mı kontrol et
+            response=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://api.nuget.org/v3-flatcontainer/$project_name/$version/$project_name.$version.nupkg")
+          
+            if [ "$response" = "200" ]; then
+              echo "⏭️  $project_name v$version already exists on NuGet.org, skipping..."
               continue
             fi
-            
-            echo "📦 Publishing $(basename $package)..."
-            dotnet nuget push "$package" \
-              --api-key ${{ secrets.NUGET_API_KEY }} \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate || echo "⚠️  Package already exists or failed, skipping..."
+          
+            echo "🔨 Packing $project..."
+          
+            # Pack
+            dotnet pack "$project" \
+              --configuration ${{ env.CONFIGURATION }} \
+              -p:Version=$version \
+              --output ./nupkgs
+          
+            # Publish
+            package="./nupkgs/${project_name}.${version}.nupkg"
+            if [ -f "$package" ]; then
+              echo "📤 Publishing $package..."
+              dotnet nuget push "$package" \
+                --api-key ${{ secrets.NUGET_API_KEY }} \
+                --source https://api.nuget.org/v3/index.json \
+                --skip-duplicate
+          
+              if [ $? -eq 0 ]; then
+                echo "✅ $project_name published successfully!"
+              else
+                echo "❌ Failed to publish $project_name"
+              fi
+            fi
           done
           
-          echo "✅ Publish completed!"
-      
-      - name: Publish Symbol Packages
-        run: |
-          echo "🔍 Publishing symbol packages..."
-          
-          for package in ./nupkgs/*.snupkg; do
-            echo "📦 Publishing $(basename $package)..."
-            dotnet nuget push "$package" \
-              --api-key ${{ secrets.NUGET_API_KEY }} \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate || echo "⚠️  Symbol package already exists or failed, skipping..."
-          done
-          
-          echo "✅ Symbol packages completed!"
-      
+          echo "✅ All done!"
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: ./nupkgs/*.nupkg
-          body: |
-            ## ToonNet v${{ github.ref_name }}
-            
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
-            
-            ### NuGet Packages Published
-            - ToonNet.Core
-            - ToonNet.Extensions.Json
-            - ToonNet.Extensions.Yaml
-            - ToonNet.AspNetCore
-            - ToonNet.AspNetCore.Mvc
-            - ToonNet.SourceGenerators
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true
