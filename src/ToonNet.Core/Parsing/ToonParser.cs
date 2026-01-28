@@ -825,8 +825,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
         {
             fieldsSpan = fieldsSpan[1..^1];
         }
-        // Need to convert to string for Split() - no way around this for now
-        fieldNames = new string(fieldsSpan).Split(',').Select(f => f.Trim()).ToArray();
+        
+        // Optimized: use custom SplitAndTrim instead of string.Split + LINQ
+        fieldNames = SplitAndTrim(fieldsSpan);
 
         return (arrayLength, fieldNames);
     }
@@ -972,6 +973,67 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
         }
     }
+    
+    #region Helper Methods
+    
+    /// <summary>
+    /// Splits a ReadOnlySpan by comma and trims each segment without allocating strings.
+    /// </summary>
+    /// <param name="input">The span to split.</param>
+    /// <returns>Array of trimmed field names.</returns>
+    private static string[] SplitAndTrim(ReadOnlySpan<char> input)
+    {
+        if (input.IsEmpty)
+        {
+            return Array.Empty<string>();
+        }
+
+        // Count commas to pre-allocate array
+        var count = 1;
+        for (var i = 0; i < input.Length; i++)
+        {
+            if (input[i] == ',')
+            {
+                count++;
+            }
+        }
+
+        var result = new string[count];
+        var resultIndex = 0;
+        var start = 0;
+
+        for (var i = 0; i <= input.Length; i++)
+        {
+            if (i != input.Length && input[i] != ',')
+            {
+                continue;
+            }
+
+            var segment = input.Slice(start, i - start);
+                
+            // Trim leading and trailing spaces
+            var trimStart = 0;
+            while (trimStart < segment.Length && segment[trimStart] == ' ')
+            {
+                trimStart++;
+            }
+                
+            var trimEnd = segment.Length - 1;
+            while (trimEnd >= trimStart && segment[trimEnd] == ' ')
+            {
+                trimEnd--;
+            }
+                
+            var trimmed = segment.Slice(trimStart, trimEnd - trimStart + 1);
+            result[resultIndex++] = new string(trimmed);
+                
+            start = i + 1; // Skip comma
+        }
+
+        return result;
+    }
+    
+    #endregion
 
     #endregion
 }

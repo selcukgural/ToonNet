@@ -268,7 +268,17 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
 
         _sb!.Append('{');
-        _sb!.Append(string.Join(",", array.FieldNames));
+        
+        // Optimized: avoid string.Join() allocation
+        for (int i = 0; i < array.FieldNames.Length; i++)
+        {
+            if (i > 0)
+            {
+                _sb.Append(',');
+            }
+            _sb.Append(array.FieldNames[i]);
+        }
+        
         _sb!.Append('}');
     }
 
@@ -339,15 +349,17 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
             if (item is ToonObject rowObj && array.FieldNames != null)
             {
-                var values = new List<string>();
-
-                foreach (var fieldName in array.FieldNames)
+                // Optimized: direct append instead of List + Join
+                for (int j = 0; j < array.FieldNames.Length; j++)
                 {
-                    var fieldValue = rowObj[fieldName];
-                    values.Add(FormatValue(fieldValue));
+                    if (j > 0)
+                    {
+                        _sb!.Append(',');
+                    }
+                    
+                    var fieldValue = rowObj[array.FieldNames[j]];
+                    _sb!.Append(FormatValue(fieldValue));
                 }
-
-                _sb!.Append(string.Join(",", values));
             }
             else
             {
@@ -371,8 +383,15 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// </remarks>
     private void EncodePrimitiveArrayInline(ToonArray array)
     {
-        var values = array.Items.Select(FormatValue);
-        _sb!.Append(string.Join(",", values));
+        // Optimized: direct append instead of Select + Join
+        for (int i = 0; i < array.Items.Count; i++)
+        {
+            if (i > 0)
+            {
+                _sb!.Append(',');
+            }
+            _sb!.Append(FormatValue(array.Items[i]));
+        }
     }
 
     /// <summary>
@@ -491,7 +510,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         var str = needsScientific ? value.ToString("E17", CultureInfo.InvariantCulture) : value.ToString("G17", CultureInfo.InvariantCulture);
 
         // If G17 already produced scientific notation, but we don't need it, convert to decimal
-        if (!needsScientific && (str.Contains('e') || str.Contains('E')))
+        if (!needsScientific && (str.IndexOf('e') != -1 || str.IndexOf('E') != -1))
         {
             str = value.ToString("F17", CultureInfo.InvariantCulture).TrimEnd('0');
 
@@ -504,23 +523,34 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
 
         // If we're using scientific notation, normalize it
-        if (str.Contains('e') || str.Contains('E'))
+        var eIndex = str.IndexOf('E');
+        if (eIndex == -1)
         {
-            // Use lowercase 'e'
-            str = str.Replace('E', 'e');
-
-            // Remove leading zeros in exponent and remove '+' sign
-            var eIndex = str.IndexOf('e');
-            var mantissa = str[..eIndex];
-            var exponentPart = str[(eIndex + 1)..];
-
+            eIndex = str.IndexOf('e');
+        }
+        
+        if (eIndex != -1)
+        {
+            // Build normalized scientific notation without allocating intermediate strings
+            Span<char> buffer = stackalloc char[str.Length + 8]; // Extra space for reformatted exponent
+            
+            // Copy mantissa
+            var mantissa = str.AsSpan(0, eIndex);
+            mantissa.CopyTo(buffer);
+            buffer[eIndex] = 'e'; // Use lowercase 'e'
+            
             // Parse and reformat exponent
+            var exponentPart = str.AsSpan(eIndex + 1);
             if (int.TryParse(exponentPart, out var expValue))
             {
-                str = $"{mantissa}e{expValue}";
+                expValue.TryFormat(buffer[(eIndex + 1)..], out var written);
+                return new string(buffer[..(eIndex + 1 + written)]);
             }
+            
+            // Fallback if parsing fails
+            str = str.Replace('E', 'e');
         }
-        else if (str.Contains('.'))
+        else if (str.IndexOf('.') != -1)
         {
             // Remove trailing zeros after decimal point
             str = str.TrimEnd('0');
@@ -542,7 +572,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// The number to check. Must not be zero.
     /// </param>
     /// <returns>
-    /// True if the number requires scientific notation (e.g., exponent >= 21 or <= -21); otherwise, false.
+    /// True if the number requires scientific notation (e.g., exponent &gt;= 21 or &lt;= -21); otherwise, false.
     /// </returns>
     private static bool CheckNeedsScientific(double value)
     {
@@ -663,10 +693,44 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     ///     - Newline ('\n') becomes '\\n'
     ///     - Carriage return ('\r') becomes '\\r'
     ///     - Tab ('\t') becomes '\\t'
+    ///     Performance: Single-pass implementation to minimize allocations (5 Replace calls → 1 StringBuilder).
     /// </remarks>
     private static string EscapeString(string value)
     {
-        return value.Replace("\\", @"\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
+        // Quick check: if no special chars, return original
+        if (value.IndexOfAny(['\\', '"', '\n', '\r', '\t']) == -1)
+        {
+            return value;
+        }
+
+        var sb = new StringBuilder(value.Length + 16); // +16 for potential escape sequences
+        
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '\\':
+                    sb.Append(@"\\");
+                    break;
+                case '"':
+                    sb.Append("\\\"");
+                    break;
+                case '\n':
+                    sb.Append("\\n");
+                    break;
+                case '\r':
+                    sb.Append("\\r");
+                    break;
+                case '\t':
+                    sb.Append("\\t");
+                    break;
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+        
+        return sb.ToString();
     }
 
     /// <summary>

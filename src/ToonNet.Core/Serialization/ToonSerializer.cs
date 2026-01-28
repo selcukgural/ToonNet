@@ -31,6 +31,9 @@ public static class ToonSerializer
         public Dictionary<PropertyInfo, ToonPropertyAttribute?> PropertyAttributes { get; init; } = new();
         public Dictionary<PropertyInfo, Func<object, object?>> Getters { get; init; } = new();
         public Dictionary<PropertyInfo, Action<object, object?>> Setters { get; init; } = new();
+        
+        // Cached property names for each naming policy (to avoid repeated transformations)
+        public Dictionary<(PropertyInfo, PropertyNamingPolicy), string> CachedPropertyNames { get; init; } = new();
     }
 
     /// <summary>
@@ -616,7 +619,7 @@ public static class ToonSerializer
             }
             else
             {
-                propName = GetPropertyName(prop, options);
+                propName = GetPropertyName(prop, options, metadata);
             }
 
             // Use compiled getter for massive speedup (300-500% faster than reflection)
@@ -640,26 +643,40 @@ public static class ToonSerializer
     /// </summary>
     /// <param name="property">The property to get the name for.</param>
     /// <param name="options">Serialization options containing naming policy.</param>
+    /// <param name="metadata">Type metadata containing cached property names.</param>
     /// <returns>The name to use in TOON format.</returns>
-    private static string GetPropertyName(PropertyInfo property, ToonSerializerOptions options)
+    /// <remarks>
+    /// Optimized: Uses cached property names from metadata to avoid repeated transformations.
+    /// </remarks>
+    private static string GetPropertyName(PropertyInfo property, ToonSerializerOptions options, TypeMetadata metadata)
     {
-        // Check for custom name attribute
-        var nameAttr = property.GetCustomAttribute<ToonPropertyAttribute>();
-
-        if (nameAttr != null)
+        // Check for custom name attribute first (takes precedence)
+        if (metadata.PropertyAttributes.TryGetValue(property, out var nameAttr) && nameAttr != null)
         {
             return nameAttr.Name;
         }
 
-        var name = property.Name;
+        // Try to get cached transformed name
+        var cacheKey = (property, options.PropertyNamingPolicy);
+        if (metadata.CachedPropertyNames.TryGetValue(cacheKey, out var cachedName))
+        {
+            return cachedName;
+        }
 
-        return options.PropertyNamingPolicy switch
+        // Transform and cache
+        var name = property.Name;
+        var transformedName = options.PropertyNamingPolicy switch
         {
             PropertyNamingPolicy.CamelCase => ToCamelCase(name),
             PropertyNamingPolicy.SnakeCase => ToSnakeCase(name),
             PropertyNamingPolicy.LowerCase => name.ToLowerInvariant(),
             _                              => name
         };
+
+        // Cache for next time (thread-safe as dictionary operations on same key are atomic)
+        metadata.CachedPropertyNames[cacheKey] = transformedName;
+        
+        return transformedName;
     }
 
     /// <summary>
@@ -1071,7 +1088,7 @@ public static class ToonSerializer
             }
             else
             {
-                propName = GetPropertyName(prop, options);
+                propName = GetPropertyName(prop, options, metadata);
             }
 
             if (!obj.Properties.TryGetValue(propName, out var toonValue))

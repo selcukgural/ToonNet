@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.ObjectPool;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Parsing;
@@ -15,6 +16,25 @@ internal sealed class ToonLexer
     private int _column = 1;
     private int _line = 1;
     private int _position;
+
+    // Cache for common indentation levels (0-100 spaces in steps of 2)
+    private static readonly ReadOnlyMemory<char>[] IndentCache;
+    
+    // StringBuilder pool for quoted string parsing
+    private static readonly ObjectPool<StringBuilder> StringBuilderPool;
+
+    static ToonLexer()
+    {
+        // Pre-compute indent strings for common levels (0, 2, 4, 6, ..., 100)
+        IndentCache = new ReadOnlyMemory<char>[51];
+        for (int i = 0; i < IndentCache.Length; i++)
+        {
+            IndentCache[i] = new string(' ', i * 2).AsMemory();
+        }
+        
+        // Initialize StringBuilder pool
+        StringBuilderPool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
+    }
 
     /// <summary>
     /// Creates a new lexer for the specified input string.
@@ -140,6 +160,9 @@ internal sealed class ToonLexer
     /// Reads an indentation (sequence of spaces) from the input string at the current position.
     /// </summary>
     /// <returns>A token representing the indentation, including the number of spaces and their position in the input.</returns>
+    /// <remarks>
+    /// Optimized with indent cache for common indentation levels.
+    /// </remarks>
     private ToonToken ReadIndentation()
     {
         var startColumn = _column;
@@ -151,7 +174,19 @@ internal sealed class ToonLexer
             count++;
         }
 
-        return new ToonToken(ToonTokenType.Indent, new string(' ', count).AsMemory(), _line, startColumn);
+        // Use cached indent if available (even numbers 0-100)
+        ReadOnlyMemory<char> indentValue;
+        if (count % 2 == 0 && count / 2 < IndentCache.Length)
+        {
+            indentValue = IndentCache[count / 2];
+        }
+        else
+        {
+            // Fallback for odd or large indents
+            indentValue = new string(' ', count).AsMemory();
+        }
+
+        return new ToonToken(ToonTokenType.Indent, indentValue, _line, startColumn);
     }
 
     /// <summary>
@@ -248,53 +283,63 @@ internal sealed class ToonLexer
     /// <exception cref="ToonParseException">
     /// Thrown when a quoted string is not properly terminated in the input.
     /// </exception>
+    /// <remarks>
+    /// Optimized with StringBuilder pooling to reduce allocations.
+    /// </remarks>
     private string ReadQuotedStringValue()
     {
-        var sb = new StringBuilder();
-
-        Advance(); // opening "
-
-        while (!IsAtEnd() && Peek() != '"')
+        var sb = StringBuilderPool.Get();
+        
+        try
         {
-            var ch = Peek();
+            Advance(); // opening "
 
-            if (ch == '\\')
+            while (!IsAtEnd() && Peek() != '"')
             {
-                Advance();
+                var ch = Peek();
 
-                if (IsAtEnd())
+                if (ch == '\\')
                 {
-                    throw new ToonParseException("Unterminated string", _line, _column);
+                    Advance();
+
+                    if (IsAtEnd())
+                    {
+                        throw new ToonParseException("Unterminated string", _line, _column);
+                    }
+
+                    var escaped = Peek();
+
+                    sb.Append(escaped switch
+                    {
+                        'n'  => '\n',
+                        't'  => '\t',
+                        'r'  => '\r',
+                        '"'  => '"',
+                        '\\' => '\\',
+                        _    => escaped
+                    });
+                }
+                else
+                {
+                    sb.Append(ch);
                 }
 
-                var escaped = Peek();
-
-                sb.Append(escaped switch
-                {
-                    'n'  => '\n',
-                    't'  => '\t',
-                    'r'  => '\r',
-                    '"'  => '"',
-                    '\\' => '\\',
-                    _    => escaped
-                });
+                Advance();
             }
-            else
+
+            if (IsAtEnd())
             {
-                sb.Append(ch);
+                throw new ToonParseException("Unterminated string", _line, _column);
             }
 
-            Advance();
-        }
+            Advance(); // closing "
 
-        if (IsAtEnd())
+            return sb.ToString();
+        }
+        finally
         {
-            throw new ToonParseException("Unterminated string", _line, _column);
+            StringBuilderPool.Return(sb);
         }
-
-        Advance(); // closing "
-
-        return sb.ToString();
     }
 
 
