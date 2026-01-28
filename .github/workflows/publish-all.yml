@@ -1,9 +1,12 @@
-name: Publish to NuGet
+name: Publish All Packages to NuGet
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -24,9 +27,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Extract version from tag
+      - name: Set version
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Pack and Publish
         run: |
