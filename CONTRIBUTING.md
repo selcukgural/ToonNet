@@ -14,7 +14,7 @@ Thank you for your interest in contributing to ToonNet! 🎉
 
 ## Code of Conduct
 
-This project follows a Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to [selcukgural@example.com](mailto:selcukgural@example.com).
+This project follows a Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to [selcukgural@gmail.com](mailto:selcukgural@gmail.com).
 
 ## Getting Started
 
