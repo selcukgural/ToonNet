@@ -1,0 +1,74 @@
+name: Publish to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  CONFIGURATION: Release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore dependencies
+        run: dotnet restore
+      
+      - name: Build
+        run: dotnet build --configuration ${{ env.CONFIGURATION }} --no-restore
+      
+      - name: Run tests
+        run: dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity minimal
+      
+      - name: Pack NuGet packages
+        run: dotnet pack --configuration ${{ env.CONFIGURATION }} --no-build --output ./nupkgs
+      
+      - name: List packages
+        run: |
+          echo "📦 Created packages:"
+          ls -lh ./nupkgs/*.nupkg
+      
+      - name: Publish to NuGet
+        run: |
+          for package in ./nupkgs/*.nupkg; do
+            echo "Publishing $package..."
+            dotnet nuget push "$package" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./nupkgs/*.nupkg
+          body: |
+            ## ToonNet v${{ github.ref_name }}
+            
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
+            
+            ### NuGet Packages Published
+            - ToonNet.Core
+            - ToonNet.Extensions.Json
+            - ToonNet.Extensions.Yaml
+            - ToonNet.AspNetCore
+            - ToonNet.AspNetCore.Mvc
+            - ToonNet.SourceGenerators
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
