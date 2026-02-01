@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 
@@ -39,23 +40,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
         var lexer = new ToonLexer(input);
         _tokens.Clear();
         _tokens.AddRange(lexer.Tokenize());
-        _position = 0;
-        _currentTokenPosition = -1; // Reset token cache
-
-        var root = ParseValue(0);
-        return new ToonDocument(root);
-    }
-
-    /// <summary>
-    ///     Parses a list of TOON tokens into a document.
-    /// </summary>
-    /// <param name="tokens">The tokens to parse.</param>
-    /// <returns>A ToonDocument representing the parsed tokens.</returns>
-    /// <exception cref="ToonParseException">Thrown when the tokens are invalid.</exception>
-    internal ToonDocument Parse(List<ToonToken> tokens)
-    {
-        _tokens.Clear();
-        _tokens.AddRange(tokens);
         _position = 0;
         _currentTokenPosition = -1; // Reset token cache
 
@@ -105,7 +89,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <param name="stream">The stream to read from.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous parse operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when the stream is null.</exception>
     /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     public async Task<ToonDocument> ParseFromStreamAsync(Stream stream, CancellationToken cancellationToken = default)
@@ -420,43 +404,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    ///     Parses an inline tabular array row (comma-separated values).
-    /// </summary>
-    /// <param name="fieldNames">The field names for tabular data.</param>
-    /// <returns>A ToonArray with the parsed row values.</returns>
-    private ToonArray ParseTabularArrayInlineRow(string[]? fieldNames)
-    {
-        var values = new List<ToonValue>();
-
-        // Read first value
-        if (IsValueToken(Peek().Type))
-        {
-            var token = Advance();
-            values.Add(ParseValueToken(token));
-        }
-
-        // Read the remaining values (separated by commas)
-        while (Peek().Type == ToonTokenType.Comma)
-        {
-            Advance(); // consume comma
-
-            if (IsValueToken(Peek().Type))
-            {
-                var token = Advance();
-                values.Add(ParseValueToken(token));
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        return fieldNames != null && values.Count != fieldNames.Length
-                   ? throw new ToonParseException($"Row has {values.Count} values but expected {fieldNames.Length}", 0, 0)
-                   : new ToonArray(values);
-    }
-
-    /// <summary>
     ///     Parses a list (items prefixed with '-').
     /// </summary>
     /// <param name="indentLevel">The current indentation level.</param>
@@ -619,7 +566,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <remarks>
     ///     Optimized to avoid repeated Peek() calls by accessing tokens directly.
     /// </remarks>
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int GetCurrentIndent()
     {
         if (_position >= _tokens.Count)
@@ -672,7 +619,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Optimized with token cache to avoid repeated access at the same position.
     ///     Uses AggressiveInlining for maximum performance.
     /// </remarks>
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private ToonToken Peek()
     {
         // Check if the cached token is still valid for the current position
@@ -694,7 +641,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <remarks>
     ///     Invalidates the token cache since position changes.
     /// </remarks>
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private ToonToken Advance()
     {
         var token = Peek(); // Get the current token (may use cache)
@@ -716,7 +663,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <remarks>
     ///     Optimized to check position and EndOfInput token type.
     /// </remarks>
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool IsAtEnd()
     {
         return _position >= _tokens.Count || (_position < _tokens.Count && _tokens[_position].Type == ToonTokenType.EndOfInput);
@@ -731,7 +678,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Helper method to simplify repeated token type checks throughout the parser.
     ///     Uses a cached Peek() result for optimal performance.
     /// </remarks>
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool ExpectToken(ToonTokenType expectedType)
     {
         return Peek().Type == expectedType;
@@ -745,12 +692,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Helper method that combines a common pattern of reading indent level and consuming the token.
     ///     Optimized for frequent indent processing in nested structures.
     /// </remarks>
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int GetCurrentIndentAndAdvance()
     {
         var token = Peek();
+        
         var indentLevel = token.Type == ToonTokenType.Indent ? token.Value.Length : 0;
+        
         Advance();
+        
         return indentLevel;
     }
 

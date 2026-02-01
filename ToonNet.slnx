@@ -1,19 +1,37 @@
 <Solution>
     <Folder Name="/benchmark/">
-        <Project Path="benchmark/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj" />
+        <Project Path="benchmark/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj">
+            <BuildType Project="Release" />
+        </Project>
     </Folder>
     <Folder Name="/demo/">
-        <Project Path="demo/ToonNet.Demo/ToonNet.Demo.csproj" />
+        <Project Path="demo/ToonNet.Demo/ToonNet.Demo.csproj">
+            <BuildType Project="Release" />
+        </Project>
     </Folder>
     <Folder Name="/src/">
-        <Project Path="src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj" />
-        <Project Path="src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj" />
-        <Project Path="src/ToonNet.Core/ToonNet.Core.csproj" />
-        <Project Path="src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj" />
-        <Project Path="src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj" />
-        <Project Path="src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj" />
+        <Project Path="src/ToonNet.AspNetCore.Mvc/ToonNet.AspNetCore.Mvc.csproj">
+            <BuildType Project="Release" />
+        </Project>
+        <Project Path="src/ToonNet.AspNetCore/ToonNet.AspNetCore.csproj">
+            <BuildType Project="Release" />
+        </Project>
+        <Project Path="src/ToonNet.Core/ToonNet.Core.csproj">
+            <BuildType Project="Release" />
+        </Project>
+        <Project Path="src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj">
+            <BuildType Project="Release" />
+        </Project>
+        <Project Path="src/ToonNet.Extensions.Yaml/ToonNet.Extensions.Yaml.csproj">
+            <BuildType Project="Release" />
+        </Project>
+        <Project Path="src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj">
+            <BuildType Project="Release" />
+        </Project>
     </Folder>
     <Folder Name="/test/">
-        <Project Path="tests/ToonNet.Tests/ToonNet.Tests.csproj" />
+        <Project Path="tests/ToonNet.Tests/ToonNet.Tests.csproj">
+            <BuildType Project="Release" />
+        </Project>
     </Folder>
 </Solution>

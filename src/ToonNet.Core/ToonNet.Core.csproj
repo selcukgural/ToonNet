@@ -10,7 +10,7 @@
         <Title>ToonNet Core Library</Title>
         <Description>High-performance TOON format serialization for .NET. Expression tree-based with zero reflection overhead. 435+ tests, 100% TOON v3.0 spec compliance. Perfect for AI/LLM token optimization, configuration files, and data exchange.</Description>
         <PackageTags>toon;serialization;performance;dotnet;ai;llm;token-efficient;expression-trees</PackageTags>
-        <PackageReleaseNotes>Initial 1.0.0 release. Full TOON v3.0 spec compliance with 435+ tests.</PackageReleaseNotes>
+        <PackageReleaseNotes>v1.2.0: Major performance optimizations with SIMD vectorization and Span&lt;T&gt; operations. Estimated 25-30% speed improvement and 30-40% memory reduction. All 435 tests passing.</PackageReleaseNotes>
         
         <!-- Performance: Enable Profile-Guided Optimization -->
         <TieredCompilation>true</TieredCompilation>

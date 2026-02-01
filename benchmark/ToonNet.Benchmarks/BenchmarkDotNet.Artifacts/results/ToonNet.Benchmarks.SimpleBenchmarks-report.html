@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>ToonNet.Benchmarks.SimpleBenchmarks-20260201-000048</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.0, macOS 26.2 (25C56) [Darwin 25.2.0]
+Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
+.NET SDK 10.0.100
+  [Host]     : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+  Job-ZNQJPI : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+</code></pre>
+<pre><code>WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>SerializeGenerated</td><td>114.5 ns</td><td>2.21 ns</td><td>1.96 ns</td><td>0.0889</td><td>744 B</td>
+</tr><tr><td>SerializeReflection</td><td>793.6 ns</td><td>4.91 ns</td><td>5.46 ns</td><td>0.1917</td><td>1608 B</td>
+</tr><tr><td>DeserializeGenerated</td><td>228.0 ns</td><td>1.09 ns</td><td>0.97 ns</td><td>0.1118</td><td>936 B</td>
+</tr><tr><td>DeserializeReflection</td><td>2,164.4 ns</td><td>40.45 ns</td><td>37.83 ns</td><td>0.7286</td><td>6120 B</td>
+</tr></tbody></table>
+</body>
+</html>

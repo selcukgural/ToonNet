@@ -48,7 +48,7 @@ static class Program
             Console.WriteLine($"Loaded TOON file: ecommerce-order.toon ({toonContent.Length} chars)");
 
             // Deserialize to strongly-typed object
-            var order = ToonSerializer.Deserialize<ToonNet.Demo.Samples.ECommerceOrder>(toonContent);
+            var order = ToonSerializer.Deserialize<Samples.ECommerceOrder>(toonContent);
             
             Console.WriteLine();
             Console.WriteLine("ORDER DETAILS:");
@@ -142,7 +142,7 @@ static class Program
             Console.WriteLine($"Loaded TOON file: healthcare-patient.toon ({toonContent.Length} chars)");
 
             // Deserialize to strongly-typed object
-            var patient = ToonSerializer.Deserialize<ToonNet.Demo.Samples.PatientRecord>(toonContent);
+            var patient = ToonSerializer.Deserialize<Samples.PatientRecord>(toonContent);
             
             Console.WriteLine();
             Console.WriteLine("PATIENT DETAILS:");

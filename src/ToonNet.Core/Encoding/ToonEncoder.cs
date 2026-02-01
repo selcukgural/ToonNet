@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using System.Text;
 using Microsoft.Extensions.ObjectPool;
 using ToonNet.Core.Models;
@@ -490,6 +493,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <exception cref="ToonEncodingException">
     /// Thrown when the value is NaN or Infinity, as these are not allowed in the TOON format.
     /// </exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string FormatNumber(double value)
     {
         if (double.IsNaN(value) || double.IsInfinity(value))
@@ -506,63 +510,97 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         // Check if we need to use scientific notation based on the actual exponent
         var needsScientific = CheckNeedsScientific(value);
 
-        // Use the appropriate format based on whether we need scientific notation
-        var str = needsScientific ? value.ToString("E17", CultureInfo.InvariantCulture) : value.ToString("G17", CultureInfo.InvariantCulture);
-
-        // If G17 already produced scientific notation, but we don't need it, convert to decimal
-        if (!needsScientific && (str.IndexOf('e') != -1 || str.IndexOf('E') != -1))
-        {
-            str = value.ToString("F17", CultureInfo.InvariantCulture).TrimEnd('0');
-
-            if (str.EndsWith('.'))
-            {
-                str += '0';
-            }
-
-            return str;
-        }
-
-        // If we're using scientific notation, normalize it
-        var eIndex = str.IndexOf('E');
-        if (eIndex == -1)
-        {
-            eIndex = str.IndexOf('e');
-        }
+        // Optimization: Use stackalloc buffer for TryFormat to avoid string allocations
+        Span<char> buffer = stackalloc char[32]; // Sufficient for any double
         
-        if (eIndex != -1)
+        if (needsScientific)
         {
-            // Build normalized scientific notation without allocating intermediate strings
-            Span<char> buffer = stackalloc char[str.Length + 8]; // Extra space for reformatted exponent
-            
-            // Copy mantissa
-            var mantissa = str.AsSpan(0, eIndex);
-            mantissa.CopyTo(buffer);
-            buffer[eIndex] = 'e'; // Use lowercase 'e'
-            
-            // Parse and reformat exponent
-            var exponentPart = str.AsSpan(eIndex + 1);
-            if (int.TryParse(exponentPart, out var expValue))
+            if (value.TryFormat(buffer, out var written, "E17", CultureInfo.InvariantCulture))
             {
-                expValue.TryFormat(buffer[(eIndex + 1)..], out var written);
-                return new string(buffer[..(eIndex + 1 + written)]);
-            }
-            
-            // Fallback if parsing fails
-            str = str.Replace('E', 'e');
-        }
-        else if (str.IndexOf('.') != -1)
-        {
-            // Remove trailing zeros after decimal point
-            str = str.TrimEnd('0');
-
-            // If we end up with just a decimal point, add a zero
-            if (str.EndsWith('.'))
-            {
-                str += '0';
+                var result = buffer[..written];
+                // Normalize to lowercase 'e'
+                for (int i = 0; i < written; i++)
+                {
+                    if (result[i] == 'E')
+                    {
+                        result[i] = 'e';
+                        break;
+                    }
+                }
+                return new string(result);
             }
         }
+        else
+        {
+            if (value.TryFormat(buffer, out var written, "G17", CultureInfo.InvariantCulture))
+            {
+                var result = buffer[..written];
+                
+                // Check if scientific notation was produced
+                int eIndex = -1;
+                for (int i = 0; i < written; i++)
+                {
+                    if (result[i] is 'e' or 'E')
+                    {
+                        eIndex = i;
+                        break;
+                    }
+                }
+                
+                if (eIndex != -1)
+                {
+                    // Scientific notation produced, convert to decimal
+                    Span<char> decimalBuffer = stackalloc char[32];
+                    if (value.TryFormat(decimalBuffer, out written, "F17", CultureInfo.InvariantCulture))
+                    {
+                        // Trim trailing zeros
+                        while (written > 0 && decimalBuffer[written - 1] == '0')
+                        {
+                            written--;
+                        }
+                        
+                        if (written > 0 && decimalBuffer[written - 1] == '.')
+                        {
+                            written++; // Keep one zero after decimal
+                        }
+                        
+                        return new string(decimalBuffer[..written]);
+                    }
+                }
+                else
+                {
+                    // Check for decimal point and trim trailing zeros
+                    int dotIndex = -1;
+                    for (int i = 0; i < written; i++)
+                    {
+                        if (result[i] == '.')
+                        {
+                            dotIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    if (dotIndex != -1)
+                    {
+                        // Trim trailing zeros after decimal
+                        while (written > dotIndex + 1 && result[written - 1] == '0')
+                        {
+                            written--;
+                        }
+                        
+                        if (written == dotIndex + 1)
+                        {
+                            written++; // Keep '.0'
+                        }
+                    }
+                }
+                
+                return new string(result[..written]);
+            }
+        }
 
-        return str;
+        // Fallback to original implementation
+        return value.ToString("G17", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -574,6 +612,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <returns>
     /// True if the number requires scientific notation (e.g., exponent &gt;= 21 or &lt;= -21); otherwise, false.
     /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool CheckNeedsScientific(double value)
     {
         if (value == 0)
@@ -646,6 +685,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     ///     or contains special characters such as ':', ',', '[', ']', '{', '}', newline, carriage return,
     ///     double quotes, or backslashes.
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool NeedsQuoting(string value)
     {
         // Empty strings
@@ -654,26 +694,35 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             return true;
         }
 
+        var span = value.AsSpan();
+        
         // Leading or trailing whitespace
-        if (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]))
+        if (char.IsWhiteSpace(span[0]) || char.IsWhiteSpace(span[^1]))
         {
             return true;
         }
 
-        // Contains whitespace in the middle
-        if (value.Contains(' '))
+        // Keywords (optimized comparison)
+        if (value.Length <= 5)
         {
-            return true;
+            if (value is "true" or "false" or "null")
+            {
+                return true;
+            }
         }
 
-        // Keywords
-        if (value is "true" or "false" or "null")
+        // Fast path: check for special chars and spaces
+        for (int i = 0; i < span.Length; i++)
         {
-            return true;
+            char ch = span[i];
+            if (ch is ' ' or ':' or ',' or '[' or ']' or '{' or '}' or '\n' or '\r' or '"' or '\\')
+            {
+                return true;
+            }
         }
 
-        // Looks like a number
-        return double.TryParse(value, out _) || value.Any(ch => ch is ':' or ',' or '[' or ']' or '{' or '}' or '\n' or '\r' or '"' or '\\');
+        // Looks like a number (last check)
+        return double.TryParse(value, out _);
     }
 
     /// <summary>
@@ -693,12 +742,13 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     ///     - Newline ('\n') becomes '\\n'
     ///     - Carriage return ('\r') becomes '\\r'
     ///     - Tab ('\t') becomes '\\t'
-    ///     Performance: Single-pass implementation to minimize allocations (5 Replace calls → 1 StringBuilder).
+    ///     Performance: SIMD-accelerated detection + single-pass implementation.
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static string EscapeString(string value)
     {
-        // Quick check: if no special chars, return original
-        if (value.IndexOfAny(['\\', '"', '\n', '\r', '\t']) == -1)
+        // Quick check: if no special chars, return original (SIMD-accelerated)
+        if (!ContainsSpecialChars(value.AsSpan()))
         {
             return value;
         }
@@ -731,6 +781,59 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
         
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Checks if the span contains any special characters that need escaping.
+    /// Uses SIMD vectorization when available for better performance.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool ContainsSpecialChars(ReadOnlySpan<char> value)
+    {
+        // SIMD-accelerated search for special characters
+        if (Vector128.IsHardwareAccelerated && value.Length >= Vector128<ushort>.Count)
+        {
+            var backslash = Vector128.Create((ushort)'\\');
+            var quote = Vector128.Create((ushort)'"');
+            var newline = Vector128.Create((ushort)'\n');
+            var carriageReturn = Vector128.Create((ushort)'\r');
+            var tab = Vector128.Create((ushort)'\t');
+
+            ref ushort searchSpace = ref Unsafe.As<char, ushort>(ref MemoryMarshal.GetReference(value));
+            int offset = 0;
+            int length = value.Length;
+
+            while (length >= Vector128<ushort>.Count)
+            {
+                var vector = Vector128.LoadUnsafe(ref searchSpace, (nuint)offset);
+
+                if (Vector128.EqualsAny(vector, backslash) ||
+                    Vector128.EqualsAny(vector, quote) ||
+                    Vector128.EqualsAny(vector, newline) ||
+                    Vector128.EqualsAny(vector, carriageReturn) ||
+                    Vector128.EqualsAny(vector, tab))
+                {
+                    return true;
+                }
+
+                offset += Vector128<ushort>.Count;
+                length -= Vector128<ushort>.Count;
+            }
+
+            // Check remaining elements
+            for (int i = offset; i < value.Length; i++)
+            {
+                if (value[i] is '\\' or '"' or '\n' or '\r' or '\t')
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Fallback for non-SIMD path
+        return value.IndexOfAny(['\\', '"', '\n', '\r', '\t']) >= 0;
     }
 
     /// <summary>

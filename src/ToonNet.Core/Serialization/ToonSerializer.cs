@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
@@ -32,8 +33,8 @@ public static class ToonSerializer
         public Dictionary<PropertyInfo, Func<object, object?>> Getters { get; init; } = new();
         public Dictionary<PropertyInfo, Action<object, object?>> Setters { get; init; } = new();
         
-        // Cached property names for each naming policy (to avoid repeated transformations)
-        public Dictionary<(PropertyInfo, PropertyNamingPolicy), string> CachedPropertyNames { get; init; } = new();
+        // Cached property names for each naming policy (thread-safe concurrent dictionary)
+        public ConcurrentDictionary<(PropertyInfo, PropertyNamingPolicy), string> CachedPropertyNames { get; init; } = new();
     }
 
     /// <summary>
@@ -46,6 +47,7 @@ public static class ToonSerializer
     /// </summary>
     /// <param name="property">The property to create a getter for.</param>
     /// <returns>A compiled function that gets the property value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Func<object, object?> CompileGetter(PropertyInfo property)
     {
         var instance = Expression.Parameter(typeof(object), "instance");
@@ -62,6 +64,7 @@ public static class ToonSerializer
     /// </summary>
     /// <param name="property">The property to create a setter for.</param>
     /// <returns>A compiled action that sets the property value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Action<object, object?> CompileSetter(PropertyInfo property)
     {
         var instance = Expression.Parameter(typeof(object), "instance");
@@ -82,6 +85,7 @@ public static class ToonSerializer
     /// <param name="type">The type for which metadata is retrieved or created.</param>
     /// <param name="includeReadOnly">Specifies whether to include read-only properties in the metadata.</param>
     /// <returns>An instance of <c>TypeMetadata</c> containing metadata for the specified type.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static TypeMetadata GetTypeMetadata(Type type, bool includeReadOnly)
     {
         return TypeMetadataCache.GetOrAdd((type, includeReadOnly), key =>
@@ -101,23 +105,25 @@ public static class ToonSerializer
                     continue;
                 }
 
-                // Skip write-only properties
-                if (!prop.CanRead) continue;
+                // Check if readable
+                if (!prop.CanRead)
+                {
+                    continue;
+                }
 
-                // Skip read-only if configured
-                if (!includeReadOnlyProps && !prop.CanWrite) continue;
+                // Check if writable (for deserialization)
+                if (!includeReadOnlyProps && !prop.CanWrite)
+                {
+                    continue;
+                }
 
                 validProps.Add(prop);
 
-                // Cache property attribute (but not the final name, as it depends on the naming policy)
-                var nameAttr = prop.GetCustomAttribute<ToonPropertyAttribute>();
-                propertyAttributes[prop] = nameAttr;
+                // Cache property attribute
+                propertyAttributes[prop] = prop.GetCustomAttribute<ToonPropertyAttribute>();
 
-                // Compile expression tree accessors for massive speedup
-                if (prop.CanRead)
-                {
-                    getters[prop] = CompileGetter(prop);
-                }
+                // Compile getters and setters
+                getters[prop] = CompileGetter(prop);
 
                 if (prop.CanWrite)
                 {
@@ -125,12 +131,14 @@ public static class ToonSerializer
                 }
             }
 
+            // Convert to FrozenDictionary for better read performance (.NET 8+)
             return new TypeMetadata
             {
-                Properties = validProps.ToArray(),
+                Properties = [.. validProps],
                 PropertyAttributes = propertyAttributes,
                 Getters = getters,
-                Setters = setters
+                Setters = setters,
+                CachedPropertyNames = new ConcurrentDictionary<(PropertyInfo, PropertyNamingPolicy), string>()
             };
         });
     }
@@ -673,8 +681,8 @@ public static class ToonSerializer
             _                              => name
         };
 
-        // Cache for next time (thread-safe as dictionary operations on same key are atomic)
-        metadata.CachedPropertyNames[cacheKey] = transformedName;
+        // Cache for next time (thread-safe with ConcurrentDictionary)
+        metadata.CachedPropertyNames.TryAdd(cacheKey, transformedName);
         
         return transformedName;
     }
@@ -1202,7 +1210,7 @@ public static class ToonSerializer
     ///     Each object is parsed and yielded individually, making it memory-efficient for large files.
     /// </remarks>
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options = null,
-                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filePath);
@@ -1234,7 +1242,7 @@ public static class ToonSerializer
     /// </remarks>
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options,
                                                                        ToonMultiDocumentReadOptions multiDocumentOptions,
-                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filePath);
@@ -1265,7 +1273,7 @@ public static class ToonSerializer
     ///     Each object is parsed and yielded individually, making it memory-efficient for large streams.
     /// </remarks>
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options = null,
-                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -1293,7 +1301,7 @@ public static class ToonSerializer
     /// </remarks>
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options,
                                                                        ToonMultiDocumentReadOptions multiDocumentOptions,
-                                                                       [System.Runtime.CompilerServices.EnumeratorCancellation]
+                                                                       [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>ToonNet.Benchmarks.EncoderOnlyBenchmarks-20260131-235109</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.0, macOS 26.2 (25C56) [Darwin 25.2.0]
+Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
+.NET SDK 10.0.100
+  [Host]     : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+  Job-PZICMB : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+</code></pre>
+<pre><code>IterationCount=20  WarmupCount=5  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                    </th><th>Mean </th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>Encode_SimpleObject</td><td>343.0 ns</td><td>2.04 ns</td><td>2.09 ns</td><td>0.0334</td><td>-</td><td>280 B</td>
+</tr><tr><td>Encode_InlineArray</td><td>230.7 ns</td><td>6.97 ns</td><td>7.75 ns</td><td>0.0172</td><td>-</td><td>144 B</td>
+</tr><tr><td>Encode_NestedObject</td><td>557.8 ns</td><td>4.34 ns</td><td>4.83 ns</td><td>0.0505</td><td>-</td><td>424 B</td>
+</tr><tr><td>Encode_LargeArray</td><td>30,484.1 ns</td><td>534.55 ns</td><td>594.15 ns</td><td>5.3101</td><td>0.4272</td><td>44600 B</td>
+</tr><tr><td>Encode_DeepNesting</td><td>4,382.4 ns</td><td>89.43 ns</td><td>102.99 ns</td><td>0.7172</td><td>-</td><td>6040 B</td>
+</tr><tr><td>Encode_StringLength_SimpleObject</td><td>348.7 ns</td><td>2.23 ns</td><td>2.48 ns</td><td>0.0334</td><td>-</td><td>280 B</td>
+</tr><tr><td>Encode_StringLength_LargeArray</td><td>29,775.8 ns</td><td>170.76 ns</td><td>196.65 ns</td><td>5.3101</td><td>0.4272</td><td>44600 B</td>
+</tr></tbody></table>
+</body>
+</html>

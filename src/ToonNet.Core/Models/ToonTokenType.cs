@@ -163,42 +163,10 @@ internal static class ToonTokenTypeExtensions
     }
 
     /// <summary>
-    ///     Checks if a token can start a value (Key, Value, QuotedString, ListItem).
-    /// </summary>
-    public static bool CanStartValue(this ToonTokenType type)
-    {
-        return type.Is(ToonTokenCategory.ValueStart);
-    }
-
-    /// <summary>
     ///     Checks if a token is an actual value (Value, QuotedString).
     /// </summary>
     public static bool IsActualValue(this ToonTokenType type)
     {
         return type.Is(ToonTokenCategory.ActualValue);
-    }
-
-    /// <summary>
-    ///     Checks if a token is structural (Colon, Comma, Newline, Indent).
-    /// </summary>
-    public static bool IsStructural(this ToonTokenType type)
-    {
-        return type.Is(ToonTokenCategory.Structural);
-    }
-
-    /// <summary>
-    ///     Checks if a token is array-related (ArrayLength, ArrayFields).
-    /// </summary>
-    public static bool IsArrayRelated(this ToonTokenType type)
-    {
-        return type.Is(ToonTokenCategory.ArrayRelated);
-    }
-
-    /// <summary>
-    ///     Checks if a token is terminating (Newline, EndOfInput).
-    /// </summary>
-    public static bool IsTerminating(this ToonTokenType type)
-    {
-        return type.Is(ToonTokenCategory.Terminating);
     }
 }

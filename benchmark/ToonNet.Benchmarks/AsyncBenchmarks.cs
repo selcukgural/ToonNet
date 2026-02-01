@@ -102,7 +102,7 @@ public class AsyncBenchmarks
     [Benchmark]
     public async Task EncodeAsync_Small()
     {
-        var doc = _parser.Parse(_smallDocument);
+        var doc = await _parser.ParseAsync(_smallDocument);
         await _encoder.EncodeAsync(doc);
     }
 

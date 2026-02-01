@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>ToonNet.Benchmarks.LargeDocumentBenchmarks-20260131-235348</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.0, macOS 26.2 (25C56) [Darwin 25.2.0]
+Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
+.NET SDK 10.0.100
+  [Host]     : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+  Job-TUDSHG : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+</code></pre>
+<pre><code>IterationCount=10  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method   </th><th>Mean </th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>Parse_10KB</td><td>243.7 &mu;s</td><td>9.78 &mu;s</td><td>5.82 &mu;s</td><td>121.0938</td><td>95.2148</td><td>81.5430</td><td>706.67 KB</td>
+</tr><tr><td>Parse_100KB</td><td>3,375.7 &mu;s</td><td>10.70 &mu;s</td><td>6.37 &mu;s</td><td>742.1875</td><td>714.8438</td><td>492.1875</td><td>6034.82 KB</td>
+</tr><tr><td>Parse_1MB</td><td>45,765.2 &mu;s</td><td>5,273.31 &mu;s</td><td>3,487.97 &mu;s</td><td>3363.6364</td><td>2090.9091</td><td>1090.9091</td><td>85012.27 KB</td>
+</tr><tr><td>Encode_10KB</td><td>341.8 &mu;s</td><td>6.67 &mu;s</td><td>3.97 &mu;s</td><td>143.0664</td><td>107.9102</td><td>92.2852</td><td>798.25 KB</td>
+</tr><tr><td>Encode_100KB</td><td>4,598.9 &mu;s</td><td>78.51 &mu;s</td><td>51.93 &mu;s</td><td>859.3750</td><td>757.8125</td><td>546.8750</td><td>6884.58 KB</td>
+</tr><tr><td>Encode_1MB</td><td>54,283.7 &mu;s</td><td>959.03 &mu;s</td><td>570.71 &mu;s</td><td>3875.0000</td><td>2375.0000</td><td>875.0000</td><td>93477.41 KB</td>
+</tr><tr><td>RoundTrip_10KB</td><td>608.8 &mu;s</td><td>22.31 &mu;s</td><td>14.76 &mu;s</td><td>259.7656</td><td>246.0938</td><td>169.9219</td><td>1505.09 KB</td>
+</tr><tr><td>RoundTrip_100KB</td><td>7,680.1 &mu;s</td><td>396.11 &mu;s</td><td>262.00 &mu;s</td><td>1250.0000</td><td>968.7500</td><td>687.5000</td><td>12919.3 KB</td>
+</tr></tbody></table>
+</body>
+</html>

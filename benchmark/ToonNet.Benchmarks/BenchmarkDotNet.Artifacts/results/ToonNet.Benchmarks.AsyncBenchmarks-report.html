@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>ToonNet.Benchmarks.AsyncBenchmarks-20260128-201359</title>
+<title>ToonNet.Benchmarks.AsyncBenchmarks-20260131-234003</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -17,7 +17,7 @@ BenchmarkDotNet v0.15.0, macOS 26.2 (25C56) [Darwin 25.2.0]
 Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
 .NET SDK 10.0.100
   [Host]     : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
-  Job-KWXFVL : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+  Job-JQGDCJ : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
 </code></pre>
 <pre><code>IterationCount=10  WarmupCount=3  
 </code></pre>
@@ -25,14 +25,14 @@ Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
 <table>
 <thead><tr><th>Method                      </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>SerializeAsync_Small</td><td>1.924 &mu;s</td><td>0.0154 &mu;s</td><td>0.0092 &mu;s</td><td>0.4272</td><td>-</td><td>-</td><td>3.5 KB</td>
+</thead><tbody><tr><td>SerializeAsync_Small</td><td>1.798 &mu;s</td><td>0.0357 &mu;s</td><td>0.0212 &mu;s</td><td>0.3738</td><td>-</td><td>-</td><td>3.06 KB</td>
 </tr><tr><td>DeserializeAsync_Small</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td>
-</tr><tr><td>ParseAsync_Small</td><td>8.890 &mu;s</td><td>0.6438 &mu;s</td><td>0.3831 &mu;s</td><td>2.8229</td><td>0.0610</td><td>-</td><td>21.83 KB</td>
-</tr><tr><td>ParseAsync_Medium</td><td>133.333 &mu;s</td><td>2.9965 &mu;s</td><td>1.9820 &mu;s</td><td>131.5918</td><td>131.5918</td><td>37.5977</td><td>343.97 KB</td>
-</tr><tr><td>EncodeAsync_Small</td><td>11.008 &mu;s</td><td>0.8664 &mu;s</td><td>0.5731 &mu;s</td><td>3.0670</td><td>0.0305</td><td>-</td><td>24.62 KB</td>
-</tr><tr><td>FileOperations_SerializeToFile</td><td>59.837 &mu;s</td><td>5.7993 &mu;s</td><td>3.8359 &mu;s</td><td>0.4883</td><td>-</td><td>-</td><td>4.23 KB</td>
-</tr><tr><td>FileOperations_DeserializeFromFile</td><td>82.516 &mu;s</td><td>6.2636 &mu;s</td><td>4.1430 &mu;s</td><td>2.9297</td><td>0.1221</td><td>-</td><td>22.25 KB</td>
-</tr><tr><td>StreamOperations_WriteAndRead</td><td>4.973 &mu;s</td><td>0.0618 &mu;s</td><td>0.0368 &mu;s</td><td>2.0218</td><td>0.0076</td><td>-</td><td>16.54 KB</td>
+</tr><tr><td>ParseAsync_Small</td><td>8.379 &mu;s</td><td>0.3885 &mu;s</td><td>0.2032 &mu;s</td><td>2.8381</td><td>0.0610</td><td>-</td><td>21.82 KB</td>
+</tr><tr><td>ParseAsync_Medium</td><td>132.097 &mu;s</td><td>4.1397 &mu;s</td><td>2.4635 &mu;s</td><td>131.5918</td><td>131.5918</td><td>37.5977</td><td>343.97 KB</td>
+</tr><tr><td>EncodeAsync_Small</td><td>10.009 &mu;s</td><td>0.6227 &mu;s</td><td>0.4119 &mu;s</td><td>2.8534</td><td>0.0305</td><td>-</td><td>23.05 KB</td>
+</tr><tr><td>FileOperations_SerializeToFile</td><td>57.401 &mu;s</td><td>13.0804 &mu;s</td><td>8.6519 &mu;s</td><td>0.3662</td><td>-</td><td>-</td><td>3.8 KB</td>
+</tr><tr><td>FileOperations_DeserializeFromFile</td><td>77.843 &mu;s</td><td>4.4337 &mu;s</td><td>2.3189 &mu;s</td><td>2.9297</td><td>-</td><td>-</td><td>21.81 KB</td>
+</tr><tr><td>StreamOperations_WriteAndRead</td><td>4.683 &mu;s</td><td>0.0734 &mu;s</td><td>0.0437 &mu;s</td><td>1.9684</td><td>0.0305</td><td>-</td><td>16.1 KB</td>
 </tr></tbody></table>
 </body>
 </html>

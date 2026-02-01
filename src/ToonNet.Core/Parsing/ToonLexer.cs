@@ -1,3 +1,7 @@
+using System.Buffers;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using System.Text;
 using Microsoft.Extensions.ObjectPool;
 using ToonNet.Core.Models;
@@ -349,17 +353,14 @@ internal sealed class ToonLexer
     /// <returns>
     /// A <see cref="ToonToken"/> representing either a key or a value, based on the parsed input.
     /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private ToonToken ReadKeyOrValue()
     {
         var startLine = _line;
-        var startColumn = _column;
 
-        // Skip leading whitespace
-        while (!IsAtEnd() && Peek() == ' ')
-        {
-            Advance();
-            startColumn = _column;
-        }
+        // Skip leading whitespace with SIMD
+        SkipWhitespace();
+        var startColumn = _column;
 
         // If we hit a quoted string after skipping whitespace, parse it as a quoted string token
         if (Peek() == '"')
@@ -368,10 +369,12 @@ internal sealed class ToonLexer
         }
 
         var startPos = _position;
+        var span = _input.Span;
 
-        while (!IsAtEnd())
+        // Fast path: scan for structural characters
+        while (_position < span.Length)
         {
-            var ch = Peek();
+            var ch = span[_position];
 
             // Stop at structural characters
             if (ch is ':' or ',' or '\n' or '\r' or '[' or '{' or ']' or '}' or '"')
@@ -379,24 +382,26 @@ internal sealed class ToonLexer
                 break;
             }
 
-            Advance();
+            _position++;
+            _column++;
         }
 
         var length = _position - startPos;
         var value = _input.Slice(startPos, length);
 
-        // Trim leading and trailing spaces
-        var span = value.Span;
-        var trimStart = 0;
+        // Trim trailing spaces efficiently
+        var trimmedSpan = value.Span;
+        int trimStart = 0;
+        int trimEnd = trimmedSpan.Length;
 
-        while (trimStart < span.Length && span[trimStart] == ' ')
+        // Trim start
+        while (trimStart < trimmedSpan.Length && trimmedSpan[trimStart] == ' ')
         {
             trimStart++;
         }
 
-        var trimEnd = span.Length;
-
-        while (trimEnd > trimStart && span[trimEnd - 1] == ' ')
+        // Trim end
+        while (trimEnd > trimStart && trimmedSpan[trimEnd - 1] == ' ')
         {
             trimEnd--;
         }
@@ -416,13 +421,45 @@ internal sealed class ToonLexer
     /// </summary>
     /// <remarks>
     /// Moves the position forward until a non-whitespace character is encountered or the end of input is reached.
+    /// SIMD-accelerated for better performance on large inputs.
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void SkipWhitespace()
     {
-        while (!IsAtEnd() && Peek() == ' ')
+        var span = _input.Span;
+        int pos = _position;
+        int length = span.Length;
+
+        // SIMD-accelerated whitespace skipping
+        if (Vector128.IsHardwareAccelerated && (length - pos) >= Vector128<ushort>.Count)
         {
-            Advance();
+            var spaceVector = Vector128.Create((ushort)' ');
+            
+            ref ushort searchSpace = ref Unsafe.As<char, ushort>(ref MemoryMarshal.GetReference(span));
+            
+            while ((length - pos) >= Vector128<ushort>.Count)
+            {
+                var vector = Vector128.LoadUnsafe(ref searchSpace, (nuint)pos);
+                
+                if (!Vector128.EqualsAll(vector, spaceVector))
+                {
+                    // Not all chars are spaces, find first non-space
+                    break;
+                }
+                
+                pos += Vector128<ushort>.Count;
+                _column += Vector128<ushort>.Count;
+            }
         }
+
+        // Handle remaining characters
+        while (pos < length && span[pos] == ' ')
+        {
+            pos++;
+            _column++;
+        }
+
+        _position = pos;
     }
 
     /// <summary>
