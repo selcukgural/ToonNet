@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>ToonNet.Benchmarks.DeepNestingBenchmarks-20260128-201628</title>
+<title>ToonNet.Benchmarks.DeepNestingBenchmarks-20260204-222123</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -17,7 +17,7 @@ BenchmarkDotNet v0.15.0, macOS 26.2 (25C56) [Darwin 25.2.0]
 Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
 .NET SDK 10.0.100
   [Host]     : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
-  Job-KWXFVL : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+  Job-BJDRJN : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
 </code></pre>
 <pre><code>IterationCount=10  WarmupCount=3  
 </code></pre>
@@ -25,13 +25,13 @@ Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
 <table>
 <thead><tr><th>Method     </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>Parse_Depth10</td><td>8.132 &mu;s</td><td>0.0490 &mu;s</td><td>0.0292 &mu;s</td><td>2.8839</td><td>0.0305</td><td>23.59 KB</td>
-</tr><tr><td>Parse_Depth25</td><td>25.262 &mu;s</td><td>0.3031 &mu;s</td><td>0.2005 &mu;s</td><td>6.1340</td><td>0.0305</td><td>50.27 KB</td>
-</tr><tr><td>Parse_Depth50</td><td>64.481 &mu;s</td><td>0.5854 &mu;s</td><td>0.3872 &mu;s</td><td>16.1133</td><td>2.8076</td><td>132.1 KB</td>
-</tr><tr><td>Parse_Depth75</td><td>119.855 &mu;s</td><td>1.5517 &mu;s</td><td>1.0264 &mu;s</td><td>32.2266</td><td>10.7422</td><td>265.46 KB</td>
-</tr><tr><td>Encode_Depth10</td><td>11.335 &mu;s</td><td>0.0866 &mu;s</td><td>0.0573 &mu;s</td><td>3.5248</td><td>-</td><td>28.82 KB</td>
+</thead><tbody><tr><td>Parse_Depth10</td><td>8.177 &mu;s</td><td>0.1091 &mu;s</td><td>0.0649 &mu;s</td><td>2.8839</td><td>0.0305</td><td>23.59 KB</td>
+</tr><tr><td>Parse_Depth25</td><td>24.544 &mu;s</td><td>0.2537 &mu;s</td><td>0.1510 &mu;s</td><td>6.1340</td><td>0.2136</td><td>50.27 KB</td>
+</tr><tr><td>Parse_Depth50</td><td>65.100 &mu;s</td><td>2.9605 &mu;s</td><td>1.7618 &mu;s</td><td>16.1133</td><td>2.8076</td><td>132.1 KB</td>
+</tr><tr><td>Parse_Depth75</td><td>119.016 &mu;s</td><td>2.4288 &mu;s</td><td>1.6065 &mu;s</td><td>32.2266</td><td>10.7422</td><td>265.46 KB</td>
+</tr><tr><td>Encode_Depth10</td><td>11.253 &mu;s</td><td>0.5154 &mu;s</td><td>0.3409 &mu;s</td><td>3.3112</td><td>0.0458</td><td>27.11 KB</td>
 </tr><tr><td>Encode_Depth50</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td>
-</tr><tr><td>RoundTrip_Depth25</td><td>60.457 &mu;s</td><td>0.6194 &mu;s</td><td>0.3240 &mu;s</td><td>16.3574</td><td>1.0986</td><td>133.87 KB</td>
+</tr><tr><td>RoundTrip_Depth25</td><td>61.131 &mu;s</td><td>1.7561 &mu;s</td><td>1.1616 &mu;s</td><td>15.8691</td><td>1.4648</td><td>129.7 KB</td>
 </tr><tr><td>RoundTrip_Depth50</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td>
 </tr></tbody></table>
 </body>

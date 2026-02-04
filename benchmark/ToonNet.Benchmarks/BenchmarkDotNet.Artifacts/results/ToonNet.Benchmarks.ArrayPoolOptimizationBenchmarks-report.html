@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>ToonNet.Benchmarks.ArrayPoolOptimizationBenchmarks-20260204-222404</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.0, macOS 26.2 (25C56) [Darwin 25.2.0]
+Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
+.NET SDK 10.0.100
+  [Host]     : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+  Job-RBRYOQ : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+</code></pre>
+<pre><code>IterationCount=10  RunStrategy=Throughput  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                   </th><th>Mean  </th><th>Error </th><th>StdDev</th><th>Ratio   </th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>&#39;GetBytes - Small (100B)&#39;</td><td>18.08 ns</td><td>0.143 ns</td><td>0.075 ns</td><td>baseline</td><td></td><td>0.0181</td><td>-</td><td>-</td><td>152 B</td><td></td>
+</tr><tr><td>&#39;GetBytes - Medium (1KB)&#39;</td><td>98.79 ns</td><td>1.408 ns</td><td>0.932 ns</td><td>5.46x slower</td><td>0.05x</td><td>0.1625</td><td>-</td><td>-</td><td>1360 B</td><td>8.95x more</td>
+</tr><tr><td>&#39;GetBytes - Large (10KB)&#39;</td><td>878.04 ns</td><td>32.449 ns</td><td>21.463 ns</td><td>48.57x slower</td><td>1.15x</td><td>1.5898</td><td>-</td><td>-</td><td>13328 B</td><td>87.68x more</td>
+</tr><tr><td>&#39;GetBytes - VeryLarge (100KB)&#39;</td><td>16,361.16 ns</td><td>1,379.705 ns</td><td>912.589 ns</td><td>905.10x slower</td><td>48.32x</td><td>41.6565</td><td>41.6565</td><td>41.6565</td><td>133060 B</td><td>875.39x more</td>
+</tr><tr><td>&#39;ArrayPool - Small (100B)&#39;</td><td>15.61 ns</td><td>0.189 ns</td><td>0.125 ns</td><td>1.16x faster</td><td>0.01x</td><td>-</td><td>-</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>&#39;ArrayPool - Medium (1KB)&#39;</td><td>49.89 ns</td><td>0.743 ns</td><td>0.442 ns</td><td>2.76x slower</td><td>0.03x</td><td>-</td><td>-</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>&#39;ArrayPool - Large (10KB)&#39;</td><td>369.99 ns</td><td>4.880 ns</td><td>3.228 ns</td><td>20.47x slower</td><td>0.19x</td><td>-</td><td>-</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>&#39;ArrayPool - VeryLarge (100KB)&#39;</td><td>3,717.52 ns</td><td>14.639 ns</td><td>8.711 ns</td><td>205.65x slower</td><td>0.92x</td><td>-</td><td>-</td><td>-</td><td>2 B</td><td>76.00x less</td>
+</tr><tr><td>&#39;StreamWrite_GetBytes - Large&#39;</td><td>1,453.96 ns</td><td>22.445 ns</td><td>13.356 ns</td><td>80.43x slower</td><td>0.77x</td><td>3.2043</td><td>0.1526</td><td>-</td><td>26792 B</td><td>176.26x more</td>
+</tr><tr><td>&#39;StreamWrite_ArrayPool - Large&#39;</td><td>901.44 ns</td><td>8.628 ns</td><td>4.513 ns</td><td>49.87x slower</td><td>0.31x</td><td>1.6069</td><td>-</td><td>-</td><td>13464 B</td><td>88.58x more</td>
+</tr></tbody></table>
+</body>
+</html>

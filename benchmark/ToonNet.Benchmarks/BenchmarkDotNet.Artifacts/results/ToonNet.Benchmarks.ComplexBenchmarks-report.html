@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>ToonNet.Benchmarks.ComplexBenchmarks-20260131-234120</title>
+<title>ToonNet.Benchmarks.ComplexBenchmarks-20260204-222015</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -17,7 +17,7 @@ BenchmarkDotNet v0.15.0, macOS 26.2 (25C56) [Darwin 25.2.0]
 Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
 .NET SDK 10.0.100
   [Host]     : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
-  Job-NZRPBE : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
+  Job-RPWNZH : .NET 8.0.11 (8.0.1124.51707), Arm64 RyuJIT AdvSIMD
 </code></pre>
 <pre><code>WarmupCount=3  
 </code></pre>
@@ -25,10 +25,10 @@ Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
 <table>
 <thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>SerializeGenerated</td><td>267.7 ns</td><td>4.73 ns</td><td>4.43 ns</td><td>0.1807</td><td>0.0005</td><td>1.48 KB</td>
-</tr><tr><td>SerializeReflection</td><td>2,443.5 ns</td><td>32.93 ns</td><td>27.49 ns</td><td>0.4921</td><td>-</td><td>4.04 KB</td>
-</tr><tr><td>DeserializeGenerated</td><td>824.1 ns</td><td>3.93 ns</td><td>3.68 ns</td><td>0.2270</td><td>-</td><td>1.86 KB</td>
-</tr><tr><td>DeserializeReflection</td><td>6,324.1 ns</td><td>74.95 ns</td><td>66.44 ns</td><td>1.7471</td><td>0.0153</td><td>14.33 KB</td>
+</thead><tbody><tr><td>SerializeGenerated</td><td>264.8 ns</td><td>2.32 ns</td><td>1.81 ns</td><td>0.1807</td><td>0.0005</td><td>1.48 KB</td>
+</tr><tr><td>SerializeReflection</td><td>2,389.9 ns</td><td>20.08 ns</td><td>17.80 ns</td><td>0.4921</td><td>-</td><td>4.04 KB</td>
+</tr><tr><td>DeserializeGenerated</td><td>831.5 ns</td><td>16.22 ns</td><td>19.31 ns</td><td>0.2270</td><td>-</td><td>1.86 KB</td>
+</tr><tr><td>DeserializeReflection</td><td>6,294.5 ns</td><td>66.43 ns</td><td>55.47 ns</td><td>1.7471</td><td>0.0153</td><td>14.33 KB</td>
 </tr></tbody></table>
 </body>
 </html>

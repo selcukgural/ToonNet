@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
@@ -167,7 +168,7 @@ public static class ToonSerializer
     /// <param name="type">The type of object to serialize.</param>
     /// <param name="options">Optional serialization options.</param>
     /// <returns>The TOON format string representation of the object.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when type is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when the type is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     public static string Serialize(object? value, Type type, ToonSerializerOptions? options = null)
     {
@@ -217,15 +218,31 @@ public static class ToonSerializer
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    /// This method uses ArrayPool&lt;byte&gt; for efficient memory usage.
+    /// Suitable for high-throughput scenarios with minimal GC pressure.
+    /// </remarks>
     public static async ValueTask SerializeToStreamAsync<T>(T? value, Stream stream, ToonSerializerOptions? options = null,
                                                             CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
         var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
-        var bytes = System.Text.Encoding.UTF8.GetBytes(toonString);
-
-        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+        
+        // Use ArrayPool to avoid allocating byte arrays
+        var encoding = System.Text.Encoding.UTF8;
+        var maxByteCount = encoding.GetMaxByteCount(toonString.Length);
+        var buffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
+        
+        try
+        {
+            var bytesWritten = encoding.GetBytes(toonString, 0, toonString.Length, buffer, 0);
+            await stream.WriteAsync(buffer.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     /// <summary>
@@ -264,6 +281,10 @@ public static class ToonSerializer
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    /// This method uses ArrayPool&lt;byte&gt; for efficient memory usage.
+    /// Suitable for high-throughput scenarios with minimal GC pressure.
+    /// </remarks>
     public static async ValueTask SerializeToStreamAsync(Type type, object? value, Stream stream, ToonSerializerOptions? options = null,
                                                          CancellationToken cancellationToken = default)
     {
@@ -272,9 +293,21 @@ public static class ToonSerializer
 
         cancellationToken.ThrowIfCancellationRequested();
         var toonString = Serialize(value, type, options);
-        var bytes = System.Text.Encoding.UTF8.GetBytes(toonString);
-
-        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+        
+        // Use ArrayPool to avoid allocating byte arrays
+        var encoding = System.Text.Encoding.UTF8;
+        var maxByteCount = encoding.GetMaxByteCount(toonString.Length);
+        var buffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
+        
+        try
+        {
+            var bytesWritten = encoding.GetBytes(toonString, 0, toonString.Length, buffer, 0);
+            await stream.WriteAsync(buffer.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     /// <summary>
@@ -300,7 +333,7 @@ public static class ToonSerializer
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(filePath);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
         await using var writer = new StreamWriter(fileStream, System.Text.Encoding.UTF8);
 
         var isFirst = true;
@@ -317,7 +350,7 @@ public static class ToonSerializer
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
-            await writer.WriteAsync(toonString).ConfigureAwait(false);
+            await writer.WriteAsync(toonString.AsMemory(), cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -362,7 +395,7 @@ public static class ToonSerializer
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
-            await writer.WriteAsync(toonString).ConfigureAwait(false);
+            await writer.WriteAsync(toonString.AsMemory(), cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -630,7 +663,7 @@ public static class ToonSerializer
                 propName = GetPropertyName(prop, options, metadata);
             }
 
-            // Use compiled getter for massive speedup (300-500% faster than reflection)
+            // Use a compiled getter for massive speedup (300-500% faster than reflection)
             var propValue = metadata.Getters.TryGetValue(prop, out var getter) 
                 ? getter(value) 
                 : prop.GetValue(value); // Fallback (shouldn't happen)
@@ -1106,7 +1139,7 @@ public static class ToonSerializer
 
             var propValue = DeserializeValue(toonValue, prop.PropertyType, options, depth + 1);
             
-            // Use compiled setter for massive speedup (300-500% faster than reflection)
+            // Use a compiled setter for massive speedup (300-500% faster than reflection)
             if (metadata.Setters.TryGetValue(prop, out var setter))
             {
                 setter(instance, propValue);
@@ -1215,7 +1248,7 @@ public static class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
         using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
 
         await foreach (var item in DeserializeStreamAsync<T>(reader, options, cancellationToken))
@@ -1248,7 +1281,7 @@ public static class ToonSerializer
         ArgumentNullException.ThrowIfNull(filePath);
         ArgumentNullException.ThrowIfNull(multiDocumentOptions);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
         using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
 
         await foreach (var item in DeserializeStreamAsync<T>(reader, options, multiDocumentOptions, cancellationToken))

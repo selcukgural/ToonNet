@@ -27,7 +27,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     #region Public API
 
     /// <summary>
-    ///     Parses a TOON format string into a document.
+    ///  Parses a TOON format string into a document.
     /// </summary>
     /// <param name="input">The TOON format string to parse.</param>
     /// <returns>A ToonDocument representing the parsed input.</returns>
@@ -79,8 +79,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(filePath);
         
-        var input = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken);
-        return await ParseAsync(input, cancellationToken);
+        var input = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        return await ParseAsync(input, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -97,8 +97,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
         ArgumentNullException.ThrowIfNull(stream);
         
         using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
-        var input = await reader.ReadToEndAsync(cancellationToken);
-        return await ParseAsync(input, cancellationToken);
+        var input = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        return await ParseAsync(input, cancellationToken).ConfigureAwait(false);
     }
 
     #endregion
@@ -545,7 +545,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 return new ToonBoolean(false);
         }
 
-        // Try to parse as number
+        // Try to parse as a number
         if (double.TryParse(span, NumberStyles.Any, CultureInfo.InvariantCulture, out var number))
         {
             return new ToonNumber(number);
@@ -938,11 +938,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return Array.Empty<string>();
         }
 
-        // Count commas to pre-allocate array
+        // Count commas to a pre-allocate array
         var count = 1;
-        for (var i = 0; i < input.Length; i++)
+        foreach (var c in input)
         {
-            if (input[i] == ',')
+            if (c == ',')
             {
                 count++;
             }

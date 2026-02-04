@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -352,7 +353,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
             if (item is ToonObject rowObj && array.FieldNames != null)
             {
-                // Optimized: direct append instead of List + Join
+                // Optimized: directly append instead of List + Join
                 for (int j = 0; j < array.FieldNames.Length; j++)
                 {
                     if (j > 0)
@@ -386,7 +387,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// </remarks>
     private void EncodePrimitiveArrayInline(ToonArray array)
     {
-        // Optimized: direct append instead of Select + Join
+        // Optimized: directly append instead of Select + Join
         for (int i = 0; i < array.Items.Count; i++)
         {
             if (i > 0)
@@ -418,21 +419,20 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             WriteIndent(indentLevel);
             _sb!.Append("- ");
 
-            if (item is ToonObject obj)
+            switch (item)
             {
-                EncodeObjectInline(obj, indentLevel);
-                _sb!.AppendLine();
+                case ToonObject obj:
+                    EncodeObjectInline(obj, indentLevel);
+                    break;
+                case ToonArray arr:
+                    EncodeValue(arr, indentLevel + _options.IndentSize);
+                    break;
+                default:
+                    EncodeValue(item, indentLevel);
+                    break;
             }
-            else if (item is ToonArray arr)
-            {
-                EncodeValue(arr, indentLevel + _options.IndentSize);
-                _sb!.AppendLine();
-            }
-            else
-            {
-                EncodeValue(item, indentLevel);
-                _sb!.AppendLine();
-            }
+
+            _sb!.AppendLine();
         }
     }
 
@@ -512,95 +512,106 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
         // Optimization: Use stackalloc buffer for TryFormat to avoid string allocations
         Span<char> buffer = stackalloc char[32]; // Sufficient for any double
-        
+
+        int dotIndex = -1;
+
         if (needsScientific)
         {
-            if (value.TryFormat(buffer, out var written, "E17", CultureInfo.InvariantCulture))
+            if (!value.TryFormat(buffer, out var written, "E17", CultureInfo.InvariantCulture))
             {
-                var result = buffer[..written];
-                // Normalize to lowercase 'e'
-                for (int i = 0; i < written; i++)
-                {
-                    if (result[i] == 'E')
-                    {
-                        result[i] = 'e';
-                        break;
-                    }
-                }
-                return new string(result);
+                return value.ToString("G17", CultureInfo.InvariantCulture);
             }
+
+            var result = buffer[..written];
+            // Normalize to lowercase 'e'
+            for (int i = 0; i < written; i++)
+            {
+                if (result[i] != 'E')
+                {
+                    continue;
+                }
+
+                result[i] = 'e';
+                break;
+            }
+            return new string(result);
         }
         else
         {
-            if (value.TryFormat(buffer, out var written, "G17", CultureInfo.InvariantCulture))
+            if (!value.TryFormat(buffer, out var written, "G17", CultureInfo.InvariantCulture))
             {
-                var result = buffer[..written];
+                return value.ToString("G17", CultureInfo.InvariantCulture);
+            }
+
+            var result = buffer[..written];
                 
-                // Check if scientific notation was produced
-                int eIndex = -1;
-                for (int i = 0; i < written; i++)
+            // Check if scientific notation was produced
+            var eIndex = -1;
+            for (int i = 0; i < written; i++)
+            {
+                if (result[i] is not ('e' or 'E'))
                 {
-                    if (result[i] is 'e' or 'E')
-                    {
-                        eIndex = i;
-                        break;
-                    }
+                    continue;
                 }
+
+                eIndex = i;
+                break;
+            }
                 
-                if (eIndex != -1)
+            if (eIndex != -1)
+            {
+                // Scientific notation produced, convert to decimal
+                Span<char> decimalBuffer = stackalloc char[32];
+
+                if (!value.TryFormat(decimalBuffer, out written, "F17", CultureInfo.InvariantCulture))
                 {
-                    // Scientific notation produced, convert to decimal
-                    Span<char> decimalBuffer = stackalloc char[32];
-                    if (value.TryFormat(decimalBuffer, out written, "F17", CultureInfo.InvariantCulture))
-                    {
-                        // Trim trailing zeros
-                        while (written > 0 && decimalBuffer[written - 1] == '0')
-                        {
-                            written--;
-                        }
-                        
-                        if (written > 0 && decimalBuffer[written - 1] == '.')
-                        {
-                            written++; // Keep one zero after decimal
-                        }
-                        
-                        return new string(decimalBuffer[..written]);
-                    }
+                    return new string(result[..written]);
                 }
-                else
+
+                // Trim trailing zeros
+                while (written > 0 && decimalBuffer[written - 1] == '0')
                 {
-                    // Check for decimal point and trim trailing zeros
-                    int dotIndex = -1;
-                    for (int i = 0; i < written; i++)
-                    {
-                        if (result[i] == '.')
-                        {
-                            dotIndex = i;
-                            break;
-                        }
-                    }
-                    
-                    if (dotIndex != -1)
-                    {
-                        // Trim trailing zeros after decimal
-                        while (written > dotIndex + 1 && result[written - 1] == '0')
-                        {
-                            written--;
-                        }
-                        
-                        if (written == dotIndex + 1)
-                        {
-                            written++; // Keep '.0'
-                        }
-                    }
+                    written--;
                 }
-                
+                        
+                if (written > 0 && decimalBuffer[written - 1] == '.')
+                {
+                    written++; // Keep one zero after decimal
+                }
+                        
+                return new string(decimalBuffer[..written]);
+            }
+
+            // Check for decimal point and trim trailing zeros
+            for (int i = 0; i < written; i++)
+            {
+                if (result[i] != '.')
+                {
+                    continue;
+                }
+
+                dotIndex = i;
+                break;
+            }
+
+            if (dotIndex == -1)
+            {
                 return new string(result[..written]);
             }
-        }
 
-        // Fallback to original implementation
-        return value.ToString("G17", CultureInfo.InvariantCulture);
+            // Trim trailing zeros after decimal
+            while (written > dotIndex + 1 && result[written - 1] == '0')
+            {
+                written--;
+            }
+                        
+            if (written == dotIndex + 1)
+            {
+                written++; // Keep '.0'
+            }
+
+            return new string(result[..written]);
+        }
     }
 
     /// <summary>
@@ -712,9 +723,8 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
 
         // Fast path: check for special chars and spaces
-        for (int i = 0; i < span.Length; i++)
+        foreach (var ch in span)
         {
-            char ch = span[i];
             if (ch is ' ' or ':' or ',' or '[' or ']' or '{' or '}' or '\n' or '\r' or '"' or '\\')
             {
                 return true;
@@ -747,7 +757,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static string EscapeString(string value)
     {
-        // Quick check: if no special chars, return original (SIMD-accelerated)
+        // Quick check: if no special chars, return the original (SIMD-accelerated)
         if (!ContainsSpecialChars(value.AsSpan()))
         {
             return value;
@@ -791,49 +801,48 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     private static bool ContainsSpecialChars(ReadOnlySpan<char> value)
     {
         // SIMD-accelerated search for special characters
-        if (Vector128.IsHardwareAccelerated && value.Length >= Vector128<ushort>.Count)
+        if (!Vector128.IsHardwareAccelerated || value.Length < Vector128<ushort>.Count)
         {
-            var backslash = Vector128.Create((ushort)'\\');
-            var quote = Vector128.Create((ushort)'"');
-            var newline = Vector128.Create((ushort)'\n');
-            var carriageReturn = Vector128.Create((ushort)'\r');
-            var tab = Vector128.Create((ushort)'\t');
-
-            ref ushort searchSpace = ref Unsafe.As<char, ushort>(ref MemoryMarshal.GetReference(value));
-            int offset = 0;
-            int length = value.Length;
-
-            while (length >= Vector128<ushort>.Count)
-            {
-                var vector = Vector128.LoadUnsafe(ref searchSpace, (nuint)offset);
-
-                if (Vector128.EqualsAny(vector, backslash) ||
-                    Vector128.EqualsAny(vector, quote) ||
-                    Vector128.EqualsAny(vector, newline) ||
-                    Vector128.EqualsAny(vector, carriageReturn) ||
-                    Vector128.EqualsAny(vector, tab))
-                {
-                    return true;
-                }
-
-                offset += Vector128<ushort>.Count;
-                length -= Vector128<ushort>.Count;
-            }
-
-            // Check remaining elements
-            for (int i = offset; i < value.Length; i++)
-            {
-                if (value[i] is '\\' or '"' or '\n' or '\r' or '\t')
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return value.IndexOfAny(['\\', '"', '\n', '\r', '\t']) >= 0;
         }
 
-        // Fallback for non-SIMD path
-        return value.IndexOfAny(['\\', '"', '\n', '\r', '\t']) >= 0;
+        var backslash = Vector128.Create((ushort)'\\');
+        var quote = Vector128.Create((ushort)'"');
+        var newline = Vector128.Create((ushort)'\n');
+        var carriageReturn = Vector128.Create((ushort)'\r');
+        var tab = Vector128.Create((ushort)'\t');
+
+        ref ushort searchSpace = ref Unsafe.As<char, ushort>(ref MemoryMarshal.GetReference(value));
+        int offset = 0;
+        int length = value.Length;
+
+        while (length >= Vector128<ushort>.Count)
+        {
+            var vector = Vector128.LoadUnsafe(ref searchSpace, (nuint)offset);
+
+            if (Vector128.EqualsAny(vector, backslash) ||
+                Vector128.EqualsAny(vector, quote) ||
+                Vector128.EqualsAny(vector, newline) ||
+                Vector128.EqualsAny(vector, carriageReturn) ||
+                Vector128.EqualsAny(vector, tab))
+            {
+                return true;
+            }
+
+            offset += Vector128<ushort>.Count;
+            length -= Vector128<ushort>.Count;
+        }
+
+        // Check remaining elements
+        for (int i = offset; i < value.Length; i++)
+        {
+            if (value[i] is '\\' or '"' or '\n' or '\r' or '\t')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -906,8 +915,8 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(filePath);
         
-        var encodedString = await EncodeAsync(document, cancellationToken);
-        await File.WriteAllTextAsync(filePath, encodedString, System.Text.Encoding.UTF8, cancellationToken);
+        var encodedString = await EncodeAsync(document, cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(filePath, encodedString, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -920,12 +929,29 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <exception cref="ArgumentNullException">Thrown when a document or stream is null.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    /// This method uses ArrayPool&lt;byte&gt; for efficient memory usage.
+    /// Suitable for high-throughput scenarios with minimal GC pressure.
+    /// </remarks>
     public async Task EncodeToStreamAsync(ToonDocument document, Stream stream, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
         
-        var encodedString = await EncodeAsync(document, cancellationToken);
-        var bytes = System.Text.Encoding.UTF8.GetBytes(encodedString);
-        await stream.WriteAsync(bytes, cancellationToken);
+        var encodedString = await EncodeAsync(document, cancellationToken).ConfigureAwait(false);
+        
+        // Use ArrayPool to avoid allocating byte arrays
+        var encoding = System.Text.Encoding.UTF8;
+        var maxByteCount = encoding.GetMaxByteCount(encodedString.Length);
+        var buffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
+        
+        try
+        {
+            var bytesWritten = encoding.GetBytes(encodedString, 0, encodedString.Length, buffer, 0);
+            await stream.WriteAsync(buffer.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 }
