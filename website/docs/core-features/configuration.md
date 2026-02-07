@@ -554,6 +554,13 @@ var options = new ToonSerializerOptions
 };
 ```
 
+## Thread-Safety
+
+- `ToonSerializer` methods are safe to call concurrently across threads.
+- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
+- Cache entries are created on demand and retained for the process lifetime (no eviction).
+- Reuse `ToonSerializerOptions` instances, but do not mutate a single instance concurrently across threads.
+
 ## See Also
 
 - **[Serialization](serialization)**: Using options during serialization

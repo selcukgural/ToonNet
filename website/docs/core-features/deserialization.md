@@ -603,3 +603,10 @@ public Person DeserializePerson(string toonInput)
 - **[Type System](type-system)**: Understanding TOON types
 - **[Configuration](configuration)**: Detailed options guide
 - **[Custom Converters](../advanced/custom-converters)**: Handle custom types
+
+## Thread-Safety
+
+- `ToonSerializer` methods are safe to call concurrently across threads.
+- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
+- Cache entries are created on demand and retained for the process lifetime (no eviction).
+- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.

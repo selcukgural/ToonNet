@@ -369,6 +369,15 @@ builder.Services.AddToon(builder.Configuration)
 
 ---
 
+## 🔒 Thread-Safety
+
+- `ToonSerializer` methods are safe to call concurrently across threads.
+- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
+- Cache entries are created on demand and retained for the process lifetime (no eviction).
+- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
+
+---
+
 ## 🔗 Related Packages
 
 **Core:**

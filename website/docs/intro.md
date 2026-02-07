@@ -91,3 +91,10 @@ Additional resources:
 ## License
 
 ToonNet is open-source software licensed under the [MIT License](https://github.com/selcukgural/ToonNet/blob/main/LICENSE).
+
+## Thread-Safety
+
+- `ToonSerializer` methods are safe to call concurrently across threads.
+- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
+- Cache entries are created on demand and retained for the process lifetime (no eviction).
+- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.

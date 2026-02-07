@@ -33,6 +33,9 @@ public string Serialize(User user)
 }
 ```
 
+**Thread-safety note:** Reuse options across calls, but do not mutate a single `ToonSerializerOptions`
+instance concurrently across threads.
+
 ### 2. Use Streaming for Large Data
 
 ```csharp

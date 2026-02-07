@@ -18,6 +18,13 @@ namespace ToonNet.Core.Serialization;
 /// and asynchronous methods supporting various input and output options such as
 /// strings, streams, and files.
 /// </summary>
+/// <remarks>
+/// This type is thread-safe for concurrent use. Shared metadata caches are
+/// backed by <see cref="ConcurrentDictionary{TKey,TValue}"/> and are safe for
+/// multi-threaded access. For correctness, do not mutate a single
+/// <see cref="ToonSerializerOptions"/> instance concurrently across threads.
+/// Cache entries are retained for the lifetime of the process.
+/// </remarks>
 public static class ToonSerializer
 {
     #region Reflection Cache
@@ -27,6 +34,11 @@ public static class ToonSerializer
     /// Contains details about properties, attributes, getters, and setters to
     /// facilitate efficient serialization and deserialization.
     /// </summary>
+    /// <remarks>
+    /// Instances are built once and treated as immutable thereafter. The
+    /// <see cref="CachedPropertyNames"/> map is concurrent for safe updates when
+    /// property names are computed by multiple threads.
+    /// </remarks>
     private sealed class TypeMetadata
     {
         public PropertyInfo[] Properties { get; init; } = [];
@@ -39,8 +51,13 @@ public static class ToonSerializer
     }
 
     /// <summary>
-    ///     Thread-safe cache for type metadata.
+    /// Thread-safe cache for type metadata.
     /// </summary>
+    /// <remarks>
+    /// Entries are created on demand and retained for the lifetime of the
+    /// process. This cache does not evict entries, so the size grows with the
+    /// number of unique types and option combinations encountered.
+    /// </remarks>
     private static readonly ConcurrentDictionary<(Type Type, bool IncludeReadOnly), TypeMetadata> TypeMetadataCache = new();
 
     /// <summary>
@@ -86,6 +103,10 @@ public static class ToonSerializer
     /// <param name="type">The type for which metadata is retrieved or created.</param>
     /// <param name="includeReadOnly">Specifies whether to include read-only properties in the metadata.</param>
     /// <returns>An instance of <c>TypeMetadata</c> containing metadata for the specified type.</returns>
+    /// <remarks>
+    /// This method is thread-safe and uses a concurrent cache to avoid repeated
+    /// reflection work across threads.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static TypeMetadata GetTypeMetadata(Type type, bool includeReadOnly)
     {
@@ -687,7 +708,8 @@ public static class ToonSerializer
     /// <param name="metadata">Type metadata containing cached property names.</param>
     /// <returns>The name to use in TOON format.</returns>
     /// <remarks>
-    /// Optimized: Uses cached property names from metadata to avoid repeated transformations.
+    /// Optimized: Uses cached property names from metadata to avoid repeated
+    /// transformations. The cache is thread-safe for concurrent access.
     /// </remarks>
     private static string GetPropertyName(PropertyInfo property, ToonSerializerOptions options, TypeMetadata metadata)
     {

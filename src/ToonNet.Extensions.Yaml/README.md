@@ -337,6 +337,15 @@ var roundtripYaml = ToonYamlConverter.ToYaml(toonDoc);
 
 ---
 
+## 🔒 Thread-Safety
+
+- `ToonSerializer` and YAML conversion methods are safe to call concurrently across threads.
+- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
+- Cache entries are created on demand and retained for the process lifetime (no eviction).
+- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
+
+---
+
 ## 🔗 Related Packages
 
 **Core:**
@@ -397,4 +406,3 @@ Contributions welcome! Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) firs
 ---
 
 **Part of the [ToonNet](../../README.md) serialization library family.**
-
