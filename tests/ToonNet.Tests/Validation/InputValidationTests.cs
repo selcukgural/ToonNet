@@ -84,15 +84,11 @@ public class InputValidationTests
     }
 
     [Fact]
-    public void ToonEncoder_Encode_DocumentWithNullRoot_ThrowsArgumentNullException()
+    public void ToonDocument_Constructor_NullRoot_ThrowsArgumentNullException()
     {
-        // Arrange
-        var encoder = new ToonEncoder();
-        var document = new ToonDocument(null!);
-
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => encoder.Encode(document));
-        Assert.Contains("Document root cannot be null", ex.Message);
+        var ex = Assert.Throws<ArgumentNullException>(() => new ToonDocument(null!));
+        Assert.Equal("root", ex.ParamName);
     }
 
     [Fact]

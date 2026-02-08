@@ -11,10 +11,11 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.SourceGenerators</PackageId>
+        <Version>1.4.0</Version>
         <Title>ToonNet Source Generators</Title>
         <Description>Compile-time code generation for zero-allocation serialization. AOT-compatible, generates static Serialize/Deserialize methods. Perfect for hot paths and maximum performance.</Description>
         <PackageTags>toon;source-generator;aot;roslyn;performance;zero-allocation;codegen</PackageTags>
-        <PackageReleaseNotes>Initial 1.0.0 release with full attribute support and AOT compatibility.</PackageReleaseNotes>
+        <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>
         <DevelopmentDependency>true</DevelopmentDependency>
     </PropertyGroup>
 

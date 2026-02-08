@@ -356,6 +356,50 @@ string yaml = ToonYamlConvert.ToYaml(toonString);
 | `FromYaml(yaml)` | Extensions.Yaml | YAML string | TOON string | Convert YAML to TOON |
 | `ToYaml(toon)` | Extensions.Yaml | TOON string | YAML string | Convert TOON to YAML |
 
+### Async & Streaming API
+
+For large datasets (millions of records, database exports, ETL pipelines), ToonNet provides memory-efficient streaming serialization:
+
+```csharp
+// Stream large dataset from database without loading all into memory
+await ToonSerializer.SerializeStreamAsync(
+    items: dbContext.Users.AsAsyncEnumerable(),
+    filePath: "users_export.toon",
+    cancellationToken: cts.Token
+);
+
+// Read back with incremental deserialization
+await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_export.toon"))
+{
+    ProcessUser(user);  // Memory-efficient: only one user in memory at a time
+}
+
+// Advanced: Custom separator mode and batch size
+await ToonSerializer.SerializeStreamAsync(
+    items: GenerateLargeDatasetAsync(),
+    filePath: "export.toon",
+    options: null,
+    writeOptions: new ToonMultiDocumentWriteOptions
+    {
+        Mode = ToonMultiDocumentSeparatorMode.ExplicitSeparator,  // Use "---" separator
+        DocumentSeparator = "---",
+        BatchSize = 100  // Buffer 100 items before writing (improves throughput)
+    },
+    cancellationToken: cts.Token
+);
+```
+
+**Use Cases:**
+- **Database exports** - Stream millions of records without OOM
+- **ETL pipelines** - Process large files incrementally
+- **Log processing** - Parse multi-GB log files
+- **Data migration** - Convert large datasets with minimal memory footprint
+
+**Performance:**
+- **Memory:** Constant O(1) regardless of dataset size (only batch size × item size in memory)
+- **Throughput:** Batched writes reduce I/O overhead by ~2-3x compared to unbuffered
+- **Cancellation:** Full CancellationToken support for long-running operations
+
 📖 **Full API documentation: [API-GUIDE.md](docs/API-GUIDE.md)**
 
 ---

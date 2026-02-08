@@ -13,10 +13,11 @@
     
     <!-- Package Information -->
     <PackageId>ToonNet.Extensions.Yaml</PackageId>
+    <Version>1.4.0</Version>
     <Title>ToonNet YAML Extension</Title>
     <Description>Bidirectional YAML ↔ TOON conversion with YamlDotNet. Perfect for Kubernetes, Docker configs, and CI/CD files. Includes ToonYamlConvert high-level API and ToonYamlConverter engine.</Description>
     <PackageTags>toon;yaml;serialization;kubernetes;docker;config;devops;ci-cd</PackageTags>
-    <PackageReleaseNotes>Initial 1.0.0 release with layered architecture (ToonYamlConvert + ToonYamlConverter).</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

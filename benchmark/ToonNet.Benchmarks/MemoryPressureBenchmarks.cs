@@ -1,4 +1,3 @@
-using System.Linq;
 using BenchmarkDotNet.Attributes;
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
@@ -56,7 +55,7 @@ public class MemoryPressureBenchmarks
     }
 
     [Benchmark]
-    public object? RoundTrip_HighAllocationPressure()
+    public ToonDocument RoundTrip_HighAllocationPressure()
     {
         var doc = _parser.Parse(_document);
         var encoded = _encoder.Encode(doc);
@@ -69,7 +68,7 @@ public class MemoryPressureBenchmarks
         // Simulate parsing multiple documents in sequence
         for (int i = 0; i < 10; i++)
         {
-            var doc = _parser.Parse(_document);
+            _ = _parser.Parse(_document);
         }
     }
 
@@ -81,7 +80,7 @@ public class MemoryPressureBenchmarks
         // Simulate encoding multiple times
         for (int i = 0; i < 10; i++)
         {
-            var encoded = _encoder.Encode(doc);
+            _ = _encoder.Encode(doc);
         }
     }
 
@@ -92,7 +91,7 @@ public class MemoryPressureBenchmarks
         for (int i = 0; i < 100; i++)
         {
             var parser = new ToonParser();
-            var doc = parser.Parse("name: test\nage: 30");
+            _ = parser.Parse("name: test\nage: 30");
         }
     }
 
@@ -108,7 +107,64 @@ public class MemoryPressureBenchmarks
         for (int i = 0; i < 100; i++)
         {
             var encoder = new ToonEncoder();
-            var encoded = encoder.Encode(simpleDoc);
+            _ = encoder.Encode(simpleDoc);
+        }
+    }
+
+    [Benchmark]
+    public async Task SerializeStreamAsync_10K_Items()
+    {
+        // Test streaming serialization with 10K items
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            await ToonSerializer.SerializeStreamAsync(GenerateTestDataAsync(10_000), tempFile);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Benchmark]
+    public async Task SerializeCollectionToFileAsync_10K_Items()
+    {
+        // Test collection serialization with 10K items (baseline comparison)
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var items = Enumerable.Range(0, 10_000).Select(i => new
+            {
+                Id = i,
+                Name = $"User_{i}",
+                Email = $"user{i}@example.com"
+            }).ToList();
+            
+            await ToonSerializer.SerializeCollectionToFileAsync(items, tempFile);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static async IAsyncEnumerable<object> GenerateTestDataAsync(int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            await Task.Yield();
+            yield return new
+            {
+                Id = i,
+                Name = $"User_{i}",
+                Email = $"user{i}@example.com"
+            };
         }
     }
 }

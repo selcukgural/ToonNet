@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'core-features/serialization',
         'core-features/deserialization',
+        'core-features/streaming',
         'core-features/type-system',
         'core-features/configuration',
       ],

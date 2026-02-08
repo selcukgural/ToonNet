@@ -309,10 +309,10 @@ public sealed class ToonSerializerAsyncTests
         var user = new TestUser { Name = "Test", Age = 1, Email = "test@test.com" };
 
         // Act & Assert
-        var ex1 = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => ToonSerializer.SerializeAsync(user, _options, cts.Token).AsTask());
             
-        var ex2 = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => ToonSerializer.DeserializeAsync<TestUser>("Name: Test", _options, cts.Token).AsTask());
     }
 
@@ -364,6 +364,283 @@ public sealed class ToonSerializerAsyncTests
                 File.Delete(filePath);
             }
         }
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_LargeDataset_WritesIncrementally()
+    {
+        // Arrange
+        var filePath = Path.GetTempFileName();
+        var itemCount = 10_000;
+
+        try
+        {
+            // Act - Stream large dataset without loading all into memory
+            await ToonSerializer.SerializeStreamAsync(
+                GenerateUsersAsync(itemCount), 
+                filePath, 
+                _options
+            );
+
+            // Assert - Verify file was written
+            Assert.True(File.Exists(filePath));
+            var fileInfo = new FileInfo(filePath);
+            Assert.True(fileInfo.Length > 0);
+
+            // Verify roundtrip - read back and count
+            var readCount = 0;
+            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options))
+            {
+                Assert.NotNull(user);
+                readCount++;
+            }
+
+            Assert.Equal(itemCount, readCount);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_WithExplicitSeparator_WritesCorrectFormat()
+    {
+        // Arrange
+        var filePath = Path.GetTempFileName();
+        var users = GenerateUsersAsync(3);
+
+        try
+        {
+            // Act - Use explicit separator mode
+            await ToonSerializer.SerializeStreamAsync(
+                users,
+                filePath,
+                _options,
+                ToonMultiDocumentWriteOptions.ExplicitSeparator
+            );
+
+            // Assert - Verify separator format
+            var content = await File.ReadAllTextAsync(filePath);
+            var separatorCount = content.Split("---").Length - 1;
+            Assert.Equal(2, separatorCount); // 3 items = 2 separators
+
+            // Verify roundtrip with matching read options
+            var readUsers = new List<TestUser>();
+            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(
+                filePath, 
+                _options, 
+                ToonMultiDocumentReadOptions.ExplicitSeparator))
+            {
+                if (user != null)
+                {
+                    readUsers.Add(user);
+                }
+            }
+
+            Assert.Equal(3, readUsers.Count);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_WithBlankLineSeparator_WritesCorrectFormat()
+    {
+        // Arrange
+        var filePath = Path.GetTempFileName();
+        var users = GenerateUsersAsync(5);
+
+        try
+        {
+            // Act - Use blank line separator (default)
+            await ToonSerializer.SerializeStreamAsync(
+                users,
+                filePath,
+                _options,
+                ToonMultiDocumentWriteOptions.BlankLine
+            );
+
+            // Assert - Verify blank line format
+            var content = await File.ReadAllTextAsync(filePath);
+            Assert.Contains("\n\n", content); // Should have blank line separators
+
+            // Verify roundtrip
+            var readUsers = new List<TestUser>();
+            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(
+                filePath, 
+                _options, 
+                ToonMultiDocumentReadOptions.BlankLine))
+            {
+                if (user != null)
+                {
+                    readUsers.Add(user);
+                }
+            }
+
+            Assert.Equal(5, readUsers.Count);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_ToStream_WritesCorrectly()
+    {
+        // Arrange
+        using var stream = new MemoryStream();
+        var users = GenerateUsersAsync(100);
+
+        // Act
+        await ToonSerializer.SerializeStreamAsync(users, stream, _options);
+
+        // Assert
+        stream.Position = 0;
+        using var reader = new StreamReader(stream);
+        
+        var readUsers = new List<TestUser>();
+        await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(reader, _options))
+        {
+            if (user != null)
+            {
+                readUsers.Add(user);
+            }
+        }
+
+        Assert.Equal(100, readUsers.Count);
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_WithCancellation_ThrowsOperationCanceledException()
+    {
+        // Arrange
+        var filePath = Path.GetTempFileName();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync(); // Cancel immediately
+
+        try
+        {
+            // Act & Assert
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            {
+                await ToonSerializer.SerializeStreamAsync(
+                    GenerateUsersAsync(1000),
+                    filePath,
+                    _options,
+                    cts.Token
+                );
+            });
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_CustomBatchSize_ProcessesCorrectly()
+    {
+        // Arrange
+        var filePath = Path.GetTempFileName();
+        var customOptions = new ToonMultiDocumentWriteOptions
+        {
+            Mode = ToonMultiDocumentSeparatorMode.BlankLine,
+            BatchSize = 10 // Small batch size for testing
+        };
+
+        try
+        {
+            // Act
+            await ToonSerializer.SerializeStreamAsync(
+                GenerateUsersAsync(50),
+                filePath,
+                _options,
+                customOptions
+            );
+
+            // Assert - Verify all items written
+            var readCount = 0;
+            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options))
+            {
+                Assert.NotNull(user);
+                readCount++;
+            }
+
+            Assert.Equal(50, readCount);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_EmptyStream_WritesNothing()
+    {
+        // Arrange
+        var filePath = Path.GetTempFileName();
+
+        try
+        {
+            // Act
+            await ToonSerializer.SerializeStreamAsync(
+                EmptyUsersAsync(),
+                filePath,
+                _options
+            );
+
+            // Assert
+            var content = await File.ReadAllTextAsync(filePath);
+            Assert.Empty(content);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
+    // Helper: Generate async enumerable of test users
+    private static async IAsyncEnumerable<TestUser> GenerateUsersAsync(int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            await Task.Yield(); // Simulate async data source
+            yield return new TestUser
+            {
+                Name = $"User{i}",
+                Age = 20 + (i % 50),
+                Email = $"user{i}@test.com"
+            };
+        }
+    }
+
+    // Helper: Empty async enumerable
+    private static async IAsyncEnumerable<TestUser> EmptyUsersAsync()
+    {
+        await Task.CompletedTask;
+        yield break;
     }
 
     public sealed class TestUser

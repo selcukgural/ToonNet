@@ -31,6 +31,7 @@ var restored = ToonSerializer.Deserialize<Person>(toon);
 - 🚀 **High Performance** - Expression trees, not reflection (10-100x faster)
 - 💰 **Token Efficient** - 40% fewer tokens than JSON (lower AI API costs)
 - 💻 **Developer Friendly** - System.Text.Json-compatible API
+- 🔄 **Streaming Support** - Memory-efficient serialization for millions of records
 - 🔧 **ASP.NET Core** - Input/output formatters, configuration provider
 - 📦 **Format Extensions** - JSON/YAML bidirectional conversion
 - 🎯 **Source Generators** - Compile-time code generation

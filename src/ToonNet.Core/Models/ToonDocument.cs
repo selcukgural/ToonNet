@@ -24,7 +24,7 @@ public sealed class ToonDocument(ToonValue root)
     /// <value>
     ///     The root value of the document, which can be any type derived from <see cref="ToonValue"/>.
     /// </value>
-    public ToonValue Root { get; } = root;
+    public ToonValue Root { get; } = root ?? throw new ArgumentNullException(nameof(root));
 
     /// <summary>
     ///     Attempts to treat the document root as an object.

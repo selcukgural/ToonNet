@@ -13,10 +13,11 @@
     
     <!-- Package Information -->
     <PackageId>ToonNet.Extensions.Json</PackageId>
+    <Version>1.4.0</Version>
     <Title>ToonNet JSON Extension</Title>
     <Description>Bidirectional JSON ↔ TOON conversion with System.Text.Json. Includes ToonConvert high-level API and ToonJsonConverter engine. Seamless interoperability for JSON-based systems.</Description>
     <PackageTags>toon;json;serialization;converter;system-text-json;interop</PackageTags>
-    <PackageReleaseNotes>Initial 1.0.0 release with layered architecture (ToonConvert + ToonJsonConverter).</PackageReleaseNotes>
+    <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

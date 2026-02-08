@@ -1,7 +1,6 @@
 using System.Text.Json;
 using ToonNet.Core;
 using ToonNet.Core.Encoding;
-using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.Extensions.Json;

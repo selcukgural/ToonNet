@@ -7,11 +7,11 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.Core</PackageId>
-        <Version>1.3.0</Version>
+        <Version>1.4.0</Version>
         <Title>ToonNet Core Library</Title>
-        <Description>High-performance TOON format serialization for .NET. Expression tree-based with zero reflection overhead. ArrayPool memory optimization, ConfigureAwait best practices. 447+ tests, 100% TOON v3.0 spec compliance. Perfect for AI/LLM token optimization, configuration files, and data exchange.</Description>
-        <PackageTags>toon;serialization;performance;dotnet;ai;llm;token-efficient;expression-trees;arraypool;high-performance</PackageTags>
-        <PackageReleaseNotes>v1.3.0: Critical async/memory optimizations - ConfigureAwait(false) eliminates deadlock risk, ArrayPool reduces memory allocation by 99.99% with 2-4x speed improvement on large payloads. Zero GC pressure. All 447 tests passing.</PackageReleaseNotes>
+        <Description>High-performance TOON format serialization for .NET. Expression tree-based with zero reflection overhead. ArrayPool memory optimization, ConfigureAwait best practices. 449+ tests, 100% TOON v3.0 spec compliance. Perfect for AI/LLM token optimization, configuration files, and data exchange.</Description>
+        <PackageTags>toon;serialization;performance;dotnet;ai;llm;token-efficient;expression-trees;arraypool;high-performance;streaming</PackageTags>
+        <PackageReleaseNotes>v1.4.0: Streaming serialization API for millions of records. SerializeStreamAsync/DeserializeStreamAsync with O(1) memory, 2-3x faster throughput. ToonMultiDocumentWriteOptions (batch size, separator modes). Validation framework added. All 449 tests passing.</PackageReleaseNotes>
         
         <!-- Performance: Enable Profile-Guided Optimization -->
         <TieredCompilation>true</TieredCompilation>

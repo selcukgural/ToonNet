@@ -439,9 +439,11 @@ catch (ToonSerializationException ex)
 3. **Use record types** for immutable data
 4. **Handle exceptions** appropriately in production
 5. **Use async methods** for I/O operations
+6. **Use streaming API** for large datasets (millions of records)
 
 ## Next Steps
 
-- **[Serialization](../core-features/serialization)**: Deep dive into serialization options
+- **[Serialization](../core-features/serialization)**: Deep dive into serialization options and streaming API
 - **[Deserialization](../core-features/deserialization)**: Advanced deserialization techniques
 - **[Configuration](../core-features/configuration)**: Customize serialization behavior
+- **[Performance Tuning](../advanced/performance-tuning)**: Optimize for large datasets with streaming

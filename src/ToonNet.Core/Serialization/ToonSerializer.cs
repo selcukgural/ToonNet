@@ -21,7 +21,7 @@ namespace ToonNet.Core.Serialization;
 /// <remarks>
 /// This type is thread-safe for concurrent use. Shared metadata caches are
 /// backed by <see cref="ConcurrentDictionary{TKey,TValue}"/> and are safe for
-/// multi-threaded access. For correctness, do not mutate a single
+/// multithreaded access. For correctness, do not mutate a single
 /// <see cref="ToonSerializerOptions"/> instance concurrently across threads.
 /// Cache entries are retained for the lifetime of the process.
 /// </remarks>
@@ -420,6 +420,176 @@ public static class ToonSerializer
 
             isFirst = false;
         }
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a stream of objects to a file with memory-efficient incremental serialization.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to serialize.</typeparam>
+    /// <param name="items">The async enumerable stream of items to serialize.</param>
+    /// <param name="filePath">The file path to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when items or filePath is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when file I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method is designed for large datasets that do not fit in memory (e.g., database queries, ETL pipelines).
+    ///     Items are serialized incrementally as they are enumerated, with minimal memory overhead.
+    ///     Uses blank-line separation by default. Compatible with <see cref="DeserializeStreamAsync{T}(string,ToonSerializerOptions,CancellationToken)"/>.
+    /// </remarks>
+    /// <example>
+    ///     <code>
+    ///     // Stream large dataset from database
+    ///     await ToonSerializer.SerializeStreamAsync(
+    ///         items: dbContext.Users.AsAsyncEnumerable(),
+    ///         filePath: "users.toon",
+    ///         cancellationToken: cts.Token
+    ///     );
+    ///     </code>
+    /// </example>
+    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options = null,
+                                                          CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(filePath);
+
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+        await SerializeStreamAsync(items, fileStream, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a stream of objects to a file with memory-efficient incremental serialization and custom write options.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to serialize.</typeparam>
+    /// <param name="items">The async enumerable stream of items to serialize.</param>
+    /// <param name="filePath">The file path to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="writeOptions">Options controlling multi-document separation and batching behavior.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when items, filePath, or writeOptions is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when file I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This overload allows configuring the separator mode (blank-line vs explicit separator) and batch size for optimized throughput.
+    ///     Higher batch sizes reduce I/O overhead but increase memory usage. The default batch size is 50.
+    /// </remarks>
+    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options,
+                                                          ToonMultiDocumentWriteOptions writeOptions,
+                                                          CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(filePath);
+        ArgumentNullException.ThrowIfNull(writeOptions);
+
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+        await SerializeStreamAsync(items, fileStream, options, writeOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a stream of objects to a stream with memory-efficient incremental serialization.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to serialize.</typeparam>
+    /// <param name="items">The async enumerable stream of items to serialize.</param>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when items or stream is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method is designed for large datasets that do not fit in memory (e.g., database queries, ETL pipelines).
+    ///     Items are serialized incrementally as they are enumerated, with minimal memory overhead.
+    ///     Uses blank-line separation by default. Compatible with <see cref="DeserializeStreamAsync{T}(StreamReader,ToonSerializerOptions,CancellationToken)"/>.
+    /// </remarks>
+    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options = null,
+                                                          CancellationToken cancellationToken = default)
+    {
+        await SerializeStreamAsync(items, stream, options, ToonMultiDocumentWriteOptions.BlankLine, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a stream of objects to a stream with memory-efficient incremental serialization and custom write options.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to serialize.</typeparam>
+    /// <param name="items">The async enumerable stream of items to serialize.</param>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="writeOptions">Options controlling multi-document separation and batching behavior.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>A ValueTask that represents the asynchronous serialization and write operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when items, stream, or writeOptions is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    /// <remarks>
+    ///     This method uses batched writes for improved throughput. Items are accumulated up to the configured batch size 
+    ///     before writing to the stream, reducing I/O overhead. Memory usage is proportional to batch size × item size.
+    ///     For very large items (MB+), consider using a smaller batch size.
+    /// </remarks>
+    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options,
+                                                          ToonMultiDocumentWriteOptions writeOptions,
+                                                          CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(writeOptions);
+
+        await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        var isFirst = true;
+        var batch = new StringBuilder();
+        var itemCount = 0;
+        var batchSize = Math.Max(1, writeOptions.BatchSize); // Ensure at least 1
+
+        await foreach (var item in items.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Add a separator between documents
+            if (!isFirst)
+            {
+                if (writeOptions.Mode == ToonMultiDocumentSeparatorMode.ExplicitSeparator)
+                {
+                    batch.AppendLine(writeOptions.DocumentSeparator);
+                }
+                else
+                {
+                    batch.AppendLine(); // Blank line separator
+                }
+            }
+
+            // Serialize item
+            var toonString = await SerializeAsync(item, options, cancellationToken).ConfigureAwait(false);
+            batch.Append(toonString);
+
+            isFirst = false;
+            itemCount++;
+
+            // Flush batch when a size threshold reached
+            if (itemCount < batchSize)
+            {
+                continue;
+            }
+
+            await writer.WriteAsync(batch.ToString().AsMemory(), cancellationToken).ConfigureAwait(false);
+            batch.Clear();
+            itemCount = 0;
+        }
+
+        // Flush remaining items
+        if (batch.Length > 0)
+        {
+            await writer.WriteAsync(batch.ToString().AsMemory(), cancellationToken).ConfigureAwait(false);
+        }
+
+        await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     #endregion

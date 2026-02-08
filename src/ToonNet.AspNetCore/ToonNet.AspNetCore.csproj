@@ -12,9 +12,10 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.AspNetCore</PackageId>
+        <Version>1.4.0</Version>
         <Description>ASP.NET Core integration for ToonNet. Provides dependency injection extensions and middleware for TOON format support in web applications.</Description>
         <PackageTags>toon;aspnetcore;web;api;middleware;di</PackageTags>
-        <PackageReleaseNotes>Initial 1.0.0 release with DI extensions.</PackageReleaseNotes>
+        <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
