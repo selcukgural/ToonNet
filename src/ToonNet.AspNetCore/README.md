@@ -144,7 +144,7 @@ Controls TOON format encoding behavior:
 |--------|------|---------|-------------|
 | `IndentSize` | `int` | `2` | Number of spaces per indentation level (even, 2-100) |
 | `MaxDepth` | `int` | `100` | Maximum nesting depth when encoding **and parsing**; deeper input is rejected with `ToonParseException` |
-| `Delimiter` | `char` | `,` | Array item delimiter |
+| `Delimiter` | `char` | `,` | Document delimiter: `,`, tab or `\|` (configuration also accepts `comma`, `tab`, `pipe`) |
 | `StrictMode` | `bool` | `true` | Enable strict parsing rules (e.g. array length checks) |
 | `AllowExtendedLimits` | `bool` | `false` | Allow `MaxDepth` above 200 (up to 1000) |
 

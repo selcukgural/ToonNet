@@ -202,62 +202,30 @@ public class ToonOptionsValidationTests
 
     [Theory]
     [InlineData(' ')]
-    [InlineData('\u00A0')] // Non-breaking space
-    [InlineData('\u2000')] // En quad
-    [InlineData('\u3000')] // Ideographic space
-    public void Delimiter_WhitespaceCharacter_ThrowsArgumentException(char value)
-    {
-        // Arrange
-        var options = new ToonOptions();
-
-        // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => options.Delimiter = value);
-        Assert.Contains("cannot be a whitespace character", ex.Message);
-        Assert.Contains($"U+{(int)value:X4}", ex.Message);
-        Assert.Equal(nameof(value), ex.ParamName);
-    }
-
-    [Theory]
     [InlineData('\n')]
     [InlineData('\r')]
-    [InlineData('\t')]
-    public void Delimiter_NewlineOrTab_ThrowsArgumentException(char value)
+    [InlineData('\u0000')]
+    [InlineData('\u007F')]
+    [InlineData(';')]
+    [InlineData('-')]
+    [InlineData('.')]
+    public void Delimiter_NotCommaTabOrPipe_ThrowsArgumentException(char value)
     {
         // Arrange
         var options = new ToonOptions();
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentException>(() => options.Delimiter = value);
-        Assert.Contains("cannot be a newline or tab character", ex.Message);
-        Assert.Contains($"U+{(int)value:X4}", ex.Message);
-        Assert.Equal(nameof(value), ex.ParamName);
-    }
-
-    [Theory]
-    [InlineData('\u0000')] // Null
-    [InlineData('\u0001')] // Start of heading
-    [InlineData('\u001F')] // Unit separator
-    [InlineData('\u007F')] // Delete
-    public void Delimiter_ControlCharacter_ThrowsArgumentException(char value)
-    {
-        // Arrange
-        var options = new ToonOptions();
-
-        // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => options.Delimiter = value);
-        Assert.Contains("cannot be a control character", ex.Message);
+        Assert.Contains("must be comma (','), tab ('\\t') or pipe ('|')", ex.Message);
         Assert.Contains($"U+{(int)value:X4}", ex.Message);
         Assert.Equal(nameof(value), ex.ParamName);
     }
 
     [Theory]
     [InlineData(',')]
-    [InlineData(';')]
+    [InlineData('\t')]
     [InlineData('|')]
-    [InlineData('-')]
-    [InlineData('_')]
-    [InlineData('.')]
-    public void Delimiter_ValidCharacter_Succeeds(char value)
+    public void Delimiter_SpecDelimiter_Succeeds(char value)
     {
         // Arrange
         var options = new ToonOptions();
@@ -350,13 +318,13 @@ public class ToonOptionsValidationTests
         // Act
         options.IndentSize = 4;
         options.MaxDepth = 100;
-        options.Delimiter = ';';
+        options.Delimiter = '|';
         options.StrictMode = false;
 
         // Assert
         Assert.Equal(4, options.IndentSize);
         Assert.Equal(100, options.MaxDepth);
-        Assert.Equal(';', options.Delimiter);
+        Assert.Equal('|', options.Delimiter);
         Assert.False(options.StrictMode);
     }
 

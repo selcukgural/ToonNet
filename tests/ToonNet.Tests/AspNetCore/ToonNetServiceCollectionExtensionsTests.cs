@@ -17,6 +17,25 @@ public sealed class ToonNetServiceCollectionExtensionsTests
     /// <summary>
     ///     Ensures options are bound from configuration and core services are registered.
     /// </summary>
+    [Theory]
+    [InlineData("tab", '\t')]
+    [InlineData("\t", '\t')]
+    [InlineData("Pipe", '|')]
+    [InlineData(",", ',')]
+    public void AddToonNet_WithConfiguration_BindsDelimiterNamesAndCharacters(string configured, char expected)
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["ToonNet:ToonOptions:Delimiter"] = configured })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Equal(expected, provider.GetRequiredService<IOptions<ToonOptions>>().Value.Delimiter);
+    }
+
     [Fact]
     public void AddToonNet_WithConfiguration_BindsOptionsAndRegistersServices()
     {
@@ -26,7 +45,7 @@ public sealed class ToonNetServiceCollectionExtensionsTests
                                 ["ToonNet:ToonOptions:AllowExtendedLimits"] = "true",
                                 ["ToonNet:ToonOptions:MaxDepth"] = "500",
                                 ["ToonNet:ToonOptions:IndentSize"] = "4",
-                                ["ToonNet:ToonOptions:Delimiter"] = ";",
+                                ["ToonNet:ToonOptions:Delimiter"] = "pipe",
                                 ["ToonNet:ToonOptions:StrictMode"] = "false",
 
                                 ["ToonNet:ToonSerializerOptions:AllowExtendedLimits"] = "true",
@@ -44,7 +63,7 @@ public sealed class ToonNetServiceCollectionExtensionsTests
         var toonOptions = provider.GetRequiredService<IOptions<ToonOptions>>().Value;
         Assert.Equal(4, toonOptions.IndentSize);
         Assert.Equal(500, toonOptions.MaxDepth);
-        Assert.Equal(';', toonOptions.Delimiter);
+        Assert.Equal('|', toonOptions.Delimiter);
         Assert.False(toonOptions.StrictMode);
         Assert.True(toonOptions.AllowExtendedLimits);
 

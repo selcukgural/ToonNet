@@ -132,7 +132,8 @@ IsActive: true";
         // Assert
         Assert.Contains("Name: Diana", toon);
         Assert.Contains("Address:", toon);
-        Assert.Contains("  Street: \"123 Main St\"", toon);
+        Assert.Contains("  Street: 123 Main St", toon);
+        Assert.Contains("  ZipCode: \"02101\"", toon); // numeric-like strings stay quoted
         Assert.Contains("  City: Boston", toon);
     }
 

@@ -32,7 +32,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("items[0]:", result);
+        Assert.Equal("items: []", result);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class EncoderCoverageTests
     }
 
     [Fact]
-    public void Encode_ArrayOfObjects_UsesListFormat()
+    public void Encode_UniformArrayOfObjects_UsesTabularFormat()
     {
         var array = new ToonArray();
         var item1 = new ToonObject();
@@ -242,8 +242,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("items", result);
-        Assert.Contains("-", result); // List item marker
+        Assert.Equal("items[1]{name}:\n  Item1", result);
     }
 
     [Fact]

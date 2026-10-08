@@ -95,40 +95,29 @@ var products = new List<Product>
     new() { Id = 3, Name = "Keyboard", Price = 89.99m, InStock = false }
 };
 
-string json = ToonConvert.SerializeToJson(products);
-string toon = ToonSerializer.Serialize(products);
-
-Console.WriteLine($"JSON tokens: ~{json.Length / 4}");  // ~150 tokens
-Console.WriteLine($"TOON tokens: ~{toon.Length / 4}");  // ~90 tokens
-// 40% token reduction = 40% cost savings on AI APIs
+string json = JsonSerializer.Serialize(products);   // compact JSON: 167 characters
+string toon = ToonSerializer.Serialize(products);   // TOON: 97 characters (~42% fewer)
 ```
 
-**JSON output (longer, more tokens):**
+**JSON output (compact):**
 ```json
-[{"id":1,"name":"Laptop","price":1299.99,"inStock":true},{"id":2,"name":"Mouse","price":29.99,"inStock":true},{"id":3,"name":"Keyboard","price":89.99,"inStock":false}]
+[{"Id":1,"Name":"Laptop","Price":1299.99,"InStock":true},{"Id":2,"Name":"Mouse","Price":29.99,"InStock":true},{"Id":3,"Name":"Keyboard","Price":89.99,"InStock":false}]
 ```
 
-**TOON output (shorter, fewer tokens):**
+**TOON output** – uniform objects become a table with the field names declared once:
 ```toon
-products[3]:
-  - Id: 1
-    Name: Laptop
-    Price: 1299.99
-    InStock: true
-  - Id: 2
-    Name: Mouse
-    Price: 29.99
-    InStock: true
-  - Id: 3
-    Name: Keyboard
-    Price: 89.99
-    InStock: false
+[3]{Id,Name,Price,InStock}:
+  1,Laptop,1299.99,true
+  2,Mouse,29.99,true
+  3,Keyboard,89.99,false
 ```
 
-**Real-world savings:**
-- GPT-4: ~$0.03 per 1K input tokens → 40% fewer tokens = **40% cost reduction**
-- Claude: ~$0.015 per 1K input tokens → Significant savings on large prompts
-- Perfect for RAG systems, prompt engineering, AI-powered tools
+The saving depends on the shape of the data: it is largest for arrays of uniform objects (tabular form) and
+smaller for deeply nested or irregular data. Measure with your own payloads and tokenizer.
+
+**Where it helps:**
+- Input-token cost scales with prompt size, so fewer tokens means proportionally lower cost
+- RAG context, tool results and other tabular data passed to LLMs
 
 ### ⚡ Performance & Architecture
 

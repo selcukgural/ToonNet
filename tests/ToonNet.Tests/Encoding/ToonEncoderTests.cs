@@ -157,7 +157,7 @@ public class ToonEncoderTests
     }
 
     [Fact]
-    public void Encode_StringWithSpaces_QuotesString()
+    public void Encode_StringWithInternalSpaces_IsNotQuoted()
     {
         // Arrange
         var obj = new ToonObject
@@ -170,7 +170,7 @@ public class ToonEncoderTests
         // Act
         var result = encoder.Encode(doc);
 
-        // Assert
-        Assert.Contains("name: \"Alice Smith\"", result);
+        // Assert - internal spaces are safe unquoted (spec §7.2)
+        Assert.Equal("name: Alice Smith", result);
     }
 }

@@ -38,8 +38,8 @@ public class ToonEncoderEdgeCaseTests
         // Act
         var result = encoder.Encode(doc);
 
-        // Assert
-        Assert.Contains("items[0]:", result);
+        // Assert - canonical empty array form (spec §9.1)
+        Assert.Equal("items: []", result);
     }
 
     [Fact]

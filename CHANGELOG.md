@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI:** Build, test, pack and docs build on every push and pull request; manual, test-gated NuGet publishing.
 
 ### Changed
+- **ToonNet.Core (breaking output change):** The encoder was rewritten to follow TOON spec v3.3.2 and now passes all
+  142 encode conformance fixtures. Notable differences from 1.4.0 output:
+  - Arrays of uniform objects with primitive values use the tabular form (`items[2]{id,name}:`), which
+    `ToonSerializer` never produced before.
+  - Root arrays and arrays inside list items get their `[N]:` header (previously missing and unreadable).
+  - Empty arrays are written as `key: []` (root: `[]`).
+  - Numbers use the shortest canonical form (`0.1` instead of `0.10000000000000001`; exponent form with sign outside
+    1e-6..1e21, e.g. `1e-7`); NaN and infinities are written as `null` instead of throwing.
+  - Strings are quoted only when required: internal spaces no longer force quotes, while strings starting with `-`,
+    containing control characters or the delimiter are now quoted; other control characters are escaped as `\uXXXX`.
+  - Keys that are not `^[A-Za-z_][A-Za-z0-9_.]*$` are quoted, including tabular field names.
+  - No trailing newline and no blank lines after tabular or list arrays.
+- **ToonNet.Core (breaking):** `ToonOptions.Delimiter` only accepts comma, tab or pipe (spec §11); tab was rejected
+  before and other characters produced output no TOON decoder can read. Tab and pipe are declared in headers.
+- **ToonNet.Core:** `ToonNumber` keeps the exact value of `long`, `ulong` and `decimal` numbers (`DecimalValue`), so
+  large integers and decimals are no longer rounded through `double` when serialized.
+- **ToonNet.AspNetCore:** The `Delimiter` configuration value also accepts `comma`, `tab` and `pipe`; a literal tab
+  is no longer ignored as whitespace.
 - **Docs:** Replaced the "100% TOON v3.0 compliance" claims with the measured conformance against spec v3.3.2.
 
 ### Security

@@ -700,22 +700,22 @@ public static class ToonSerializer
                 result = new ToonBoolean(b);
                 return true;
             case byte b:
-                result = new ToonNumber(b);
+                result = new ToonNumber((long)b);
                 return true;
             case sbyte sb:
-                result = new ToonNumber(sb);
+                result = new ToonNumber((long)sb);
                 return true;
             case short s:
-                result = new ToonNumber(s);
+                result = new ToonNumber((long)s);
                 return true;
             case ushort us:
-                result = new ToonNumber(us);
+                result = new ToonNumber((long)us);
                 return true;
             case int i:
-                result = new ToonNumber(i);
+                result = new ToonNumber((long)i);
                 return true;
             case uint ui:
-                result = new ToonNumber(ui);
+                result = new ToonNumber((long)ui);
                 return true;
             case long l:
                 result = new ToonNumber(l);
@@ -730,7 +730,7 @@ public static class ToonSerializer
                 result = new ToonNumber(d);
                 return true;
             case decimal m:
-                result = new ToonNumber((double)m);
+                result = new ToonNumber(m);
                 return true;
             case DateTime dt:
                 result = new ToonString(dt.ToString("O")); // ISO 8601

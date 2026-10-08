@@ -1,8 +1,6 @@
 using System.Buffers;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics;
 using System.Text;
 using Microsoft.Extensions.ObjectPool;
 using ToonNet.Core.Models;
@@ -17,10 +15,11 @@ namespace ToonNet.Core.Encoding;
 ///     the default options (<see cref="ToonOptions.Default"/>) will be used.
 /// </param>
 /// <remarks>
-///     This class is designed to be used for serializing <see cref="ToonDocument"/> instances into 
-///     their string representation in the TOON format. It supports various TOON value types such as 
-///     objects, arrays, strings, numbers, booleans, and nulls. The encoder ensures proper formatting 
-///     and handles indentation, quoting, and escaping as per the TOON specification.
+///     The output follows the canonical encoding of TOON spec v3.3.2: arrays of uniform primitive-only objects use the
+///     tabular form, primitive arrays are written inline, other arrays as expanded lists, empty arrays as <c>[]</c>,
+///     numbers in canonical decimal form, and strings and keys are quoted only when the spec requires it.
+///     The document has LF line endings, no trailing spaces and no trailing newline.
+///     An instance is not thread-safe; use one encoder per thread.
 /// </remarks>
 /// <example>
 ///     <code>
@@ -35,16 +34,23 @@ namespace ToonNet.Core.Encoding;
 /// </example>
 public sealed class ToonEncoder(ToonOptions? options = null)
 {
-    // Cache for indent strings to avoid allocations in hot paths
-    // Expanded to support MaxDepth=100 (51 levels = 0-100 spaces)
-    private static readonly string[] IndentCache = Enumerable.Range(0, 51).Select(i => new string(' ', i * 2)).ToArray();
-
     // StringBuilder pool for reducing allocations
     private static readonly ObjectPool<StringBuilder> StringBuilderPool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
 
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
     private StringBuilder? _sb;
+    private bool _hasLine;
     private int _depth;
+
+    /// <summary>
+    ///     Identifies where an array is written, which decides how an empty array is represented (spec §9.1, §9.2).
+    /// </summary>
+    private enum ArrayPosition
+    {
+        Root,
+        Field,
+        ListItem
+    }
 
     /// <summary>
     ///     Encodes a TOON document into its string representation.
@@ -61,10 +67,6 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <exception cref="ToonEncodingException">
     ///     Thrown when encoding exceeds the maximum depth specified in the options.
     /// </exception>
-    /// <remarks>
-    ///     This method gets a StringBuilder from the pool, encodes the document,
-    ///     and returns the StringBuilder to the pool after use.
-    /// </remarks>
     public string Encode(ToonDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -75,10 +77,12 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
 
         _sb = StringBuilderPool.Get();
+
         try
         {
+            _hasLine = false;
             _depth = 0;
-            EncodeValue(document.Root, 0);
+            EncodeRoot(document.Root);
             return _sb.ToString();
         }
         finally
@@ -88,27 +92,296 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
     }
 
+    #region Structure
+
     /// <summary>
-    ///     Encodes a <see cref="ToonValue"/> into the internal string builder.
+    ///     Encodes the root value: an object as top-level fields, an array with a key-less header, or a single primitive (spec §5).
     /// </summary>
-    /// <param name="value">
-    ///     The value to encode. This parameter must not be null.
-    /// </param>
-    /// <param name="indentLevel">
-    ///     The current indentation level, used to format the output string.
-    /// </param>
-    /// <exception cref="ToonEncodingException">
-    ///     Thrown when encoding exceeds the maximum depth specified in the options.
-    /// </exception>
-    /// <remarks>
-    ///     This method uses a switch statement to determine the type of the provided value
-    ///     and delegates the encoding to the appropriate helper method. Supported value types
-    ///     include null, boolean, number, string, object, and array. The depth counter is
-    ///     incremented and decremented to ensure proper tracking of nested structures.
-    /// </remarks>
-    private void EncodeValue(ToonValue value, int indentLevel)
+    private void EncodeRoot(ToonValue root)
     {
-        if (_depth > _options.MaxDepth)
+        switch (root)
+        {
+            case ToonObject obj:
+                // An empty root object yields an empty document (§8)
+                EncodeFields(obj, 0);
+                break;
+            case ToonArray array:
+                StartLine(0);
+                EncodeArray(string.Empty, array, 1, ArrayPosition.Root);
+                break;
+            default:
+                StartLine(0);
+                _sb!.Append(FormatPrimitive(root));
+                break;
+        }
+    }
+
+    /// <summary>
+    ///     Encodes the fields of an object, one line per field at the given depth.
+    /// </summary>
+    private void EncodeFields(ToonObject obj, int depth)
+    {
+        foreach (var (key, value) in obj.Properties)
+        {
+            StartLine(depth);
+            EncodeField(key, value, depth + 1);
+        }
+    }
+
+    /// <summary>
+    ///     Writes a field on the current line (after indentation or a list marker) and its nested content at <paramref name="childDepth"/>.
+    /// </summary>
+    private void EncodeField(string key, ToonValue value, int childDepth)
+    {
+        var encodedKey = EncodeKey(key);
+
+        switch (value)
+        {
+            case ToonObject obj:
+                _sb!.Append(encodedKey).Append(':');
+                EnterNesting();
+                EncodeFields(obj, childDepth);
+                _depth--;
+                break;
+            case ToonArray array:
+                EncodeArray(encodedKey, array, childDepth, ArrayPosition.Field);
+                break;
+            default:
+                _sb!.Append(encodedKey).Append(": ").Append(FormatPrimitive(value));
+                break;
+        }
+    }
+
+    /// <summary>
+    ///     Writes an array header (prefixed by an already encoded key, possibly empty) and its items (spec §9).
+    /// </summary>
+    private void EncodeArray(string encodedKey, ToonArray array, int childDepth, ArrayPosition position)
+    {
+        var sb = _sb!;
+
+        if (array.Count == 0)
+        {
+            switch (position)
+            {
+                case ArrayPosition.Field:
+                    sb.Append(encodedKey).Append(": []");
+                    break;
+                case ArrayPosition.Root:
+                    sb.Append("[]");
+                    break;
+                default:
+                    // Inner arrays of list items keep the header form (§9.2)
+                    AppendBracket(encodedKey, 0);
+                    sb.Append(':');
+                    break;
+            }
+
+            return;
+        }
+
+        EnterNesting();
+
+        AppendBracket(encodedKey, array.Count);
+
+        if (IsPrimitiveArray(array))
+        {
+            sb.Append(": ");
+
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (i > 0)
+                {
+                    sb.Append(_options.Delimiter);
+                }
+
+                sb.Append(FormatPrimitive(array[i]));
+            }
+        }
+        else if (position != ArrayPosition.ListItem && TryGetTabularFields(array) is { } fields)
+        {
+            EncodeTabularArray(array, fields, childDepth);
+        }
+        else
+        {
+            sb.Append(':');
+
+            foreach (var item in array.Items)
+            {
+                StartLine(childDepth);
+                EncodeListItem(item, childDepth);
+            }
+        }
+
+        _depth--;
+    }
+
+    /// <summary>
+    ///     Writes the field list of a tabular array followed by one row per object (spec §9.3).
+    /// </summary>
+    private void EncodeTabularArray(ToonArray array, string[] fields, int rowDepth)
+    {
+        var sb = _sb!;
+        sb.Append('{');
+
+        for (var i = 0; i < fields.Length; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(_options.Delimiter);
+            }
+
+            sb.Append(EncodeKey(fields[i]));
+        }
+
+        sb.Append("}:");
+
+        foreach (var item in array.Items)
+        {
+            var row = (ToonObject)item;
+            StartLine(rowDepth);
+
+            for (var i = 0; i < fields.Length; i++)
+            {
+                if (i > 0)
+                {
+                    sb.Append(_options.Delimiter);
+                }
+
+                sb.Append(FormatPrimitive(row.Properties[fields[i]]));
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Writes a list item whose line has been started at <paramref name="depth"/> (spec §9.4, §10).
+    /// </summary>
+    private void EncodeListItem(ToonValue item, int depth)
+    {
+        var sb = _sb!;
+
+        switch (item)
+        {
+            case ToonObject { Properties.Count: 0 }:
+                // Empty object list item is a bare hyphen (§10)
+                sb.Append('-');
+                break;
+            case ToonObject obj:
+                sb.Append("- ");
+                EnterNesting();
+
+                var isFirst = true;
+
+                foreach (var (key, value) in obj.Properties)
+                {
+                    if (!isFirst)
+                    {
+                        StartLine(depth + 1);
+                    }
+
+                    // The first field sits on the hyphen line; its nested content goes two levels deeper (§10)
+                    EncodeField(key, value, depth + 2);
+                    isFirst = false;
+                }
+
+                _depth--;
+                break;
+            case ToonArray array:
+                sb.Append("- ");
+                EncodeArray(string.Empty, array, depth + 1, ArrayPosition.ListItem);
+                break;
+            default:
+                sb.Append("- ").Append(FormatPrimitive(item));
+                break;
+        }
+    }
+
+    /// <summary>
+    ///     Returns the tabular field names when the array qualifies for tabular form (spec §9.3), otherwise null.
+    /// </summary>
+    /// <remarks>
+    ///     Every item must be a non-empty object with the same key set and only primitive values.
+    ///     The field order is the first object's key order.
+    /// </remarks>
+    private static string[]? TryGetTabularFields(ToonArray array)
+    {
+        if (array[0] is not ToonObject { Properties.Count: > 0 } first)
+        {
+            return null;
+        }
+
+        var fieldCount = first.Properties.Count;
+
+        foreach (var item in array.Items)
+        {
+            if (item is not ToonObject obj || obj.Properties.Count != fieldCount)
+            {
+                return null;
+            }
+
+            foreach (var (key, value) in obj.Properties)
+            {
+                if (!first.Properties.ContainsKey(key) || value is ToonObject or ToonArray)
+                {
+                    return null;
+                }
+            }
+        }
+
+        return [.. first.Properties.Keys];
+    }
+
+    private static bool IsPrimitiveArray(ToonArray array)
+    {
+        foreach (var item in array.Items)
+        {
+            if (item is ToonObject or ToonArray)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Appends <c>key[N]</c> including the delimiter symbol for tab and pipe (spec §6).
+    /// </summary>
+    private void AppendBracket(string encodedKey, int count)
+    {
+        var sb = _sb!;
+        sb.Append(encodedKey).Append('[').Append(count.ToString(CultureInfo.InvariantCulture));
+
+        if (_options.Delimiter != ',')
+        {
+            sb.Append(_options.Delimiter);
+        }
+
+        sb.Append(']');
+    }
+
+    /// <summary>
+    ///     Starts a new line at the given depth. Lines are separated by LF and the document has no trailing newline (spec §12).
+    /// </summary>
+    private void StartLine(int depth)
+    {
+        var sb = _sb!;
+
+        if (_hasLine)
+        {
+            sb.Append('\n');
+        }
+
+        _hasLine = true;
+        sb.Append(' ', depth * _options.IndentSize);
+    }
+
+    /// <summary>
+    ///     Tracks structural nesting, enforcing <see cref="ToonOptions.MaxDepth"/> and the available stack space.
+    /// </summary>
+    /// <exception cref="ToonEncodingException">Thrown when the document is nested too deeply.</exception>
+    private void EnterNesting()
+    {
+        if (++_depth > _options.MaxDepth)
         {
             throw new ToonEncodingException($"Maximum depth of {_options.MaxDepth} exceeded");
         }
@@ -117,665 +390,178 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         {
             throw new ToonEncodingException("Document is nested too deeply to encode with the available stack space");
         }
-
-        _depth++;
-
-        switch (value)
-        {
-            case ToonNull:
-                _sb!.Append("null");
-                break;
-            case ToonBoolean b:
-                _sb!.Append(b.Value ? "true" : "false");
-                break;
-            case ToonNumber n:
-                _sb!.Append(FormatNumber(n.Value));
-                break;
-            case ToonString s:
-                _sb!.Append(QuoteIfNeeded(s.Value));
-                break;
-            case ToonObject o:
-                EncodeObject(o, indentLevel);
-                break;
-            case ToonArray a:
-                EncodeArray(a, indentLevel);
-                break;
-        }
-
-        _depth--;
     }
 
-    /// <summary>
-    ///     Encodes an object to TOON format.
-    /// </summary>
-    /// <param name="obj">
-    ///     The object to encode. This parameter must not be null.
-    /// </param>
-    /// <param name="indentLevel">
-    ///     The current indentation level, used to format the output string.
-    /// </param>
-    /// <remarks>
-    ///     This method iterates through the properties of the provided <see cref="ToonObject"/> and encodes
-    ///     each key-value pair. Keys are quoted if they contain special characters. Values are encoded
-    ///     recursively based on their type. The method ensures proper indentation and formatting for nested
-    ///     structures.
-    /// </remarks>
-    private void EncodeObject(ToonObject obj, int indentLevel)
-    {
-        var isFirst = true;
+    #endregion
 
-        foreach (var (key, value) in obj.Properties)
-        {
-            if (!isFirst)
-            {
-                _sb!.AppendLine();
-            }
-
-            WriteIndent(indentLevel);
-
-            // Quote the key if it contains special characters
-            _sb!.Append(QuoteKeyIfNeeded(key));
-
-            if (value is ToonArray array)
-            {
-                EncodeArrayHeader(array);
-            }
-
-            _sb!.Append(':');
-
-            switch (value)
-            {
-                case ToonObject:
-                    _sb!.AppendLine();
-                    EncodeValue(value, indentLevel + _options.IndentSize);
-                    break;
-                case ToonArray arr:
-                    EncodeValue(arr, indentLevel + _options.IndentSize);
-                    break;
-                default:
-                    _sb!.Append(' ');
-                    EncodeValue(value, indentLevel);
-                    break;
-            }
-
-            isFirst = false;
-        }
-    }
+    #region Primitives, keys and quoting
 
     /// <summary>
-    ///     Encodes an object inline (first property on the same line, rest indented).
+    ///     Formats a primitive value. NaN and infinities are written as null (spec §3).
     /// </summary>
-    /// <param name="obj">
-    ///     The object to encode. This parameter must not be null.
-    /// </param>
-    /// <param name="indentLevel">
-    ///     The base indentation level for subsequent properties.
-    /// </param>
-    /// <remarks>
-    ///     This method is used when encoding objects as array items. The first property
-    ///     appears on the same line as the array marker ('-'), while subsequent properties
-    ///     are indented at the appropriate level.
-    /// </remarks>
-    private void EncodeObjectInline(ToonObject obj, int indentLevel)
-    {
-        var isFirst = true;
-
-        foreach (var (key, value) in obj.Properties)
-        {
-            if (!isFirst)
-            {
-                _sb!.AppendLine();
-                WriteIndent(indentLevel + _options.IndentSize);
-            }
-
-            // Quote the key if it contains special characters
-            _sb!.Append(QuoteKeyIfNeeded(key));
-
-            if (value is ToonArray array)
-            {
-                EncodeArrayHeader(array);
-            }
-
-            _sb!.Append(':');
-
-            switch (value)
-            {
-                case ToonObject:
-                    _sb!.AppendLine();
-                    EncodeValue(value, indentLevel + _options.IndentSize * 2);
-                    break;
-                case ToonArray arr:
-                    EncodeValue(arr, indentLevel + _options.IndentSize * 2);
-                    break;
-                default:
-                    _sb!.Append(' ');
-                    EncodeValue(value, indentLevel + _options.IndentSize);
-                    break;
-            }
-
-            isFirst = false;
-        }
-    }
-
-    /// <summary>
-    ///     Encodes the array header with length and optional field names.
-    /// </summary>
-    /// <param name="array">
-    ///     The array to encode the header for. This parameter must not be null.
-    /// </param>
-    /// <remarks>
-    ///     This method writes the array length in square brackets. If the array is tabular and contains
-    /// field names, those field names are written in curly braces after the length.
-    /// </remarks>
-    private void EncodeArrayHeader(ToonArray array)
-    {
-        _sb!.Append($"[{array.Count}]");
-
-        if (!array.IsTabular || array.FieldNames == null)
-        {
-            return;
-        }
-
-        _sb!.Append('{');
-        
-        // Optimized: avoid string.Join() allocation
-        for (int i = 0; i < array.FieldNames.Length; i++)
-        {
-            if (i > 0)
-            {
-                _sb.Append(',');
-            }
-            _sb.Append(array.FieldNames[i]);
-        }
-        
-        _sb!.Append('}');
-    }
-
-    /// <summary>
-    ///     Encodes an array to TOON format.
-    /// </summary>
-    /// <param name="array">
-    ///     The array to encode. This parameter must not be null.
-    /// </param>
-    /// <param name="indentLevel">
-    ///     The current indentation level, used to format the output string.
-    /// </param>
-    /// <remarks>
-    ///     This method determines the type of the array and encodes it accordingly:
-    ///     - Tabular arrays are encoded with field names and rows.
-    ///     - Primitive arrays are encoded inline as a comma-separated list.
-    ///     - Mixed arrays are encoded as a list with each item on a new line.
-    ///     Empty arrays are skipped.
-    /// </remarks>
-    private void EncodeArray(ToonArray array, int indentLevel)
-    {
-        if (array.Count == 0)
-        {
-            return;
-        }
-
-        // Check if it's a tabular array (array of objects with same fields)
-        if (array is { IsTabular: true, FieldNames: not null })
-        {
-            _sb!.AppendLine();
-            EncodeTabularArray(array, indentLevel);
-        }
-        // Check if it's a primitive array that can be inline
-        else if (IsPrimitiveArray(array))
-        {
-            _sb!.Append(' ');
-            EncodePrimitiveArrayInline(array);
-        }
-        else
-        {
-            // Mixed array - use list notation
-            _sb!.AppendLine();
-            EncodeListArray(array, indentLevel);
-        }
-    }
-
-    /// <summary>
-    ///     Encodes a tabular array (array of objects with field names) into the TOON format.
-    /// </summary>
-    /// <param name="array">
-    ///     The tabular array to encode. This parameter must not be null and should contain
-    ///     objects with consistent field names.
-    /// </param>
-    /// <param name="indentLevel">
-    ///     The current indentation level, used to format the output string.
-    /// </param>
-    /// <remarks>
-    ///     This method iterates through the items in the array and encodes each row as a
-    ///     comma-separated list of field values. If the array contains objects with field names,
-    ///     the values are extracted and formatted accordingly. Non-object items are formatted
-    ///     directly. Proper indentation is applied for each row.
-    /// </remarks>
-    private void EncodeTabularArray(ToonArray array, int indentLevel)
-    {
-        foreach (var item in array.Items)
-        {
-            WriteIndent(indentLevel);
-
-            if (item is ToonObject rowObj && array.FieldNames != null)
-            {
-                // Optimized: directly append instead of List + Join
-                for (int j = 0; j < array.FieldNames.Length; j++)
-                {
-                    if (j > 0)
-                    {
-                        _sb!.Append(',');
-                    }
-                    
-                    var fieldValue = rowObj[array.FieldNames[j]];
-                    _sb!.Append(FormatValue(fieldValue));
-                }
-            }
-            else
-            {
-                _sb!.Append(FormatValue(item));
-            }
-
-            _sb!.AppendLine();
-        }
-    }
-
-    /// <summary>
-    ///     Encodes a primitive array as an inline comma-separated list.
-    /// </summary>
-    /// <param name="array">
-    ///     The array to encode. This parameter must not be null and should contain only
-    ///     primitive values (e.g., null, boolean, number, or string).
-    /// </param>
-    /// <remarks>
-    ///     This method formats the array as a single line of comma-separated values.
-    ///     It is optimized for arrays containing only primitive types.
-    /// </remarks>
-    private void EncodePrimitiveArrayInline(ToonArray array)
-    {
-        // Optimized: directly append instead of Select + Join
-        for (int i = 0; i < array.Items.Count; i++)
-        {
-            if (i > 0)
-            {
-                _sb!.Append(',');
-            }
-            _sb!.Append(FormatValue(array.Items[i]));
-        }
-    }
-
-    /// <summary>
-    ///     Encodes an array as a list with each item prefixed by a '-' character.
-    /// </summary>
-    /// <param name="array">
-    ///     The array to encode. This parameter must not be null.
-    /// </param>
-    /// <param name="indentLevel">
-    ///     The current indentation level, used to format the output string.
-    /// </param>
-    /// <remarks>
-    ///     This method encodes each item in the array as a separate line. If an item is
-    ///     an object or another array, it is encoded recursively with increased indentation.
-    ///     Primitive items are encoded inline. Proper indentation is applied for each item.
-    /// </remarks>
-    private void EncodeListArray(ToonArray array, int indentLevel)
-    {
-        foreach (var item in array.Items)
-        {
-            WriteIndent(indentLevel);
-            _sb!.Append("- ");
-
-            switch (item)
-            {
-                case ToonObject obj:
-                    EncodeObjectInline(obj, indentLevel);
-                    break;
-                case ToonArray arr:
-                    EncodeValue(arr, indentLevel + _options.IndentSize);
-                    break;
-                default:
-                    EncodeValue(item, indentLevel);
-                    break;
-            }
-
-            _sb!.AppendLine();
-        }
-    }
-
-    /// <summary>
-    ///     Checks if an array contains only primitive values.
-    /// </summary>
-    /// <param name="array">
-    ///     The array to check. This parameter must not be null.
-    /// </param>
-    /// <returns>
-    ///     True if all items in the array are primitive values (null, boolean, number, or string);
-    ///     otherwise, false.
-    /// </returns>
-    /// <remarks>
-    ///     This method is used to determine if an array can be encoded as a single line
-    ///     of comma-separated values. Non-primitive items (e.g., objects or arrays) will
-    ///     cause the method to return false.
-    /// </remarks>
-    private static bool IsPrimitiveArray(ToonArray array)
-    {
-        return array.Items.All(item => item is ToonNull or ToonBoolean or ToonNumber or ToonString);
-    }
-
-    /// <summary>
-    /// Formats a TOON value as a string.
-    /// </summary>
-    /// <param name="value">
-    /// The value to format. This can be null or any type derived from <see cref="ToonValue"/>.
-    /// </param>
-    /// <returns>
-    /// A string representation of the TOON value. Returns "null" for null values or <see cref="ToonNull"/>,
-    /// "true"/"false" for <see cref="ToonBoolean"/>, a formatted number for <see cref="ToonNumber"/>,
-    /// a quoted string for <see cref="ToonString"/>, or the result of <see cref="object.ToString"/> for other types.
-    /// </returns>
-    private static string FormatValue(ToonValue? value)
+    /// <exception cref="ToonEncodingException">Thrown for unknown <see cref="ToonValue"/> subclasses.</exception>
+    private string FormatPrimitive(ToonValue? value)
     {
         return value switch
         {
-            null          => "null",
-            ToonNull      => "null",
-            ToonBoolean b => b.Value ? "true" : "false",
-            ToonNumber n  => FormatNumber(n.Value),
-            ToonString s  => QuoteIfNeeded(s.Value),
-            _             => value.ToString() ?? "null"
+            null or ToonNull => "null",
+            ToonBoolean b    => b.Value ? "true" : "false",
+            ToonNumber n     => ToonNumberFormatter.Format(n) ?? "null",
+            ToonString s     => QuoteIfNeeded(s.Value, _options.Delimiter),
+            _                => throw new ToonEncodingException($"Unsupported TOON value type: {value.GetType().Name}")
         };
     }
 
     /// <summary>
-    /// Formats a numeric value as a TOON-compatible string.
+    ///     Quotes a string value when spec §7.2 requires it.
     /// </summary>
-    /// <param name="value">
-    /// The number to format. Must not be NaN or Infinity.
-    /// </param>
-    /// <returns>
-    /// A string representation of the number, formatted according to the TOON specification.
-    /// Scientific notation is used for very large or very small numbers.
-    /// </returns>
-    /// <exception cref="ToonEncodingException">
-    /// Thrown when the value is NaN or Infinity, as these are not allowed in the TOON format.
-    /// </exception>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string FormatNumber(double value)
+    private static string QuoteIfNeeded(string value, char delimiter)
     {
-        if (double.IsNaN(value) || double.IsInfinity(value))
-        {
-            throw new ToonEncodingException("NaN and Infinity are not allowed in TOON");
-        }
-
-        // Normalize -0 to 0
-        if (value == 0)
-        {
-            return "0";
-        }
-
-        // Check if we need to use scientific notation based on the actual exponent
-        var needsScientific = CheckNeedsScientific(value);
-
-        // Optimization: Use stackalloc buffer for TryFormat to avoid string allocations
-        Span<char> buffer = stackalloc char[32]; // Sufficient for any double
-
-        int dotIndex = -1;
-
-        if (needsScientific)
-        {
-            if (!value.TryFormat(buffer, out var written, "E17", CultureInfo.InvariantCulture))
-            {
-                return value.ToString("G17", CultureInfo.InvariantCulture);
-            }
-
-            var result = buffer[..written];
-            // Normalize to lowercase 'e'
-            for (int i = 0; i < written; i++)
-            {
-                if (result[i] != 'E')
-                {
-                    continue;
-                }
-
-                result[i] = 'e';
-                break;
-            }
-            return new string(result);
-        }
-        else
-        {
-            if (!value.TryFormat(buffer, out var written, "G17", CultureInfo.InvariantCulture))
-            {
-                return value.ToString("G17", CultureInfo.InvariantCulture);
-            }
-
-            var result = buffer[..written];
-                
-            // Check if scientific notation was produced
-            var eIndex = -1;
-            for (int i = 0; i < written; i++)
-            {
-                if (result[i] is not ('e' or 'E'))
-                {
-                    continue;
-                }
-
-                eIndex = i;
-                break;
-            }
-                
-            if (eIndex != -1)
-            {
-                // Scientific notation produced, convert to decimal
-                Span<char> decimalBuffer = stackalloc char[32];
-
-                if (!value.TryFormat(decimalBuffer, out written, "F17", CultureInfo.InvariantCulture))
-                {
-                    return new string(result[..written]);
-                }
-
-                // Trim trailing zeros
-                while (written > 0 && decimalBuffer[written - 1] == '0')
-                {
-                    written--;
-                }
-                        
-                if (written > 0 && decimalBuffer[written - 1] == '.')
-                {
-                    written++; // Keep one zero after decimal
-                }
-                        
-                return new string(decimalBuffer[..written]);
-            }
-
-            // Check for decimal point and trim trailing zeros
-            for (int i = 0; i < written; i++)
-            {
-                if (result[i] != '.')
-                {
-                    continue;
-                }
-
-                dotIndex = i;
-                break;
-            }
-
-            if (dotIndex == -1)
-            {
-                return new string(result[..written]);
-            }
-
-            // Trim trailing zeros after decimal
-            while (written > dotIndex + 1 && result[written - 1] == '0')
-            {
-                written--;
-            }
-                        
-            if (written == dotIndex + 1)
-            {
-                written++; // Keep '.0'
-            }
-
-            return new string(result[..written]);
-        }
+        return NeedsQuoting(value, delimiter) ? "\"" + Escape(value) + "\"" : value;
     }
 
     /// <summary>
-    /// Checks if a number requires scientific notation based on the TOON specification.
+    ///     Encodes a key or tabular field name, quoting it unless it matches <c>^[A-Za-z_][A-Za-z0-9_.]*$</c> (spec §7.3).
     /// </summary>
-    /// <param name="value">
-    /// The number to check. Must not be zero.
-    /// </param>
-    /// <returns>
-    /// True if the number requires scientific notation (e.g., exponent &gt;= 21 or &lt;= -21); otherwise, false.
-    /// </returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool CheckNeedsScientific(double value)
+    private static string EncodeKey(string key)
     {
-        if (value == 0)
+        return IsSafeUnquotedKey(key) ? key : "\"" + Escape(key) + "\"";
+    }
+
+    private static bool IsSafeUnquotedKey(string key)
+    {
+        if (key.Length == 0 || !(char.IsAsciiLetter(key[0]) || key[0] == '_'))
         {
             return false;
         }
 
-        var absValue = Math.Abs(value);
+        foreach (var ch in key.AsSpan(1))
+        {
+            if (!(char.IsAsciiLetterOrDigit(ch) || ch is '_' or '.'))
+            {
+                return false;
+            }
+        }
 
-        // For very large numbers (exponent >= 21)
-        if (absValue >= 1e21)
+        return true;
+    }
+
+    /// <summary>
+    ///     Checks the quoting rules of spec §7.2 for a string value.
+    /// </summary>
+    /// <param name="value">The string to check.</param>
+    /// <param name="delimiter">The delimiter in effect for the value.</param>
+    /// <returns><c>true</c> if the string must be quoted.</returns>
+    internal static bool NeedsQuoting(string value, char delimiter)
+    {
+        if (value.Length == 0 || char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]))
         {
             return true;
         }
 
-        // For very small numbers (exponent <= -21)
-        return absValue is > 0 and < 1e-20;
-    }
-
-    /// <summary>
-    /// Quotes a string value if it needs quoting.
-    /// </summary>
-    /// <param name="value">
-    /// The string vaLue to potentially quote. Can be null or empty.
-    /// </param>
-    /// <returns>
-    /// The quoted string if quoting is necessary; otherwise, the original string.
-    /// </returns>
-    private static string QuoteIfNeeded(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return "\"\"";
-        }
-
-        return NeedsQuoting(value) ? $"\"{EscapeString(value)}\"" : value;
-    }
-
-    /// <summary>
-    /// Quotes a key if it needs quoting.
-    /// </summary>
-    /// <param name="key">
-    /// The key to potentially quote. Can be null or empty.
-    /// </param>
-    /// <returns>
-    /// The quoted key if quoting is necessary; otherwise, the original key.
-    /// </returns>
-    private static string QuoteKeyIfNeeded(string key)
-    {
-        if (string.IsNullOrEmpty(key))
-        {
-            return "\"\"";
-        }
-
-        return NeedsQuoting(key) ? $"\"{EscapeString(key)}\"" : key;
-    }
-
-    /// <summary>
-    ///     Checks if a string needs to be quoted based on the TOON format specification.
-    /// </summary>
-    /// <param name="value">
-    ///     The string to check. This parameter must not be null.
-    /// </param>
-    /// <returns>
-    ///     <c>true</c> if the string needs quoting; otherwise, <c>false</c>.
-    /// </returns>
-    /// <remarks>
-    ///     A string requires quoting if it is empty, contains leading or trailing whitespace,
-    ///     includes spaces, matches reserved keywords ("true", "false", "null"), resembles a number,
-    ///     or contains special characters such as ':', ',', '[', ']', '{', '}', newline, carriage return,
-    ///     double quotes, or backslashes.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool NeedsQuoting(string value)
-    {
-        // Empty strings
-        if (string.IsNullOrEmpty(value))
+        if (value is "true" or "false" or "null" || value[0] == '-' || IsNumericLike(value))
         {
             return true;
         }
 
-        var span = value.AsSpan();
-        
-        // Leading or trailing whitespace
-        if (char.IsWhiteSpace(span[0]) || char.IsWhiteSpace(span[^1]))
+        foreach (var ch in value)
         {
-            return true;
-        }
-
-        // Keywords (optimized comparison)
-        if (value.Length <= 5)
-        {
-            if (value is "true" or "false" or "null")
+            if (ch is ':' or '"' or '\\' or '[' or ']' or '{' or '}' || ch < '\u0020' || ch == delimiter)
             {
                 return true;
             }
         }
 
-        // Fast path: check for special chars and spaces
-        foreach (var ch in span)
-        {
-            if (ch is ' ' or ':' or ',' or '[' or ']' or '{' or '}' or '\n' or '\r' or '"' or '\\')
-            {
-                return true;
-            }
-        }
-
-        // Looks like a number (last check)
-        return double.TryParse(value, out _);
+        return false;
     }
 
     /// <summary>
-    ///     Escapes special characters in a string to ensure compatibility with the TOON format.
+    ///     Matches <c>/^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i</c> (spec §7.2).
     /// </summary>
-    /// <param name="value">
-    ///     The string to escape. This parameter must not be null.
-    /// </param>
-    /// <returns>
-    ///     The escaped string, where special characters such as backslashes, double quotes, newlines,
-    ///     carriage returns, and tabs are replaced with their escaped equivalents.
-    /// </returns>
-    /// <remarks>
-    ///     This method replaces the following characters with their escaped representations:
-    ///     - Backslash ('\\') becomes '\\\\'
-    ///     - Double quote ('"') becomes '\\\"'
-    ///     - Newline ('\n') becomes '\\n'
-    ///     - Carriage return ('\r') becomes '\\r'
-    ///     - Tab ('\t') becomes '\\t'
-    ///     Performance: SIMD-accelerated detection + single-pass implementation.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static string EscapeString(string value)
+    private static bool IsNumericLike(string value)
     {
-        // Quick check: if no special chars, return the original (SIMD-accelerated)
-        if (!ContainsSpecialChars(value.AsSpan()))
+        var i = 0;
+
+        if (value[i] == '-')
+        {
+            i++;
+        }
+
+        if (!SkipDigits(value, ref i))
+        {
+            return false;
+        }
+
+        if (i < value.Length && value[i] == '.')
+        {
+            i++;
+
+            if (!SkipDigits(value, ref i))
+            {
+                return false;
+            }
+        }
+
+        if (i < value.Length && value[i] is 'e' or 'E')
+        {
+            i++;
+
+            if (i < value.Length && value[i] is '+' or '-')
+            {
+                i++;
+            }
+
+            if (!SkipDigits(value, ref i))
+            {
+                return false;
+            }
+        }
+
+        return i == value.Length;
+
+        static bool SkipDigits(string text, ref int index)
+        {
+            var start = index;
+
+            while (index < text.Length && char.IsAsciiDigit(text[index]))
+            {
+                index++;
+            }
+
+            return index > start;
+        }
+    }
+
+    /// <summary>
+    ///     Escapes a string per spec §7.1: backslash, quote, LF, CR and tab use short escapes,
+    ///     other control characters U+0000–U+001F use lowercase <c>\uXXXX</c>.
+    /// </summary>
+    private static string Escape(string value)
+    {
+        var needsEscape = false;
+
+        foreach (var ch in value)
+        {
+            if (ch is '\\' or '"' || ch < '\u0020')
+            {
+                needsEscape = true;
+                break;
+            }
+        }
+
+        if (!needsEscape)
         {
             return value;
         }
 
-        var sb = new StringBuilder(value.Length + 16); // +16 for potential escape sequences
-        
-        foreach (char c in value)
+        var sb = new StringBuilder(value.Length + 8);
+
+        foreach (var ch in value)
         {
-            switch (c)
+            switch (ch)
             {
                 case '\\':
-                    sb.Append(@"\\");
+                    sb.Append("\\\\");
                     break;
                 case '"':
                     sb.Append("\\\"");
@@ -789,105 +575,19 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                 case '\t':
                     sb.Append("\\t");
                     break;
+                case < '\u0020':
+                    sb.Append("\\u").Append(((int)ch).ToString("x4", CultureInfo.InvariantCulture));
+                    break;
                 default:
-                    sb.Append(c);
+                    sb.Append(ch);
                     break;
             }
         }
-        
+
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Checks if the span contains any special characters that need escaping.
-    /// Uses SIMD vectorization when available for better performance.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool ContainsSpecialChars(ReadOnlySpan<char> value)
-    {
-        // SIMD-accelerated search for special characters
-        if (!Vector128.IsHardwareAccelerated || value.Length < Vector128<ushort>.Count)
-        {
-            return value.IndexOfAny(['\\', '"', '\n', '\r', '\t']) >= 0;
-        }
-
-        var backslash = Vector128.Create((ushort)'\\');
-        var quote = Vector128.Create((ushort)'"');
-        var newline = Vector128.Create((ushort)'\n');
-        var carriageReturn = Vector128.Create((ushort)'\r');
-        var tab = Vector128.Create((ushort)'\t');
-
-        ref ushort searchSpace = ref Unsafe.As<char, ushort>(ref MemoryMarshal.GetReference(value));
-        int offset = 0;
-        int length = value.Length;
-
-        while (length >= Vector128<ushort>.Count)
-        {
-            var vector = Vector128.LoadUnsafe(ref searchSpace, (nuint)offset);
-
-            if (Vector128.EqualsAny(vector, backslash) ||
-                Vector128.EqualsAny(vector, quote) ||
-                Vector128.EqualsAny(vector, newline) ||
-                Vector128.EqualsAny(vector, carriageReturn) ||
-                Vector128.EqualsAny(vector, tab))
-            {
-                return true;
-            }
-
-            offset += Vector128<ushort>.Count;
-            length -= Vector128<ushort>.Count;
-        }
-
-        // Check remaining elements
-        for (int i = offset; i < value.Length; i++)
-        {
-            if (value[i] is '\\' or '"' or '\n' or '\r' or '\t')
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    ///     Writes indentation to the output string builder based on the specified indentation level.
-    /// </summary>
-    /// <param name="indentLevel">
-    ///     The indentation level, in spaces. If the level is less than or equal to zero, no indentation is added.
-    /// </param>
-    /// <remarks>
-    ///     This method uses a cached array of precomputed indentation strings for common levels to minimize
-    ///     allocations. For uncommon levels, it generates the indentation dynamically. If the level is odd,
-    ///     an additional space is appended to the cached string.
-    /// </remarks>
-    private void WriteIndent(int indentLevel)
-    {
-        if (indentLevel <= 0)
-        {
-            return;
-        }
-
-        if (indentLevel < IndentCache.Length * 2)
-        {
-            // For commonly-used indent levels, use cache when possible
-            var cacheIndex = indentLevel / 2;
-
-            if (cacheIndex > 0 && cacheIndex < IndentCache.Length)
-            {
-                _sb!.Append(IndentCache[cacheIndex]);
-
-                if (indentLevel % 2 == 1)
-                {
-                    _sb!.Append(' ');
-                }
-
-                return;
-            }
-        }
-
-        _sb!.Append(new string(' ', indentLevel));
-    }
+    #endregion
 
     /// <summary>
     ///     Asynchronously encodes a TOON document into its string representation.

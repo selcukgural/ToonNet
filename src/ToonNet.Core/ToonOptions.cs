@@ -60,40 +60,25 @@ public sealed class ToonOptions : IValidatableObject
     }
 
     /// <summary>
-    ///     Gets or sets the delimiter character for array values.
-    ///     Cannot be whitespace, newline, tab, or control characters.
+    ///     Gets or sets the document delimiter for inline arrays and tabular rows: comma (','), tab ('\t') or pipe ('|').
     ///     The default value is comma (',').
     /// </summary>
     /// <exception cref="ArgumentException">
-    ///     Thrown when the value is a whitespace character, newline, tab, or control character.
+    ///     Thrown when the value is not comma, tab or pipe.
     /// </exception>
     /// <remarks>
-    ///     Per TOON specification §11, delimiters must be printable non-whitespace characters.
+    ///     Per TOON specification §11, tab and pipe are declared in array headers (<c>[N\t]</c>, <c>[N|]</c>);
+    ///     decoders always use the delimiter declared by each header, so this option only affects encoding.
     /// </remarks>
     public char Delimiter
     {
         get => _delimiter;
         set
         {
-            // Check for the newline/tab first (more specific message)
-            if (value is '\n' or '\r' or '\t')
+            if (value is not (',' or '\t' or '|'))
             {
                 throw new ArgumentException(
-                    $"Delimiter cannot be a newline or tab character (U+{(int)value:X4})",
-                    nameof(value));
-            }
-
-            if (char.IsWhiteSpace(value))
-            {
-                throw new ArgumentException(
-                    $"Delimiter cannot be a whitespace character (U+{(int)value:X4})",
-                    nameof(value));
-            }
-
-            if (char.IsControl(value))
-            {
-                throw new ArgumentException(
-                    $"Delimiter cannot be a control character (U+{(int)value:X4})",
+                    $"Delimiter must be comma (','), tab ('\\t') or pipe ('|') per TOON specification §11, but was U+{(int)value:X4}",
                     nameof(value));
             }
 
@@ -185,22 +170,10 @@ public sealed class ToonOptions : IValidatableObject
                 [nameof(MaxDepth), nameof(AllowExtendedLimits)]);
         }
 
-        if (Delimiter is '\n' or '\r' or '\t')
+        if (Delimiter is not (',' or '\t' or '|'))
         {
             yield return new ValidationResult(
-                $"Delimiter cannot be a newline or tab character (U+{(int)Delimiter:X4})",
-                [nameof(Delimiter)]);
-        }
-        else if (char.IsWhiteSpace(Delimiter))
-        {
-            yield return new ValidationResult(
-                $"Delimiter cannot be a whitespace character (U+{(int)Delimiter:X4})",
-                [nameof(Delimiter)]);
-        }
-        else if (char.IsControl(Delimiter))
-        {
-            yield return new ValidationResult(
-                $"Delimiter cannot be a control character (U+{(int)Delimiter:X4})",
+                $"Delimiter must be comma (','), tab ('\\t') or pipe ('|') per TOON specification §11, but was U+{(int)Delimiter:X4}",
                 [nameof(Delimiter)]);
         }
     }

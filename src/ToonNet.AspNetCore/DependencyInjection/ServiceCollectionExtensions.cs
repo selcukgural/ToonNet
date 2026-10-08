@@ -114,10 +114,17 @@ public static class ServiceCollectionExtensions
             options.IndentSize = indentSize.Value;
         }
 
+        // Accepts the character itself (",", "|", a literal tab) or the names "comma", "tab" and "pipe"
         var delimiterString = section.GetValue<string?>(nameof(ToonOptions.Delimiter));
-        if (!string.IsNullOrWhiteSpace(delimiterString))
+        if (!string.IsNullOrEmpty(delimiterString))
         {
-            options.Delimiter = delimiterString[0];
+            options.Delimiter = delimiterString.ToLowerInvariant() switch
+            {
+                "comma" => ',',
+                "tab"   => '\t',
+                "pipe"  => '|',
+                _       => delimiterString[0]
+            };
         }
 
         var strictMode = section.GetValue<bool?>(nameof(ToonOptions.StrictMode));

@@ -1311,9 +1311,9 @@ passing without being removed, so the list always reflects the current state.
 
 | Fixture set | Cases | Passing |
 |-------------|-------|---------|
-| Encode | 142 | 70 |
+| Encode | 142 | 142 |
 | Decode | 236 | 141 |
-| **Total** | **378** | **211 (56%)** |
+| **Total** | **378** | **283 (75%)** |
 
 Not implemented (optional, §13.4): key folding, path expansion.
 

@@ -35,7 +35,7 @@ public abstract class ToonValue
     ///     Implicitly converts an integer value to a ToonValue.
     /// </summary>
     /// <param name="value">The integer value to convert.</param>
-    public static implicit operator ToonValue(int value) => new ToonNumber(value);
+    public static implicit operator ToonValue(int value) => new ToonNumber((long)value);
 
     /// <summary>
     ///     Implicitly converts a long value to a ToonValue.
@@ -53,7 +53,7 @@ public abstract class ToonValue
     ///     Implicitly converts a decimal value to a ToonValue.
     /// </summary>
     /// <param name="value">The decimal value to convert.</param>
-    public static implicit operator ToonValue(decimal value) => new ToonNumber((double)value);
+    public static implicit operator ToonValue(decimal value) => new ToonNumber(value);
 
     /// <summary>
     ///     Implicitly converts a string value to a ToonValue.
@@ -81,7 +81,7 @@ public enum ToonValueType
     Boolean,
 
     /// <summary>
-    ///     Represents a numeric value (double).
+    ///     Represents a numeric value.
     /// </summary>
     Number,
 
@@ -172,13 +172,73 @@ public sealed class ToonBoolean(bool value) : ToonValue
 /// <summary>
 ///     Represents a numeric value in TOON format.
 /// </summary>
-/// <param name="value">The numeric value to be represented.</param>
-public sealed class ToonNumber(double value) : ToonValue
+/// <remarks>
+///     Every number exposes a <see cref="double"/> <see cref="Value"/>. Numbers created from integral or
+///     <see cref="decimal"/> values, and numbers parsed from TOON text that fit in a <see cref="decimal"/>,
+///     also keep their exact value in <see cref="DecimalValue"/>, so <see cref="long"/> and <see cref="decimal"/>
+///     values round-trip without the precision loss of <see cref="double"/>.
+/// </remarks>
+public sealed class ToonNumber : ToonValue
 {
     /// <summary>
-    ///     Gets the numeric value.
+    ///     Initializes a new number from a <see cref="double"/>.
     /// </summary>
-    public double Value { get; } = value;
+    /// <param name="value">The numeric value to be represented.</param>
+    public ToonNumber(double value)
+    {
+        Value = value;
+    }
+
+    /// <summary>
+    ///     Initializes a new number from a <see cref="float"/>, keeping its shortest decimal form (0.1f is 0.1, not 0.10000000149011612).
+    /// </summary>
+    /// <param name="value">The numeric value to be represented.</param>
+    public ToonNumber(float value)
+    {
+        Value = float.IsFinite(value)
+            ? double.Parse(value.ToString("R", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture)
+            : value;
+    }
+
+    /// <summary>
+    ///     Initializes a new number from a <see cref="long"/>, keeping its exact value.
+    /// </summary>
+    /// <param name="value">The numeric value to be represented.</param>
+    public ToonNumber(long value)
+    {
+        Value = value;
+        DecimalValue = value;
+    }
+
+    /// <summary>
+    ///     Initializes a new number from a <see cref="ulong"/>, keeping its exact value.
+    /// </summary>
+    /// <param name="value">The numeric value to be represented.</param>
+    public ToonNumber(ulong value)
+    {
+        Value = value;
+        DecimalValue = value;
+    }
+
+    /// <summary>
+    ///     Initializes a new number from a <see cref="decimal"/>, keeping its exact value.
+    /// </summary>
+    /// <param name="value">The numeric value to be represented.</param>
+    public ToonNumber(decimal value)
+    {
+        Value = (double)value;
+        DecimalValue = value;
+    }
+
+    /// <summary>
+    ///     Gets the numeric value as a <see cref="double"/>.
+    /// </summary>
+    public double Value { get; }
+
+    /// <summary>
+    ///     Gets the exact value when it is known, or <c>null</c> when the number only exists as a <see cref="double"/>.
+    /// </summary>
+    public decimal? DecimalValue { get; }
 
     /// <summary>
     ///     Gets the type of this value.
@@ -186,12 +246,12 @@ public sealed class ToonNumber(double value) : ToonValue
     public override ToonValueType ValueType => ToonValueType.Number;
 
     /// <summary>
-    ///     Returns a string representation of this numeric value.
+    ///     Returns the canonical TOON representation of this number (spec §2).
     /// </summary>
-    /// <returns>The number as a string in invariant culture format.</returns>
+    /// <returns>The number in canonical form, or "null" for NaN and infinities.</returns>
     public override string ToString()
     {
-        return Value.ToString(CultureInfo.InvariantCulture);
+        return Encoding.ToonNumberFormatter.Format(this) ?? "null";
     }
 
     /// <summary>
@@ -204,7 +264,7 @@ public sealed class ToonNumber(double value) : ToonValue
     ///     Implicitly converts an integer value to a ToonNumber.
     /// </summary>
     /// <param name="value">The integer value to convert.</param>
-    public static implicit operator ToonNumber(int value) => new(value);
+    public static implicit operator ToonNumber(int value) => new((long)value);
 
     /// <summary>
     ///     Implicitly converts a long value to a ToonNumber.
@@ -222,7 +282,7 @@ public sealed class ToonNumber(double value) : ToonValue
     ///     Implicitly converts a decimal value to a ToonNumber.
     /// </summary>
     /// <param name="value">The decimal value to convert.</param>
-    public static implicit operator ToonNumber(decimal value) => new((double)value);
+    public static implicit operator ToonNumber(decimal value) => new(value);
 
     /// <summary>
     ///     Implicitly converts a ToonNumber to a double value.
