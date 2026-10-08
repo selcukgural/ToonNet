@@ -15,13 +15,15 @@ Main configuration class for controlling serialization and deserialization.
 ### Creating Options
 
 ```csharp
+using ToonNet.Core;
+using ToonNet.Core.Serialization;
+
 // Default options
 var options = new ToonSerializerOptions();
 
 // Custom options
 var options = new ToonSerializerOptions
 {
-    WriteIndented = true,
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
     IgnoreNullValues = true
 };
@@ -31,48 +33,18 @@ var options = new ToonSerializerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `WriteIndented` | `bool` | `false` | Format output with indentation |
 | `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Transform property names |
 | `IgnoreNullValues` | `bool` | `false` | Skip null properties during serialization |
-| `CaseSensitive` | `bool` | `true` | Case-sensitive property matching |
-| `AllowTrailingCommas` | `bool` | `false` | Allow trailing commas in arrays/objects |
-| `Converters` | `IList<IToonConverter>` | `[]` | Custom type converters |
-| `ToonOptions` | `ToonOptions` | `Default` | Lower-level parsing options |
+| `IncludeReadOnlyProperties` | `bool` | `true` | Serialize get-only properties |
+| `MaxDepth` | `int` | `100` | Maximum object nesting while serializing/deserializing (1–200, or up to 1000 with `AllowExtendedLimits`) |
+| `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
+| `Converters` | `List<IToonConverter>` | empty | Custom type converters |
+| `ToonOptions` | `ToonOptions` | `new ToonOptions()` | Lower-level parsing and encoding options; cannot be null |
 
-## WriteIndented
+`IncludeTypeInformation` and `PublicOnly` still exist but are `[Obsolete]` and have no effect.
 
-Controls output formatting (indentation).
-
-### Compact Format (Default)
-
-```csharp
-var options = new ToonSerializerOptions { WriteIndented = false };
-string toon = ToonSerializer.Serialize(person, options);
-```
-
-**Output:**
-```toon
-Name: Alice
-Age: 30
-Email: alice@example.com
-```
-
-### Indented Format
-
-```csharp
-var options = new ToonSerializerOptions { WriteIndented = true };
-string toon = ToonSerializer.Serialize(person, options);
-```
-
-**Output (with proper indentation for nested structures):**
-```toon
-Name: Alice
-Age: 30
-Address:
-  Street: 123 Main St
-  City: New York
-  ZipCode: 10001
-```
+There is no option to switch indentation off: TOON expresses nesting by indentation, so output is always indented
+(see `ToonOptions.IndentSize` below).
 
 ## PropertyNamingPolicy
 
@@ -159,6 +131,9 @@ last_name: Smith
 age: 30
 ```
 
+`SnakeCase` inserts `_` before every upper-case letter, so acronyms are split letter by letter (`HTTPCode` becomes
+`h_t_t_p_code`); use `[ToonProperty("http_code")]` for such names.
+
 #### LowerCase
 
 ```csharp
@@ -196,6 +171,9 @@ Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
 // person.FirstName = "Alice"
 // person.LastName = "Smith"
 ```
+
+Naming policies apply to property names only. Dictionary keys are written as they are, and a `[ToonProperty("name")]`
+attribute overrides the policy for that property.
 
 ## IgnoreNullValues
 
@@ -238,15 +216,10 @@ Username: alice
 Bio: Engineer
 ```
 
-## CaseSensitive
+## Property Name Matching
 
-Control case sensitivity during deserialization.
-
-### Case Sensitive (Default)
-
-```csharp
-var options = new ToonSerializerOptions { CaseSensitive = true };
-```
+Deserialization matches keys to property names **case-sensitively**, after applying the naming policy (or the
+`[ToonProperty]` name). There is no case-insensitive option.
 
 ```csharp
 string toonInput = """
@@ -254,37 +227,50 @@ Name: Alice
 age: 30
 """;  // lowercase 'age' won't match 'Age' property
 
-Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
+Person person = ToonSerializer.Deserialize<Person>(toonInput);
 // person.Age will be 0 (default value) because 'age' doesn't match 'Age'
 ```
 
-### Case Insensitive
+Keys without a matching property are ignored.
+
+## IncludeReadOnlyProperties
+
+Get-only properties are serialized by default. Set `IncludeReadOnlyProperties = false` to write only properties that
+have a setter:
 
 ```csharp
-var options = new ToonSerializerOptions { CaseSensitive = false };
+public class Rectangle
+{
+    public int Width { get; set; } = 3;
+    public int Height { get; set; } = 4;
+    public int Area => Width * Height;
+}
+
+ToonSerializer.Serialize(new Rectangle());
+// Width: 3
+// Height: 4
+// Area: 12
+
+ToonSerializer.Serialize(new Rectangle(), new ToonSerializerOptions { IncludeReadOnlyProperties = false });
+// Width: 3
+// Height: 4
 ```
+
+## MaxDepth
+
+`MaxDepth` limits how deeply objects may nest while serializing and deserializing (default 100). Values above 200
+throw `ArgumentOutOfRangeException` unless `AllowExtendedLimits` is set first, which allows up to 1000:
 
 ```csharp
-string toonInput = """
-name: Alice
-AGE: 30
-eMaIl: alice@example.com
-""";
-
-Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
-// All properties matched successfully!
-// person.Name = "Alice"
-// person.Age = 30
-// person.Email = "alice@example.com"
+var options = new ToonSerializerOptions
+{
+    AllowExtendedLimits = true,  // set before MaxDepth
+    MaxDepth = 500
+};
 ```
 
-## AllowTrailingCommas
-
-Allow trailing commas in collections (future feature).
-
-```csharp
-var options = new ToonSerializerOptions { AllowTrailingCommas = true };
-```
+Exceeding the limit throws `ToonEncodingException` when serializing and `ToonParseException` when deserializing.
+Circular references are detected separately and throw `ToonEncodingException` right away.
 
 ## Custom Converters
 
@@ -292,11 +278,14 @@ Register custom type converters for specific types.
 
 ```csharp
 var options = new ToonSerializerOptions();
-options.Converters.Add(new CustomDateTimeConverter());
+options.AddConverter(new CustomDateTimeConverter());  // throws on null
 options.Converters.Add(new CustomGuidConverter());
 
 string toon = ToonSerializer.Serialize(obj, options);
 ```
+
+The first converter whose `CanConvert` returns `true` is used. A converter can also be attached to a property or type
+with `[ToonConverter(typeof(MyConverter))]`.
 
 See [Custom Converters](../advanced/custom-converters) for detailed guide.
 
@@ -308,9 +297,9 @@ Lower-level configuration for TOON parsing and encoding.
 var toonOptions = new ToonOptions
 {
     IndentSize = 2,
-    IndentChar = ' ',
-    NewLine = "\n",
-    Encoding = Encoding.UTF8
+    Delimiter = ',',
+    StrictMode = true,
+    MaxDepth = 100
 };
 
 var options = new ToonSerializerOptions
@@ -323,10 +312,14 @@ var options = new ToonSerializerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `IndentSize` | `int` | `2` | Number of indent characters per level |
-| `IndentChar` | `char` | `' '` (space) | Character used for indentation |
-| `NewLine` | `string` | `Environment.NewLine` | Line ending character(s) |
-| `Encoding` | `Encoding` | `Encoding.UTF8` | Text encoding |
+| `IndentSize` | `int` | `2` | Spaces per indentation level; an even number from 2 to 100 |
+| `Delimiter` | `char` | `','` | Delimiter for inline arrays and tabular rows: `','`, `'\t'` or `'\|'` |
+| `StrictMode` | `bool` | `true` | Enforce the spec §14 errors while parsing (see [Deserialization](deserialization#parsing-rules-and-strict-mode)) |
+| `MaxDepth` | `int` | `100` | Maximum nesting depth while parsing and encoding (1–200, or up to 1000 with `AllowExtendedLimits`) |
+| `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
+
+Invalid values throw from the setter: `ArgumentOutOfRangeException` for `IndentSize` and `MaxDepth`,
+`ArgumentException` for `Delimiter`.
 
 ### Indent Configuration
 
@@ -334,43 +327,34 @@ var options = new ToonSerializerOptions
 // 4-space indentation
 var toonOptions = new ToonOptions
 {
-    IndentSize = 4,
-    IndentChar = ' '
-};
-
-// Tab indentation
-var toonOptions = new ToonOptions
-{
-    IndentSize = 1,
-    IndentChar = '\t'
+    IndentSize = 4
 };
 ```
 
-### Line Ending Configuration
+Indentation always uses spaces; TOON does not allow tabs in indentation. In strict mode the parser also expects every
+indentation to be a multiple of `IndentSize`, so read documents with the same `IndentSize` they were written with.
+
+### Delimiter Configuration
 
 ```csharp
-// Unix-style (LF)
-var toonOptions = new ToonOptions { NewLine = "\n" };
-
-// Windows-style (CRLF)
-var toonOptions = new ToonOptions { NewLine = "\r\n" };
-
-// Mac-style (CR) - legacy
-var toonOptions = new ToonOptions { NewLine = "\r" };
+var toonOptions = new ToonOptions { Delimiter = '|' };
 ```
 
-### Encoding Configuration
-
-```csharp
-// UTF-8 (default)
-var toonOptions = new ToonOptions { Encoding = Encoding.UTF8 };
-
-// UTF-16
-var toonOptions = new ToonOptions { Encoding = Encoding.Unicode };
-
-// ASCII
-var toonOptions = new ToonOptions { Encoding = Encoding.ASCII };
+```toon
+Tags[2|]: new|priority
+Items[2|]{Sku|Qty}:
+  A-1|2
+  B-7|1
 ```
+
+Tab and pipe are declared in the array header (`[2|]`, `[2\t]`). The parser always uses the delimiter declared by each
+header, so this option only affects encoding.
+
+### Line Endings and Encoding
+
+Output always uses `\n` line endings and has no trailing newline. The file and stream methods of `ToonSerializer`
+read and write UTF-8; there is no encoding option. To use another encoding, serialize to a string and write it
+yourself.
 
 ## Reusing Options
 
@@ -380,27 +364,20 @@ var toonOptions = new ToonOptions { Encoding = Encoding.ASCII };
 public class ToonService
 {
     // Static readonly options - created once
-    private static readonly ToonSerializerOptions _serializerOptions = new()
+    private static readonly ToonSerializerOptions _options = new()
     {
-        WriteIndented = true,
         PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
         IgnoreNullValues = true
     };
     
-    private static readonly ToonSerializerOptions _deserializerOptions = new()
-    {
-        PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
-        CaseSensitive = false
-    };
-    
     public string Serialize<T>(T obj)
     {
-        return ToonSerializer.Serialize(obj, _serializerOptions);
+        return ToonSerializer.Serialize(obj, _options);
     }
     
-    public T Deserialize<T>(string toon)
+    public T? Deserialize<T>(string toon)
     {
-        return ToonSerializer.Deserialize<T>(toon, _deserializerOptions);
+        return ToonSerializer.Deserialize<T>(toon, _options);
     }
 }
 ```
@@ -412,17 +389,15 @@ Create common configurations as presets:
 ```csharp
 public static class ToonPresets
 {
-    // Compact, production-ready
+    // Smaller output: skip nulls
     public static readonly ToonSerializerOptions Compact = new()
     {
-        WriteIndented = false,
         IgnoreNullValues = true
     };
     
-    // Human-readable, development
-    public static readonly ToonSerializerOptions Readable = new()
+    // Debugging: keep every value
+    public static readonly ToonSerializerOptions Verbose = new()
     {
-        WriteIndented = true,
         IgnoreNullValues = false
     };
     
@@ -430,16 +405,15 @@ public static class ToonPresets
     public static readonly ToonSerializerOptions Api = new()
     {
         PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
-        IgnoreNullValues = true,
-        CaseSensitive = false
+        IgnoreNullValues = true
     };
     
-    // Configuration files (snake_case)
+    // Hand-edited configuration files (snake_case, lenient parsing)
     public static readonly ToonSerializerOptions Config = new()
     {
-        WriteIndented = true,
         PropertyNamingPolicy = PropertyNamingPolicy.SnakeCase,
-        IgnoreNullValues = true
+        IgnoreNullValues = true,
+        ToonOptions = new ToonOptions { StrictMode = false }
     };
 }
 
@@ -458,12 +432,10 @@ public static class ToonConfig
         {
             "Development" => new ToonSerializerOptions
             {
-                WriteIndented = true,
                 IgnoreNullValues = false  // Include nulls for debugging
             },
             "Production" => new ToonSerializerOptions
             {
-                WriteIndented = false,
                 IgnoreNullValues = true  // Optimize size
             },
             _ => new ToonSerializerOptions()
@@ -482,23 +454,21 @@ string toon = ToonSerializer.Serialize(data, options);
 // Full-featured configuration
 var options = new ToonSerializerOptions
 {
-    WriteIndented = true,
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
     IgnoreNullValues = true,
-    CaseSensitive = false,
-    AllowTrailingCommas = true,
+    IncludeReadOnlyProperties = false,
+    MaxDepth = 50,
     ToonOptions = new ToonOptions
     {
         IndentSize = 2,
-        IndentChar = ' ',
-        NewLine = "\n",
-        Encoding = Encoding.UTF8
+        Delimiter = '|',
+        StrictMode = true
     }
 };
 
 // Add custom converters
-options.Converters.Add(new CustomDateTimeConverter());
-options.Converters.Add(new CustomGuidConverter());
+options.AddConverter(new CustomDateTimeConverter());
+options.AddConverter(new CustomGuidConverter());
 
 // Use for serialization
 string toon = ToonSerializer.Serialize(data, options);
@@ -515,8 +485,7 @@ var result = ToonSerializer.Deserialize<MyData>(toon, options);
 var options = new ToonSerializerOptions
 {
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
-    IgnoreNullValues = true,
-    WriteIndented = false  // Minimize response size
+    IgnoreNullValues = true  // Minimize response size
 };
 ```
 
@@ -525,9 +494,9 @@ var options = new ToonSerializerOptions
 ```csharp
 var options = new ToonSerializerOptions
 {
-    WriteIndented = true,  // Human-readable
     PropertyNamingPolicy = PropertyNamingPolicy.SnakeCase,
-    IgnoreNullValues = true
+    IgnoreNullValues = true,
+    ToonOptions = new ToonOptions { StrictMode = false }  // tolerate hand-edited files
 };
 ```
 
@@ -536,7 +505,6 @@ var options = new ToonSerializerOptions
 ```csharp
 var options = new ToonSerializerOptions
 {
-    WriteIndented = true,
     IgnoreNullValues = false,  // Include all data
     PropertyNamingPolicy = PropertyNamingPolicy.Default
 };
@@ -547,9 +515,9 @@ var options = new ToonSerializerOptions
 ```csharp
 var options = new ToonSerializerOptions
 {
-    CaseSensitive = false,  // Flexible property matching
     IgnoreNullValues = false,  // Preserve all data
-    PropertyNamingPolicy = PropertyNamingPolicy.Default
+    PropertyNamingPolicy = PropertyNamingPolicy.Default,
+    ToonOptions = new ToonOptions { StrictMode = false }  // accept documents from older writers
 };
 ```
 

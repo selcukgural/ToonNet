@@ -4,19 +4,19 @@ sidebar_position: 1
 
 # Welcome to ToonNet
 
-ToonNet is a high-performance .NET library for serializing and deserializing data in **TOON** (Token-Optimized Object Notation) format.
+ToonNet is a .NET library for serializing and deserializing data in **TOON** (Token-Oriented Object Notation) format. It implements [TOON spec v3.3.2](toon-spec).
 
 ## What is TOON?
 
 TOON is a human-readable data format designed for:
-- **AI/LLM prompts** - Up to 40% fewer tokens than JSON
+- **AI/LLM prompts** - Fewer tokens than JSON, especially for arrays of uniform objects
 - **Configuration files** - Clean, readable syntax
 - **Data exchange** - Human and machine friendly
 
 ## Quick Example
 
 ```csharp
-using ToonNet.Core;
+using ToonNet.Core.Serialization;
 
 // Serialize
 var person = new Person { Name = "Alice", Age = 30 };
@@ -28,13 +28,13 @@ var restored = ToonSerializer.Deserialize<Person>(toon);
 
 ## Key Features
 
-- 🚀 **High Performance** - Expression trees, not reflection (10-100x faster)
-- 💰 **Token Efficient** - 40% fewer tokens than JSON (lower AI API costs)
-- 💻 **Developer Friendly** - System.Text.Json-compatible API
-- 🔄 **Streaming Support** - Memory-efficient serialization for millions of records
+- 🚀 **Performance** - Compiled expression-tree property accessors and cached type metadata
+- 💰 **Token Efficient** - Tabular arrays declare field names once (lower AI API costs)
+- 💻 **Developer Friendly** - System.Text.Json-style API
+- 🔄 **Streaming Support** - Multi-document streaming from `IAsyncEnumerable<T>` without materialising the whole dataset
 - 🔧 **ASP.NET Core** - Input/output formatters, configuration provider
 - 📦 **Format Extensions** - JSON/YAML bidirectional conversion
-- 🎯 **Source Generators** - Compile-time code generation
+- 🎯 **Source Generators** - Optional generated `Serialize`/`Deserialize` methods with the same output as `ToonSerializer`
 
 ## Documentation Guide
 
@@ -91,7 +91,7 @@ Additional resources:
 
 ## License
 
-ToonNet is open-source software licensed under the [MIT License](https://github.com/selcukgural/ToonNet/blob/main/LICENSE).
+ToonNet is open-source software licensed under the [MIT License](https://github.com/selcukgural/ToonNet/blob/master/LICENSE).
 
 ## Thread-Safety
 

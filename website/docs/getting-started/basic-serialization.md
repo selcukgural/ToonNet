@@ -9,7 +9,8 @@ Learn the fundamentals of TOON serialization with practical examples.
 ```csharp
 string text = "Hello, ToonNet!";
 string toon = ToonSerializer.Serialize(text);
-// Output: Hello, ToonNet!
+// Output: "Hello, ToonNet!"
+// (quoted because it contains the delimiter ','; plain strings like Hello World are written unquoted)
 
 string restored = ToonSerializer.Deserialize<string>(toon);
 ```
@@ -157,8 +158,10 @@ Name: John Doe
 Address:
   Street: 123 Main St
   City: New York
-  ZipCode: 10001
+  ZipCode: "10001"
 ```
+
+Strings that would otherwise read as a number, boolean or `null` (such as `"10001"`) are quoted so they stay strings.
 
 ### Collections of Objects
 
@@ -205,11 +208,11 @@ string toon1 = ToonSerializer.Serialize(example1);
 // Age: 25
 // BirthDate: null
 
-var example2 = new NullableExample { Age = null, BirthDate = DateTime.Now };
+var example2 = new NullableExample { Age = null, BirthDate = DateTime.UtcNow };
 string toon2 = ToonSerializer.Serialize(example2);
 // Output:
 // Age: null
-// BirthDate: 2026-01-24T17:00:00.0000000Z
+// BirthDate: "2026-01-24T17:00:00.0000000Z"
 ```
 
 ### Nullable Reference Types
@@ -283,7 +286,7 @@ public enum Permissions
 
 var permissions = Permissions.Read | Permissions.Write;
 string toon = ToonSerializer.Serialize(permissions);
-// Output: Read, Write
+// Output: "Read, Write"
 ```
 
 ## DateTime and DateTimeOffset
@@ -387,16 +390,14 @@ var person = ToonSerializer.Deserialize<Person>(toonInput);
 
 ```csharp
 // Async file deserialization
-var config = await ToonSerializer.DeserializeAsync<AppConfig>(
-    File.OpenRead("appsettings.toon")
-);
+var config = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon");
 ```
 
 ### From Stream
 
 ```csharp
 using var stream = new MemoryStream(Encoding.UTF8.GetBytes(toonString));
-var data = ToonSerializer.Deserialize<MyData>(stream);
+var data = await ToonSerializer.DeserializeFromStreamAsync<MyData>(stream);
 ```
 
 ## Error Handling
@@ -408,13 +409,14 @@ try
 }
 catch (ToonParseException ex)
 {
+    // Invalid TOON text (strict mode is on by default)
     Console.WriteLine($"Parse error at line {ex.Line}, column {ex.Column}");
-    Console.WriteLine($"Expected: {ex.ExpectedToken}, Got: {ex.ActualToken}");
 }
 catch (ToonSerializationException ex)
 {
+    // Valid TOON that does not fit the target type, e.g. "Age: abc"
     Console.WriteLine($"Serialization error: {ex.Message}");
-    Console.WriteLine($"Property: {ex.PropertyName}, Type: {ex.TargetType}");
+    Console.WriteLine($"Path: {ex.PropertyName}, Type: {ex.TargetType}");  // e.g. Path: $.Age, Type: System.Int32
 }
 ```
 

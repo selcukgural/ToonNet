@@ -11,7 +11,7 @@ dotnet add package ToonNet.AspNetCore.Mvc
 ## Setup
 
 ```csharp
-using ToonNet.AspNetCore.Mvc;
+using ToonNet.AspNetCore.Mvc.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,7 +52,7 @@ public class UsersController : ControllerBase
 
 ```http
 HTTP/1.1 200 OK
-Content-Type: application/toon
+Content-Type: application/toon; charset=utf-8
 
 Id: 1
 Name: Alice
@@ -61,16 +61,25 @@ Email: alice@example.com
 
 ## Using ToonResult
 
-Alternative approach using `ToonResult`:
+Alternative approach using `ToonResult` (an `IResult`), which always writes TOON regardless of the `Accept` header.
+It works in Minimal APIs and in controller actions that return `IResult`:
 
 ```csharp
+using ToonNet.AspNetCore.Mvc.Http;
+
 [HttpGet("{id}")]
 public IResult GetUser(int id)
 {
     var user = GetUserFromDatabase(id);
-    return Results.Toon(user);  // Extension method
+    return new ToonResult(user);
 }
+
+// Minimal API: extension method on Results.Extensions
+app.MapGet("/users/{id}", (int id) => Results.Extensions.Toon(GetUserFromDatabase(id)));
 ```
+
+`ToonResult` uses the options passed to it, otherwise the `ToonSerializerOptions` registered with `AddToonNet`, otherwise
+the defaults. The MVC output formatter uses the options passed to `AddToonFormatters` instead.
 
 ## Content Negotiation
 
@@ -80,6 +89,10 @@ Client specifies desired format via `Accept` header:
 GET /api/users/1 HTTP/1.1
 Accept: application/toon
 ```
+
+The output formatter only produces `application/toon` (`text/toon` is accepted by the input formatter only). It is
+added after the JSON formatter, so JSON stays the default for `Accept: */*` or a missing `Accept` header; use
+`[Produces("application/toon")]` to always return TOON from an action.
 
 ## See Also
 

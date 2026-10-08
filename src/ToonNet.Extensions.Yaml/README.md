@@ -16,8 +16,8 @@ ToonNet.Extensions.Yaml provides **seamless bidirectional conversion** between Y
 - ✅ **YAML → TOON** - Convert YAML strings/documents to TOON format
 - ✅ **TOON → YAML** - Convert TOON strings/documents to YAML format
 - ✅ **YamlDotNet integration** - Industry-standard YAML parser
-- ✅ **Preserves structure** - Round-trip conversions maintain data integrity
-- ✅ **Full YAML support** - Objects, arrays, scalars, anchors, aliases
+- ✅ **Preserves structure** - Round-trip conversions keep mappings, sequences and scalar values
+- ✅ **Common YAML features** - Mappings, sequences, scalars, flow notation, anchors and aliases (expanded into copies)
 
 **Perfect for:**
 - ⚙️ **Configuration Files** - Convert YAML configs to TOON format
@@ -87,7 +87,7 @@ string toonString = ToonYamlConvert.FromYaml(yamlString);
 // Output (TOON format):
 // name: Alice
 // age: 30
-// hobbies[2]: reading, coding
+// hobbies[2]: reading,coding
 
 // TOON → YAML string conversion
 string yamlBack = ToonYamlConvert.ToYaml(toonString);
@@ -186,7 +186,7 @@ string toonConfig = ToonYamlConvert.FromYaml(yamlConfig);
 //     password: secret
 // logging:
 //   level: info
-//   outputs[2]: console, file
+//   outputs[2]: console,file
 
 // Convert back to YAML if needed
 string yamlBack = ToonYamlConvert.ToYaml(toonConfig);
@@ -270,20 +270,30 @@ File.WriteAllText("workflow.toon", toonWorkflow);
 
 // Convert back when needed
 string yamlOutput = ToonYamlConvert.ToYaml(toonWorkflow);
-```
-var buildJob = (ToonObject)jobs["build"];
-var steps = (ToonArray)buildJob["steps"];
+
+// Or inspect it as a document
+var doc = ToonYamlConverter.FromYaml(workflowYaml);
+var jobs = (ToonObject)doc.AsObject()["jobs"]!;
+var buildJob = (ToonObject)jobs["build"]!;
+var steps = (ToonArray)buildJob["steps"]!;
 
 Console.WriteLine($"Workflow has {steps.Items.Count} steps");
 ```
+
+Keys that are not plain identifiers are quoted in TOON (`"runs-on": ubuntu-latest`).
 
 ---
 
 ## ✨ YAML Features Supported
 
+Scalars are typed by their text: lowercase `true`/`yes`/`on` and `false`/`no`/`off` become booleans,
+`null`, `~` and empty values become null, and anything that .NET can parse as a number becomes a number.
+Quoting does not change this (`"42"` and `"true"` also become a number and a boolean), and the number check is
+lenient (`'1,000'` becomes `1000`, `(5)` becomes `-5`). Values that must stay strings may need post-processing.
+
 ### Boolean Variants
 ```yaml
-# All supported
+# All read as booleans
 enabled: true
 disabled: false
 legacy_yes: yes
@@ -297,8 +307,8 @@ switch_off: off
 integer: 42
 float: 3.14
 scientific: 1.5e-10
-hex: 0xFF
-octal: 0o77
+hex: 0xFF      # kept as the string "0xFF"
+octal: 0o77    # kept as the string "0o77"
 ```
 
 ### Complex Structures
@@ -342,7 +352,8 @@ var roundtripYaml = ToonYamlConverter.ToYaml(toonDoc);
 // Structure preserved (formatting may differ)
 ```
 
-**Note:** Comments and anchors/aliases are not preserved (YAML parser limitation).
+**Note:** Comments are not preserved, aliases are expanded into copies, and only the first document of a
+multi-document stream is converted.
 
 ---
 
@@ -364,7 +375,7 @@ var roundtripYaml = ToonYamlConverter.ToYaml(toonDoc);
 - [`ToonNet.Extensions.Json`](../ToonNet.Extensions.Json) - JSON ↔ TOON conversion
 
 **Web Integration:**
-- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - ASP.NET Core middleware
+- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - TOON configuration provider and DI integration
 - [`ToonNet.AspNetCore.Mvc`](../ToonNet.AspNetCore.Mvc) - MVC formatters
 
 **Development:**
@@ -387,9 +398,6 @@ var roundtripYaml = ToonYamlConverter.ToYaml(toonDoc);
 # Run YAML conversion tests
 cd tests/ToonNet.Tests
 dotnet test --filter "FullyQualifiedName~ToonYamlConverter"
-
-# Run specific test categories
-dotnet test --filter "Category=YamlConversion"
 ```
 
 ---
@@ -398,7 +406,7 @@ dotnet test --filter "Category=YamlConversion"
 
 - .NET 8.0 or later
 - ToonNet.Core
-- YamlDotNet 16.3.0+
+- YamlDotNet 16.2.0+ (installed automatically)
 
 ---
 

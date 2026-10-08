@@ -3,20 +3,22 @@
 **Performance benchmarks for ToonNet serialization**
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
-[![BenchmarkDotNet](https://img.shields.io/badge/BenchmarkDotNet-v0.13+-blue)](#)
+[![BenchmarkDotNet](https://img.shields.io/badge/BenchmarkDotNet-v0.15.0-blue)](#)
 
 ---
 
 ## 📊 What is ToonNet.Benchmarks?
 
-ToonNet.Benchmarks provides **comprehensive performance testing** for ToonNet:
+ToonNet.Benchmarks is a [BenchmarkDotNet](https://benchmarkdotnet.org/) console project with performance tests for ToonNet:
 
-- ⚡ **Parser Benchmarks** - TOON parsing performance
-- 🔄 **Encoder Benchmarks** - TOON encoding performance
-- 📦 **Serialization Benchmarks** - End-to-end C# ↔ TOON
-- 🎯 **Source Generator Benchmarks** - AOT vs runtime comparison
-- 🧠 **Memory Benchmarks** - Allocation tracking
-- 📈 **Scalability Tests** - Large documents, deep nesting
+- ⚡ **Parser Benchmarks** - TOON parsing performance (`ParserOnlyBenchmarks`)
+- 🔄 **Encoder Benchmarks** - TOON encoding performance (`EncoderOnlyBenchmarks`)
+- 🎯 **Generated vs. `ToonSerializer`** - source-generated methods compared with `ToonSerializer` (`SimpleBenchmarks`, `MediumBenchmarks`, `ComplexBenchmarks`)
+- ⏱️ **Async & Streaming Benchmarks** - async, file, stream and `SerializeStreamAsync` APIs (`AsyncBenchmarks`, `StreamingSerializationBenchmarks`)
+- 🧠 **Memory Benchmarks** - allocation tracking (`MemoryPressureBenchmarks`, `ArrayPoolOptimizationBenchmarks`)
+- 📈 **Scalability Tests** - large documents, deep nesting (`LargeDocumentBenchmarks`, `DeepNestingBenchmarks`)
+
+All benchmark classes use `[MemoryDiagnoser]`, so allocations are reported for every run.
 
 ---
 
@@ -24,160 +26,101 @@ ToonNet.Benchmarks provides **comprehensive performance testing** for ToonNet:
 
 ### Running Benchmarks
 
+`Program.cs` currently runs a single class, `ArrayPoolOptimizationBenchmarks`, through `BenchmarkRunner.Run<T>()`.
+Command-line arguments such as `--filter` are **not** forwarded to BenchmarkDotNet.
+
 ```bash
-# Run all benchmarks
-cd src/ToonNet.Benchmarks
-dotnet run -c Release
-
-# Run specific benchmark
-dotnet run -c Release --filter "*ParserBenchmarks*"
-
-# Run with memory diagnostics
-dotnet run -c Release -m
-
-# Export results
-dotnet run -c Release --exporters html json
+# From the repository root
+dotnet run -c Release --project benchmark/ToonNet.Benchmarks
 ```
+
+To run another class, change the type argument in `Program.cs`, for example:
+
+```csharp
+var summary = BenchmarkRunner.Run<ToonNet.Benchmarks.ParserOnlyBenchmarks>(config);
+```
+
+> If you want to select benchmarks from the command line, replace the `BenchmarkRunner.Run<...>` call with
+> `BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config)`. The filters below assume
+> that change (`dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*ParserOnly*"`).
 
 ---
 
 ## 📋 Benchmark Categories
 
+| Class | File | Filter (with `BenchmarkSwitcher`) |
+|-------|------|-----------------------------------|
+| `ParserOnlyBenchmarks` | `ParserOnlyBenchmarks.cs` | `*ParserOnly*` |
+| `EncoderOnlyBenchmarks` | `EncoderOnlyBenchmarks.cs` | `*EncoderOnly*` |
+| `SimpleBenchmarks`, `MediumBenchmarks`, `ComplexBenchmarks` | `Benchmarks.cs` | `*SimpleBenchmarks*`, `*MediumBenchmarks*`, `*ComplexBenchmarks*` |
+| `AsyncBenchmarks` | `AsyncBenchmarks.cs` | `*AsyncBenchmarks*` |
+| `StreamingSerializationBenchmarks` | `StreamingSerializationBenchmarks.cs` | `*StreamingSerialization*` |
+| `MemoryPressureBenchmarks` | `MemoryPressureBenchmarks.cs` | `*MemoryPressure*` |
+| `LargeDocumentBenchmarks` | `LargeDocumentBenchmarks.cs` | `*LargeDocument*` |
+| `DeepNestingBenchmarks` | `DeepNestingBenchmarks.cs` | `*DeepNesting*` |
+| `ArrayPoolOptimizationBenchmarks`, `ToonSerializerOptimizationBenchmarks`, `ConfigureAwaitBenchmarks` | `OptimizationBenchmarks.cs` | `*Optimization*`, `*ConfigureAwait*` |
+
 ### 1. Parser Only Benchmarks
 
-Tests TOON parsing performance (string → ToonDocument):
+Tests TOON parsing performance (string → `ToonDocument`) with `ToonParser`:
 
-```bash
-dotnet run -c Release --filter "*ParserOnly*"
-```
-
-**Metrics:**
-- Parse time for small/medium/large documents
-- Memory allocations during parsing
-- Token generation overhead
+- `Parse_SimpleObject`, `Parse_InlineArray`, `Parse_ListStyleArray`, `Parse_NestedObject`, `Parse_MixedContent`
+- `ParseAndAccess_*` and `ParseAndIterate_ArrayCount` - parsing plus reading values
 
 ### 2. Encoder Only Benchmarks
 
-Tests TOON encoding performance (ToonDocument → string):
+Tests TOON encoding performance (`ToonDocument` → string) with `ToonEncoder`:
 
-```bash
-dotnet run -c Release --filter "*EncoderOnly*"
-```
+- `Encode_SimpleObject`, `Encode_InlineArray`, `Encode_NestedObject`, `Encode_LargeArray`, `Encode_DeepNesting`
+- `Encode_StringLength_*` - encoding plus measuring the output length
 
-**Metrics:**
-- Encode time for various structures
-- String builder efficiency
-- Indentation overhead
+### 3. Generated vs. `ToonSerializer` Benchmarks
 
-### 3. Serialization Benchmarks
+`SimpleBenchmarks`, `MediumBenchmarks` and `ComplexBenchmarks` (in `Benchmarks.cs`) use the `[ToonSerializable]`
+models in `Models/BenchmarkModels.cs` and compare:
 
-Tests end-to-end performance (C# object ↔ TOON):
+- `SerializeGenerated` / `DeserializeGenerated` - the source-generated static `Serialize`/`Deserialize` methods
+- `SerializeReflection` / `DeserializeReflection` - `ToonSerializer.Serialize` / `ToonSerializer.Deserialize<T>`
 
-```bash
-dotnet run -c Release --filter "*Serialization*"
-```
+> **Note:** these are not like-for-like. `SerializeGenerated` returns a `ToonDocument` (no text encoding), while
+> `SerializeReflection` returns the encoded TOON string. The deserialize benchmarks also include a serialize step.
 
-**Metrics:**
-- Cold start vs hot path
-- Expression tree compilation cost
-- Type metadata caching
+### 4. Async & Streaming Benchmarks
 
-### 4. Source Generator Benchmarks
-
-Compares source generator vs runtime serialization:
-
-```bash
-dotnet run -c Release --filter "*SourceGenerator*"
-```
-
-**Metrics:**
-- Zero-allocation vs expression trees
-- AOT vs JIT performance
-- Startup time comparison
+- `AsyncBenchmarks` - `SerializeAsync`, `DeserializeAsync`, async parse/encode, file and stream round trips
+- `StreamingSerializationBenchmarks` - `SerializeCollectionToFileAsync` (baseline) vs. `SerializeStreamAsync` with
+  different batch sizes and the explicit `---` separator, for 1,000 / 10,000 / 100,000 items (`[Params]`)
 
 ### 5. Memory Pressure Benchmarks
 
-Tests behavior under memory constraints:
+Tests allocation-heavy workloads:
 
-```bash
-dotnet run -c Release --filter "*MemoryPressure*"
-```
+- Parse/encode/round trip of a large document, many documents in a loop
+- Creating many parser and encoder instances
+- `SerializeStreamAsync` vs. `SerializeCollectionToFileAsync` for 10,000 items
 
-**Metrics:**
-- Large document handling
-- GC pressure
-- Memory growth patterns
+### 6. Large Document & Deep Nesting Benchmarks
 
-### 6. Deep Nesting Benchmarks
+- `LargeDocumentBenchmarks` - parse, encode and round trip of ~10 KB, ~100 KB and ~1 MB documents
+- `DeepNestingBenchmarks` - parse at depth 10/25/50/75, encode at depth 10/50, round trip at depth 25/50
 
-Tests performance with deeply nested structures:
+### 7. Optimization Benchmarks
 
-```bash
-dotnet run -c Release --filter "*DeepNesting*"
-```
-
-**Metrics:**
-- Max depth handling
-- Stack usage
-- Recursive overhead
+`OptimizationBenchmarks.cs` contains micro-benchmarks for implementation choices: `Encoding.GetBytes` vs. `ArrayPool`
+buffers (`ArrayPoolOptimizationBenchmarks`), stream/file/collection serialization (`ToonSerializerOptimizationBenchmarks`)
+and async calls with `ConfigureAwait(false)` (`ConfigureAwaitBenchmarks`).
 
 ---
 
 ## 📊 Sample Results
 
-### Typical Benchmark Output
+No current results are published. The encoder and parser were rewritten for TOON spec v3.3.2 after the last recorded
+run, so earlier numbers no longer describe the library. Run the benchmarks on your own hardware (see
+[Quick Start](#-quick-start)) and compare results from the same machine only.
 
-```
-BenchmarkDotNet v0.13.12, Windows 11
-Intel Core i7-12700K, 1 CPU, 12 logical and 8 physical cores
-.NET SDK 8.0.100
-
-|                    Method |      Mean |    StdDev | Allocated |
-|-------------------------- |----------:|----------:|----------:|
-|          Parse_SmallDoc   |   1.52 μs |  0.032 μs |    1.2 KB |
-|          Parse_MediumDoc  |  45.23 μs |  0.981 μs |   38.5 KB |
-|          Parse_LargeDoc   | 892.45 μs | 15.234 μs |  512.3 KB |
-|                           |           |           |           |
-|         Encode_SmallDoc   |   0.89 μs |  0.018 μs |    0.8 KB |
-|         Encode_MediumDoc  |  28.34 μs |  0.623 μs |   24.1 KB |
-|         Encode_LargeDoc   | 543.12 μs |  9.876 μs |  385.2 KB |
-|                           |           |           |           |
-| Serialize_ExpressionTree  |  89.50 ns |  1.823 ns |     120 B |
-| Serialize_SourceGenerator |  45.20 ns |  0.912 ns |       - B |  ← Zero allocation!
-| Serialize_Reflection      | 4250.30 ns | 87.456 ns |     856 B |
-
-Summary:
-- Source Generator is 2x faster than Expression Trees
-- Source Generator is 94x faster than Reflection
-- Zero allocations with Source Generators (hot path)
-```
-
----
-
-## 🎯 Key Findings
-
-### Performance Characteristics
-
-**Parser:**
-- ~1.5 μs for small documents (<1 KB)
-- Linear scaling with document size
-- Efficient token-based parsing
-
-**Encoder:**
-- ~0.9 μs for small documents
-- StringBuilder-based (minimal allocations)
-- Indentation adds ~15% overhead
-
-**Serialization:**
-- Cold start: 1-2ms (expression tree compilation)
-- Hot path: 45-90ns (cached compiled accessors)
-- 20-40x faster than reflection-based serializers
-
-**Source Generators:**
-- Zero allocation after initial object creation
-- 2x faster than expression trees
-- 94x faster than reflection
-- Perfect for AOT scenarios
+The files in `BenchmarkDotNet.Artifacts/results/` are **historical**: they were produced in February 2026 with
+BenchmarkDotNet v0.15.0 on .NET 8.0.11 (Apple M3 Max, macOS 26.2), before the encoder/parser rewrite. Do not quote
+them as the performance of the current version.
 
 ---
 
@@ -218,8 +161,10 @@ public class MyCustomBenchmark
 
 ### Run Custom Benchmark
 
+Point `Program.cs` at the new class (`BenchmarkRunner.Run<MyCustomBenchmark>(config)`), then:
+
 ```bash
-dotnet run -c Release --filter "*MyCustomBenchmark*"
+dotnet run -c Release --project benchmark/ToonNet.Benchmarks
 ```
 
 ---
@@ -227,6 +172,9 @@ dotnet run -c Release --filter "*MyCustomBenchmark*"
 ## 📈 Comparing with Other Libraries
 
 ### JSON Comparison
+
+The project does not contain a format comparison benchmark. To add one, reference the JSON libraries you want to
+compare (`System.Text.Json` is part of .NET; `Newtonsoft.Json` needs a package reference) and write a class like this:
 
 ```csharp
 [MemoryDiagnoser]
@@ -268,6 +216,8 @@ public class FormatComparisonBenchmarks
 ---
 
 ## 🧪 Benchmark Scenarios
+
+The snippets below are templates for new benchmarks, not classes that exist in the project.
 
 ### Scenario 1: Real-World Object Graphs
 
@@ -325,15 +275,15 @@ public string SerializeNestedStructure(int depth)
 
 ### Generated Reports
 
-Benchmarks generate multiple report formats:
+With the default BenchmarkDotNet configuration, each benchmark class produces an HTML, CSV and GitHub Markdown report
+in `BenchmarkDotNet.Artifacts/results/` (relative to the working directory of the run):
 
 ```bash
 BenchmarkDotNet.Artifacts/
 ├── results/
-│   ├── ToonNet.Benchmarks.ParserBenchmarks-report.html
-│   ├── ToonNet.Benchmarks.ParserBenchmarks-report.json
-│   ├── ToonNet.Benchmarks.ParserBenchmarks-report.csv
-│   └── ToonNet.Benchmarks.ParserBenchmarks-measurements.csv
+│   ├── ToonNet.Benchmarks.ParserOnlyBenchmarks-report.html
+│   ├── ToonNet.Benchmarks.ParserOnlyBenchmarks-report.csv
+│   └── ToonNet.Benchmarks.ParserOnlyBenchmarks-report-github.md
 ```
 
 ### View Results
@@ -342,8 +292,8 @@ BenchmarkDotNet.Artifacts/
 # Open HTML report
 open BenchmarkDotNet.Artifacts/results/*-report.html
 
-# View JSON data
-cat BenchmarkDotNet.Artifacts/results/*-report.json | jq
+# View Markdown table
+cat BenchmarkDotNet.Artifacts/results/*-report-github.md
 ```
 
 ---
@@ -351,12 +301,12 @@ cat BenchmarkDotNet.Artifacts/results/*-report.json | jq
 ## 🔗 Related Packages
 
 **Core:**
-- [`ToonNet.Core`](../ToonNet.Core) - Core serialization
-- [`ToonNet.SourceGenerators`](../ToonNet.SourceGenerators) - Source generators
+- [`ToonNet.Core`](../../src/ToonNet.Core) - Core serialization
+- [`ToonNet.SourceGenerators`](../../src/ToonNet.SourceGenerators) - Source generators
 
 **Extensions:**
-- [`ToonNet.Extensions.Json`](../ToonNet.Extensions.Json) - JSON conversion
-- [`ToonNet.Extensions.Yaml`](../ToonNet.Extensions.Yaml) - YAML conversion
+- [`ToonNet.Extensions.Json`](../../src/ToonNet.Extensions.Json) - JSON conversion
+- [`ToonNet.Extensions.Yaml`](../../src/ToonNet.Extensions.Yaml) - YAML conversion
 
 **Testing:**
 - [`ToonNet.Tests`](../../tests/ToonNet.Tests) - Functional tests
@@ -367,14 +317,14 @@ cat BenchmarkDotNet.Artifacts/results/*-report.json | jq
 
 - [Main Documentation](../../README.md) - Complete guide
 - [Performance Guide](../../README.md#-performance--architecture) - Performance features
-- [Source Generators](../ToonNet.SourceGenerators) - Zero-allocation serialization
+- [Source Generators](../../src/ToonNet.SourceGenerators/README.md) - Generated `Serialize`/`Deserialize` methods
 
 ---
 
 ## 📋 Requirements
 
-- .NET 8.0 or later
-- BenchmarkDotNet 0.13.12+
+- .NET 8.0 SDK or later (the project targets `net8.0`)
+- BenchmarkDotNet 0.15.0 (package reference in `ToonNet.Benchmarks.csproj`)
 - Release configuration (benchmarks should run in Release mode)
 
 ---
@@ -387,7 +337,7 @@ Want to add benchmarks? Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) fir
 - Use `[MemoryDiagnoser]` for allocation tracking
 - Include `[SimpleJob]` or `[ShortRunJob]` for quick tests
 - Add `[Arguments]` for parameterized benchmarks
-- Document expected performance characteristics
+- Document what the benchmark measures; don't commit numbers without the BenchmarkDotNet environment header
 
 ---
 

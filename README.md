@@ -26,10 +26,10 @@ ToonNet is a **.NET serialization library** that provides:
 - **Serialize** C# objects to TOON format
 - **Deserialize** TOON format to C# objects  
 - **Convert** between JSON, TOON, and YAML formats
-- **System.Text.Json-compatible API** for zero learning curve
+- **System.Text.Json-style API** (`Serialize`/`Deserialize`) that feels familiar
 
 **TOON Format** is a human-readable data format optimized for:
-- **AI/LLM prompts** - Up to 40% fewer tokens than JSON
+- **AI/LLM prompts** - Fewer tokens than JSON, especially for arrays of uniform objects
 - **Configuration files** - Clean, readable syntax
 - **Data exchange** - Human and machine friendly
 
@@ -42,52 +42,15 @@ ToonNet is a **.NET serialization library** that provides:
 
 ## 🤖 Why Developers Choose ToonNet
 
-ToonNet delivers **production-grade performance** with three critical advantages:
+ToonNet focuses on three things:
 
-1. **🎯 40% Token Reduction** - Fewer tokens = Lower AI API costs
-2. **⚡ Extreme Performance** - 2-4x faster than competitors with near-zero allocations
-3. **🔧 Zero Learning Curve** - System.Text.Json-compatible API
-
-### ⚡ Performance First - Built for Production
-
-ToonNet is **obsessively optimized** for high-throughput, low-latency production environments:
-
-**Benchmark-Proven Speed (Apple M3 Max, .NET 8.0):**
-```
-Payload Size    Speed Improvement    Memory Saved    GC Pressure
-───────────────────────────────────────────────────────────────
-100 Bytes       1.16x faster         100% (0 alloc)  ZERO ✅
-1 KB            1.98x faster         100% (0 alloc)  ZERO ✅
-10 KB           2.37x faster         100% (0 alloc)  ZERO ✅
-100 KB          4.40x faster         99.99% saved    ZERO ✅
-```
-
-**Real-World Impact:**
-- **Stream operations:** 1.61x faster, 50% less memory
-- **Large payloads (100KB+):** Up to **4.4x speed boost** ⚡
-- **GC collections:** **ZERO** (ArrayPool eliminates allocations)
-- **Deadlock risk:** **ELIMINATED** (proper ConfigureAwait usage)
-
-**Architecture Excellence:**
-- **Expression Trees** - Compiled property accessors (10-100x faster than reflection)
-- **ArrayPool<T>** - Reusable memory buffers, zero heap allocations
-- **SIMD Vectorization** - Hardware-accelerated parallel processing
-- **Source Generator** - Optional static `Serialize`/`Deserialize` methods with the same output as `ToonSerializer`
-- **Thread-Safe Caching** - `ConcurrentDictionary` for concurrent scenarios
-- **ConfigureAwait(false)** - No deadlocks in WPF/WinForms/legacy environments
-
-```csharp
-// Hot path performance (after warmup)
-var toon = ToonSerializer.Serialize(largeObject);  
-// 100KB payload: ~3.7μs, 2 bytes allocated (vs 16.4μs, 133KB with GetBytes)
-// That's 340% faster with 99.99% less memory! 🚀
-```
-
-> **Performance Guarantee:** All numbers are **real BenchmarkDotNet measurements**, not estimates. ToonNet is benchmarked on every release to prevent regressions.
+1. **🎯 Fewer tokens** - Tabular TOON for uniform data is much smaller than JSON, which lowers LLM input cost
+2. **📐 Spec conformance** - Encoder and decoder follow TOON spec v3.3.2 and are tested against the official fixtures
+3. **🔧 Familiar API** - `Serialize`/`Deserialize` methods in the style of System.Text.Json
 
 ### 🤖 AI Token Optimization
 
-TOON format uses **significantly fewer tokens** than JSON, reducing AI API costs:
+For uniform data, TOON is much more compact than JSON, which usually means fewer tokens in LLM prompts:
 
 ```csharp
 // Example: Product catalog for AI prompt
@@ -124,34 +87,17 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 
 ### ⚡ Performance & Architecture
 
-ToonNet is **engineered for extreme performance** in production environments:
+**How it is built:**
+- **Expression Trees** - Property getters/setters are compiled once per type instead of using reflection on every call
+- **Metadata Caching** - Thread-safe `ConcurrentDictionary` caches for type metadata and property names
+- **Source Generator** - Optional static `Serialize`/`Deserialize` methods with the same output as `ToonSerializer`
+- **ArrayPool<byte>** - `SerializeToStreamAsync` encodes the TOON text into a pooled buffer before writing to the stream
 
-**Zero-Allocation Hot Paths:**
-- **ArrayPool<T>** - Reusable byte buffers eliminate heap allocations (99.99% reduction)
-- **Expression Trees** - Compiled property accessors (10-100x faster than reflection)
-- **Metadata Caching** - Thread-safe `ConcurrentDictionary` for type metadata
-- **SIMD Operations** - Hardware-accelerated string processing
-- **No runtime reflection** overhead after first access
-
-**Latest Optimizations (v1.3.0):**
-```csharp
-// ArrayPool optimization - Near-zero allocations
-using var stream = new MemoryStream();
-await ToonSerializer.SerializeToStreamAsync(data, stream);
-// 10KB: 901ns, 13KB allocated (vs 1,454ns, 27KB with old approach)
-// Result: 1.61x faster, 50% less memory, ZERO GC pressure ✅
-```
-
-**Production-Ready Async:**
-- **ConfigureAwait(false)** - Eliminates deadlock risk in all environments
-- **Cancellation Support** - Full CancellationToken propagation
-- **80KB Buffers** - Large file I/O optimization (20x larger than default)
-- **Concurrent Operations** - Thread-safe by design
-
-**Architecture highlights:**
-- **Compiled getters/setters** - Expression trees compiled to IL, not reflection calls
-- **Memory pooling** - ArrayPool<byte> for stream operations
-- **Span<T> and Memory<T>** - Modern .NET APIs for reduced allocations
+**Async I/O:**
+- **ConfigureAwait(false)** - Awaited I/O calls do not capture the synchronization context
+- **Cancellation Support** - `CancellationToken` on all async methods
+- **80 KB file buffers** - File-based methods open the file with an 81,920-byte buffer
+- **Streaming** - `SerializeStreamAsync`/`DeserializeStreamAsync` process one document at a time
 
 **Thread-Safety:**
 - **Concurrent use:** `ToonSerializer` methods are safe to call from multiple threads.
@@ -159,7 +105,8 @@ await ToonSerializer.SerializeToStreamAsync(data, stream);
 - **Cache lifetime:** Metadata entries are created on demand and retained for the process lifetime (no eviction).
 - **Options caution:** Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
 
-> **When to use ToonNet:** High-throughput APIs, real-time systems, AI/LLM applications, microservices with tight latency budgets. Benchmark-proven 2-4x faster than traditional serializers.
+> **Benchmarks:** The BenchmarkDotNet project lives in [`benchmark/ToonNet.Benchmarks`](benchmark/ToonNet.Benchmarks).
+> The committed results predate the v3.3.2 encoder/parser rewrite, so run the benchmarks yourself for current numbers.
 
 ---
 
@@ -172,8 +119,8 @@ ToonNet is modular - install only what you need:
 | **ToonNet.Core** | Core serialization API - C# ↔ TOON (uses expression trees) | [![NuGet](https://img.shields.io/nuget/v/ToonNet.Core.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Core/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/) | ✅ Stable |
 | **ToonNet.Extensions.Json** | JSON ↔ TOON conversion | [![NuGet](https://img.shields.io/nuget/v/ToonNet.Extensions.Json.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Extensions.Json/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Extensions.Json.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Extensions.Json/) | ✅ Stable |
 | **ToonNet.Extensions.Yaml** | YAML ↔ TOON conversion | [![NuGet](https://img.shields.io/nuget/v/ToonNet.Extensions.Yaml.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Extensions.Yaml/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Extensions.Yaml.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Extensions.Yaml/) | ✅ Stable |
-| **ToonNet.AspNetCore** | ASP.NET Core middleware & formatters | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | ✅ Stable |
-| **ToonNet.AspNetCore.Mvc** | MVC input/output formatters | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.Mvc.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.Mvc.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | ✅ Stable |
+| **ToonNet.AspNetCore** | ASP.NET Core dependency injection & TOON configuration provider | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | ✅ Stable |
+| **ToonNet.AspNetCore.Mvc** | MVC input/output formatters & `ToonResult` | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.Mvc.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.Mvc.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | ✅ Stable |
 | **ToonNet.SourceGenerators** | Generates static `Serialize`/`Deserialize` methods for `[ToonSerializable]` types | [![NuGet](https://img.shields.io/nuget/v/ToonNet.SourceGenerators.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.SourceGenerators.svg?style=flat)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | ✅ Stable |
 
 ### Quick Install
@@ -268,7 +215,7 @@ RecentPurchases[2]{Product,Amount}:
   ML Course,99.99
 ```
 
-**Token savings:** ~40% fewer tokens than JSON = lower AI API costs!
+**Token savings:** the field names of `RecentPurchases` are written once instead of per item, so the prompt is smaller than the equivalent JSON.
 
 That's it - no configuration, no attributes, just works.
 
@@ -276,7 +223,7 @@ That's it - no configuration, no attributes, just works.
 
 ## 📚 API Reference
 
-ToonNet provides **6 core methods** with familiar System.Text.Json-style naming:
+ToonNet's core methods use familiar System.Text.Json-style naming:
 
 ### C# Object Serialization
 
@@ -299,10 +246,13 @@ string toon = ToonConvert.FromJson(jsonString);
 // Convert TOON string to JSON string
 string json = ToonConvert.ToJson(toonString);
 
-// Parse JSON directly to C# object (via TOON)
+// Parse JSON to a C# object (System.Text.Json)
 var obj = ToonConvert.DeserializeFromJson<MyClass>(jsonString);
 
-// Serialize C# object directly to JSON
+// Convert JSON to TOON, then deserialize with ToonSerializer
+var obj2 = ToonConvert.ParseJson<MyClass>(jsonString);
+
+// Serialize C# object to JSON (System.Text.Json, indented by default)
 string json = ToonConvert.SerializeToJson(myObject);
 ```
 
@@ -339,7 +289,8 @@ string yaml = ToonYamlConvert.ToYaml(toonString);
 | `Deserialize<T>(toon)` | Core | TOON string | C# Object | Load TOON into objects |
 | `FromJson(json)` | Extensions.Json | JSON string | TOON string | Convert JSON to TOON |
 | `ToJson(toon)` | Extensions.Json | TOON string | JSON string | Convert TOON to JSON |
-| `DeserializeFromJson<T>(json)` | Extensions.Json | JSON string | C# Object | Parse JSON via TOON |
+| `DeserializeFromJson<T>(json)` | Extensions.Json | JSON string | C# Object | Parse JSON (System.Text.Json) |
+| `ParseJson<T>(json)` | Extensions.Json | JSON string | C# Object | Parse JSON via TOON |
 | `SerializeToJson<T>(obj)` | Extensions.Json | C# Object | JSON string | Export as JSON |
 | `FromYaml(yaml)` | Extensions.Yaml | YAML string | TOON string | Convert YAML to TOON |
 | `ToYaml(toon)` | Extensions.Yaml | TOON string | YAML string | Convert TOON to YAML |
@@ -384,8 +335,8 @@ await ToonSerializer.SerializeStreamAsync(
 - **Data migration** - Convert large datasets with minimal memory footprint
 
 **Performance:**
-- **Memory:** Constant O(1) regardless of dataset size (only batch size × item size in memory)
-- **Throughput:** Batched writes reduce I/O overhead by ~2-3x compared to unbuffered
+- **Memory:** Independent of the number of items (roughly batch size × item size in memory)
+- **Throughput:** Writes are batched (`BatchSize`, default 50 items) to reduce I/O calls
 - **Cancellation:** Full CancellationToken support for long-running operations
 
 📖 **Full API documentation: [API-GUIDE.md](docs/API-GUIDE.md)**
@@ -433,7 +384,7 @@ Customer context:
 Generate personalized product recommendations.
 ";
 
-// Result: 40% fewer tokens = 40% lower AI API costs
+// Result: fewer input tokens than the same data as JSON
 ```
 
 **Output (compact, AI-friendly):**

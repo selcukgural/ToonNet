@@ -13,7 +13,7 @@ dotnet add package ToonNet.AspNetCore
 ### Add TOON Configuration File
 
 ```csharp
-using ToonNet.AspNetCore;
+using ToonNet.AspNetCore.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,6 +38,13 @@ Logging:
   EnableConsole: true
 Features[3]: Authentication,Caching,Compression
 ```
+
+Nested objects become `Section:Key` paths and array items become index keys (`Features:0`, `Features:1`, ...). Only a
+root object is read (a root array or primitive yields no keys). Strict mode applies by default (pass a `ToonOptions`
+as the last argument of `AddToonFile` to change it), and a file that is not valid TOON throws a `FormatException`.
+
+Values are stored as strings: booleans become `True`/`False`, and numbers are converted through `double`, so `1.0`
+becomes `1` and integers beyond 2^53 lose precision. Quote such values (`Version: "1.0"`) to keep them as written.
 
 ## Reading Configuration
 

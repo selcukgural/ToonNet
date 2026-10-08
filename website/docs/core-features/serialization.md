@@ -4,38 +4,39 @@ Complete guide to serializing .NET objects to TOON format using `ToonSerializer`
 
 ## Overview
 
-`ToonSerializer` is a static class that provides methods for converting .NET objects to TOON format. It uses expression trees (not reflection) for high performance.
+`ToonSerializer` (namespace `ToonNet.Core.Serialization`) is a static class that converts .NET objects to TOON format.
+Type metadata is discovered with reflection once per type and cached; property getters and setters are compiled
+expression trees, so later calls do not pay the reflection cost again.
 
 ## Basic Serialization
 
 ### Serialize to String
 
 ```csharp
-using ToonNet.Core;
+using ToonNet.Core.Serialization;
 
 var person = new Person { Name = "Alice", Age = 30 };
 string toon = ToonSerializer.Serialize(person);
+// Name: Alice
+// Age: 30
 ```
+
+The output has no trailing newline.
 
 ### Serialize to Stream
 
 ```csharp
 using var stream = new MemoryStream();
-ToonSerializer.Serialize(stream, person);
-
-// Or with explicit encoding
-ToonSerializer.Serialize(stream, person, Encoding.UTF8);
+await ToonSerializer.SerializeToStreamAsync(person, stream);  // written as UTF-8
 ```
 
 ### Serialize to File
 
 ```csharp
-// Synchronous
-ToonSerializer.SerializeToFile("person.toon", person);
-
-// Asynchronous
-await ToonSerializer.SerializeToFileAsync("person.toon", person);
+await ToonSerializer.SerializeToFileAsync(person, "person.toon");  // written as UTF-8
 ```
+
+There are no synchronous stream or file overloads; use `Serialize` and write the string yourself if you need one.
 
 ## Serialization Options
 
@@ -46,7 +47,6 @@ Configure serialization behavior with `ToonSerializerOptions`:
 ```csharp
 var options = new ToonSerializerOptions
 {
-    WriteIndented = true,
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
     IgnoreNullValues = false
 };
@@ -54,20 +54,26 @@ var options = new ToonSerializerOptions
 string toon = ToonSerializer.Serialize(person, options);
 ```
 
-### Write Indented (Formatting)
+### Indentation and Delimiter
 
-Control output formatting:
+TOON output is always indented; nesting is expressed by indentation. The indent width and the delimiter used in
+inline arrays and tabular rows are set on the nested `ToonOptions`:
 
 ```csharp
-// Compact (default)
-var options = new ToonSerializerOptions { WriteIndented = false };
-string compact = ToonSerializer.Serialize(person, options);
-// Output: Name: Alice\nAge: 30
+var options = new ToonSerializerOptions
+{
+    ToonOptions = new ToonOptions
+    {
+        IndentSize = 4,     // even number, 2..100 (default 2)
+        Delimiter = '|'     // ',' (default), '\t' or '|'
+    }
+};
 
-// Indented (readable)
-var options = new ToonSerializerOptions { WriteIndented = true };
-string indented = ToonSerializer.Serialize(person, options);
-// Output (with proper indentation for nested objects)
+string toon = ToonSerializer.Serialize(order, options);
+// Tags[2|]: new|priority
+// Items[2|]{Sku|Qty}:
+//     A-1|2
+//     B-7|1
 ```
 
 ### Property Naming Policy
@@ -80,8 +86,7 @@ public enum PropertyNamingPolicy
     Default,        // Keep original names (default)
     CamelCase,      // firstName, lastName
     SnakeCase,      // first_name, last_name
-    KebabCase,      // first-name, last-name
-    PascalCase      // FirstName, LastName
+    LowerCase       // firstname, lastname
 }
 ```
 
@@ -171,6 +176,8 @@ string toon2 = ToonSerializer.Serialize(user, ignoreNulls);
 // Bio: Engineer
 ```
 
+`IgnoreNullValues` only skips object properties; `null` items inside arrays are always kept.
+
 ## Advanced Scenarios
 
 ### Serialize Collections
@@ -178,11 +185,13 @@ string toon2 = ToonSerializer.Serialize(user, ignoreNulls);
 ```csharp
 // Array
 int[] numbers = { 1, 2, 3, 4, 5 };
-string toon = ToonSerializer.Serialize(numbers);
+string toon1 = ToonSerializer.Serialize(numbers);
+// [5]: 1,2,3,4,5
 
 // List
 List<string> names = new() { "Alice", "Bob", "Charlie" };
-string toon = ToonSerializer.Serialize(names);
+string toon2 = ToonSerializer.Serialize(names);
+// [3]: Alice,Bob,Charlie
 
 // Dictionary
 Dictionary<string, int> scores = new()
@@ -190,7 +199,24 @@ Dictionary<string, int> scores = new()
     ["Math"] = 95,
     ["Physics"] = 87
 };
-string toon = ToonSerializer.Serialize(scores);
+string toon3 = ToonSerializer.Serialize(scores);
+// Math: 95
+// Physics: 87
+
+// Uniform objects use the tabular form
+var employees = new List<Employee>
+{
+    new() { Name = "Alice", Department = "Engineering", Salary = 85000 },
+    new() { Name = "Bob", Department = "Marketing", Salary = 65000 }
+};
+string toon4 = ToonSerializer.Serialize(employees);
+// [2]{Name,Department,Salary}:
+//   Alice,Engineering,85000
+//   Bob,Marketing,65000
+
+// Empty collections
+string toon5 = ToonSerializer.Serialize(new { Tags = new string[0] });
+// Tags: []
 ```
 
 ### Serialize with Custom Converters
@@ -228,8 +254,12 @@ public class Rectangle : Shape
 // Serialize as base type
 Shape shape = new Circle { Color = "Red", Radius = 5.0 };
 string toon = ToonSerializer.Serialize<Shape>(shape);
-// Output includes all properties from Circle
+// Color: Red
+// Radius: 5
 ```
+
+Objects are written with their runtime type, base-class properties first. No type discriminator is written, so
+reading the text back into `Shape` needs a [custom converter](../advanced/custom-converters).
 
 ### Serialize Complex Nested Structures
 
@@ -296,21 +326,29 @@ Departments[1]:
 
 ## Async Serialization
 
+### Serialize to String (Async)
+
+```csharp
+string toon = await ToonSerializer.SerializeAsync(data);
+```
+
+`SerializeAsync` runs synchronously and returns a completed `ValueTask<string>`; it exists for API symmetry.
+
 ### Serialize to Stream (Async)
 
 ```csharp
-using var fileStream = File.Create("data.toon");
-await ToonSerializer.SerializeAsync(fileStream, data);
+await using var fileStream = File.Create("data.toon");
+await ToonSerializer.SerializeToStreamAsync(data, fileStream);
 ```
 
 ### Serialize to File (Async)
 
 ```csharp
-await ToonSerializer.SerializeToFileAsync("data.toon", data);
+await ToonSerializer.SerializeToFileAsync(data, "data.toon");
 
 // With options
-var options = new ToonSerializerOptions { WriteIndented = true };
-await ToonSerializer.SerializeToFileAsync("data.toon", data, options);
+var options = new ToonSerializerOptions { PropertyNamingPolicy = PropertyNamingPolicy.CamelCase };
+await ToonSerializer.SerializeToFileAsync(data, "data.toon", options);
 ```
 
 ## Streaming Serialization (Large Datasets)
@@ -338,7 +376,7 @@ await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_ex
 
 ### Advanced Streaming Options
 
-Configure separator mode and batch size for optimal performance:
+Configure separator mode and batch size:
 
 ```csharp
 // Custom write options for large datasets
@@ -372,10 +410,13 @@ await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>(
 
 Choose the separator mode that fits your use case:
 
-| Mode | Format | Use Case | Compatibility |
-|------|--------|----------|--------------|
-| **BlankLine** (default) | Documents separated by blank lines | Legacy compatibility, human-readable | Compatible with older versions |
-| **ExplicitSeparator** | Documents separated by `---` | Deterministic parsing, YAML-like | Recommended for new projects |
+| Mode | Format | Use Case |
+|------|--------|----------|
+| **BlankLine** (default) | Documents separated by one blank line | Human-readable; the encoder never writes blank lines inside a document |
+| **ExplicitSeparator** | Documents separated by a `---` line (`DocumentSeparator`) | Explicit boundaries, YAML-like |
+
+The separator is always written with `\n`, independent of the platform line ending. Read the file back with the
+same mode.
 
 **Example output (BlankLine):**
 ```toon
@@ -401,18 +442,16 @@ Name: Charlie
 Age: 35
 ```
 
-### Performance Characteristics
+### Memory Characteristics
 
-| Aspect | Traditional | Streaming | Improvement |
-|--------|-------------|-----------|-------------|
-| **Memory Usage** | O(n) - all items | O(1) - constant | ~99% reduction for large datasets |
-| **Throughput** | Baseline | 2-3x faster | Batched I/O writes |
-| **Max Dataset Size** | Limited by RAM | Unlimited | No OOM risk |
-| **Cancellation** | Limited | Full support | CancellationToken propagation |
+- Items are pulled from the `IAsyncEnumerable<T>` one at a time, so the source never has to be materialized.
+- Up to `BatchSize` serialized documents (default 50) are buffered before each write, so memory use grows with batch
+  size × item size, not with the number of items.
+- `DeserializeStreamAsync` reads line by line and keeps only the current document in memory.
+- The `CancellationToken` is checked for every item.
 
-**Example: 1 million users**
-- Traditional: ~2GB memory, 30 seconds
-- Streaming: ~50MB memory, 12 seconds (2.5x faster, 97.5% less memory)
+The repository contains a BenchmarkDotNet suite for streaming (`benchmark/ToonNet.Benchmarks/StreamingSerializationBenchmarks.cs`);
+run it on your own hardware and data shape for numbers.
 
 ### Use Cases
 
@@ -460,15 +499,14 @@ await foreach (var logEntry in ToonSerializer.DeserializeStreamAsync<LogEntry>("
 
 1. **Reuse ToonSerializerOptions**: Create once, use multiple times
 2. **Use async methods** for I/O-bound operations
-3. **Avoid reflection**: ToonNet uses expression trees automatically
-4. **Stream for large data**: Use stream methods instead of string methods
+3. **Metadata is cached**: the first call for a type builds and caches its metadata; later calls reuse it
+4. **Stream large collections**: use `SerializeStreamAsync` instead of building one huge string
 5. **Profile your code**: Use BenchmarkDotNet for optimization
 
 ```csharp
 // Good: Reuse options
 private static readonly ToonSerializerOptions _options = new()
 {
-    WriteIndented = true,
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase
 };
 
@@ -480,24 +518,25 @@ public string SerializeUser(User user)
 
 ## All Serialize Methods
 
+All methods take an optional `ToonSerializerOptions? options = null`; the async ones also take an optional
+`CancellationToken`.
+
 | Method | Description | Use Case |
 |--------|-------------|----------|
-| `Serialize<T>(T value)` | Serialize to string | Simple, in-memory data |
-| `Serialize<T>(T value, ToonSerializerOptions)` | Serialize with options | Custom formatting |
-| `Serialize<T>(Stream, T value)` | Serialize to stream | Large data, file output |
-| `Serialize<T>(Stream, T, Encoding)` | Serialize with encoding | Non-UTF8 encoding |
-| `SerializeAsync<T>(Stream, T)` | Async stream serialization | Async I/O |
-| `SerializeAsync<T>(Stream, T, ToonSerializerOptions)` | Async with options | Async + custom options |
-| `SerializeToFile<T>(string, T)` | Serialize to file | File persistence |
-| `SerializeToFileAsync<T>(string, T)` | Async file serialization | Async file I/O |
-| **`SerializeStreamAsync<T>(IAsyncEnumerable<T>, string)`** | **Stream large datasets to file** | **Millions of records, DB exports** |
-| **`SerializeStreamAsync<T>(IAsyncEnumerable<T>, Stream, ...)`** | **Stream with custom options** | **ETL pipelines, configurable batching** |
+| `Serialize<T>(T value, options)` | Serialize to string | Simple, in-memory data |
+| `Serialize(object value, Type type, options)` | Serialize with a runtime type | Non-generic code |
+| `SerializeToValue<T>(T value, options)` | Convert to a `ToonValue` tree without text | Inspect or modify before encoding |
+| `SerializeAsync<T>(T value, options, ct)` | Serialize to string (`ValueTask<string>`) | Async call sites |
+| `SerializeToStreamAsync<T>(T value, Stream, options, ct)` | Write UTF-8 to a stream | Network, files |
+| `SerializeToStreamAsync(Type, object value, Stream, options, ct)` | Same, with a runtime type | Non-generic code |
+| `SerializeToFileAsync<T>(T value, string filePath, options, ct)` | Write UTF-8 to a file | File persistence |
+| `SerializeCollectionToFileAsync<T>(IEnumerable<T>, string filePath, options, ct)` | One document per item, blank-line separated | Multi-document files |
+| `SerializeCollectionToStreamAsync<T>(IEnumerable<T>, Stream, options, ct)` | Same, to a stream | Multi-document streams |
+| **`SerializeStreamAsync<T>(IAsyncEnumerable<T>, string filePath, ...)`** | **Stream large datasets to a file** | **DB exports, large datasets** |
+| **`SerializeStreamAsync<T>(IAsyncEnumerable<T>, Stream, ...)`** | **Stream to a stream** | **ETL pipelines** |
 
-**New in streaming API:**
-- ✅ Memory-efficient: O(1) constant memory usage
-- ✅ Batched writes: 2-3x faster I/O throughput
-- ✅ Cancellation: Full `CancellationToken` support
-- ✅ Configurable: Batch size and separator mode options
+The `SerializeStreamAsync` overloads that take `ToonMultiDocumentWriteOptions` control the separator mode and batch
+size. See [Streaming](streaming) for details.
 
 ## Error Handling
 
@@ -506,19 +545,16 @@ try
 {
     string toon = ToonSerializer.Serialize(obj);
 }
-catch (ToonSerializationException ex)
-{
-    Console.WriteLine($"Serialization failed: {ex.Message}");
-    Console.WriteLine($"Property: {ex.PropertyName}");
-    Console.WriteLine($"Type: {ex.TargetType}");
-}
 catch (ToonEncodingException ex)
 {
+    // Circular reference or MaxDepth exceeded
     Console.WriteLine($"Encoding error: {ex.Message}");
-    Console.WriteLine($"Property path: {ex.PropertyPath}");
-    Console.WriteLine($"Value: {ex.ProblematicValue}");
+    Console.WriteLine($"Property path: {ex.PropertyPath}");  // e.g. $.Children[0].Parent
 }
 ```
+
+`ToonSerializationException` is thrown by deserialization (type mismatches), not by `Serialize`. A `[ToonConverter]`
+type that does not implement `IToonConverter` throws `InvalidOperationException`.
 
 ## Common Issues
 
@@ -526,9 +562,12 @@ catch (ToonEncodingException ex)
 
 **Problem**: Object graph contains circular references.
 
-**Solution**: ToonNet detects and throws `ToonSerializationException`. Break the cycle:
+**Solution**: ToonNet detects the cycle and throws `ToonEncodingException` with the path of the back-reference
+(for example `$.Children[0].Parent`). Break the cycle:
 
 ```csharp
+using ToonNet.Core.Serialization.Attributes;
+
 public class Parent
 {
     public string Name { get; set; }
@@ -539,7 +578,7 @@ public class Child
 {
     public string Name { get; set; }
     // Don't serialize parent reference
-    [ToonIgnore]  // Custom attribute (if implemented)
+    [ToonIgnore]
     public Parent Parent { get; set; }
 }
 ```
@@ -548,12 +587,17 @@ public class Child
 
 **Problem**: Serializing very large objects causes memory issues.
 
-**Solution**: Use streaming:
+**Solution**: Write directly to a file or stream, and for large collections stream the items:
 
 ```csharp
-using var fileStream = File.Create("large-data.toon");
-await ToonSerializer.SerializeAsync(fileStream, largeObject);
+await using var fileStream = File.Create("large-data.toon");
+await ToonSerializer.SerializeToStreamAsync(largeObject, fileStream);
+
+// Large collections: one document per item, never materialized as a whole
+await ToonSerializer.SerializeStreamAsync(GetItemsAsync(), "items.toon");
 ```
+
+`SerializeToStreamAsync` still builds the whole TOON string in memory before writing it.
 
 ## Thread-Safety
 

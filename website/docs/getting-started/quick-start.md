@@ -26,7 +26,7 @@ public class Person
 Use `ToonSerializer` to convert your object to TOON format:
 
 ```csharp
-using ToonNet.Core;
+using ToonNet.Core.Serialization;
 
 var person = new Person
 {
@@ -68,7 +68,7 @@ Console.WriteLine($"{restoredPerson.Name} is {restoredPerson.Age} years old");
 Here's a complete working example:
 
 ```csharp
-using ToonNet.Core;
+using ToonNet.Core.Serialization;
 
 // Define your model
 public class Person
@@ -106,14 +106,14 @@ class Program
 
 For the same data, compare the output formats:
 
-**TOON Format** (73 characters):
+**TOON Format** (50 characters):
 ```toon
 Name: Alice Smith
 Age: 30
 Email: alice@example.com
 ```
 
-**JSON Format** (97 characters):
+**JSON Format** (72 characters, indented):
 ```json
 {
   "Name": "Alice Smith",
@@ -122,14 +122,16 @@ Email: alice@example.com
 }
 ```
 
-**Token Savings**: ~25% fewer tokens with TOON! 🚀
+TOON drops the braces and most quotes. The savings grow with uniform arrays of objects, which TOON writes as
+a table with the field names stated once (`items[2]{id,name}:`). Measure token counts with your own data and
+tokenizer.
 
 ## What Makes TOON Different?
 
-1. **Human-Readable**: Clean syntax without brackets and quotes
-2. **Token-Efficient**: Up to 40% fewer tokens than JSON (ideal for AI/LLM)
+1. **Human-Readable**: Indentation instead of braces; strings are quoted only when required
+2. **Compact**: Tabular arrays state field names once, which usually means fewer tokens than JSON for LLM prompts
 3. **Type-Safe**: Strongly typed serialization/deserialization
-4. **Performance**: Uses expression trees, not reflection
+4. **Performance**: Property access goes through compiled expression trees (type metadata is read once via reflection and cached); the optional [source generator](../advanced/source-generators) avoids that metadata path
 
 ## Next Steps
 

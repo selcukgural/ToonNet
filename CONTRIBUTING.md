@@ -28,8 +28,11 @@ This project follows a Code of Conduct. By participating, you are expected to up
 
 ### Prerequisites
 
-- .NET 8.0 SDK or later
+- .NET 10 SDK (the solution file is `ToonNet.slnx`, which needs SDK 9.0.200 or later, and
+  `ToonNet.SourceGenerators.Tests` also targets `net10.0`)
+- .NET 8 runtime (the libraries and most test projects target `net8.0`)
 - Git
+- Node.js 22 (only to build the documentation site in `website/`)
 - IDE (Visual Studio, Rider, or VS Code)
 
 ### Setup
@@ -40,13 +43,26 @@ git clone https://github.com/YOUR_USERNAME/ToonNet.git
 cd ToonNet
 
 # Restore dependencies
-dotnet restore
+dotnet restore ToonNet.slnx
 
 # Build the solution
-dotnet build
+dotnet build ToonNet.slnx
 
 # Run tests
-dotnet test
+dotnet test ToonNet.slnx
+```
+
+### Repository Layout
+
+```
+src/                  # Packages: ToonNet.Core, ToonNet.Extensions.Json, ToonNet.Extensions.Yaml,
+                      #           ToonNet.AspNetCore, ToonNet.AspNetCore.Mvc, ToonNet.SourceGenerators
+tests/                # ToonNet.Tests, ToonNet.SourceGenerators.Tests
+benchmark/            # ToonNet.Benchmarks (BenchmarkDotNet)
+demo/                 # ToonNet.Demo (sample console app)
+docs/                 # API guide and spec compliance notes
+website/              # Docusaurus documentation site
+Directory.Build.props # Shared package metadata
 ```
 
 ## Making Changes
@@ -82,21 +98,25 @@ Examples:
 
 ```bash
 # Run all tests
-dotnet test
+dotnet test ToonNet.slnx
 
 # Run tests for a specific project
 dotnet test tests/ToonNet.Tests/
+dotnet test tests/ToonNet.SourceGenerators.Tests/
 
-# Run tests with coverage
-dotnet test /p:CollectCoverage=true
+# Run tests with coverage (coverlet.collector)
+dotnet test tests/ToonNet.Tests/ --collect:"XPlat Code Coverage"
 ```
+
+The official TOON spec v3.3.2 conformance fixtures run as part of `ToonNet.Tests`. If your change makes a case in
+`tests/ToonNet.Tests/SpecCompliance/KnownNonConformance.txt` pass, remove it from that file (the test fails otherwise).
 
 ### Writing Tests
 
 - **Unit tests** for all new features
 - **Integration tests** for complex scenarios
-- **Performance tests** for critical paths
-- Aim for **80%+ code coverage**
+- **Benchmarks** (in `benchmark/ToonNet.Benchmarks`) for performance-critical changes
+- Cover both success and error paths
 
 Example:
 ```csharp
@@ -152,9 +172,10 @@ Brief description of changes
 
 ### C# Style
 
-- **Follow .NET conventions**
-- **Use latest C# features** (C# 12+)
-- **Enable nullable reference types**
+- **Follow .NET conventions** (the repository has no `.editorconfig`; match the style of the surrounding code)
+- **Library projects target `net8.0`** (C# 12); `ToonNet.SourceGenerators` targets `netstandard2.0` and must not
+  reference `ToonNet.Core`
+- **Nullable reference types are enabled** in every project
 - **Use expression-bodied members** where appropriate
 - **Prefer `var` for obvious types**
 
@@ -175,11 +196,10 @@ Brief description of changes
 /// <param name="value">The value to serialize.</param>
 /// <param name="options">Serialization options.</param>
 /// <returns>TOON format string.</returns>
-/// <exception cref="ArgumentNullException">Thrown when value is null.</exception>
-public static string Serialize<T>(T value, ToonSerializerOptions? options = null)
+/// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+public static string Serialize<T>(T? value, ToonSerializerOptions? options = null)
 {
-    ArgumentNullException.ThrowIfNull(value);
-    // Implementation...
+    return Serialize(value, typeof(T), options);
 }
 ```
 
@@ -192,8 +212,10 @@ public static string Serialize<T>(T value, ToonSerializerOptions? options = null
 
 ## Continuous Integration
 
-Every push to `master` and every pull request runs [`ci.yml`](.github/workflows/ci.yml): it builds the solution,
-runs all test projects, packs every package under `src/` and builds the documentation site. Please make sure
+Every push to `master` and every pull request targeting `master` runs [`ci.yml`](.github/workflows/ci.yml): it builds
+the solution in Release, runs all test projects, packs every package under `src/` (validation only) and builds the
+documentation site. Pushes to `master` that change `website/` also deploy the site with
+[`docs.yml`](.github/workflows/docs.yml). Please make sure
 `dotnet test ToonNet.slnx` passes locally before opening a pull request.
 
 ## Releasing (maintainers)

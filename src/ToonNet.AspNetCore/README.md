@@ -14,16 +14,16 @@
 
 ToonNet.AspNetCore provides **seamless integration** of ToonNet serialization with ASP.NET Core:
 
-- ✅ **Dependency Injection** - Register ToonParser, ToonEncoder, and options
+- ✅ **Dependency Injection** - Register `ToonEncoder` and options
 - ✅ **Configuration Binding** - Load settings from appsettings.json
 - ✅ **Options Validation** - Fail-fast on invalid configuration
 - ✅ **TOON Configuration Provider** - Read TOON files as configuration source
-- ✅ **Middleware Ready** - Foundation for MVC formatters and middleware
+- ✅ **MVC Ready** - Foundation for the `ToonNet.AspNetCore.Mvc` formatters
 
 **Perfect for:**
-- 🌐 **Web APIs** - Serve TOON-formatted responses
+- 🌐 **Web APIs** - Shared options for TOON responses (formatters in `ToonNet.AspNetCore.Mvc`)
 - ⚙️ **Configuration** - Load TOON config files
-- 🔧 **DI Integration** - Inject ToonParser/Encoder into services
+- 🔧 **DI Integration** - Inject `ToonEncoder` and options into services
 - 📊 **Options Pattern** - Configure ToonNet via appsettings.json
 
 ---
@@ -46,19 +46,18 @@ dotnet add package ToonNet.AspNetCore.Mvc
 ### Basic Setup - Default Options
 
 ```csharp
-using ToonNet.AspNetCore;
+using ToonNet.AspNetCore.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Register ToonNet services with default options
-builder.Services.AddToon();
+builder.Services.AddToonNet();
 
 var app = builder.Build();
 app.Run();
 ```
 
 This registers:
-- `ToonParser` (singleton)
 - `ToonEncoder` (singleton)
 - `ToonOptions` (IOptions<ToonOptions>)
 - `ToonSerializerOptions` (IOptions<ToonSerializerOptions>)
@@ -89,12 +88,18 @@ This registers:
 }
 ```
 
+Only the keys shown in the tables below are read. `ToonSerializerOptions` also accepts `IgnoreNullValues` and
+`PropertyNamingPolicy` (`Default`, `CamelCase`, `SnakeCase`, `LowerCase`). Use a different root section name with
+`AddToonNet(builder.Configuration, "MySection")`.
+
 **Program.cs:**
 ```csharp
+using ToonNet.AspNetCore.DependencyInjection;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Bind configuration from appsettings.json
-builder.Services.AddToon(builder.Configuration);
+builder.Services.AddToonNet(builder.Configuration);
 
 var app = builder.Build();
 app.Run();
@@ -103,7 +108,7 @@ app.Run();
 ### Using Delegate Configuration
 
 ```csharp
-builder.Services.AddToon(toonOptions =>
+builder.Services.AddToonNet(toonOptions =>
 {
     toonOptions.IndentSize = 4;
     toonOptions.MaxDepth = 50;
@@ -117,19 +122,18 @@ builder.Services.AddToon(toonOptions =>
 ### Hybrid Approach (Configuration + Delegate)
 
 ```csharp
-// Load from config + override specific values
-builder.Services.AddToon(
-    builder.Configuration,
-    toonOptions =>
-    {
-        // Override specific settings
-        toonOptions.IndentSize = 4;
-    },
-    serializerOptions =>
-    {
-        serializerOptions.IncludeReadOnlyProperties = true;
-    }
-);
+// Load from config, then override specific values (Configure runs after the configuration binding)
+builder.Services.AddToonNet(builder.Configuration);
+
+builder.Services.Configure<ToonOptions>(toonOptions =>
+{
+    toonOptions.IndentSize = 4;
+});
+
+builder.Services.Configure<ToonSerializerOptions>(serializerOptions =>
+{
+    serializerOptions.IncludeReadOnlyProperties = true;
+});
 ```
 
 ---
@@ -154,7 +158,9 @@ Controls C# object serialization behavior:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `IgnoreNullValues` | `bool` | `false` | Skip properties whose value is `null` |
 | `IncludeReadOnlyProperties` | `bool` | `true` | Include read-only properties when serializing |
+| `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Key naming: `Default`, `CamelCase`, `SnakeCase`, `LowerCase` |
 | `MaxDepth` | `int` | `100` | Maximum object graph depth |
 | `AllowExtendedLimits` | `bool` | `false` | Allow `MaxDepth` above 200 (up to 1000) |
 
@@ -165,22 +171,30 @@ Controls C# object serialization behavior:
 
 ## 🎯 Usage Patterns
 
-### Pattern 1: Inject ToonParser/Encoder
+### Pattern 1: Inject ToonEncoder
+
+`ToonEncoder` is registered as a singleton with the configured `ToonOptions`. There is no injectable parser; parse
+with `ToonDocument.Parse` and the injected options:
 
 ```csharp
+using Microsoft.Extensions.Options;
+using ToonNet.Core;
+using ToonNet.Core.Encoding;
+using ToonNet.Core.Models;
+
 public class ToonService
 {
-    private readonly ToonParser _parser;
     private readonly ToonEncoder _encoder;
+    private readonly ToonOptions _options;
     private readonly ILogger<ToonService> _logger;
 
     public ToonService(
-        ToonParser parser, 
         ToonEncoder encoder,
+        IOptions<ToonOptions> options,
         ILogger<ToonService> logger)
     {
-        _parser = parser;
         _encoder = encoder;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -188,7 +202,7 @@ public class ToonService
     {
         try
         {
-            return _parser.Parse(toonString);
+            return ToonDocument.Parse(toonString, _options);
         }
         catch (ToonParseException ex)
         {
@@ -211,6 +225,8 @@ builder.Services.AddScoped<ToonService>();
 
 ```csharp
 using Microsoft.Extensions.Options;
+using ToonNet.Core;
+using ToonNet.Core.Serialization;
 
 public class ConfigAnalyzer
 {
@@ -295,11 +311,11 @@ Features:
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Add TOON file as configuration source
+// Add TOON file as configuration source (using ToonNet.AspNetCore.Configuration;)
 builder.Configuration.AddToonFile("appsettings.toon", optional: false, reloadOnChange: true);
 
 // Register ToonNet services
-builder.Services.AddToon(builder.Configuration);
+builder.Services.AddToonNet(builder.Configuration);
 
 var app = builder.Build();
 
@@ -314,7 +330,7 @@ var logLevel = builder.Configuration["Logging:Level"];
 // Multiple TOON files
 builder.Configuration
     .AddToonFile("appsettings.toon")
-    .AddToonFile($"appsettings.{env}.toon", optional: true);
+    .AddToonFile($"appsettings.{builder.Environment.EnvironmentName}.toon", optional: true);
 
 // With environment variables
 builder.Configuration
@@ -327,7 +343,16 @@ builder.Configuration.AddToonFile(
     optional: false,
     reloadOnChange: true  // Auto-reload when file changes
 );
+
+// Custom parsing options (e.g. non-strict mode)
+builder.Configuration.AddToonFile("legacy.toon", optional: true, reloadOnChange: false,
+    options: new ToonOptions { StrictMode = false });
 ```
+
+Nested objects become `Section:Key` paths and array items become index keys (`Items:0`, `Items:1`). Values are stored as
+strings: booleans become `True`/`False`, and numbers are converted through `double`, so `1.0` becomes `1` and integers
+beyond 2^53 lose precision; quote such values to keep them as written. A file that is not valid TOON throws a
+`FormatException`.
 
 ---
 
@@ -339,28 +364,28 @@ ToonNet.AspNetCore uses **Options Validation** to ensure configuration is valid:
 
 ```csharp
 // Validation happens at startup
-builder.Services.AddToon(builder.Configuration);
+builder.Services.AddToonNet(builder.Configuration);
 
 // If configuration is invalid, app will fail to start with clear error message
 ```
 
 ### Custom Validation
 
+`AddToonNet` returns the `IServiceCollection`; add extra rules through the options builder:
+
 ```csharp
-builder.Services.AddToon(builder.Configuration)
-    .Validate(options => 
-    {
-        if (options.IndentSize < 1 || options.IndentSize > 8)
-            return false;
-        return true;
-    }, "IndentSize must be between 1 and 8");
+builder.Services.AddToonNet(builder.Configuration);
+
+builder.Services.AddOptions<ToonOptions>()
+    .Validate(options => options.IndentSize <= 8, "IndentSize must not exceed 8")
+    .ValidateOnStart();
 ```
 
 ### Validation Rules (Built-in)
 
 - `IndentSize`: Must be an even number between 2 and 100
 - `MaxDepth`: Must be 1-200 (or 1-1000 if `AllowExtendedLimits = true`)
-- `Delimiter`: Must not be whitespace, a newline or a control character
+- `Delimiter`: Must be comma, tab or pipe
 
 ---
 
@@ -403,8 +428,7 @@ builder.Services.AddToon(builder.Configuration)
 
 ```bash
 # Run ASP.NET Core integration tests
-cd tests/ToonNet.Tests
-dotnet test --filter "Category=AspNetCore"
+dotnet test tests/ToonNet.Tests --filter "FullyQualifiedName~ToonNet.Tests.AspNetCore"
 ```
 
 ---

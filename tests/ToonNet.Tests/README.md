@@ -4,7 +4,6 @@
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
 [![xUnit](https://img.shields.io/badge/xUnit-2.5+-blue)](#)
-[![Tests](https://img.shields.io/badge/tests-427%20passing-success)](#)
 
 ---
 
@@ -12,12 +11,12 @@
 
 ToonNet.Tests provides **comprehensive testing** for all ToonNet functionality:
 
-- ✅ **427 Passing Tests** - Full coverage of features
-- ✅ **Spec Compliance** - TOON v3.0 specification tests
-- ✅ **Unit Tests** - Parser, encoder, serializer
-- ✅ **Integration Tests** - Format conversions, roundtrips
-- ✅ **Edge Cases** - Error handling, validation
-- ✅ **Real-World Scenarios** - E-commerce, healthcare examples
+- ✅ **Spec Compliance** - official TOON spec v3.3.2 conformance fixtures plus hand-written spec tests
+- ✅ **Unit Tests** - Parser, encoder, serializer, `ToonValue`/`ToonDocument` models
+- ✅ **Integration Tests** - JSON/YAML conversions, ASP.NET Core configuration and MVC formatters, async/streaming APIs
+- ✅ **Edge Cases** - Error handling, depth limits, input and options validation
+
+Source generator tests live in a separate project, [`ToonNet.SourceGenerators.Tests`](../ToonNet.SourceGenerators.Tests).
 
 ---
 
@@ -26,8 +25,12 @@ ToonNet.Tests provides **comprehensive testing** for all ToonNet functionality:
 ### Running All Tests
 
 ```bash
+# This project only
 cd tests/ToonNet.Tests
 dotnet test
+
+# Every test project in the solution (from the repository root)
+dotnet test ToonNet.slnx
 ```
 
 ### Running Specific Test Categories
@@ -45,8 +48,11 @@ dotnet test --filter "FullyQualifiedName~ToonJsonConverter"
 # YAML conversion tests
 dotnet test --filter "FullyQualifiedName~ToonYamlConverter"
 
-# Spec compliance tests
+# Spec compliance tests (fixtures + hand-written)
 dotnet test --filter "FullyQualifiedName~SpecCompliance"
+
+# ASP.NET Core integration tests
+dotnet test --filter "FullyQualifiedName~AspNetCore"
 ```
 
 ### Running with Coverage
@@ -54,7 +60,7 @@ dotnet test --filter "FullyQualifiedName~SpecCompliance"
 ```bash
 dotnet test --collect:"XPlat Code Coverage"
 
-# View coverage report
+# View coverage report (coverlet.collector is already referenced by the project)
 dotnet tool install -g dotnet-reportgenerator-globaltool
 reportgenerator -reports:"**/*.cobertura.xml" -targetdir:"coverage" -reporttypes:Html
 open coverage/index.html
@@ -66,51 +72,70 @@ open coverage/index.html
 
 ```
 ToonNet.Tests/
-├── Parsing/
-│   ├── ToonParserTests.cs              # Parser unit tests
-│   ├── ToonParserEdgeCaseTests.cs      # Edge cases, errors
-│   └── ToonLexerTests.cs               # Lexer/tokenizer tests
+├── AspNetCore/
+│   ├── MvcTests.cs                              # ToonInputFormatter / ToonOutputFormatter
+│   └── ToonNetServiceCollectionExtensionsTests.cs
+│
+├── AsyncApi/
+│   ├── ToonSerializerAsyncTests.cs              # Async, file and streaming APIs
+│   └── ConfigureAwaitTests.cs
+│
+├── Configuration/
+│   └── ToonConfigurationProviderTests.cs        # TOON configuration provider
+│
+├── Coverage/
+│   ├── EncoderCoverageTests.cs
+│   ├── ParserCoverageTests.cs
+│   └── SerializerCoverageTests.cs
 │
 ├── Encoding/
-│   ├── ToonEncoderTests.cs             # Encoder unit tests
-│   └── ToonEncoderEdgeCaseTests.cs     # Edge cases, options
-│
-├── Serialization/
-│   ├── ToonSerializerTests.cs          # Serializer tests
-│   ├── SerializationTests.cs           # Type serialization
-│   ├── DeserializationTests.cs         # Type deserialization
-│   ├── RoundtripTests.cs               # Roundtrip validation
-│   └── AttributeTests.cs               # [ToonProperty], [ToonIgnore]
+│   ├── ToonEncoderTests.cs                      # Encoder unit tests
+│   └── ToonEncoderEdgeCaseTests.cs              # Edge cases, options
 │
 ├── Interop/
-│   ├── ToonJsonConverterTests.cs       # JSON ↔ TOON conversion
-│   └── ToonYamlConverterTests.cs       # YAML ↔ TOON conversion
-│
-├── SpecCompliance/
-│   └── ToonSpecComplianceTests.cs      # TOON spec v3.0 tests
+│   ├── ToonJsonConverterTests.cs                # JSON ↔ TOON conversion
+│   └── ToonYamlConverterTests.cs                # YAML ↔ TOON conversion
 │
 ├── Models/
-│   └── TestModels.cs                   # Test data models
+│   ├── ToonDocumentTests.cs
+│   ├── ToonValueTests.cs
+│   └── ToonValueImplicitConversionTests.cs
 │
-└── ErrorMessageTests.cs                # Error message validation
+├── Parsing/
+│   ├── ToonParserTests.cs                       # Parser unit tests
+│   ├── ToonParserEdgeCaseTests.cs               # Edge cases, errors
+│   └── ToonParserDepthLimitTests.cs             # MaxDepth and stack-depth limits
+│
+├── Serialization/
+│   ├── ToonSerializerBasicTests.cs
+│   ├── ToonSerializerTypeSupportTests.cs        # CLR type mapping
+│   ├── ToonSerializerOutputFormatTests.cs       # Exact TOON output
+│   ├── ToonSerializerValueApiTests.cs           # SerializeToValue / DeserializeFromValue
+│   ├── ToonSerializerDebugTests.cs
+│   └── ToonConverterTests.cs                    # Custom converters
+│
+├── SpecCompliance/
+│   ├── SpecFixtureConformanceTests.cs           # Official spec v3.3.2 fixtures
+│   ├── ToonSpecComplianceTests.cs               # Hand-written spec tests
+│   ├── KnownNonConformance.txt                  # Fixture cases that do not pass yet
+│   └── Fixtures/v3.3.2/{encode,decode}/         # Fixture JSON files
+│
+├── Validation/
+│   ├── InputValidationTests.cs
+│   ├── ToonOptionsValidationTests.cs
+│   ├── ToonSerializerOptionsValidationTests.cs
+│   └── ToonValidatorTests.cs
+│
+└── ErrorMessageTests.cs                         # Error message validation
 ```
 
 ---
 
 ## 📊 Test Coverage
 
-### Coverage by Component
-
-| Component | Tests | Coverage | Notes |
-|-----------|-------|----------|-------|
-| **Parser** | 85 | ~95% | Lexer, token parsing, error handling |
-| **Encoder** | 62 | ~92% | Format options, indentation, inline |
-| **Serializer** | 143 | ~94% | All CLR types, attributes, options |
-| **JSON Converter** | 48 | ~90% | Bidirectional conversion, roundtrips |
-| **YAML Converter** | 35 | ~88% | Bidirectional conversion, roundtrips |
-| **Spec Compliance** | 54 | 100% | TOON v3.0 specification conformance |
-
-**Total:** 427 tests, ~93% overall coverage
+The suite runs on pushes and pull requests to `master` in [CI](../../.github/workflows/ci.yml). Test counts change often, so
+they are not listed here; `dotnet test ToonNet.slnx` prints the current totals. Code coverage is not measured in CI;
+use the coverage command above to measure it locally.
 
 ---
 
@@ -130,7 +155,8 @@ TOONNET_WRITE_NONCONFORMANCE=/tmp/nonconformance.txt \
 
 ### 1. Parser Tests
 
-Tests TOON format parsing:
+Tests TOON format parsing. `ToonParser` is internal; the test project can use it through `InternalsVisibleTo`
+(application code uses `ToonDocument.Parse`):
 
 ```csharp
 [Fact]
@@ -151,9 +177,9 @@ public void Parse_SimpleObject_Success()
 }
 
 [Fact]
-public void Parse_InvalidSyntax_ThrowsException()
+public void Parse_ArrayLengthMismatch_ThrowsException()
 {
-    var invalid = "Name: Alice\nAge:";  // Missing value
+    var invalid = "tags[3]: a,b";  // Header declares 3 values, 2 given (strict mode)
     
     var parser = new ToonParser();
     Assert.Throws<ToonParseException>(() => parser.Parse(invalid));
@@ -179,7 +205,7 @@ public void Serialize_ComplexObject_Success()
     
     Assert.Contains("Name: Bob", toon);
     Assert.Contains("Age: 25", toon);
-    Assert.Contains("Hobbies[2]: Reading, Gaming", toon);
+    Assert.Contains("Hobbies[2]: Reading,Gaming", toon);
 }
 
 [Fact]
@@ -229,7 +255,7 @@ public void JSON_To_TOON_To_JSON_Roundtrip()
 
 ### 4. Spec Compliance Tests
 
-Tests TOON v3.0 specification conformance:
+Hand-written tests for TOON spec v3.3.2 rules (in addition to the fixtures above):
 
 ```csharp
 [Fact]
@@ -256,10 +282,12 @@ Tests error handling and unusual scenarios:
 
 ```csharp
 [Fact]
-public void Parse_EmptyInput_ThrowsException()
+public void Parse_EmptyInput_ReturnsEmptyObject()
 {
     var parser = new ToonParser();
-    Assert.Throws<ToonParseException>(() => parser.Parse(""));
+    var doc = parser.Parse("");  // An empty document is an empty object (spec)
+
+    Assert.Empty(((ToonObject)doc.Root).Properties);
 }
 
 [Fact]
@@ -269,7 +297,8 @@ public void Serialize_CircularReference_ThrowsException()
     var node2 = new Node { Name = "Node2", Parent = node1 };
     node1.Child = node2;  // Circular!
     
-    Assert.Throws<ToonSerializationException>(
+    // The message includes the property path of the cycle
+    Assert.Throws<ToonEncodingException>(
         () => ToonSerializer.Serialize(node1)
     );
 }
@@ -294,70 +323,18 @@ public void Deserialize_MaxDepthExceeded_ThrowsException()
 
 ## 🧪 Running Tests in CI/CD
 
-### GitHub Actions Example
-
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v1
-        with:
-          dotnet-version: '8.0.x'
-      
-      - name: Restore dependencies
-        run: dotnet restore
-      
-      - name: Build
-        run: dotnet build --no-restore
-      
-      - name: Test
-        run: dotnet test --no-build --verbosity normal --collect:"XPlat Code Coverage"
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v2
-        with:
-          files: '**/coverage.cobertura.xml'
-```
-
----
-
-## 📈 Test Statistics
-
-### Latest Test Run
-
-```
-Test Run Successful.
-Total tests: 427
-     Passed: 427
-     Failed: 0
-    Skipped: 1
- Total time: 5.2 seconds
-```
-
-### Test Performance
-
-| Test Category | Tests | Avg Time | Total Time |
-|---------------|-------|----------|------------|
-| Parser | 85 | ~0.5ms | ~42ms |
-| Encoder | 62 | ~0.3ms | ~19ms |
-| Serializer | 143 | ~1.2ms | ~172ms |
-| JSON Converter | 48 | ~2.1ms | ~101ms |
-| YAML Converter | 35 | ~3.5ms | ~123ms |
-| Spec Compliance | 54 | ~0.8ms | ~43ms |
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) builds the solution, runs all test projects, packs the
+NuGet packages (validation only) and builds the docs site on pushes and pull requests to `master`. The manual
+[`publish.yml`](../../.github/workflows/publish.yml) workflow runs the tests again before publishing to NuGet.
 
 ---
 
 ## 🔍 Test Data
 
 ### Sample Test Models
+
+Most tests declare small models next to the tests that use them (for example the nested classes in
+`Coverage/SerializerCoverageTests.cs`). Typical shapes:
 
 ```csharp
 public class Person
@@ -404,7 +381,7 @@ public class Employee
 
 **Development:**
 - [`ToonNet.Demo`](../../demo/ToonNet.Demo) - Sample applications
-- [`ToonNet.Benchmarks`](../../src/ToonNet.Benchmarks) - Performance tests
+- [`ToonNet.Benchmarks`](../../benchmark/ToonNet.Benchmarks) - Performance tests
 
 ---
 
@@ -419,10 +396,11 @@ public class Employee
 ## 📋 Requirements
 
 - .NET 8.0 or later
-- xUnit 2.5.3+
+- xUnit 2.5.3
 - ToonNet.Core
 - ToonNet.Extensions.Json
 - ToonNet.Extensions.Yaml
+- ToonNet.AspNetCore, ToonNet.AspNetCore.Mvc (uses the `Microsoft.AspNetCore.App` framework reference)
 
 ---
 

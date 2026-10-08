@@ -16,8 +16,8 @@ ToonNet.Extensions.Json provides **seamless bidirectional conversion** between J
 - ✅ **JSON → TOON** - Convert JSON strings/documents to TOON format
 - ✅ **TOON → JSON** - Convert TOON strings/documents to JSON format
 - ✅ **System.Text.Json integration** - Familiar API patterns
-- ✅ **Preserves structure** - Round-trip conversions maintain data integrity
-- ✅ **Developer-friendly** - Extension methods on ToonSerializer
+- ✅ **Preserves structure** - Round-trip conversions keep objects, arrays and values (numbers go through `double`)
+- ✅ **Developer-friendly** - Static `ToonConvert` (string-based) and `ToonJsonConverter` (document-based) helpers
 
 **Perfect for:**
 - 🤖 **AI/LLM Applications** - Convert JSON APIs to token-efficient TOON
@@ -57,7 +57,7 @@ string toonString = ToonConvert.FromJson(jsonString);
 // Output (TOON format):
 // name: Alice
 // age: 30
-// hobbies[2]: reading, coding
+// hobbies[2]: reading,coding
 
 // TOON → JSON string conversion
 string jsonBack = ToonConvert.ToJson(toonString);
@@ -85,11 +85,13 @@ var person = new Person
 // Serialize C# object to JSON
 string json = ToonConvert.SerializeToJson(person);
 
-// Deserialize JSON to C# object
+// Deserialize JSON to C# object (plain System.Text.Json, case-sensitive by default)
 var personBack = ToonConvert.DeserializeFromJson<Person>(json);
 
-// One-step: JSON string → C# object via TOON
-var person2 = ToonConvert.ParseJson<Person>(jsonString);
+// One-step: JSON string → C# object via TOON.
+// TOON keys must match the property names; the camelCase policy maps "name" to Name.
+var person2 = ToonConvert.ParseJson<Person>(jsonString,
+    new ToonSerializerOptions { PropertyNamingPolicy = PropertyNamingPolicy.CamelCase });
 ```
 
 ---
@@ -130,6 +132,9 @@ string json = ToonJsonConverter.ToJson(toonValue, writerOptions);  // JsonWriter
 
 ### Object Serialization
 
+`SerializeToJson` and `DeserializeFromJson` are thin wrappers over `System.Text.Json.JsonSerializer`
+(TOON is not involved; `SerializeToJson` indents when no options are passed).
+
 ```csharp
 // C# object → JSON string
 string json = ToonConvert.SerializeToJson<T>(obj);
@@ -169,7 +174,7 @@ You are a product analyst. Here is the product catalog:
 Recommend the best products for a software developer.
 """;
 
-// TOON is ~40% fewer tokens than JSON!
+// Uniform arrays of objects become TOON tables, which usually take fewer tokens than JSON
 ```
 
 ### Example 2: Data Migration
@@ -204,7 +209,7 @@ var original = JsonSerializer.Deserialize<object>(originalJson);
 var roundtrip = JsonSerializer.Deserialize<object>(roundtripJson);
 
 // Semantic equivalence preserved (format may differ)
-// 35.00 → 35 is semantically equal (JSON spec compliant)
+// roundtripJson is {"discount":35,"active":true}
 ```
 
 ---
@@ -228,11 +233,15 @@ var roundtrip = JsonSerializer.Deserialize<object>(roundtripJson);
 
 ```csharp
 // JSON: {"price": 35.00}
-// TOON: price: 35.00
-// JSON (roundtrip): {"price": 35}  ← Format differs, value identical
+// TOON: price: 35
+// JSON (roundtrip): {"price":35}  ← Format differs, value identical
 ```
 
-This is standard behavior across all serialization libraries (System.Text.Json, Newtonsoft.Json). See [Roundtrip Guarantees](../../docs/API-GUIDE.md) for details.
+JSON numbers are read as `double`, so integers beyond 2^53 and long decimals lose precision
+(`12345678901234567890` becomes `12345678901234567000`). `ToonJsonConverter.FromJson(string)` uses
+`JsonDocument.Parse` with its default maximum depth of 64.
+
+See [Roundtrip Guarantees](../../docs/API-GUIDE.md) for details.
 
 ---
 
@@ -254,7 +263,7 @@ This is standard behavior across all serialization libraries (System.Text.Json, 
 - [`ToonNet.Extensions.Yaml`](../ToonNet.Extensions.Yaml) - YAML ↔ TOON conversion
 
 **Web Integration:**
-- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - ASP.NET Core middleware
+- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - TOON configuration provider and DI integration
 - [`ToonNet.AspNetCore.Mvc`](../ToonNet.AspNetCore.Mvc) - MVC formatters
 
 **Development:**
@@ -277,9 +286,6 @@ This is standard behavior across all serialization libraries (System.Text.Json, 
 # Run JSON conversion tests
 cd tests/ToonNet.Tests
 dotnet test --filter "FullyQualifiedName~ToonJsonConverter"
-
-# Run specific test categories
-dotnet test --filter "Category=JsonConversion"
 ```
 
 ---

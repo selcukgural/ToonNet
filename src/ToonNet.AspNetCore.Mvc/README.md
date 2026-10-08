@@ -32,7 +32,7 @@ ToonNet.AspNetCore.Mvc provides **MVC input/output formatters** for serving and 
 ### Installation
 
 ```bash
-# Core packages (required)
+# Core packages (installed automatically as dependencies)
 dotnet add package ToonNet.Core
 dotnet add package ToonNet.AspNetCore
 
@@ -43,13 +43,13 @@ dotnet add package ToonNet.AspNetCore.Mvc
 ### Basic Setup
 
 ```csharp
-using ToonNet.AspNetCore;
-using ToonNet.AspNetCore.Mvc;
+using ToonNet.AspNetCore.DependencyInjection;
+using ToonNet.AspNetCore.Mvc.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add ToonNet services
-builder.Services.AddToon();
+// Optional: registers IOptions<ToonSerializerOptions>, which ToonResult uses when no options are passed
+builder.Services.AddToonNet();
 
 // Add MVC with TOON formatters
 builder.Services.AddControllers()
@@ -90,7 +90,7 @@ public class ProductsController : ControllerBase
 // GET /api/products
 // Accept: application/json  → Returns JSON
 // Accept: application/toon  → Returns TOON
-// Accept: */*               → Returns default format
+// Accept: */*               → Returns JSON (the first registered formatter)
 ```
 
 **TOON Response:**
@@ -130,13 +130,13 @@ Category: Electronics
 using ToonNet.AspNetCore.Mvc.Http;
 
 [HttpGet("{id}")]
-public IActionResult GetProduct(int id)
+public IResult GetProduct(int id)
 {
     var product = _repository.GetById(id);
     if (product == null)
-        return NotFound();
+        return Results.NotFound();
 
-    // Explicitly return TOON format
+    // Explicitly return TOON format, regardless of the Accept header
     return new ToonResult(product);
 }
 ```
@@ -179,6 +179,9 @@ Total: 1359.97
 ### Custom Formatter Options
 
 ```csharp
+using ToonNet.Core;
+using ToonNet.Core.Serialization;
+
 builder.Services.AddControllers()
     .AddToonFormatters(options =>
     {
@@ -186,6 +189,9 @@ builder.Services.AddControllers()
         options.ToonOptions = new ToonOptions { IndentSize = 4, MaxDepth = 50 };
     });
 ```
+
+The formatters use these options for both reading and writing (with `CamelCase`, request bodies must use camelCase
+keys; unknown keys are ignored). They do not read the options registered with `AddToonNet`.
 
 ### Request Size and Depth Limits
 
@@ -197,17 +203,24 @@ builder.Services.AddControllers()
     .AddToonFormatters(configureOptions: null, maxRequestBodySize: 512 * 1024);
 ```
 
-Parsing enforces `ToonOptions.MaxDepth` (default 100). Bodies that are nested too deeply, or that are not valid TOON,
-produce a model-state error (`400 Bad Request` with `[ApiController]`) instead of an exception. Only TOON errors are
-reported to the client; other exceptions are not swallowed.
+The limit is enforced by throwing `BadHttpRequestException` (status code 413). Kestrel and the developer exception page
+answer with `413`; on .NET 8, `UseExceptionHandler` answers with `500` unless your handler uses the exception's
+`StatusCode`.
+
+Parsing enforces `ToonOptions.MaxDepth` (default 100). Bodies that are nested too deeply, are not valid TOON or do not
+match the model type produce a model-state error (`400 Bad Request` with `[ApiController]`) instead of an exception.
+The TOON error message (position or property path, and the offending value) is returned to the client; other
+exceptions are not swallowed and their messages are not returned.
 
 ### Formatter Priority
+
+`AddToonFormatters()` appends the TOON formatters after the JSON formatters, so JSON stays the default and TOON is
+returned when the client asks for `application/toon` (or the action has `[Produces("application/toon")]`). To answer
+`406 Not Acceptable` instead of falling back to JSON for unsupported `Accept` values:
 
 ```csharp
 builder.Services.AddControllers(options =>
 {
-    // Add TOON as preferred format
-    options.RespectBrowserAcceptHeader = true;
     options.ReturnHttpNotAcceptable = true;
 })
 .AddToonFormatters();
@@ -216,8 +229,8 @@ builder.Services.AddControllers(options =>
 ### Media Type Mappings
 
 TOON formatters register these media types:
-- `application/toon`
-- `text/toon`
+- `application/toon` (input and output)
+- `text/toon` (input only; `Accept: text/toon` is not served as TOON)
 
 Both formatters support UTF-8 and UTF-16 (`charset=utf-16`); the request charset is used for reading and the negotiated
 charset for writing.
@@ -232,7 +245,7 @@ Deserializes TOON request bodies to C# objects:
 
 ```csharp
 // Automatically registered with AddToonFormatters()
-// Handles Content-Type: application/toon
+// Handles Content-Type: application/toon and text/toon
 // Rejects bodies over 4 MB by default (413)
 new ToonInputFormatter(serializerOptions);
 new ToonInputFormatter(serializerOptions, maxRequestBodySize: 1024 * 1024);
@@ -259,9 +272,12 @@ public sealed class ToonResult : IResult
     public Task ExecuteAsync(HttpContext httpContext)
 }
 
-// Usage:
+// Usage (Content-Type: application/toon; status 200):
 app.MapGet("/data", () => new ToonResult(data));
 app.MapGet("/data-custom", () => new ToonResult(data, customOptions));
+app.MapGet("/data-ext", () => Results.Extensions.Toon(data));  // same, via IResultExtensions
+
+// Without options, ToonResult uses IOptions<ToonSerializerOptions> from DI (AddToonNet) or the defaults.
 ```
 
 ---
@@ -309,18 +325,18 @@ public ActionResult<BatchResult> ProcessBatch([FromBody] List<Product> products)
     return Ok(results);
 }
 
-// Request (TOON - more compact):
-// products[3]:
-//   - Name: Item1, Price: 10.00
-//   - Name: Item2, Price: 20.00
-//   - Name: Item3, Price: 30.00
+// Request (TOON - more compact, a root tabular array):
+// [3]{Name,Price}:
+//   Item1,10.00
+//   Item2,20.00
+//   Item3,30.00
 ```
 
 ### Example 3: Configuration API
 
 ```csharp
 [HttpPut("config")]
-public async Task<IActionResult> UpdateConfig([FromBody] AppConfig config)
+public async Task<IResult> UpdateConfig([FromBody] AppConfig config)
 {
     // Accepts both JSON and TOON
     await _configService.UpdateAsync(config);
@@ -362,8 +378,7 @@ public class ToonFormatterTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("application/toon", response.Content.Headers.ContentType.MediaType);
         
         var toon = await response.Content.ReadAsStringAsync();
-        Assert.Contains("Name:", toon);
-        Assert.Contains("Price:", toon);
+        Assert.StartsWith("[3]{Id,Name,Price}:", toon);  // list of products → tabular array
     }
 
     [Fact]

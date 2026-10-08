@@ -13,9 +13,9 @@ ToonNet.Demo showcases **real-world applications** of ToonNet serialization:
 
 - ✅ **E-Commerce Order System** - Complex order management
 - ✅ **Healthcare EMR** - Patient records with medical data
-- ✅ **Format Conversions** - JSON ↔ TOON roundtrip validation
-- ✅ **Production-Quality Models** - Realistic data structures
-- ✅ **Complete Examples** - From loading to validation
+- ✅ **Format Conversions** - JSON ↔ TOON roundtrip check with `ToonConvert`
+- ✅ **Realistic Models** - Nested objects, lists, dictionaries, nullable values
+- ✅ **Complete Examples** - Load a `.toon` file, deserialize it, convert it to JSON and back
 
 ---
 
@@ -24,20 +24,30 @@ ToonNet.Demo showcases **real-world applications** of ToonNet serialization:
 ### Running the Demo
 
 ```bash
+# From the repository root
+dotnet run --project demo/ToonNet.Demo
+
+# Or from the project folder
 cd demo/ToonNet.Demo
 dotnet run
 ```
 
+The demo is not interactive: it runs both samples and exits. The sample files are copied to the output folder
+(`bin/<Configuration>/net8.0/Samples`) at build time and loaded from there.
+
 ### Demo Output
+
+Prices and decimals are formatted with the current culture (shown here with `.` as the decimal separator).
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  Real-World Sample Files Demo
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-═══════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════════════════════
   SAMPLE #1: E-Commerce Order System
-═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
 
 Loaded TOON file: ecommerce-order.toon (2731 chars)
 
@@ -48,17 +58,26 @@ ORDER DETAILS:
    Items: 3 products
    Total: $838.91 USD
    Status: Processing
+   Order Date: 2026-01-11
+
+   ITEMS:
+      - Premium Wireless Headphones x2 @ $349.99
+      - USB-C Charging Cable (3-Pack) x1 @ $24.99
+      ... and 1 more items
 
 Testing Format Conversions:
-   TOON -> JSON: 3601 chars
-   JSON -> TOON: 2917 chars
+   TOON -> JSON: 2578 chars
+   JSON -> TOON: 2600 chars
    Roundtrip verification: SEMANTIC MATCH
+   Note: Format differs (e.g., 35.00 -> 35) but values are equivalent
+   Original JSON length: 2579
+   Roundtrip JSON length: 2570
 
 E-Commerce sample completed successfully!
 
-═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
   SAMPLE #2: Healthcare Patient Record (EMR System)
-═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
 
 Loaded TOON file: healthcare-patient.toon (4882 chars)
 
@@ -66,20 +85,40 @@ PATIENT DETAILS:
    Patient ID: MRN-2026-987654
    Name: Michael Chen
    Age: 40 years old
+   Gender: Male
    Blood Type: A+
+   Status: Active
+   Admission: 2026-01-10 08:15
 
    LATEST VITAL SIGNS:
       Temperature: 98.7 F
+      Blood Pressure: 119/79 mmHg
       Heart Rate: 73 bpm
       O2 Saturation: 98%
 
+   DIAGNOSES:
+      - [J18.9] Pneumonia, unspecified organism (Moderate)
+      - [E11.9] Type 2 diabetes mellitus without complications (Mild)
+
+   ACTIVE MEDICATIONS:
+      - Azithromycin 500mg - Once daily
+      - Metformin 1000mg - Twice daily
+      - Lisinopril 10mg - Once daily
+
+   CRITICAL ALLERGIES:
+      - Shellfish: Anaphylaxis
+
 Testing Format Conversions:
-   TOON -> JSON: 6276 chars
-   JSON -> TOON: 4906 chars
+   TOON -> JSON: 4523 chars
+   JSON -> TOON: 4475 chars
    Roundtrip verification: PASSED
 
 Healthcare sample completed successfully!
 ```
+
+> **Note:** For the e-commerce sample, "SEMANTIC MATCH" is printed whenever the normalized JSON strings differ; the demo
+> does not compare the values themselves. The difference comes from numbers such as `35.00`, which are written back
+> as `35`.
 
 ---
 
@@ -91,31 +130,31 @@ Healthcare sample completed successfully!
 
 **Files:**
 - `ecommerce-order.toon` (2.7 KB) - TOON format
-- `ecommerce-order.json` (2.6 KB) - JSON format
-- `ecommerce-order.yaml` (2.2 KB) - YAML format
+- `ecommerce-order.json` (3.6 KB) - JSON format
+- `ecommerce-order.yaml` (2.7 KB) - YAML format
 - `ECommerceModels.cs` - C# model classes
 
 **Models:**
 ```csharp
 public class ECommerceOrder
 {
-    public string OrderId { get; set; }
+    public string OrderId { get; set; } = string.Empty;
     public DateTime OrderDate { get; set; }
-    public Customer Customer { get; set; }
-    public List<OrderItem> Items { get; set; }
-    public PaymentInfo Payment { get; set; }
-    public ShippingInfo Shipping { get; set; }
-    public decimal SubTotal { get; set; }
-    public decimal Tax { get; set; }
-    public decimal ShippingCost { get; set; }
-    public decimal Total { get; set; }
-    public string Status { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public Customer Customer { get; set; } = new();
+    public Address ShippingAddress { get; set; } = new();
+    public Address BillingAddress { get; set; } = new();
+    public List<OrderItem> Items { get; set; } = new();
+    public PaymentInfo PaymentInfo { get; set; } = new();
+    public ShippingInfo Shipping { get; set; } = new();
+    public PricingInfo Pricing { get; set; } = new();
+    public OrderMetadata Metadata { get; set; } = new();
 }
 ```
 
 **Features Demonstrated:**
-- Complex nested objects (Customer, Items, Payment, Shipping)
-- Collections (List<OrderItem>)
+- Complex nested objects (Customer, addresses, PaymentInfo, Shipping, Pricing)
+- Collections (List<OrderItem>, nested List<ProductReview>)
 - Dictionaries (Product attributes)
 - Decimal precision
 - DateTime handling
@@ -124,21 +163,33 @@ public class ECommerceOrder
 **TOON Sample (excerpt; see the `Samples` folder for the full file):**
 ```toon
 OrderId: ORD-2026-00142857
-OrderDate: 2026-01-11T14:30:00Z
+OrderDate: "2026-01-11T15:30:00.0000000Z"
+Status: Processing
 Customer:
-  CustomerId: CUST-789012
-  Name: Sarah Johnson
+  CustomerId: CUST-98765
+  FirstName: Sarah
+  LastName: Johnson
   Email: sarah.johnson@example.com
+  ...
 Items[3]:
-  - ProductId: PROD-001
-    Name: Premium Wireless Headphones
+  - ProductId: PROD-12345
+    Name: "Premium Wireless Headphones"
+    Category: Electronics
+    SKU: WH-1000XM5-BLK
     Quantity: 2
     UnitPrice: 349.99
-    SubTotal: 699.98
-  - ProductId: PROD-002
-    Name: USB-C Charging Cable (3-Pack)
-    Quantity: 1
-    UnitPrice: 24.99
+    Discount: 35.00
+    TaxRate: 0.08
+    Total: 664.98
+    Attributes:
+      Color: Black
+      Warranty: "2 years"
+      InStock: "true"
+    Reviews[2]:
+      - Rating: 5
+        Comment: "Excellent sound quality!"
+        Verified: true
+      ...
 ```
 
 ### Sample #2: Healthcare Patient Record
@@ -147,24 +198,27 @@ Items[3]:
 
 **Files:**
 - `healthcare-patient.toon` (4.9 KB) - TOON format
-- `healthcare-patient.json` (6.1 KB) - JSON format
-- `healthcare-patient.yaml` (4.7 KB) - YAML format
+- `healthcare-patient.json` (6.2 KB) - JSON format
+- `healthcare-patient.yaml` (4.8 KB) - YAML format
 - `HealthcareModels.cs` - C# model classes
 
 **Models:**
 ```csharp
 public class PatientRecord
 {
-    public string RecordId { get; set; }
-    public PatientInfo Patient { get; set; }
-    public List<VitalSigns> VitalSignsHistory { get; set; }
-    public List<Diagnosis> Diagnoses { get; set; }
-    public List<Medication> Medications { get; set; }
-    public List<LabResult> LabResults { get; set; }
-    public List<Procedure> Procedures { get; set; }
-    public List<Allergy> Allergies { get; set; }
-    public Physician AttendingPhysician { get; set; }
+    public string PatientId { get; set; } = string.Empty;
+    public string RecordNumber { get; set; } = string.Empty;
     public DateTime AdmissionDate { get; set; }
+    public DateTime? DischargeDate { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public PatientInfo PatientInfo { get; set; } = new();
+    public List<VitalSigns> VitalSigns { get; set; } = new();
+    public List<Diagnosis> Diagnoses { get; set; } = new();
+    public List<Medication> Medications { get; set; } = new();
+    public List<LabResult> LabResults { get; set; } = new();
+    public List<Procedure> Procedures { get; set; } = new();
+    public List<Physician> AttendingPhysicians { get; set; } = new();
+    public List<Allergy> Allergies { get; set; } = new();
 }
 ```
 
@@ -174,23 +228,32 @@ public class PatientRecord
 - Code systems (ICD-10 diagnosis codes)
 - Nullable values (discharge date)
 - Units of measurement
-- Complex nested hierarchies (14 classes)
+- Complex nested hierarchies (12 classes)
 
 **TOON Sample (excerpt; see the `Samples` folder for the full file):**
 ```toon
-RecordId: EMR-2026-001
-Patient:
-  PatientId: MRN-2026-987654
-  Name: Michael Chen
-  DateOfBirth: 1985-05-15
+PatientId: MRN-2026-987654
+RecordNumber: "EMR-HSP-00142857"
+AdmissionDate: "2026-01-10T08:15:00.0000000Z"
+DischargeDate: null
+Status: Active
+PatientInfo:
+  FirstName: Michael
+  MiddleName: Robert
+  LastName: Chen
+  DateOfBirth: "1985-06-15T00:00:00.0000000"
+  Age: 40
   Gender: Male
-  BloodType: A+
-VitalSignsHistory[2]:
-  - Timestamp: 2026-01-10T08:00:00Z
+  BloodType: "A+"
+  ...
+VitalSigns[4]:
+  - Timestamp: "2026-01-10T08:30:00.0000000Z"
     Temperature: 98.6
+    TemperatureUnit: F
     BloodPressure:
       Systolic: 120
       Diastolic: 80
+      Unit: mmHg
     HeartRate: 72
     RespiratoryRate: 16
     OxygenSaturation: 98
@@ -206,15 +269,15 @@ All models use strongly-typed C# classes with full property definitions:
 
 ```csharp
 // Load TOON file
-string toonContent = File.ReadAllText("ecommerce-order.toon");
+string toonContent = File.ReadAllText("Samples/ecommerce-order.toon");
 
 // Deserialize to typed object
 var order = ToonSerializer.Deserialize<ECommerceOrder>(toonContent);
 
 // Access properties with IntelliSense
 Console.WriteLine($"Order ID: {order.OrderId}");
-Console.WriteLine($"Customer: {order.Customer.Name}");
-Console.WriteLine($"Total: ${order.Total:F2}");
+Console.WriteLine($"Customer: {order.Customer.FirstName} {order.Customer.LastName}");
+Console.WriteLine($"Total: ${order.Pricing.GrandTotal:F2}");
 ```
 
 ### 2. Format Conversion
@@ -225,12 +288,12 @@ Demonstrates seamless conversion between formats:
 using ToonNet.Extensions.Json;
 
 // TOON → JSON
-string toonString = File.ReadAllText("order.toon");
-string jsonString = ToonConvert.ToJson(toonString);
+string toonContent = File.ReadAllText("Samples/ecommerce-order.toon");
+string jsonFromToon = ToonConvert.ToJson(toonContent);
 
 // JSON → TOON
-string jsonContent = File.ReadAllText("order.json");
-string toonString = ToonConvert.FromJson(jsonContent);
+string jsonContent = File.ReadAllText("Samples/ecommerce-order.json");
+string toonFromJson = ToonConvert.FromJson(jsonContent);
 ```
 
 ### 3. Roundtrip Validation
@@ -239,15 +302,19 @@ Verifies data integrity through format conversions:
 
 ```csharp
 // Original JSON
-string originalJson = File.ReadAllText("order.json");
+string originalJson = File.ReadAllText("Samples/healthcare-patient.json");
 
 // JSON → TOON → JSON
 string toonString = ToonConvert.FromJson(originalJson);
 string roundtripJson = ToonConvert.ToJson(toonString);
 
-// Validate semantic equivalence
-bool isEquivalent = CompareJsonSemantically(originalJson, roundtripJson);
-// Result: true (values match, format may differ)
+// Compare after normalizing both with System.Text.Json (no indentation)
+var compact = new JsonSerializerOptions { WriteIndented = false };
+string Normalize(string json) =>
+    JsonSerializer.Serialize(JsonSerializer.Deserialize<object>(json), compact);
+
+bool roundtripMatch = Normalize(originalJson) == Normalize(roundtripJson);
+// Healthcare sample: true. E-commerce sample: false, because 35.00 comes back as 35.
 ```
 
 ### 4. Complex Data Structures
@@ -255,14 +322,14 @@ bool isEquivalent = CompareJsonSemantically(originalJson, roundtripJson);
 Shows handling of realistic, production-grade data:
 
 ```csharp
-// E-Commerce: 10 classes, 40+ properties
-// Healthcare: 14 classes, 60+ properties
+// E-Commerce: 10 classes, 70+ properties
+// Healthcare: 12 classes, 80+ properties
 // Both: Nested objects, collections, dictionaries
 
 var patient = ToonSerializer.Deserialize<PatientRecord>(toonContent);
 
 // Access deeply nested data
-var latestVitals = patient.VitalSignsHistory.First();
+var latestVitals = patient.VitalSigns.OrderByDescending(v => v.Timestamp).First();
 var systolic = latestVitals.BloodPressure.Systolic;
 var diagnoses = patient.Diagnoses
     .Where(d => d.Severity == "Moderate")
@@ -275,12 +342,11 @@ var diagnoses = patient.Diagnoses
 
 | Sample | TOON Size | JSON Size | YAML Size | Models | Properties |
 |--------|-----------|-----------|-----------|--------|------------|
-| **E-Commerce** | 2.7 KB | 2.6 KB | 2.2 KB | 10 | 40+ |
-| **Healthcare** | 4.9 KB | 6.1 KB | 4.7 KB | 14 | 60+ |
+| **E-Commerce** | 2.7 KB | 3.6 KB | 2.7 KB | 10 | 70+ |
+| **Healthcare** | 4.9 KB | 6.2 KB | 4.8 KB | 12 | 80+ |
 
-**Token Efficiency (approximate):**
-- E-Commerce: TOON ~680 tokens vs JSON ~650 tokens
-- Healthcare: TOON ~1,220 tokens vs JSON ~1,525 tokens (20% reduction!)
+Sizes are of the indented files in `Samples/` (the JSON uses camelCase keys, the TOON files PascalCase). The demo does
+not count tokens; token savings depend on the tokenizer and on the shape of the data.
 
 ---
 
@@ -305,14 +371,12 @@ Each sample includes three formats for comparison:
 
 ## 🧪 Running Tests
 
-Demo includes basic validation:
+The demo prints its checks ("Roundtrip verification: ...") but does not set an exit code: errors are caught and
+printed, and the process always exits with `0`. The real test suite lives in [`tests/`](../../tests):
 
 ```bash
-# Run demo with validation
-dotnet run
-
-# Check exit code
-echo $?  # 0 = success, 1 = failure
+# From the repository root
+dotnet test ToonNet.slnx
 ```
 
 ---
@@ -344,8 +408,8 @@ echo $?  # 0 = success, 1 = failure
 - .NET 8.0 or later
 - ToonNet.Core
 - ToonNet.Extensions.Json (for JSON conversion)
-- System.Text.Json (built-in)
-- YamlDotNet (for YAML samples)
+- System.Text.Json (package reference 10.0.1)
+- YamlDotNet 16.3.0 (used by `Converters/FormatConverter.cs`; the demo's `Main` does not load the `.yaml` files)
 
 ---
 

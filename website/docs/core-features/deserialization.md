@@ -11,7 +11,7 @@ Deserialization converts TOON format strings, streams, or files back to strongly
 ### Deserialize from String
 
 ```csharp
-using ToonNet.Core;
+using ToonNet.Core.Serialization;
 
 string toonInput = """
 Name: Alice
@@ -28,23 +28,18 @@ Console.WriteLine($"{person.Name} is {person.Age} years old");
 ### Deserialize from Stream
 
 ```csharp
-using var stream = File.OpenRead("data.toon");
-var data = ToonSerializer.Deserialize<MyData>(stream);
-
-// Or with explicit encoding
-using var stream = File.OpenRead("data.toon");
-var data = ToonSerializer.Deserialize<MyData>(stream, Encoding.UTF8);
+await using var stream = File.OpenRead("data.toon");
+var data = await ToonSerializer.DeserializeFromStreamAsync<MyData>(stream);  // read as UTF-8
 ```
 
 ### Deserialize from File
 
 ```csharp
-// Synchronous
-var config = ToonSerializer.DeserializeFromFile<AppConfig>("appsettings.toon");
-
-// Asynchronous
-var config = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon");
+var config = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon");  // read as UTF-8
 ```
+
+There are no synchronous stream or file overloads; read the text yourself and call `Deserialize<T>(string)` if you
+need one.
 
 ## Deserializing Different Types
 
@@ -57,18 +52,15 @@ bool flag = ToonSerializer.Deserialize<bool>("true");
 string text = ToonSerializer.Deserialize<string>("Hello World");
 ```
 
+A root primitive that contains `: ` or looks like `key: value` is read as an object, so quote such strings
+(`"\"10:30\""`).
+
 ### Collections
 
 #### Arrays
 
 ```csharp
-string toonInput = """
-- 10
-- 20
-- 30
-- 40
-- 50
-""";
+string toonInput = "[5]: 10,20,30,40,50";
 
 int[] numbers = ToonSerializer.Deserialize<int[]>(toonInput);
 // Result: [10, 20, 30, 40, 50]
@@ -78,9 +70,10 @@ int[] numbers = ToonSerializer.Deserialize<int[]>(toonInput);
 
 ```csharp
 string toonInput = """
-- Apple
-- Banana
-- Cherry
+[3]:
+  - Apple
+  - Banana
+  - Cherry
 """;
 
 List<string> fruits = ToonSerializer.Deserialize<List<string>>(toonInput);
@@ -96,6 +89,7 @@ Age: 30
 """;
 
 Dictionary<string, object> data = ToonSerializer.Deserialize<Dictionary<string, object>>(toonInput);
+// Values: "Alice", "Smith", 30L (integers are read as long into object)
 
 // Typed dictionary
 Dictionary<string, int> scores = ToonSerializer.Deserialize<Dictionary<string, int>>("""
@@ -137,17 +131,20 @@ Person person = ToonSerializer.Deserialize<Person>(toonInput);
 ### Collections of Objects
 
 ```csharp
+// Tabular form (what ToonSerializer writes for uniform objects)
 string toonInput = """
-- Name: Alice
-  Department: Engineering
-  Salary: 85000
-- Name: Bob
-  Department: Marketing
-  Salary: 65000
-- Name: Charlie
-  Department: Sales
-  Salary: 70000
+[3]{Name,Department,Salary}:
+  Alice,Engineering,85000
+  Bob,Marketing,65000
+  Charlie,Sales,70000
 """;
+
+// The list form is read as well:
+// [3]:
+//   - Name: Alice
+//     Department: Engineering
+//     Salary: 85000
+//   ...
 
 public class Employee
 {
@@ -245,6 +242,9 @@ Permissions permissions = ToonSerializer.Deserialize<Permissions>(toonInput);
 // permissions = Permissions.Read | Permissions.Write
 ```
 
+Enum names are matched case-insensitively (`active` works), and numeric values (`Status: 1`) are accepted.
+Enums are written as their member names (flags as `"Read, Write"`).
+
 ## DateTime Deserialization
 
 ```csharp
@@ -262,7 +262,11 @@ public class Event
 }
 
 Event evt = ToonSerializer.Deserialize<Event>(toonInput);
+// evt.EventDate.Kind == DateTimeKind.Unspecified (no offset in the text)
 ```
+
+Dates are parsed with the invariant culture, and `DateTimeKind` is preserved: a `Z` suffix gives `Utc`, no suffix
+gives `Unspecified`. `ToonSerializer` writes dates in the round-trip `O` format.
 
 ## Deserialization Options
 
@@ -272,26 +276,17 @@ Event evt = ToonSerializer.Deserialize<Event>(toonInput);
 var options = new ToonSerializerOptions
 {
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase,
-    AllowTrailingCommas = true,
-    CaseSensitive = false
+    ToonOptions = new ToonOptions { StrictMode = true }
 };
 
 Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
 ```
 
-### Case-Insensitive Deserialization
+### Key Matching Is Case-Sensitive
 
-```csharp
-string toonInput = """
-name: Alice
-AGE: 30
-eMaIl: alice@example.com
-""";
-
-var options = new ToonSerializerOptions { CaseSensitive = false };
-Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
-// Works! Property names matched case-insensitively
-```
+Keys must match the property name exactly after the naming policy (or the `[ToonProperty]` name) is applied. There is
+no case-insensitive option: with the default policy, `name: Alice` does not set `Name`, and the property keeps its
+default value.
 
 ### Property Naming Policy
 
@@ -341,19 +336,12 @@ HashSet<int> uniqueIds = ToonSerializer.Deserialize<HashSet<int>>(toonInput);
 ```csharp
 string toonInput = """
 Name: Engineering
-Teams:
-  - Backend
-  - Frontend
-  - DevOps
-Projects:
+Teams[3]: Backend,Frontend,DevOps
+Projects[2]:
   - Name: Project A
-    Members:
-      - Alice
-      - Bob
+    Members[2]: Alice,Bob
   - Name: Project B
-    Members:
-      - Charlie
-      - David
+    Members[2]: Charlie,David
 """;
 
 public class Department
@@ -377,25 +365,22 @@ Department dept = ToonSerializer.Deserialize<Department>(toonInput);
 ```csharp
 string toonInput = """
 Name: TechCorp
-Employees:
+Employees[2]:
   - Name: Alice
     Position: Engineer
     Skills:
-      C#: 9
+      "C#": 9
       Python: 7
-    Projects:
-      - Name: Project X
-        Status: Active
-      - Name: Project Y
-        Status: Completed
+    Projects[2]{Name,Status}:
+      Project X,Active
+      Project Y,Completed
   - Name: Bob
     Position: Designer
     Skills:
       Figma: 8
       Photoshop: 9
-    Projects:
-      - Name: Project Z
-        Status: Active
+    Projects[1]{Name,Status}:
+      Project Z,Active
 """;
 
 public class Company
@@ -448,8 +433,9 @@ Radius: 5.0
 // Deserialize to specific type
 Circle circle = ToonSerializer.Deserialize<Circle>(toonInput);
 
-// Or deserialize to base type (requires type information in data)
-Shape shape = ToonSerializer.Deserialize<Shape>(toonInput);
+// Deserializing to the abstract base type throws ToonSerializationException
+// ("Cannot create an instance of the abstract type or interface Shape; register a converter for it").
+// TOON carries no type information; use a custom converter to pick the concrete type.
 ```
 
 ## Async Deserialization
@@ -457,8 +443,8 @@ Shape shape = ToonSerializer.Deserialize<Shape>(toonInput);
 ### Deserialize from Stream (Async)
 
 ```csharp
-using var fileStream = File.OpenRead("data.toon");
-var data = await ToonSerializer.DeserializeAsync<MyData>(fileStream);
+await using var fileStream = File.OpenRead("data.toon");
+var data = await ToonSerializer.DeserializeFromStreamAsync<MyData>(fileStream);
 ```
 
 ### Deserialize from File (Async)
@@ -467,13 +453,15 @@ var data = await ToonSerializer.DeserializeAsync<MyData>(fileStream);
 var config = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon");
 
 // With options
-var options = new ToonSerializerOptions { CaseSensitive = false };
-var config = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon", options);
+var options = new ToonSerializerOptions { PropertyNamingPolicy = PropertyNamingPolicy.SnakeCase };
+var config2 = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon", options);
 ```
+
+`DeserializeAsync<T>(string)` also exists; it parses synchronously and returns a completed `ValueTask<T?>`.
 
 ## Type Inference
 
-ToonNet automatically infers types during deserialization:
+The TOON value is converted to the requested target type:
 
 ```csharp
 // Number types
@@ -486,7 +474,7 @@ decimal decimalValue = ToonSerializer.Deserialize<decimal>("19.99");
 bool flag = ToonSerializer.Deserialize<bool>("true");
 
 // DateTime
-DateTime date = ToonSerializer.Deserialize<DateTime>("2026-01-24T17:00:00");
+DateTime date = ToonSerializer.Deserialize<DateTime>("\"2026-01-24T17:00:00\"");  // quoted: contains ':'
 
 // Guid
 Guid id = ToonSerializer.Deserialize<Guid>("3f2504e0-4f89-11d3-9a0c-0305e82c3301");
@@ -494,16 +482,18 @@ Guid id = ToonSerializer.Deserialize<Guid>("3f2504e0-4f89-11d3-9a0c-0305e82c3301
 
 ## All Deserialize Methods
 
+All methods take an optional `ToonSerializerOptions? options = null`; the async ones also take an optional
+`CancellationToken`.
+
 | Method | Description | Use Case |
 |--------|-------------|----------|
-| `Deserialize<T>(string)` | Deserialize from string | Simple, in-memory data |
-| `Deserialize<T>(string, ToonSerializerOptions)` | Deserialize with options | Custom parsing |
-| `Deserialize<T>(Stream)` | Deserialize from stream | Large files, network data |
-| `Deserialize<T>(Stream, Encoding)` | Deserialize with encoding | Non-UTF8 encoding |
-| `DeserializeAsync<T>(Stream)` | Async stream deserialization | Async I/O |
-| `DeserializeAsync<T>(Stream, ToonSerializerOptions)` | Async with options | Async + custom options |
-| `DeserializeFromFile<T>(string)` | Deserialize from file | File input |
-| `DeserializeFromFileAsync<T>(string)` | Async file deserialization | Async file I/O |
+| `Deserialize<T>(string toon, options)` | Deserialize from string | Simple, in-memory data |
+| `Deserialize(string toon, Type type, options)` | Same, with a runtime type | Non-generic code |
+| `DeserializeFromValue<T>(ToonValue value, options)` | Convert a `ToonValue` tree without text | Data from `ToonDocument.Parse` or `SerializeToValue` |
+| `DeserializeAsync<T>(string toon, options, ct)` | Deserialize from string (`ValueTask<T?>`) | Async call sites |
+| `DeserializeFromStreamAsync<T>(Stream, options, ct)` | Read UTF-8 from a stream | Network data |
+| `DeserializeFromFileAsync<T>(string filePath, options, ct)` | Read UTF-8 from a file | File input |
+| `DeserializeStreamAsync<T>(string filePath \| StreamReader, ...)` | Yield one object per document | Multi-document files, see [Streaming](streaming) |
 
 ## Parsing Rules and Strict Mode
 
@@ -546,17 +536,20 @@ try
 }
 catch (ToonParseException ex)
 {
+    // Invalid TOON text, e.g. "Array length mismatch: expected 3, got 2"
     Console.WriteLine($"Parse error at line {ex.Line}, column {ex.Column}");
-    Console.WriteLine($"Expected: {ex.ExpectedToken}");
-    Console.WriteLine($"Got: {ex.ActualToken}");
 }
 catch (ToonSerializationException ex)
 {
+    // Valid TOON that does not fit the target type
     Console.WriteLine($"Deserialization failed: {ex.Message}");
-    Console.WriteLine($"Property: {ex.PropertyName}");
+    Console.WriteLine($"Path: {ex.PropertyName}");        // e.g. $.Items[2].Price
     Console.WriteLine($"Target type: {ex.TargetType}");
 }
 ```
+
+Both derive from `ToonException`. Exceeding `ToonSerializerOptions.MaxDepth` while converting also throws
+`ToonParseException` (with line and column 0).
 
 ## Common Issues
 
@@ -569,7 +562,7 @@ catch (ToonSerializationException ex)
 ```csharp
 // Wrong: trying to deserialize string to int
 string toonInput = "Age: NotANumber";
-// Throws ToonSerializationException
+// Throws ToonSerializationException: 'NotANumber' is not a number (Path: $.Age)
 
 // Correct:
 string toonInput = "Age: 30";
@@ -580,7 +573,7 @@ var person = ToonSerializer.Deserialize<Person>(toonInput);
 
 **Problem**: TOON input missing required properties.
 
-**Solution**: Make properties nullable or provide defaults:
+**Solution**: Missing keys leave the property at its initial value; make properties nullable or provide defaults:
 
 ```csharp
 public class Person
@@ -611,7 +604,8 @@ Person person = ToonSerializer.Deserialize<Person>(toonInput);
 
 1. **Reuse options**: Create `ToonSerializerOptions` once
 2. **Use async methods**: For I/O-bound operations
-3. **Stream large files**: Don't load entire file into memory
+3. **Stream multi-document files**: `DeserializeStreamAsync` keeps one document in memory at a time
+   (`DeserializeFromFileAsync` and `DeserializeFromStreamAsync` read the whole input)
 4. **Use specific types**: Avoid `object` or `dynamic`
 5. **Profile deserialization**: Use BenchmarkDotNet
 
@@ -619,7 +613,6 @@ Person person = ToonSerializer.Deserialize<Person>(toonInput);
 // Good: Reuse options
 private static readonly ToonSerializerOptions _options = new()
 {
-    CaseSensitive = false,
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase
 };
 

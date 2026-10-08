@@ -49,7 +49,7 @@ Bu klasör, **TOON specification'ın desteklediği TÜM veri tiplerini** içeren
 
 ## 🎯 Demo Özellikleri
 
-### ✅ Her format için TAM dönüşüm desteği:
+### ✅ Her format için dönüşüm desteği:
 
 ```
 TOON ←→ JSON ←→ YAML
@@ -57,10 +57,15 @@ TOON ←→ JSON ←→ YAML
 C# Object (her üç format için)
 ```
 
+> Demo uygulaması (`Program.cs`) yalnızca `.toon` ve `.json` dosyalarını kullanır. YAML dönüşümü için
+> `ToonNet.Extensions.Yaml` paketi gerekir; demo projesi bu pakete referans vermez (`.yaml` dosyaları karşılaştırma içindir).
+
 ### ✅ İki farklı yaklaşım:
 
 #### **1. String-Based Conversions (Dosya → Dosya)**
 ```csharp
+using ToonNet.Extensions.Json;
+
 // JSON string → TOON string
 string json = File.ReadAllText("ecommerce-order.json");
 string toon = ToonConvert.FromJson(json);
@@ -72,6 +77,9 @@ string json = ToonConvert.ToJson(toon);
 
 #### **2. Object-Based Conversions (Type-Safe)**
 ```csharp
+using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;
+
 // JSON → C# Object → TOON
 var order = ToonConvert.DeserializeFromJson<ECommerceOrder>(jsonString);
 string toon = ToonSerializer.Serialize(order);
@@ -94,19 +102,19 @@ string json = ToonConvert.SerializeToJson(order);
    - `null`
 
 2. **Dates & Times**
-   - `DateTime` (ISO 8601 format)
+   - `DateTime` (ISO 8601 format, `Kind` korunur)
    - `DateTimeOffset`
-   - `TimeSpan`
+   - `DateOnly`, `TimeOnly`, `TimeSpan`
 
 3. **Collections**
-   - `List<T>`
+   - `List<T>`, `HashSet<T>`, immutable collections
    - `T[]` (arrays)
-   - `Dictionary<string, T>`
+   - `Dictionary<TKey, T>` (string ve primitive key'ler)
 
 4. **Nested Objects**
-   - Unlimited nesting depth
+   - Derin nesting (`ToonOptions.MaxDepth` sınırına kadar)
    - Complex object graphs
-   - Circular reference handling
+   - Circular reference'lar property path ile birlikte exception fırlatır (`$.Next` gibi)
 
 5. **Nullable Types**
    - `string?`
@@ -128,6 +136,8 @@ string json = ToonConvert.SerializeToJson(order);
 ```csharp
 using ToonNet.Core.Serialization;
 
+using ToonNet.Extensions.Json;
+
 // Örnek 1: JSON dosyası → TOON dosyası
 var jsonContent = await File.ReadAllTextAsync("ecommerce-order.json");
 var toonContent = ToonConvert.FromJson(jsonContent);
@@ -143,6 +153,7 @@ await File.WriteAllTextAsync("output.json", jsonContent);
 
 ```csharp
 using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;
 using ToonNet.Demo.Samples;
 
 // JSON → C# Object
@@ -191,12 +202,16 @@ Console.WriteLine($"String roundtrip: {json2 == json3}");
 ## 🎓 Öğrenme Noktaları
 
 ### 1. **TOON Format Özellikleri**
-- Okunabilir (JSON'dan daha temiz)
-- Compact (YAML'dan daha kısa)
-- Type-safe (spec-compliant)
+- Okunabilir (JSON'dan daha az noktalama)
+- Compact (bu örneklerde JSON'dan küçük, YAML ile benzer boyutta)
+- TOON spec v3.3.2 formatını izler
 - Human-friendly (kolay düzenlenebilir)
 
 ### 2. **Nested Arrays**
+
+Sample dosyalarındaki list formu (`ToonSerializer`, yalnızca primitive alanlı uniform object dizilerini
+tabular formda yazar: `Reviews[2]{Rating,Comment}:`):
+
 ```toon
 Items[3]:
   - ProductId: PROD-12345
@@ -219,7 +234,7 @@ GiftMessage: null
 Attributes:
   Color: Black
   Warranty: "2 years"
-  InStock: true
+  InStock: "true"
 ```
 
 ---
@@ -227,9 +242,9 @@ Attributes:
 ## ✅ Doğrulama
 
 Her sample için:
-1. ✅ **Syntax Valid**: TOON/JSON/YAML spec'e uygun
-2. ✅ **Roundtrip Safe**: Format A → Format B → Format A (data loss yok)
-3. ✅ **Type Complete**: Tüm TOON-supported types var
+1. ✅ **Parse Edilebilir**: TOON/JSON/YAML dosyaları okunabiliyor (demo `.toon` ve `.json` dosyalarını okur)
+2. ✅ **Roundtrip**: JSON → TOON → JSON değerleri korur (sayı formatı değişebilir, aşağıya bakın)
+3. ✅ **Çeşitli Tipler**: string, sayı, bool, null, tarih, liste, dictionary, nested object
 4. ✅ **Real-World**: Gerçek kullanım senaryoları
 5. ✅ **Developer-Friendly**: Açık, anlaşılır, kafa karıştırmayan
 
@@ -243,9 +258,9 @@ dotnet run
 ```
 
 Demo otomatik olarak:
-1. Tüm sample dosyalarını okur
-2. Format dönüşümleri yapar
-3. Roundtrip testleri çalıştırır
+1. `ecommerce-order.toon` ve `healthcare-patient.toon` dosyalarını okuyup typed object'lere deserialize eder
+2. TOON → JSON ve JSON → TOON dönüşümleri yapar
+3. JSON → TOON → JSON roundtrip kontrolü yapar
 4. Sonuçları console'a yazdırır
 
 ---
@@ -253,24 +268,25 @@ Demo otomatik olarak:
 ## 📊 Karşılaştırma
 
 ### E-Commerce Order Sample
-| Format | Dosya Boyutu | Okunabilirlik | Parse Hızı |
-|--------|--------------|---------------|------------|
-| TOON   | 2.7 KB       | ⭐⭐⭐⭐⭐    | ⚡⚡⚡      |
-| JSON   | 3.5 KB       | ⭐⭐⭐        | ⚡⚡⚡⚡    |
-| YAML   | 2.6 KB       | ⭐⭐⭐⭐      | ⚡⚡        |
+| Format | Dosya Boyutu |
+|--------|--------------|
+| TOON   | 2.7 KB       |
+| JSON   | 3.6 KB       |
+| YAML   | 2.7 KB       |
 
 ### Healthcare Patient Record Sample
-| Format | Dosya Boyutu | Okunabilirlik | Parse Hızı |
-|--------|--------------|---------------|------------|
-| TOON   | 4.8 KB       | ⭐⭐⭐⭐⭐    | ⚡⚡⚡      |
-| JSON   | 6.1 KB       | ⭐⭐⭐        | ⚡⚡⚡⚡    |
-| YAML   | 4.7 KB       | ⭐⭐⭐⭐      | ⚡⚡        |
+| Format | Dosya Boyutu |
+|--------|--------------|
+| TOON   | 4.9 KB       |
+| JSON   | 6.2 KB       |
+| YAML   | 4.8 KB       |
 
 **TOON avantajları:**
-- JSON'dan %20-27 daha küçük
-- YAML ile aynı boyut ama daha hızlı parse
+- Bu örneklerde indent'li JSON'dan yaklaşık %21-24 daha küçük
+- YAML ile benzer boyutta
 - Human-readable ve kolay düzenlenebilir
-- Type-safe ve spec-compliant
+
+Parse hızı ölçülmedi; performans için [benchmark projesine](../../../benchmark/ToonNet.Benchmarks/README.md) bakın.
 
 ---
 
@@ -280,6 +296,7 @@ Healthcare sample'ı için gerçek dünya senaryosu:
 
 ```csharp
 using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;
 using ToonNet.Demo.Samples;
 
 // Load patient record from TOON file
@@ -343,7 +360,7 @@ ToonNet **iki farklı roundtrip garantisi** sunar:
 
 ### 1️⃣ Type-Safe Roundtrip (Strongly-Typed) - ✅ TAM KORUMA
 
-**C# class'lar ile çalışırken TÜM veri TAM OLARAK korunur:**
+**C# class'lar ile çalışırken property değerleri korunur:**
 
 ```csharp
 // Original object
@@ -357,11 +374,12 @@ var order = new ECommerceOrder
 string toon = ToonSerializer.Serialize(order);
 var order2 = ToonSerializer.Deserialize<ECommerceOrder>(toon);
 
-// ✅ GARANTİ: order == order2 (tamamen aynı)
-Assert.Equal(35.00m, order2.Pricing.GrandTotal);  // Precision korunur
+// ✅ Değerler aynı (decimal eşitliği scale'e bakmaz)
+Assert.Equal(35.00m, order2.Pricing.GrandTotal);  // TOON'da "35" yazılır, 35m olarak okunur
 ```
 
-**Garanti:** C# object → TOON → C# object roundtrip'inde **veri kaybı YOK**.
+**Garanti:** C# object → TOON → C# object roundtrip'inde desteklenen tipler için **değer kaybı yok**. Sayılar
+kanonik formda yazılır, bu yüzden `decimal` scale'i (`35.00m` → `35m`) korunmaz.
 
 ---
 
@@ -374,7 +392,7 @@ Assert.Equal(35.00m, order2.Pricing.GrandTotal);  // Precision korunur
 string json = @"{ ""discount"": 35.00 }";
 
 // Dönüşüm: JSON → TOON → JSON
-string toon = ToonConvert.FromJson(json);   // Discount: 35.00
+string toon = ToonConvert.FromJson(json);   // discount: 35
 string json2 = ToonConvert.ToJson(toon);    // {"discount": 35}
 
 // ⚠️ Format değişti: 35.00 → 35
@@ -384,11 +402,10 @@ string json2 = ToonConvert.ToJson(toon);    // {"discount": 35}
 **Format conversion'da NELERdeğişebilir:**
 - ❌ Decimal trailing zeros: `35.00` → `35` (semantik olarak eşit)
 - ❌ Whitespace: girinti, satır sonları (kozmetik)
-- ❌ Property sırası: yeniden sıralanabilir (JSON spec izin verir)
 - ❌ Number gösterimi: `1e2` → `100` (semantik olarak eşit)
 
 **Format conversion'da NELERgaranti edilir:**
-- ✅ Tüm property isimleri korunur
+- ✅ Tüm property isimleri ve sırası korunur
 - ✅ Tüm değerler korunur (semantik eşitlik)
 - ✅ Tüm nested yapılar korunur
 - ✅ null/true/false tam olarak korunur
@@ -398,23 +415,19 @@ string json2 = ToonConvert.ToJson(toon);    // {"discount": 35}
 
 ### Neden Bu Önemli?
 
-**Bu davranış tüm serialization library'lerinde standarttır:**
+**ToonNet sayıları kanonik formda yazar** (TOON spec v3.3.2): trailing zero'lar ve exponent gösterimi normalize
+edilir. Bu, sayıyı bir değer olarak okuyup yeniden yazan serializer'larda yaygındır; ancak her kütüphane böyle
+davranmaz:
 
-| Library | Decimal Format | Whitespace | Property Order |
-|---------|----------------|------------|----------------|
-| **System.Text.Json** | Korunmaz | Korunmaz | Korunmaz* |
-| **Newtonsoft.Json** | Korunmaz | Korunmaz | Korunmaz* |
-| **ToonNet** | Korunmaz | Korunmaz | Korunur |
-
-\* Özel konfigürasyon gerektirir
-
-**System.Text.Json'dan örnek:**
+**System.Text.Json'dan örnek (orijinal sayı metnini korur):**
 ```csharp
 string json1 = @"{ ""value"": 35.00 }";
 var obj = JsonSerializer.Deserialize<JsonElement>(json1);
 string json2 = JsonSerializer.Serialize(obj);
-// Sonuç: {"value":35}  ← Aynı davranış!
+// Sonuç: {"value":35.00}  ← JsonElement ham sayı metnini saklar
 ```
+
+Bu yüzden JSON → TOON → JSON dönüşümünden sonra string karşılaştırması yerine değer karşılaştırması yapın.
 
 ---
 
@@ -427,7 +440,7 @@ string json2 = JsonSerializer.Serialize(obj);
 var order = ToonSerializer.Deserialize<ECommerceOrder>(toonString);
 order.Status = "Shipped";
 string toon = ToonSerializer.Serialize(order);
-// Tüm data tam korunur, GrandTotal = 35.00m kesin
+// Değerler korunur (GrandTotal == 35.00m; scale 35m olarak okunur)
 ```
 
 #### ⚠️ Veri Dönüşümünde Format Conversion Kullan
@@ -469,17 +482,16 @@ Assert.Equal(obj1.GetProperty("discount").GetDecimal(),
 - **Tam veri koruması** gerekiyor? → **Strongly-typed serialization** kullan ✅
 - **Format dönüşümü** yapıyorsun? → **Semantik eşitlik** bekle (değerler eşit, format farklı olabilir) ⚠️
 
-Bu davranış **endüstri standardı** ve JSON RFC 8259 specification'a uygundur.
+JSON RFC 8259, sayıların gösterimini (ör. `35.00` ve `35`) değil değerini tanımlar; bu dönüşüm spec'e uygundur.
 
 ---
 
 ## 🎯 Sonuç
 
 Bu samples, ToonNet'in:
-- ✅ Tüm veri tiplerini desteklediğini
+- ✅ Yaygın .NET veri tiplerini desteklediğini
 - ✅ Kompleks nested structures ile çalıştığını
 - ✅ Çift taraflı dönüşüm yaptığını
-- ✅ Production-ready olduğunu
-- ✅ Healthcare, E-Commerce gibi critical domainlerde kullanılabileceğini
+- ✅ Healthcare, E-Commerce gibi gerçekçi veri modelleriyle çalıştığını
 
-**kanıtlar!**
+**gösterir.**

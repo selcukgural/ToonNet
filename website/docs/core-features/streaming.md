@@ -4,11 +4,13 @@ Learn how to efficiently serialize and deserialize large datasets using ToonNet'
 
 ## Overview
 
-When working with millions of records, traditional serialization approaches can exhaust memory. ToonNet's streaming API provides:
+When working with millions of records, building one huge string or list can exhaust memory. ToonNet's streaming API
+writes one TOON document per item and reads them back one at a time:
 
-- **Constant Memory Usage**: O(1) memory regardless of dataset size
-- **Batched I/O**: 2-3x faster throughput with configurable batch sizes
-- **Cancellation Support**: Full `CancellationToken` propagation
+- **Bounded Memory Usage**: items are pulled from an `IAsyncEnumerable<T>` and only the current batch is buffered,
+  so memory does not grow with the number of items
+- **Batched I/O**: serialized documents are buffered and written in batches (`BatchSize`, default 50)
+- **Cancellation Support**: the `CancellationToken` is checked for every item
 - **Separator Modes**: Choose between blank-line or explicit separator formats
 
 ## When to Use Streaming
@@ -20,9 +22,7 @@ Use streaming serialization when:
 - Processing **multi-GB log files**
 - Avoiding **OutOfMemoryException** in production
 
-**Memory comparison (1M records):**
-- Traditional: ~2GB memory (materialize all items)
-- Streaming: ~50MB memory (constant, batch-based)
+`SerializeStreamAsync` and `DeserializeStreamAsync` live in `ToonNet.Core.Serialization`.
 
 ## Basic Streaming Serialization
 
@@ -57,12 +57,14 @@ Choose between two separator modes:
 
 #### 1. BlankLine (Default)
 
-Documents separated by blank lines - compatible with legacy code.
+Documents separated by one blank line. This is what the overloads without write options use, and what
+`SerializeCollectionToFileAsync` writes.
 
 ```csharp
 await ToonSerializer.SerializeStreamAsync(
     items,
     "data.toon",
+    options: null,
     writeOptions: ToonMultiDocumentWriteOptions.BlankLine
 );
 ```
@@ -81,12 +83,14 @@ Age: 35
 
 #### 2. ExplicitSeparator
 
-Documents separated by `---` - deterministic, YAML-like format.
+Documents separated by a `---` line - explicit, YAML-like format. The separator text can be changed with
+`DocumentSeparator`; the reader recognizes a separator only when the whole line matches it exactly.
 
 ```csharp
 await ToonSerializer.SerializeStreamAsync(
     items,
     "data.toon",
+    options: null,
     writeOptions: ToonMultiDocumentWriteOptions.ExplicitSeparator
 );
 ```
@@ -103,9 +107,11 @@ Name: Charlie
 Age: 35
 ```
 
+Separators are always written with `\n`, regardless of the platform line ending, and the file has no trailing newline.
+
 ### Batch Size Configuration
 
-Control the batch size for optimal throughput:
+Control how many serialized documents are buffered before each write:
 
 ```csharp
 var writeOptions = new ToonMultiDocumentWriteOptions
@@ -124,9 +130,9 @@ await ToonSerializer.SerializeStreamAsync(
 ```
 
 **Batch size guidelines:**
-- **Small items (&lt;1KB)**: Use 100-200 for best throughput
-- **Medium items (1-10KB)**: Use 50-100 (default: 50)
-- **Large items (>10KB)**: Use 10-50 to limit memory spikes
+- The default is 50; values below 1 are treated as 1.
+- Memory use is roughly batch size × serialized item size, so use smaller batches for large items.
+- Larger batches mean fewer write calls; measure with your own data to pick a value.
 
 ## Complete Examples
 
@@ -164,6 +170,7 @@ public async Task RunEtlPipelineAsync(CancellationToken cancellationToken)
     await ToonSerializer.SerializeStreamAsync(
         items: ExtractTransformAsync(),
         filePath: "transformed_data.toon",
+        options: null,
         writeOptions: new ToonMultiDocumentWriteOptions { BatchSize = 100 },
         cancellationToken: cancellationToken
     );
@@ -221,17 +228,17 @@ Report progress during long-running operations:
 ```csharp
 public async Task ExportWithProgressAsync(IProgress<int> progress, CancellationToken cancellationToken)
 {
-    int count = 0;
-    
     await ToonSerializer.SerializeStreamAsync(
-        items: TrackProgressAsync(progress, ref count),
+        items: TrackProgressAsync(progress),
         filePath: "export.toon",
         cancellationToken: cancellationToken
     );
 }
 
-private async IAsyncEnumerable<User> TrackProgressAsync(IProgress<int> progress, ref int count)
+private async IAsyncEnumerable<User> TrackProgressAsync(IProgress<int> progress)
 {
+    var count = 0;
+
     await foreach (var user in dbContext.Users.AsAsyncEnumerable())
     {
         yield return user;
@@ -253,34 +260,24 @@ var writeOptions = ToonMultiDocumentWriteOptions.ExplicitSeparator;
 var readOptions = ToonMultiDocumentReadOptions.ExplicitSeparator;
 
 // Write
-await ToonSerializer.SerializeStreamAsync(items, "data.toon", writeOptions: writeOptions);
+await ToonSerializer.SerializeStreamAsync(items, "data.toon", options: null, writeOptions: writeOptions);
 
 // Read
-await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>("data.toon", readOptions: readOptions))
+await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>("data.toon", options: null, multiDocumentOptions: readOptions))
 {
     ProcessItem(item);
 }
 ```
 
+Reading a `---` separated file in blank-line mode fails with a `ToonParseException`, because the `---` line ends up
+inside a document.
+
 ## Performance Benchmarks
 
-Real-world performance measurements (Apple M3 Max, .NET 8.0):
-
-### 1,000 Records
-- **Traditional**: 5ms, 2MB allocated
-- **Streaming (batch=50)**: 4ms, 100KB allocated (95% less memory)
-
-### 10,000 Records
-- **Traditional**: 45ms, 20MB allocated
-- **Streaming (batch=50)**: 22ms, 800KB allocated (2x faster, 96% less memory)
-
-### 100,000 Records
-- **Traditional**: 450ms, 200MB allocated
-- **Streaming (batch=50)**: 150ms, 6MB allocated (3x faster, 97% less memory)
-
-### 1,000,000 Records
-- **Traditional**: OOM risk, ~2GB+
-- **Streaming (batch=50)**: 1.5s, 50MB allocated (constant memory)
+The repository contains a BenchmarkDotNet suite that compares `SerializeCollectionToFileAsync` with
+`SerializeStreamAsync` at several batch sizes (`benchmark/ToonNet.Benchmarks/StreamingSerializationBenchmarks.cs`).
+No results are published for the current version; see `benchmark/ToonNet.Benchmarks/README.md` for how to run it on
+your own hardware.
 
 ## API Reference
 
@@ -355,8 +352,8 @@ IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
 3. **Use `AsNoTracking()`** for Entity Framework read-only queries
 4. **Match separator modes** for write/read roundtrips
 5. **Monitor memory usage** in production with metrics
-6. **Use explicit separators** for new projects (more deterministic)
-7. **Buffer appropriately** - larger batches = better throughput, more memory
+6. **Consider explicit separators** when other tools also write the file, so document boundaries are unambiguous
+7. **Buffer appropriately** - larger batches mean fewer writes but more memory
 
 ## Troubleshooting
 

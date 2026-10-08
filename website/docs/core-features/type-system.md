@@ -36,12 +36,15 @@ When reading:
 
 - Integer targets reject fractions (`3.9`) and out-of-range values with a `ToonSerializationException` instead of truncating.
 - Quoted numbers are accepted for numeric targets, and unquoted numbers or booleans for `string` targets.
-- Types without a parameterless constructor (for example positional records) are created through their public constructor
-  with the most parameters, or the one marked `[ToonConstructor]`; parameters are matched to properties by name.
+- The constructor is chosen in this order: the one marked `[ToonConstructor]`, then a public parameterless constructor,
+  then the public constructor with the most parameters (for example for positional records). Constructor parameters
+  are matched to properties by name (case-insensitively), then the remaining settable properties are assigned.
 - Errors include the path of the failing value, for example `$.Items[2].Price`.
 - Serializing an object graph with a cycle throws a `ToonEncodingException` instead of recursing until `MaxDepth`.
 
 ## ToonValue Hierarchy
+
+All model types live in the `ToonNet.Core.Models` namespace.
 
 ```
 ToonValue (abstract base class)
@@ -57,9 +60,8 @@ ToonValue (abstract base class)
 
 `ToonValue` is the abstract base class for all TOON types. It provides:
 
-- **Type property**: Gets the `ToonValueType` enum value
-- **Implicit operators**: Convert from/to C# primitive types
-- **Indexers**: Access nested values
+- **`ValueType` property**: Gets the `ToonValueType` enum value
+- **Implicit operators**: Convert from `bool`, `int`, `long`, `float`, `double`, `decimal` and `string`
 
 ### ToonValueType Enum
 
@@ -78,9 +80,9 @@ public enum ToonValueType
 ### Check Value Type
 
 ```csharp
-ToonValue value = ToonSerializer.Deserialize<ToonValue>(toonString);
+ToonValue value = ToonSerializer.Deserialize<ToonValue>(toonString)!;
 
-if (value.Type == ToonValueType.Object)
+if (value.ValueType == ToonValueType.Object)
 {
     ToonObject obj = (ToonObject)value;
     // Work with object
@@ -89,13 +91,12 @@ if (value.Type == ToonValueType.Object)
 
 ## ToonNull
 
-Represents a null value.
+Represents a null value. There is a single shared instance.
 
 ```csharp
 ToonNull nullValue = ToonNull.Instance;
 
 // Check if value is null
-ToonValue value = ...;
 bool isNull = value is ToonNull;
 ```
 
@@ -113,6 +114,7 @@ ToonValue value = true;  // Creates ToonBoolean
 
 // Get value
 bool boolValue = ((ToonBoolean)value).Value;
+bool flag = trueValue;   // implicit ToonBoolean → bool
 ```
 
 ## ToonNumber
@@ -148,18 +150,19 @@ Represents text values.
 ToonString str = new ToonString("Hello, ToonNet!");
 
 // Implicit conversion
-ToonValue value = "Hello";  // Creates ToonString
+ToonValue value = "Hello";  // Creates ToonString (a null string becomes ToonNull.Instance)
 
 // Get value
 string textValue = ((ToonString)value).Value;
 
-// Direct implicit operator
-string text = (string)value;
+// Implicit ToonString → string
+string text = str;
 ```
 
 ## ToonObject
 
-Represents key-value pairs (like C# Dictionary or JSON object).
+Represents key-value pairs (like C# Dictionary or JSON object). The entries are stored in the `Properties`
+dictionary (`Dictionary<string, ToonValue>`), which keeps insertion order when encoding.
 
 ### Creating ToonObject
 
@@ -173,7 +176,7 @@ obj["Age"] = 30;
 obj["Email"] = "alice@example.com";
 
 // Initialize with values
-var obj = new ToonObject
+var obj2 = new ToonObject
 {
     ["Name"] = "Alice",
     ["Age"] = 30,
@@ -184,21 +187,21 @@ var obj = new ToonObject
 ### Accessing Properties
 
 ```csharp
-// Indexer access
-ToonValue nameValue = obj["Name"];
-string name = (string)nameValue;
+// Indexer access: returns null (not ToonNull) when the key is missing
+ToonValue? nameValue = obj["Name"];
+string name = ((ToonString)nameValue!).Value;
 
 // Check if property exists
-bool hasAge = obj.ContainsKey("Age");
+bool hasAge = obj.Properties.ContainsKey("Age");
 
 // Get all keys
-IEnumerable<string> keys = obj.Keys;
+IEnumerable<string> keys = obj.Properties.Keys;
 
 // Get all values
-IEnumerable<ToonValue> values = obj.Values;
+IEnumerable<ToonValue> values = obj.Properties.Values;
 
 // Iterate
-foreach (var kvp in obj)
+foreach (var kvp in obj.Properties)
 {
     string key = kvp.Key;
     ToonValue value = kvp.Value;
@@ -221,11 +224,8 @@ var person = new ToonObject
 };
 
 // Access nested value
-ToonObject address = (ToonObject)person["Address"];
-string city = (string)address["City"];
-
-// Or chain indexers
-string city = (string)person["Address"]["City"];
+ToonObject address = (ToonObject)person["Address"]!;
+string city = ((ToonString)address["City"]!).Value;
 ```
 
 ### Modifying Properties
@@ -235,18 +235,21 @@ string city = (string)person["Address"]["City"];
 obj["Age"] = 31;
 
 // Remove property
-obj.Remove("Email");
+obj.Properties.Remove("Email");
 
 // Clear all properties
-obj.Clear();
+obj.Properties.Clear();
 
 // Count properties
-int count = obj.Count;
+int count = obj.Properties.Count;
 ```
+
+Assigning `null` through the indexer is ignored; assign `ToonNull.Instance` to store a TOON `null`.
 
 ## ToonArray
 
-Represents ordered sequences of values (like C# List or JSON array).
+Represents ordered sequences of values (like C# List or JSON array). The items are stored in the `Items` list
+(`List<ToonValue>`).
 
 ### Creating ToonArray
 
@@ -259,55 +262,55 @@ arr.Add("Apple");
 arr.Add("Banana");
 arr.Add("Cherry");
 
-// Initialize with values
-var arr = new ToonArray { "Apple", "Banana", "Cherry" };
-
-// From collection
-var arr = new ToonArray(new[] { 1, 2, 3, 4, 5 });
+// From a list
+var numbers = new ToonArray(new List<ToonValue> { 1, 2, 3, 4, 5 });
 ```
+
+`ToonArray` does not implement `IEnumerable`, so collection initializers (`new ToonArray { ... }`) and LINQ work on
+`Items`, not on the array itself.
 
 ### Accessing Elements
 
 ```csharp
 // Indexer access
 ToonValue firstItem = arr[0];
-string fruit = (string)firstItem;
+string fruit = ((ToonString)firstItem).Value;
 
 // Count elements
 int count = arr.Count;
 
 // Iterate
-foreach (ToonValue item in arr)
+foreach (ToonValue item in arr.Items)
 {
     Console.WriteLine(item);
 }
 
 // LINQ
-var numbers = arr.Select(v => (int)v).Where(n => n > 10);
+var large = numbers.Items
+    .OfType<ToonNumber>()
+    .Select(n => n.Value)
+    .Where(n => n > 2);
 ```
 
 ### Nested Arrays
 
 ```csharp
-var matrix = new ToonArray
+var matrix = new ToonArray(new List<ToonValue>
 {
-    new ToonArray { 1, 2, 3 },
-    new ToonArray { 4, 5, 6 },
-    new ToonArray { 7, 8, 9 }
-};
+    new ToonArray(new List<ToonValue> { 1, 2, 3 }),
+    new ToonArray(new List<ToonValue> { 4, 5, 6 }),
+    new ToonArray(new List<ToonValue> { 7, 8, 9 })
+});
 
 // Access nested element
 ToonArray row = (ToonArray)matrix[0];
-int value = (int)row[1];  // Gets 2
-
-// Or chain indexers
-int value = (int)matrix[0][1];  // Gets 2
+double value = ((ToonNumber)row[1]).Value;  // Gets 2
 ```
 
 ### Array of Objects
 
 ```csharp
-var employees = new ToonArray
+var employees = new ToonArray(new List<ToonValue>
 {
     new ToonObject
     {
@@ -321,12 +324,16 @@ var employees = new ToonArray
         ["Department"] = "Marketing",
         ["Salary"] = 65000
     }
-};
+});
 
 // Access
 ToonObject firstEmployee = (ToonObject)employees[0];
-string name = (string)firstEmployee["Name"];
+string name = ((ToonString)firstEmployee["Name"]!).Value;
 ```
+
+The encoder writes arrays of uniform objects like this one in tabular form
+(`[2]{Name,Department,Salary}:`). Parsed tabular arrays expose their field names in `FieldNames` (`IsTabular` is
+`true`).
 
 ### Modifying Arrays
 
@@ -334,17 +341,13 @@ string name = (string)firstEmployee["Name"];
 // Add item
 arr.Add("New Item");
 
-// Insert at position
-arr.Insert(1, "Inserted Item");
+// Replace an item
+arr[0] = "Replaced";
 
-// Remove by value
-arr.Remove("Apple");
-
-// Remove at index
-arr.RemoveAt(0);
-
-// Clear all items
-arr.Clear();
+// Other list operations go through Items
+arr.Items.Insert(1, "Inserted Item");
+arr.Items.RemoveAt(0);
+arr.Items.Clear();
 ```
 
 ## ToonDocument
@@ -358,7 +361,7 @@ Name: Alice
 Age: 30
 """;
 
-ToonDocument doc = ToonDocument.Parse(toonString);
+ToonDocument doc = ToonDocument.Parse(toonString);  // optional second argument: ToonOptions
 
 // Access root value
 ToonValue root = doc.Root;
@@ -366,17 +369,24 @@ ToonValue root = doc.Root;
 // If root is an object
 if (root is ToonObject obj)
 {
-    string name = (string)obj["Name"];
-    int age = (int)obj["Age"];
+    string name = ((ToonString)obj["Name"]!).Value;
+    double age = ((ToonNumber)obj["Age"]!).Value;
 }
 
-// Convert to string
-string toonOutput = doc.ToString();
+// Or, throwing InvalidOperationException when the root has another type
+ToonObject rootObject = doc.AsObject();
+
+// Convert back to TOON text
+string toonOutput = new ToonEncoder().Encode(doc);  // ToonNet.Core.Encoding
 ```
+
+`ToonDocument.Parse` throws `ToonParseException` for invalid input. `ToonDocument.ToString()` is not overridden; use
+`ToonEncoder` to get the text.
 
 ## Implicit Operators
 
-`ToonValue` provides implicit conversion operators for common C# types:
+`ToonValue` provides implicit conversion operators from common C# types. Getting a C# value back requires a cast to
+the concrete subclass first:
 
 ```csharp
 // From C# to ToonValue
@@ -387,12 +397,15 @@ ToonValue doubleValue = 3.14;
 ToonValue decimalValue = 19.99m;
 
 // From ToonValue to C#
-int num = (int)intValue;
-string text = (string)stringValue;
-bool flag = (bool)boolValue;
-double dbl = (double)doubleValue;
-decimal dec = (decimal)decimalValue;
+long num = (long)((ToonNumber)intValue).DecimalValue!.Value;
+string text = (ToonString)stringValue;     // implicit ToonString → string
+bool flag = (ToonBoolean)boolValue;        // implicit ToonBoolean → bool
+double dbl = (ToonNumber)doubleValue;      // implicit ToonNumber → double
+decimal dec = ((ToonNumber)decimalValue).DecimalValue!.Value;
 ```
+
+To convert whole trees to and from .NET objects, use `ToonSerializer.SerializeToValue` and
+`ToonSerializer.DeserializeFromValue<T>`.
 
 ## Working with Dynamic TOON Data
 
@@ -405,7 +418,7 @@ ToonDocument doc = ToonDocument.Parse(toonInput);
 ToonValue root = doc.Root;
 
 // Inspect type
-switch (root.Type)
+switch (root.ValueType)
 {
     case ToonValueType.Object:
         var obj = (ToonObject)root;
@@ -440,7 +453,7 @@ var config = new ToonObject
         ["Port"] = 5432,
         ["Name"] = "mydb"
     },
-    ["Features"] = new ToonArray
+    ["Features"] = new ToonArray(new List<ToonValue>
     {
         new ToonObject
         {
@@ -452,56 +465,67 @@ var config = new ToonObject
             ["Name"] = "Caching",
             ["Enabled"] = false
         }
-    }
+    })
 };
 
 // Serialize to TOON
 string toon = ToonSerializer.Serialize(config);
+// AppName: MyApp
+// Version: 1.0.0
+// Database:
+//   Host: localhost
+//   Port: 5432
+//   Name: mydb
+// Features[2]{Name,Enabled}:
+//   Authentication,true
+//   Caching,false
 ```
 
 ### Query TOON Data
 
 ```csharp
 ToonDocument doc = ToonDocument.Parse(toonInput);
-ToonObject root = (ToonObject)doc.Root;
+ToonObject root = doc.AsObject();
 
 // Safe property access with null checks
-if (root.TryGetValue("User", out ToonValue userValue) && 
+if (root.Properties.TryGetValue("User", out ToonValue? userValue) &&
     userValue is ToonObject user &&
-    user.TryGetValue("Name", out ToonValue nameValue))
+    user.Properties.TryGetValue("Name", out ToonValue? nameValue) &&
+    nameValue is ToonString userName)
 {
-    string userName = (string)nameValue;
-    Console.WriteLine($"User: {userName}");
+    Console.WriteLine($"User: {userName.Value}");
 }
 
 // LINQ queries on arrays
 if (root["Employees"] is ToonArray employees)
 {
-    var engineeringEmployees = employees
-        .Cast<ToonObject>()
-        .Where(emp => (string)emp["Department"] == "Engineering")
-        .Select(emp => (string)emp["Name"])
+    var engineeringEmployees = employees.Items
+        .OfType<ToonObject>()
+        .Where(emp => emp["Department"] is ToonString { Value: "Engineering" })
+        .Select(emp => ((ToonString)emp["Name"]!).Value)
         .ToList();
 }
 ```
 
 ## Type Conversion Helpers
 
+ToonNet does not ship helpers like these; you can add your own extension methods:
+
 ```csharp
 // Safe conversions
 public static class ToonValueExtensions
 {
-    public static string AsString(this ToonValue value, string defaultValue = "")
+    public static string AsString(this ToonValue? value, string defaultValue = "")
     {
         return value is ToonString str ? str.Value : defaultValue;
     }
     
-    public static int AsInt(this ToonValue value, int defaultValue = 0)
+    public static int AsInt(this ToonValue? value, int defaultValue = 0)
     {
-        return value is ToonNumber num ? num.AsInt32() : defaultValue;
+        return value is ToonNumber num ? (int)num.Value : defaultValue;
     }
     
-    public static bool AsBool(this ToonValue value, bool defaultValue = false)
+    public static bool AsBool(this ToonValue? value, bool defaultValue = false)
     {
         return value is ToonBoolean b ? b.Value : defaultValue;
     }
@@ -519,15 +543,16 @@ bool isActive = obj["IsActive"].AsBool(false);
 Use C# pattern matching with TOON types:
 
 ```csharp
-ToonValue value = obj["Data"];
+ToonValue? value = obj["Data"];
 
 string result = value switch
 {
+    null => "Missing",
     ToonNull => "No data",
     ToonString str => $"Text: {str.Value}",
-    ToonNumber num => $"Number: {num.AsDouble()}",
+    ToonNumber num => $"Number: {num.Value}",
     ToonBoolean b => $"Boolean: {b.Value}",
-    ToonObject o => $"Object with {o.Count} properties",
+    ToonObject o => $"Object with {o.Properties.Count} properties",
     ToonArray arr => $"Array with {arr.Count} items",
     _ => "Unknown type"
 };
@@ -536,20 +561,20 @@ string result = value switch
 ## Best Practices
 
 1. **Use strong types**: Prefer `ToonSerializer.Deserialize<T>()` over manual `ToonValue` manipulation
-2. **Check types before casting**: Use `is` or `Type` property
-3. **Handle nulls**: Check for `ToonNull` before accessing properties
-4. **Use TryGetValue**: For safe property access on `ToonObject`
-5. **Prefer implicit operators**: Cleaner syntax for conversions
+2. **Check types before casting**: Use `is` or the `ValueType` property
+3. **Handle nulls**: The `ToonObject` indexer returns `null` for missing keys; `ToonNull` is an explicit TOON `null`
+4. **Use TryGetValue**: `obj.Properties.TryGetValue(...)` for safe property access on `ToonObject`
+5. **Prefer implicit operators**: Cleaner syntax for building values
 
 ```csharp
 // Good: Type-safe deserialization
-Person person = ToonSerializer.Deserialize<Person>(toonInput);
+Person person = ToonSerializer.Deserialize<Person>(toonInput)!;
 
 // OK: Manual manipulation when needed
-ToonObject obj = (ToonObject)ToonDocument.Parse(toonInput).Root;
-if (obj.TryGetValue("Name", out ToonValue nameValue))
+ToonObject obj = ToonDocument.Parse(toonInput).AsObject();
+if (obj.Properties.TryGetValue("Name", out ToonValue? nameValue) && nameValue is ToonString name)
 {
-    string name = (string)nameValue;
+    Console.WriteLine(name.Value);
 }
 ```
 

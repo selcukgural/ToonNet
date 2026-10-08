@@ -4,9 +4,11 @@ Optimize ToonNet serialization and deserialization performance.
 
 ## Key Performance Features
 
-1. **Expression Trees**: ToonNet uses compiled expression trees, not reflection
-2. **Zero Allocation**: Minimal memory allocations during serialization
-3. **Streaming**: Support for streaming large datasets
+1. **Cached metadata and compiled accessors**: Type metadata is read with reflection once per type and cached;
+   property getters and setters are compiled expression trees
+2. **Source generator (optional)**: [`ToonNet.SourceGenerators`](source-generators) generates
+   `Serialize`/`Deserialize` methods at compile time
+3. **Streaming**: Write and read large datasets one document at a time
 4. **Reusable Options**: Cache `ToonSerializerOptions` instances
 
 ## Best Practices
@@ -17,14 +19,14 @@ Optimize ToonNet serialization and deserialization performance.
 // ❌ Bad: Creating options every time
 public string Serialize(User user)
 {
-    var options = new ToonSerializerOptions { WriteIndented = true };
+    var options = new ToonSerializerOptions { PropertyNamingPolicy = PropertyNamingPolicy.CamelCase };
     return ToonSerializer.Serialize(user, options);
 }
 
 // ✅ Good: Reuse options
 private static readonly ToonSerializerOptions _options = new()
 {
-    WriteIndented = true
+    PropertyNamingPolicy = PropertyNamingPolicy.CamelCase
 };
 
 public string Serialize(User user)
@@ -45,7 +47,7 @@ instance concurrently across threads.
 var allUsers = await dbContext.Users.ToListAsync();  // OOM risk with millions of records
 await ToonSerializer.SerializeCollectionToFileAsync(allUsers, "users.toon");
 
-// ✅ Good: Stream incrementally (constant memory usage)
+// ✅ Good: Stream incrementally (memory bounded by the batch, not the dataset)
 await ToonSerializer.SerializeStreamAsync(
     dbContext.Users.AsAsyncEnumerable(),
     "users.toon"
@@ -60,10 +62,12 @@ await ToonSerializer.SerializeStreamAsync(
 );
 ```
 
-**Performance gains:**
-- **Memory:** O(1) constant vs O(n) linear - 99% reduction for large datasets
-- **Throughput:** 2-3x faster with batched writes
-- **Scalability:** No OOM risk regardless of dataset size
+**What this changes:**
+- **Memory:** Only the current batch of serialized documents is buffered (`BatchSize`, default 50), instead of the
+  whole collection
+- **Throughput:** Larger batches mean fewer write calls; measure the right size for your item size
+- **Format:** Documents are separated by a blank line (or `---` with `ToonMultiDocumentWriteOptions.ExplicitSeparator`),
+  which `DeserializeStreamAsync` reads back one by one
 
 **Read back efficiently:**
 ```csharp
@@ -73,7 +77,7 @@ var users = ToonSerializer.Deserialize<List<User>>(File.ReadAllText("users.toon"
 // ✅ Good: Stream incrementally
 await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users.toon"))
 {
-    await ProcessUserAsync(user);  // Only one user in memory at a time
+    await ProcessUserAsync(user);  // Documents are read and deserialized one at a time
 }
 ```
 
@@ -81,40 +85,30 @@ await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users.to
 
 ```csharp
 // ✅ Good: Async for I/O operations
-using var stream = File.Create("data.toon");
-await ToonSerializer.SerializeAsync(stream, data);
+await ToonSerializer.SerializeToFileAsync(data, "data.toon");
+
+await using var stream = File.Create("data.toon");
+await ToonSerializer.SerializeToStreamAsync(data, stream);
 ```
 
-### 4. Minimize Allocations
+### 4. Use the Source Generator for Hot Paths
 
-```csharp
-// ✅ Use pooled memory for streams
-using var memoryStream = new MemoryStream();
-await ToonSerializer.SerializeAsync(memoryStream, data);
-byte[] bytes = memoryStream.ToArray();
-```
+For types serialized very often, `[ToonSerializable]` with
+[`ToonNet.SourceGenerators`](source-generators) converts supported property types without the reflection-based
+metadata path (other types, and options with converters, fall back to `ToonSerializer`). The generated code
+produces the same TOON as `ToonSerializer`; measure whether it helps for your types.
 
 ## Performance Comparison
 
-ToonNet vs System.Text.Json:
+The repository's benchmarks (`benchmark/ToonNet.Benchmarks`) compare generated and reflection-based
+serialization, the encoder, the parser and streaming. They do not compare ToonNet with System.Text.Json.
+The recorded results predate the current encoder and parser, so run the benchmarks on your own hardware for
+current numbers (`Program.cs` selects which benchmark class runs, e.g. `StreamingSerializationBenchmarks`):
 
-| Operation | ToonNet | System.Text.Json | Difference |
-|-----------|---------|------------------|------------|
-| Serialize (small) | 10-100x faster | Baseline | Expression trees vs reflection |
-| Deserialize (small) | 10-100x faster | Baseline | Expression trees vs reflection |
-| Memory (general) | Lower | Baseline | Fewer allocations |
-| **Streaming (large datasets)** | **O(1) memory** | **O(n) memory** | **99% reduction** |
-| **Throughput (batched)** | **2-3x faster** | **Baseline** | **Optimized I/O** |
-
-### Streaming Performance (1M Records)
-
-| Approach | Memory Usage | Time | Throughput |
-|----------|--------------|------|------------|
-| **SerializeCollectionToFileAsync** (materialize all) | ~2GB | 30s | Baseline |
-| **SerializeStreamAsync** (default batch=50) | ~50MB | 12s | 2.5x faster |
-| **SerializeStreamAsync** (batch=100) | ~60MB | 10s | 3x faster |
-
-**Key takeaway:** Streaming provides constant memory usage regardless of dataset size, with significant speed improvements from batched writes.
+```bash
+cd benchmark/ToonNet.Benchmarks
+dotnet run -c Release
+```
 
 ## Benchmarking
 
@@ -216,10 +210,8 @@ class Program
 }
 ```
 
-**Expected Results (100K items):**
-- Materialized: ~200MB allocated, 15s
-- Incremental: ~5MB allocated, 6s (2.5x faster, 97.5% less memory)
-- Batched: ~6MB allocated, 5s (3x faster)
+Compare the `Allocated` column for the materialized and streaming variants to see how much memory streaming
+saves for your item type.
 
 ## See Also
 

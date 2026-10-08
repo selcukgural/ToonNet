@@ -10,7 +10,7 @@ dotnet add package ToonNet.Extensions.Yaml
 
 ## ToonYamlConvert Class
 
-Static utility class for YAML ↔ TOON conversion.
+Static utility class for YAML ↔ TOON conversion. Its methods work on strings.
 
 ### YAML to TOON Conversion
 
@@ -25,12 +25,16 @@ address:
   zip: 10001
 """;
 
-// Convert to ToonDocument
-ToonDocument toonDoc = ToonYamlConvert.FromYaml(yaml);
-
-// Convert to TOON string
-string toonString = toonDoc.ToString();
+string toonString = ToonYamlConvert.FromYaml(yaml);
+// Output:
+// name: Alice
+// age: 30
+// address:
+//   city: New York
+//   zip: 10001
 ```
+
+`FromYaml` also takes `ToonOptions` (encoding options and the `MaxDepth` limit described below).
 
 ### TOON to YAML Conversion
 
@@ -43,20 +47,20 @@ address:
   zip: 10001
 """;
 
-ToonDocument toonDoc = ToonDocument.Parse(toonString);
-string yaml = ToonYamlConvert.ToYaml(toonDoc);
+string yaml = ToonYamlConvert.ToYaml(toonString);
 ```
 
 ## ToonYamlConverter Class
 
-Bidirectional converter:
+Bidirectional converter between YAML and `ToonDocument` / `ToonValue`:
 
 ```csharp
+using ToonNet.Core.Models;
 using ToonNet.Extensions.Yaml;
 
 // YAML → TOON
-string yaml = File.ReadAllText("config.yaml");
-ToonDocument toonDoc = ToonYamlConverter.FromYaml(yaml);
+string yamlInput = File.ReadAllText("config.yaml");
+ToonDocument toonDoc = ToonYamlConverter.FromYaml(yamlInput);
 
 // TOON → YAML
 string toonInput = """
@@ -87,8 +91,7 @@ string yaml = ToonYamlConverter.ToYaml(doc);
 string yaml = File.ReadAllText("appsettings.yaml");
 
 // Convert to TOON
-ToonDocument toonDoc = ToonYamlConvert.FromYaml(yaml);
-string toonString = toonDoc.ToString();
+string toonString = ToonYamlConvert.FromYaml(yaml);
 
 // Save as TOON config
 File.WriteAllText("appsettings.toon", toonString);
@@ -108,21 +111,25 @@ features:
 """;
 
 // To TOON
-ToonDocument toonDoc = ToonYamlConvert.FromYaml(originalYaml);
+string toon = ToonYamlConvert.FromYaml(originalYaml);
+// app:
+//   name: MyApp
+//   version: 1.0.0
+// features[2]: authentication,caching
 
 // Back to YAML
-string convertedYaml = ToonYamlConvert.ToYaml(toonDoc);
+string convertedYaml = ToonYamlConvert.ToYaml(toon);
 ```
 
 ### Docker Compose to TOON
 
 ```csharp
 string dockerCompose = File.ReadAllText("docker-compose.yaml");
-ToonDocument toonDoc = ToonYamlConvert.FromYaml(dockerCompose);
+ToonDocument toonDoc = ToonYamlConverter.FromYaml(dockerCompose);
 
 // Now work with TOON API
-var services = (ToonObject)toonDoc.Root["services"];
-foreach (var service in services)
+var services = (ToonObject)toonDoc.AsObject()["services"]!;
+foreach (var service in services.Properties)
 {
     Console.WriteLine($"Service: {service.Key}");
 }
@@ -132,10 +139,20 @@ foreach (var service in services)
 
 | Method | Description |
 |--------|-------------|
-| `ToonYamlConvert.FromYaml(string)` | YAML → ToonDocument |
-| `ToonYamlConvert.ToYaml(ToonDocument)` | ToonDocument → YAML |
+| `ToonYamlConvert.FromYaml(string, ToonOptions?)` | YAML string → TOON string |
+| `ToonYamlConvert.ToYaml(string)` | TOON string → YAML string |
 | `ToonYamlConverter.FromYaml(string)` | YAML string → ToonDocument |
+| `ToonYamlConverter.FromYaml(string, ToonOptions?)` | Same, with a custom `MaxDepth` |
 | `ToonYamlConverter.ToYaml(ToonDocument)` | ToonDocument → YAML string |
+| `ToonYamlConverter.ToYaml(ToonValue)` | ToonValue → YAML string |
+
+## Conversion Notes
+
+- Only the first document of a multi-document YAML stream (`---`) is converted.
+- Scalars are typed by their text: lowercase `true`/`false` (also `yes`/`no`, `on`/`off`), `null`/`~`/empty
+  and anything .NET can parse as a number become TOON booleans, nulls and numbers; everything else is a string.
+  Quoting does not change this (`"42"` becomes a number), and the number check is lenient (`'1,000'` becomes `1000`).
+- Anchors and aliases are expanded into copies; comments are not preserved.
 
 ## Use Cases
 
