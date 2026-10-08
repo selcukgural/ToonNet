@@ -71,6 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expand to more than `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes. New `FromYaml(string, ToonOptions?)` overload.
 
 ### Fixed
+- **ToonNet.Core:** `SerializeStreamAsync` and `SerializeCollectionToStreamAsync` now write a real blank line (or the
+  explicit `---` separator on its own line) between documents, so `DeserializeStreamAsync` reads them back one by one.
+  The separator is always `\n`, independent of the platform line ending.
 - **ToonNet.AspNetCore.Mvc:** The input formatter now decodes the body with the request charset (UTF-16 bodies were read as UTF-8),
   and the output formatter writes with the negotiated encoding so the body matches the `Content-Type` charset.
 - **ToonNet.AspNetCore.Mvc:** The input formatter only reports TOON errors to model state, keyed by the model name; other

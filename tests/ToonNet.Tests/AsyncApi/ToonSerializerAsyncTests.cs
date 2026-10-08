@@ -300,6 +300,36 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
+    public async Task SerializeCollectionToStreamAsync_MultipleObjects_RoundTrips()
+    {
+        // Arrange
+        var users = new[]
+        {
+            new TestUser { Name = "Alice", Age = 25, Email = "alice@test.com" },
+            new TestUser { Name = "Bob", Age = 30, Email = "bob@test.com" },
+            new TestUser { Name = "Charlie", Age = 35, Email = "charlie@test.com" }
+        };
+        using var stream = new MemoryStream();
+
+        // Act
+        await ToonSerializer.SerializeCollectionToStreamAsync(users, stream, _options);
+
+        // Assert
+        var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Equal(2, content.Split("\n\n").Length - 1);
+
+        stream.Position = 0;
+        using var reader = new StreamReader(stream);
+        var readUsers = new List<TestUser?>();
+        await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(reader, _options))
+        {
+            readUsers.Add(user);
+        }
+
+        Assert.Equal(["Alice", "Bob", "Charlie"], readUsers.Select(u => u!.Name));
+    }
+
+    [Fact]
     public async Task AsyncOperationsWithCancellation_WhenCancelled_ThrowsOperationCanceledException()
     {
         // Arrange

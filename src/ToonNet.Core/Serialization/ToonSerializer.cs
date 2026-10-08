@@ -22,6 +22,9 @@ namespace ToonNet.Core.Serialization;
 /// </remarks>
 public static partial class ToonSerializer
 {
+    /// <summary>Ends the previous document's last line and inserts one blank line.</summary>
+    private const string BlankLineDocumentSeparator = "\n\n";
+
     #region public serialization methods
 
     /// <summary>
@@ -221,8 +224,7 @@ public static partial class ToonSerializer
             // Add a blank line separator between objects (but not before the first)
             if (!isFirst)
             {
-                await writer.WriteLineAsync().ConfigureAwait(false); // End previous object
-                await writer.WriteLineAsync().ConfigureAwait(false); // Add a blank line
+                await writer.WriteAsync(BlankLineDocumentSeparator.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
@@ -267,7 +269,7 @@ public static partial class ToonSerializer
             // Add a blank line separator between objects (but not before the first)
             if (!isFirst)
             {
-                await writer.WriteLineAsync().ConfigureAwait(false); // End previous object
+                await writer.WriteAsync(BlankLineDocumentSeparator.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
@@ -407,16 +409,17 @@ public static partial class ToonSerializer
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Add a separator between documents
+            // Add a separator between documents. Encoded documents carry no trailing newline,
+            // so the separator has to terminate the previous document's last line itself.
             if (!isFirst)
             {
                 if (writeOptions.Mode == ToonMultiDocumentSeparatorMode.ExplicitSeparator)
                 {
-                    batch.AppendLine(writeOptions.DocumentSeparator);
+                    batch.Append('\n').Append(writeOptions.DocumentSeparator).Append('\n');
                 }
                 else
                 {
-                    batch.AppendLine(); // Blank line separator
+                    batch.Append(BlankLineDocumentSeparator);
                 }
             }
 
