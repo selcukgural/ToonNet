@@ -13,7 +13,7 @@ public static class ToonConfigurationExtensions
     ///     Adds the TOON configuration provider at <paramref name="path"/> to <paramref name="builder"/>.
     /// </summary>
     /// <param name="builder">The <see cref="IConfigurationBuilder"/> to add to.</param>
-    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>.</param>
+    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>, or an absolute path.</param>
     /// <returns>The <see cref="IConfigurationBuilder"/>.</returns>
     public static IConfigurationBuilder AddToonFile(this IConfigurationBuilder builder, string path)
     {
@@ -24,7 +24,7 @@ public static class ToonConfigurationExtensions
     ///     Adds the TOON configuration provider at <paramref name="path"/> to <paramref name="builder"/>.
     /// </summary>
     /// <param name="builder">The <see cref="IConfigurationBuilder"/> to add to.</param>
-    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>.</param>
+    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>, or an absolute path.</param>
     /// <param name="optional">Whether the file is optional.</param>
     /// <returns>The <see cref="IConfigurationBuilder"/>.</returns>
     public static IConfigurationBuilder AddToonFile(this IConfigurationBuilder builder, string path, bool optional)
@@ -36,7 +36,7 @@ public static class ToonConfigurationExtensions
     ///     Adds the TOON configuration provider at <paramref name="path"/> to <paramref name="builder"/>.
     /// </summary>
     /// <param name="builder">The <see cref="IConfigurationBuilder"/> to add to.</param>
-    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>.</param>
+    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>, or an absolute path.</param>
     /// <param name="optional">Whether the file is optional.</param>
     /// <param name="reloadOnChange">Whether the configuration should be reloaded if the file changes.</param>
     /// <param name="options">Options for parsing the TOON file.</param>
@@ -51,7 +51,7 @@ public static class ToonConfigurationExtensions
     /// </summary>
     /// <param name="builder">The <see cref="IConfigurationBuilder"/> to add to.</param>
     /// <param name="provider">The <see cref="IFileProvider"/> to use to access the file.</param>
-    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>.</param>
+    /// <param name="path">Path relative to the base path stored in <see cref="IConfigurationBuilder.Properties"/> of <paramref name="builder"/>, or an absolute path.</param>
     /// <param name="optional">Whether the file is optional.</param>
     /// <param name="reloadOnChange">Whether the configuration should be reloaded if the file changes.</param>
     /// <param name="options">Options for parsing the TOON file.</param>
@@ -61,13 +61,18 @@ public static class ToonConfigurationExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentException.ThrowIfNullOrEmpty(path);
 
-        return builder.Add(new ToonConfigurationSource
+        var source = new ToonConfigurationSource
         {
             FileProvider = provider,
             Path = path,
             Optional = optional,
             ReloadOnChange = reloadOnChange,
             Options = options
-        });
+        };
+
+        // Like AddJsonFile: an absolute path gets a file provider for its own directory instead of the base path.
+        source.ResolveFileProvider();
+
+        return builder.Add(source);
     }
 }

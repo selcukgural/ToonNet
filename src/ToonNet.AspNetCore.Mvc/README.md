@@ -48,7 +48,7 @@ using ToonNet.AspNetCore.Mvc.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Optional: registers IOptions<ToonSerializerOptions>, which ToonResult uses when no options are passed
+// Optional: configures the IOptions<ToonSerializerOptions> shared by the formatters and ToonResult
 builder.Services.AddToonNet();
 
 // Add MVC with TOON formatters
@@ -191,7 +191,9 @@ builder.Services.AddControllers()
 ```
 
 The formatters use these options for both reading and writing (with `CamelCase`, request bodies must use camelCase
-keys; unknown keys are ignored). They do not read the options registered with `AddToonNet`.
+keys; unknown keys are ignored). The delegate configures the application's `IOptions<ToonSerializerOptions>`, so the
+formatters, `ToonResult` and `AddToonNet` all share one set of options; settings made with `AddToonNet` apply to the
+formatters too.
 
 ### Request Size and Depth Limits
 

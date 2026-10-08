@@ -78,8 +78,9 @@ public IResult GetUser(int id)
 app.MapGet("/users/{id}", (int id) => Results.Extensions.Toon(GetUserFromDatabase(id)));
 ```
 
-`ToonResult` uses the options passed to it, otherwise the `ToonSerializerOptions` registered with `AddToonNet`, otherwise
-the defaults. The MVC output formatter uses the options passed to `AddToonFormatters` instead.
+`ToonResult` uses the options passed to it, otherwise the application's `IOptions<ToonSerializerOptions>`. The MVC
+formatters use the same `IOptions<ToonSerializerOptions>`: `AddToonNet(...)`, `services.Configure<ToonSerializerOptions>(...)`
+and the delegate passed to `AddToonFormatters` all configure that one instance.
 
 ## Content Negotiation
 

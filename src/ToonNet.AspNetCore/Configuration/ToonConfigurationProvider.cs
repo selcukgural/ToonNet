@@ -1,6 +1,6 @@
-using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using ToonNet.Core;
+using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 using ToonNet.Core.Parsing;
 
@@ -129,7 +129,8 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
                 break;
                 
             case ToonNumber num:
-                data[key] = num.Value.ToString(CultureInfo.InvariantCulture); // Or use invariant culture if needed
+                // Canonical TOON text with the exact value (not via double, which would round large integers)
+                data[key] = ToonNumberFormatter.Format(num) ?? string.Empty;
                 break;
                 
             case ToonBoolean boolean:

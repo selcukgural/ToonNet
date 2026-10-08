@@ -350,8 +350,9 @@ builder.Configuration.AddToonFile("legacy.toon", optional: true, reloadOnChange:
 ```
 
 Nested objects become `Section:Key` paths and array items become index keys (`Items:0`, `Items:1`). Values are stored as
-strings: booleans become `True`/`False`, and numbers are converted through `double`, so `1.0` becomes `1` and integers
-beyond 2^53 lose precision; quote such values to keep them as written. A file that is not valid TOON throws a
+strings: booleans become `True`/`False`, and numbers keep their exact value in canonical TOON form (spec §2), so
+`12345678901234567890` stays as written while `1.0` becomes `1` and `1.50` becomes `1.5`; quote a value (`Version: "1.0"`)
+to keep its text exactly. `AddToonFile` accepts relative and absolute paths. A file that is not valid TOON throws a
 `FormatException`.
 
 ---

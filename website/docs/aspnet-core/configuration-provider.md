@@ -43,8 +43,9 @@ Nested objects become `Section:Key` paths and array items become index keys (`Fe
 root object is read (a root array or primitive yields no keys). Strict mode applies by default (pass a `ToonOptions`
 as the last argument of `AddToonFile` to change it), and a file that is not valid TOON throws a `FormatException`.
 
-Values are stored as strings: booleans become `True`/`False`, and numbers are converted through `double`, so `1.0`
-becomes `1` and integers beyond 2^53 lose precision. Quote such values (`Version: "1.0"`) to keep them as written.
+Values are stored as strings: booleans become `True`/`False`, and numbers keep their exact value in canonical TOON
+form (spec §2): `12345678901234567890` stays as written, while `1.0` becomes `1` and `1.50` becomes `1.5`. Quote a value
+(`Version: "1.0"`) to keep its text exactly. `AddToonFile` accepts both relative and absolute paths.
 
 ## Reading Configuration
 

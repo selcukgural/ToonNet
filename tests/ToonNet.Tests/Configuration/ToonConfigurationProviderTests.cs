@@ -98,4 +98,44 @@ public class ToonConfigurationProviderTests
                 File.Delete(fileName);
         }
     }
+
+    [Fact]
+    public void AddToonFile_AbsolutePath_IsFound()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "toon_config_" + Guid.NewGuid() + ".toon");
+        File.WriteAllText(path, "Name: absolute");
+
+        try
+        {
+            var config = new ConfigurationBuilder().AddToonFile(path).Build();
+
+            Assert.Equal("absolute", config["Name"]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Numbers_KeepTheirExactValue_InCanonicalForm()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "toon_config_" + Guid.NewGuid() + ".toon");
+        File.WriteAllText(path, "Big: 12345678901234567890\nPrice: 1299.99\nScale: 1.50\nTiny: 0.000001");
+
+        try
+        {
+            var config = new ConfigurationBuilder().AddToonFile(path).Build();
+
+            Assert.Equal("12345678901234567890", config["Big"]);
+            Assert.Equal(12345678901234567890UL, config.GetValue<ulong>("Big"));
+            Assert.Equal("1299.99", config["Price"]);
+            Assert.Equal("1.5", config["Scale"]); // canonical form (spec §2), same value
+            Assert.Equal(0.000001m, config.GetValue<decimal>("Tiny"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

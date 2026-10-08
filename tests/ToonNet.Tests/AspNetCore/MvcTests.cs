@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.DependencyInjection;
+using ToonNet.AspNetCore.DependencyInjection;
+using ToonNet.AspNetCore.Mvc.DependencyInjection;
 using ToonNet.AspNetCore.Mvc.Formatters;
 using ToonNet.AspNetCore.Mvc.Http;
 using ToonNet.Core.Serialization;
@@ -203,6 +205,46 @@ public class MvcTests
 
         var content = System.Text.Encoding.Unicode.GetString(stream.ToArray()).TrimStart('\uFEFF');
         Assert.Contains("Name: Çağrı", content);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AddToonFormatters_UsesTheSharedSerializerOptions(bool configureThroughAddToonNet)
+    {
+        var services = new ServiceCollection();
+
+        if (configureThroughAddToonNet)
+        {
+            services.AddToonNet(configureToonOptions: null, configureSerializerOptions: o => o.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase);
+            services.AddMvc().AddToonFormatters();
+        }
+        else
+        {
+            services.AddMvc().AddToonFormatters(o => o.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase);
+        }
+
+        await using var provider = services.BuildServiceProvider();
+        var mvcOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Mvc.MvcOptions>>().Value;
+        var formatter = Assert.Single(mvcOptions.OutputFormatters.OfType<ToonOutputFormatter>());
+        Assert.Single(mvcOptions.InputFormatters.OfType<ToonInputFormatter>());
+
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
+        var stream = new MemoryStream();
+        httpContext.Response.Body = stream;
+        var model = new TestModel { Name = "Shared", Age = 1 };
+
+        await formatter.WriteAsync(new OutputFormatterWriteContext(httpContext, (s, e) => new StreamWriter(s, e, leaveOpen: true), typeof(TestModel), model));
+        // The test writer factory (StreamWriter with Encoding.UTF8) adds a BOM; MVC's own writer does not
+        var formatterOutput = System.Text.Encoding.UTF8.GetString(stream.ToArray()).TrimStart('\uFEFF');
+
+        // ToonResult resolves the same options from DI
+        var resultStream = new MemoryStream();
+        httpContext.Response.Body = resultStream;
+        await new ToonResult(model).ExecuteAsync(httpContext);
+
+        Assert.Equal("name: Shared\nage: 1", formatterOutput);
+        Assert.Equal(formatterOutput, System.Text.Encoding.UTF8.GetString(resultStream.ToArray()));
     }
 
     private class TestModel
