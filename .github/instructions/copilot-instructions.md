@@ -4,6 +4,24 @@ You are my coding assistant. Produce clean, maintainable, production-grade code.
 - Always respond in Türkçe.
 - Code comments and XML documentation must be in English.
 
+# Project Context (ToonNet)
+- ToonNet is a .NET library for TOON (Token-Oriented Object Notation), implementing TOON spec v3.3.2.
+- Layout:
+  - `src/`: ToonNet.Core, ToonNet.Extensions.Json, ToonNet.Extensions.Yaml, ToonNet.AspNetCore, ToonNet.AspNetCore.Mvc (all `net8.0`)
+    and ToonNet.SourceGenerators (`netstandard2.0`, must not reference ToonNet.Core).
+  - `tests/`: ToonNet.Tests (`net8.0`), ToonNet.SourceGenerators.Tests (`net8.0;net10.0`).
+  - `benchmark/ToonNet.Benchmarks`, `demo/ToonNet.Demo`, `docs/`, `website/` (Docusaurus).
+- Solution file: `ToonNet.slnx` (requires .NET SDK 9.0.200+; CI uses the .NET 8 and 10 SDKs).
+- Commands:
+  - Build: `dotnet build ToonNet.slnx --configuration Release`
+  - Test: `dotnet test ToonNet.slnx`
+  - Docs site: `cd website && npm ci && npm run build`
+- CI: `.github/workflows/ci.yml` (build, test, pack, docs build on pushes and pull requests to `master`);
+  `.github/workflows/docs.yml` deploys the docs site; `.github/workflows/publish.yml` is the manual NuGet publish.
+- Spec conformance: official fixtures run in `tests/ToonNet.Tests/SpecCompliance`; failing cases are listed in
+  `KnownNonConformance.txt`. Encoder/parser changes must keep the fixtures passing.
+- User-visible changes go into `CHANGELOG.md` under `[Unreleased]`.
+
 # Build & Tests (REALISTIC, BUT STRICT)
 - If the environment allows, build and ensure there are no errors/warnings.
 - If you cannot build/run tests here, explicitly say so and provide exact commands for me to run locally/CI.
@@ -70,6 +88,9 @@ You are my coding assistant. Produce clean, maintainable, production-grade code.
 - Do not log sensitive information (passwords, tokens, API keys, PII).
 
 # Result Pattern (STANDARD: Result<T> with ProblemDetailsLike Error)  [OPTION A]
+- Scope: application-style code only. ToonNet's library API reports failures with exceptions derived from
+  `ToonException` (`ToonParseException`, `ToonEncodingException`, `ToonSerializationException`); keep that
+  convention in `src/` and do not introduce Result<T> there.
 - Prefer Result<T> for expected failures (validation, not-found, conflict, business-rule failures).
 - Exceptions are only for truly exceptional/unrecoverable situations.
 - Do not mix Result<T> and exceptions for expected failures within the same layer.
