@@ -37,6 +37,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - List items under a bare `key:` require an `key[N]:` header in strict mode (with a hint in the error message);
     non-strict mode still reads them as an array.
   - Removed the internal `ToonLexer` and token types.
+- **ToonNet.Core (serializer):** Reworked type handling (see the type mapping in `type-system.md`):
+  - Objects use their runtime type (`object`-typed properties and `Serialize<object>` were empty); base-class
+    properties come first; `Deserialize<object>` returns dictionaries/lists instead of an empty object.
+  - Positional records and other types without a parameterless constructor, structs (setters were lost on a boxed copy),
+    `HashSet`/`ISet`/`IReadOnlyList`/immutable collections, and dictionaries with non-string keys are supported.
+  - Integer targets reject fractions and out-of-range values instead of truncating/clamping; `long`/`decimal` read the
+    exact value; `DateTime` keeps its `Kind` and parsing is culture-invariant; `DateOnly`, `TimeOnly`, `TimeSpan`,
+    `char`, `Uri`, `BigInteger`, `Int128`, `Half` are supported.
+  - `[ToonPropertyOrder]`, `[ToonConverter]` and `[ToonConstructor]` are honoured (previously only by the source generator).
+  - Circular references throw with the property path; type errors are `ToonSerializationException` with a path like
+    `$.Items[2].Price` (previously `ToonParseException` at "line 0").
+  - Indexer properties no longer crash serialization; `IgnoreNullValues` keeps nulls inside arrays.
+  - `IncludeTypeInformation` and `PublicOnly` had no effect and are now `[Obsolete]`.
+- **Docs:** The spec conformance page now documents the implementation-defined behaviour the spec requires
+  (numeric domain and out-of-range policy, tab policy, host type mapping, non-strict relaxations).
 - **ToonNet.Core (breaking):** `ToonOptions.Delimiter` only accepts comma, tab or pipe (spec §11); tab was rejected
   before and other characters produced output no TOON decoder can read. Tab and pipe are declared in headers.
 - **ToonNet.Core:** `ToonNumber` keeps the exact value of `long`, `ulong` and `decimal` numbers (`DecimalValue`), so

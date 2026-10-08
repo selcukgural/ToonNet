@@ -6,6 +6,41 @@ Understanding the TOON value type system and how to work with `ToonValue` and it
 
 ToonNet provides a strongly-typed object model for representing TOON values. The `ToonValue` class hierarchy mirrors the TOON specification types.
 
+## .NET Type Mapping
+
+`ToonSerializer` maps .NET values to the TOON (JSON) data model as follows. This is the host-type normalization
+that TOON spec §3 requires implementations to document.
+
+| .NET type | TOON value | Notes |
+|-----------|------------|-------|
+| `string`, `char` | string | |
+| `bool` | `true` / `false` | |
+| `byte` … `ulong`, `decimal` | number | Exact value kept |
+| `float`, `double`, `Half` | number | Shortest round-trip form; NaN and ±Infinity become `null` |
+| `BigInteger`, `Int128`, `UInt128` | number | Written as a quoted string when outside the `decimal` range (lossless) |
+| `DateTime`, `DateTimeOffset` | string | ISO 8601 round-trip format (`O`); `DateTimeKind` is preserved |
+| `DateOnly` / `TimeOnly` | string | `yyyy-MM-dd` / `HH:mm:ss[.fffffff]` |
+| `TimeSpan` | string | Constant format `[-][d.]hh:mm:ss[.fffffff]` |
+| `Guid`, `Uri` | string | |
+| enum | string | Member name (flags: `A, B`); names are matched case-insensitively and numbers are accepted when reading |
+| `null` | `null` | Omitted from objects when `IgnoreNullValues` is set; always kept in arrays |
+| arrays, `IEnumerable<T>` | array | Readable into arrays, `List<T>`, `IReadOnlyList<T>`, `HashSet<T>`, `ISet<T>`, immutable collections and other collections with a parameterless constructor |
+| dictionaries | object | Keys formatted with the invariant culture; readable into string, numeric, enum, `Guid` (and other parsable) keys |
+| other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the runtime type is used |
+| `ToonValue` | as is | Useful for dynamic content |
+
+Reading into `object` produces `Dictionary<string, object?>`, `List<object?>`, `string`, `bool`, `long` (integers),
+`decimal` (other exact numbers) or `double`.
+
+When reading:
+
+- Integer targets reject fractions (`3.9`) and out-of-range values with a `ToonSerializationException` instead of truncating.
+- Quoted numbers are accepted for numeric targets, and unquoted numbers or booleans for `string` targets.
+- Types without a parameterless constructor (for example positional records) are created through their public constructor
+  with the most parameters, or the one marked `[ToonConstructor]`; parameters are matched to properties by name.
+- Errors include the path of the failing value, for example `$.Items[2].Price`.
+- Serializing an object graph with a cycle throws a `ToonEncodingException` instead of recursing until `MaxDepth`.
+
 ## ToonValue Hierarchy
 
 ```
@@ -82,31 +117,27 @@ bool boolValue = ((ToonBoolean)value).Value;
 
 ## ToonNumber
 
-Represents numeric values (integers and floating-point).
+Represents a number. Every number has a `double` `Value`; numbers created from integers or `decimal`, and numbers
+parsed from TOON that fit in a `decimal`, also keep their exact value in `DecimalValue`.
 
 ```csharp
-// Create from different numeric types
-ToonNumber intNum = new ToonNumber(42);
-ToonNumber longNum = new ToonNumber(9999999999L);
-ToonNumber doubleNum = new ToonNumber(3.14159);
-ToonNumber decimalNum = new ToonNumber(19.99m);
+ToonNumber intNum = new ToonNumber(42L);                 // exact: DecimalValue = 42
+ToonNumber big = new ToonNumber(9007199254740993L);      // exact, beyond double precision
+ToonNumber price = new ToonNumber(19.99m);               // exact: DecimalValue = 19.99
+ToonNumber ratio = new ToonNumber(3.14159);              // double only: DecimalValue = null
 
 // Implicit conversions
-ToonValue value = 42;        // int → ToonNumber
-ToonValue value = 3.14;      // double → ToonNumber
-ToonValue value = 19.99m;    // decimal → ToonNumber
+ToonValue a = 42;        // int → ToonNumber (exact)
+ToonValue b = 3.14;      // double → ToonNumber
+ToonValue c = 19.99m;    // decimal → ToonNumber (exact)
 
-// Get value as different types
-ToonNumber num = (ToonNumber)value;
-int intValue = num.AsInt32();
-long longValue = num.AsInt64();
-double doubleValue = num.AsDouble();
-decimal decimalValue = num.AsDecimal();
-
-// Check if integer or floating-point
-bool isInteger = num.IsInteger;
-bool isFloatingPoint = num.IsFloatingPoint;
+double d = price.Value;              // 19.99
+decimal? exact = price.DecimalValue; // 19.99m
+string text = big.ToString();        // "9007199254740993" (canonical TOON form)
 ```
+
+`ToString()` returns the canonical TOON form (spec §2): no exponent between 1e-6 and 1e21, no trailing zeros,
+`-0` as `0`, and `null` for NaN and infinities.
 
 ## ToonString
 

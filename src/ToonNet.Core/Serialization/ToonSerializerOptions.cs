@@ -40,9 +40,9 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public PropertyNamingPolicy PropertyNamingPolicy { get; set; } = PropertyNamingPolicy.Default;
 
     /// <summary>
-    ///     Gets or sets whether to include type information for polymorphic scenarios.
-    ///     The default value is false.
+    ///     Has no effect and will be removed in a future major version. Objects are always serialized with their runtime type.
     /// </summary>
+    [Obsolete("IncludeTypeInformation has no effect and will be removed in a future major version.")]
     public bool IncludeTypeInformation { get; set; }
 
     /// <summary>
@@ -104,9 +104,9 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public List<IToonConverter> Converters { get; } = [];
 
     /// <summary>
-    ///     Gets or sets whether to serialize only public properties/fields.
-    ///     Default value is true.
+    ///     Has no effect and will be removed in a future major version. Only public properties are serialized.
     /// </summary>
+    [Obsolete("PublicOnly has no effect and will be removed in a future major version; only public properties are serialized.")]
     public bool PublicOnly { get; set; } = true;
 
     /// <summary>

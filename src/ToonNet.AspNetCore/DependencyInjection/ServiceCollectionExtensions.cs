@@ -165,18 +165,6 @@ public static class ServiceCollectionExtensions
             options.IgnoreNullValues = ignoreNullValues.Value;
         }
 
-        var includeTypeInformation = section.GetValue<bool?>(nameof(ToonSerializerOptions.IncludeTypeInformation));
-        if (includeTypeInformation.HasValue)
-        {
-            options.IncludeTypeInformation = includeTypeInformation.Value;
-        }
-
-        var publicOnly = section.GetValue<bool?>(nameof(ToonSerializerOptions.PublicOnly));
-        if (publicOnly.HasValue)
-        {
-            options.PublicOnly = publicOnly.Value;
-        }
-
         var includeReadOnlyProperties = section.GetValue<bool?>(nameof(ToonSerializerOptions.IncludeReadOnlyProperties));
         if (includeReadOnlyProperties.HasValue)
         {

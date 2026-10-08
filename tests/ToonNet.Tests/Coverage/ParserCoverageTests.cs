@@ -96,6 +96,40 @@ public class ParserCoverageTests
     }
 
     [Fact]
+    public void NumberOverflowingDouble_DecodesAsString()
+    {
+        var obj = new ToonParser().Parse("a: 1e400\nb: -0\nc: 12345678901234567890.123456789").AsObject();
+
+        Assert.Equal("1e400", ((ToonString)obj["a"]!).Value);
+        Assert.Equal("0", obj["b"]!.ToString());
+        Assert.Equal(12345678901234567890.123456789m, ((ToonNumber)obj["c"]!).DecimalValue);
+    }
+
+    [Fact]
+    public void TabIndentation_NonStrict_CountsAsIndentSize()
+    {
+        var obj = new ToonParser(new ToonOptions { StrictMode = false, IndentSize = 4 }).Parse("a:\n\tb: 1").AsObject();
+
+        Assert.Equal(1, ((ToonNumber)((ToonObject)obj["a"]!)["b"]!).Value);
+    }
+
+    [Fact]
+    public void TabularRows_NonStrict_PadMissingCellsWithNull()
+    {
+        var obj = new ToonParser(new ToonOptions { StrictMode = false }).Parse("t[1]{a,b}:\n  1").AsObject();
+
+        Assert.IsType<ToonNull>(((ToonObject)((ToonArray)obj["t"]!)[0])["b"]);
+    }
+
+    [Fact]
+    public void CrLfLineEndings_AreAccepted()
+    {
+        var obj = new ToonParser().Parse("a: 1\r\nb[2]: x,y\r\n").AsObject();
+
+        Assert.Equal(2, ((ToonArray)obj["b"]!).Count);
+    }
+
+    [Fact]
     public void SimpleKeyValue_Works()
     {
         var parser = new ToonParser();

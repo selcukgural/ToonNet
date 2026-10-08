@@ -889,8 +889,10 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return null;
         }
 
-        // Keep the exact value when it fits in a decimal; reject decimal results that were rounded to a different double
-        if (decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) && (double)exact == value)
+        // Keep the exact value when it fits in a decimal. Values below decimal precision (e.g. 1e-30) round to a
+        // different value there, so they only keep the double.
+        if (decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) &&
+            Math.Abs((double)exact - value) <= Math.Abs(value) * 1e-12)
         {
             return new ToonNumber(exact);
         }

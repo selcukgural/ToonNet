@@ -2,6 +2,9 @@ using ToonNet.Core;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 
+// IncludeTypeInformation and PublicOnly are obsolete but must keep working until they are removed
+#pragma warning disable CS0618
+
 namespace ToonNet.Tests.Validation;
 
 /// <summary>

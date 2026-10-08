@@ -300,9 +300,11 @@ Items[2]:
     [Fact]
     public void Deserialize_InvalidToon_ThrowsException()
     {
+        // A single line without a colon is a valid TOON string primitive (spec §5), which cannot become an object
         var invalidToon = "this is not valid toon format { } [ ]";
 
-        Assert.Throws<ToonParseException>(() => ToonSerializer.Deserialize<SimpleModel>(invalidToon));
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<SimpleModel>(invalidToon));
+        Assert.Contains("Expected an object but got String", ex.Message);
     }
 
     [Fact]
