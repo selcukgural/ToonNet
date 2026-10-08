@@ -1,29 +1,34 @@
 # ToonNet.SourceGenerators
 
-**Compile-time code generation for zero-allocation TOON serialization**
+**Roslyn source generator that adds `Serialize` / `Deserialize` methods to your TOON types**
 
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
 [![NuGet](https://img.shields.io/nuget/v/ToonNet.SourceGenerators.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.SourceGenerators/)
 [![Downloads](https://img.shields.io/nuget/dt/ToonNet.SourceGenerators.svg?style=flat)](https://www.nuget.org/packages/ToonNet.SourceGenerators/)
-[![Status](https://img.shields.io/badge/status-stable-success)](#)
 
 ---
 
-## 📦 What is ToonNet.SourceGenerators?
+## 📦 What does it do?
 
-ToonNet.SourceGenerators uses **C# Source Generators** to generate serialization code at **compile-time**:
+For every `partial` class, struct or record marked with `[ToonSerializable]`, the generator adds two static methods:
 
-- ✅ **Zero Allocation** - No runtime reflection or expression trees
-- ✅ **AOT Compatible** - Works with Native AOT compilation
-- ✅ **Maximum Performance** - Direct property access (no overhead)
-- ✅ **Type Safe** - Compile-time errors for unsupported types
-- ✅ **Auto-Generated** - No manual serialization code needed
+```csharp
+public static ToonDocument Serialize(T value, ToonSerializerOptions? options = null);
+public static T Deserialize(ToonDocument doc, ToonSerializerOptions? options = null);
+```
 
-**Perfect for:**
-- ⚡ **Hot Paths** - APIs with high-frequency serialization
-- 🚀 **Performance Critical** - Real-time systems, gaming, IoT
-- 📱 **Native AOT** - Self-contained executables
-- 🎯 **Zero Overhead** - When every microsecond counts
+The generated code follows the same rules as the reflection-based `ToonSerializer` and produces the same TOON:
+the same properties in the same order, the same constructor selection, `[ToonProperty]`, `[ToonIgnore]`,
+`[ToonPropertyOrder]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`,
+`PropertyNamingPolicy` and `Converters` options.
+
+**What is generated and what is not:**
+
+- Properties of type `string`, `bool` and the built-in numeric types are read and written directly, without reflection
+  (unless converters are registered in the options).
+- Every other property type (collections, dictionaries, enums, dates, `Guid`, nested objects) is handed to
+  `ToonSerializer.SerializeToValue` / `DeserializeFromValue`, which use reflection. The generator is therefore **not** a
+  Native AOT or trimming solution, and it makes no zero-allocation promise.
 
 ---
 
@@ -31,431 +36,133 @@ ToonNet.SourceGenerators uses **C# Source Generators** to generate serialization
 
 ### Installation
 
-```bash
-# Core package (required)
-dotnet add package ToonNet.Core
+The generated code calls into `ToonNet.Core`, so install both packages:
 
-# Source generators
+```bash
+dotnet add package ToonNet.Core
 dotnet add package ToonNet.SourceGenerators
 ```
 
-### Basic Usage
+`ToonNet.SourceGenerators` is a development dependency: it only runs at compile time and adds nothing to your output.
+
+### Usage
 
 ```csharp
+using ToonNet.Core.Encoding;
+using ToonNet.Core.Models;
 using ToonNet.Core.Serialization.Attributes;
 
-// Mark class with [ToonSerializable]
 [ToonSerializable]
-public partial class Person
+public partial record Order(string Id, List<Line> Lines)
 {
-    public string Name { get; set; }
-    public int Age { get; set; }
-    public List<string> Hobbies { get; set; }
+    public string Note { get; init; } = "";
 }
 
-// Use the class
-var person = new Person 
-{ 
-    Name = "Alice", 
-    Age = 28,
-    Hobbies = new List<string> { "Reading", "Coding" }
-};
+public record Line(string Sku, int Qty);
 
-// Serialize using ToonSerializer (runtime)
-string toon = ToonSerializer.Serialize(person);
+// Object -> TOON
+var order = new Order("A-1", [new("pen", 2), new("ink", 1)]) { Note = "rush" };
+string toon = new ToonEncoder().Encode(Order.Serialize(order));
+// Id: A-1
+// Lines[2]{Sku,Qty}:
+//   pen,2
+//   ink,1
+// Note: rush
 
-// Deserialize using ToonSerializer (runtime)
-var personBack = ToonSerializer.Deserialize<Person>(toon);
-
-// Alternative: Use generated static methods directly
-var doc = Person.Serialize(person);
-var restored = Person.Deserialize(doc);
+// TOON -> object
+Order copy = Order.Deserialize(ToonDocument.Parse(toon));
 ```
-
-**Note:** Source generator creates static `Serialize` and `Deserialize` methods at compile-time. You can use them directly or through `ToonSerializer` for zero-allocation performance.
 
 ---
 
-## 🔧 How It Works
+## 🔧 Supported shapes
 
-### Source Generator Process
+| Shape | Support |
+|-------|---------|
+| Classes, structs, records, record structs | ✅ |
+| Positional records and constructor parameters | ✅ bound by name (case-insensitive), parameter defaults used for missing keys |
+| `init`-only and `required` properties | ✅ |
+| Properties with private setters (also in base classes) | ✅ |
+| Inherited properties | ✅ base-class properties first, like `ToonSerializer` |
+| Nested types, generic types, the global namespace | ✅ containing types must be `partial` too |
+| Abstract types | `Serialize` only |
 
-1. **Compile-Time Analysis** - Analyzes [ToonSerializable] classes
-2. **Code Generation** - Generates serialization methods
-3. **Zero Runtime Overhead** - All work done at compile-time
+**Constructor selection** (same as `ToonSerializer`): a constructor marked `[ToonConstructor]`, otherwise the public
+parameterless constructor, otherwise the public constructor with the most parameters.
 
-### Generated Code Example
+**Known differences from `ToonSerializer`:**
 
-**Your Code:**
-```csharp
-[ToonSerializable]
-public partial class Product
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public decimal Price { get; set; }
-}
-```
-
-**Generated Code** (simplified):
-```csharp
-// Source generator creates static Serialize and Deserialize methods
-public partial class Product
-{
-    /// <summary>
-    /// Serializes this instance to a TOON document (generated code).
-    /// </summary>
-    public static ToonDocument Serialize(
-        Product value,
-        ToonSerializerOptions? options = null)
-    {
-        // Direct property access with no reflection overhead
-        var obj = new ToonObject();
-        obj["Id"] = new ToonNumber(value.Id);
-        obj["Name"] = new ToonString(value.Name);
-        obj["Price"] = new ToonNumber((double)value.Price);
-        return new ToonDocument(obj);
-    }
-
-    /// <summary>
-    /// Deserializes a TOON document to an instance (generated code).
-    /// </summary>
-    public static Product Deserialize(
-        ToonDocument doc,
-        ToonSerializerOptions? options = null)
-    {
-        var obj = (ToonObject)doc.Root;
-        var result = new Product();
-        result.Id = (int)((ToonNumber)obj["Id"]).Value;
-        result.Name = ((ToonString)obj["Name"]).Value;
-        result.Price = (decimal)((ToonNumber)obj["Price"]).Value;
-        return result;
-    }
-}
-```
+- A non-`required` `init` property of a **generic** type is set through the object initializer, so a key missing from
+  the document resets it to `default` instead of keeping its initializer value. Non-generic types keep the initializer
+  value (the setter is called through `[UnsafeAccessor]`).
+- A `required` property whose key is missing from the document is set to `default`.
+- Converters registered in the options for the declaring type itself are not consulted (they are for its properties).
 
 ---
 
 ## 📖 Attributes
 
-### [ToonSerializable]
-
-Marks a class for source generation:
+All attributes live in `ToonNet.Core.Serialization.Attributes`.
 
 ```csharp
-[ToonSerializable]
-public partial class MyClass
-{
-    // Class must be partial
-    // Must have parameterless constructor (or primary constructor)
-}
-```
-
-### [ToonProperty]
-
-Customizes property serialization:
-
-```csharp
-[ToonSerializable]
-public partial class Product
-{
-    [ToonProperty("product_id")]
-    public int Id { get; set; }
-    
-    public string Name { get; set; }
-}
-
-// Serializes as:
-// product_id: 123
-// Name: Laptop
-```
-
-### [ToonIgnore]
-
-Excludes properties from serialization:
-
-```csharp
-[ToonSerializable]
+[ToonSerializable(
+    NamingPolicy = PropertyNamingPolicy.CamelCase, // fixed naming; omit to use options.PropertyNamingPolicy at runtime
+    GeneratePublicMethods = true,                  // false = internal methods
+    IncludeNullChecks = true,                      // ArgumentNullException for a null argument
+    IncludeDocumentation = true)]                  // XML docs on the generated methods
 public partial class User
 {
-    public string Username { get; set; }
-    
+    [ToonPropertyOrder(-1)]
+    public int Id { get; set; }
+
+    [ToonProperty("display_name")]
+    public string Name { get; set; } = "";
+
     [ToonIgnore]
-    public string PasswordHash { get; set; }  // Not serialized
+    public string PasswordHash { get; set; } = "";
+
+    [ToonConverter(typeof(UnixTimeConverter))]
+    public DateTimeOffset LastSeen { get; set; }
 }
 ```
 
 ---
 
-## ⚡ Performance Comparison
+## ⚠️ Diagnostics
 
-### Benchmark Results
-
-```
-BenchmarkDotNet v0.13.12, Windows 11
-Intel Core i7-12700K, 1 CPU, 12 logical and 8 physical cores
-.NET SDK 8.0.100
-
-| Method                    | Mean      | Allocated |
-|-------------------------- |----------:|----------:|
-| SourceGenerator_Serialize | 45.2 ns   | -         |  ← Zero allocation!
-| ExpressionTree_Serialize  | 89.5 ns   | 120 B     |
-| Reflection_Serialize      | 4,250 ns  | 856 B     |
-
-Source Generator is:
-- 2x faster than Expression Trees
-- 94x faster than Reflection
-- Zero heap allocations (hot path)
-```
-
-### When to Use Source Generators
-
-✅ **Use Source Generators When:**
-- Hot path with high-frequency serialization
-- AOT compilation required
-- Zero-allocation is critical
-- Startup performance matters
-
-⚠️ **Use Runtime Serialization When:**
-- Types unknown at compile-time
-- Dynamic type loading (plugins)
-- Reflection-based scenarios
-- Generic/flexible serialization
+| Id | Severity | Meaning |
+|----|----------|---------|
+| `TOON001` | Error | Code generation failed unexpectedly (please report it) |
+| `TOON002` | Error | The type, or a type it is nested in, is not `partial` |
+| `TOON003` | Warning | The type has no public properties to serialize |
+| `TOON005` | Warning | The type has no public constructor; only `Serialize` is generated |
 
 ---
 
-## 🎯 Real-World Examples
+## 🔍 Viewing the generated code
 
-### Example 1: High-Performance API
-
-```csharp
-using ToonNet.Core.Serialization;
-using ToonNet.Core.Serialization.Attributes;
-
-[ToonSerializable]
-public partial class ApiResponse
-{
-    public int StatusCode { get; set; }
-    public string Message { get; set; }
-    public DateTime Timestamp { get; set; }
-}
-
-[ApiController]
-[Route("api/[controller]")]
-public class DataController : ControllerBase
-{
-    [HttpGet]
-    public IActionResult GetData()
-    {
-        var response = new ApiResponse
-        {
-            StatusCode = 200,
-            Message = "Success",
-            Timestamp = DateTime.UtcNow
-        };
-
-        // Zero-allocation serialization (source generator optimized)
-        var toon = ToonSerializer.Serialize(response);
-        return Content(toon, "application/toon");
-    }
-}
+```xml
+<PropertyGroup>
+  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+</PropertyGroup>
 ```
 
-### Example 2: Gaming/Real-Time Systems
-
-```csharp
-using ToonNet.Core.Serialization;
-using ToonNet.Core.Serialization.Attributes;
-
-[ToonSerializable]
-public partial class PlayerState
-{
-    public int PlayerId { get; set; }
-    public Vector3 Position { get; set; }
-    public float Health { get; set; }
-    public int Score { get; set; }
-}
-
-public class NetworkManager
-{
-    public void BroadcastState(PlayerState state)
-    {
-        // Critical path - zero allocations
-        string data = ToonSerializer.Serialize(state);
-        networkSocket.Send(data);
-    }
-
-    public PlayerState ReceiveState(string data)
-    {
-        // Fast deserialization
-        return ToonSerializer.Deserialize<PlayerState>(data);
-    }
-}
-```
-
-### Example 3: IoT/Embedded Systems
-
-```csharp
-using ToonNet.Core.Serialization;
-using ToonNet.Core.Serialization.Attributes;
-
-[ToonSerializable]
-public partial class SensorReading
-{
-    public DateTime Timestamp { get; set; }
-    public double Temperature { get; set; }
-    public double Humidity { get; set; }
-    public int BatteryLevel { get; set; }
-}
-
-public class SensorDevice
-{
-    public void SendTelemetry()
-    {
-        var reading = new SensorReading
-        {
-            Timestamp = DateTime.UtcNow,
-            Temperature = ReadTemperature(),
-            Humidity = ReadHumidity(),
-            BatteryLevel = GetBatteryLevel()
-        };
-
-        // Minimal memory footprint
-        var payload = ToonSerializer.Serialize(reading);
-        mqttClient.Publish("sensors/data", payload);
-    }
-}
-```
-
-### Example 4: Native AOT Application
-
-```csharp
-// Project file configuration
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <PublishAot>true</PublishAot>  <!-- Enable Native AOT -->
-  </PropertyGroup>
-  
-  <ItemGroup>
-    <PackageReference Include="ToonNet.Core" />
-    <PackageReference Include="ToonNet.SourceGenerators" />
-  </ItemGroup>
-</Project>
-
-// Code
-using ToonNet.Core.Serialization;
-using ToonNet.Core.Serialization.Attributes;
-
-[ToonSerializable]
-public partial class Config
-{
-    public string AppName { get; set; }
-    public int MaxConnections { get; set; }
-}
-
-// Works with Native AOT (no reflection!)
-var config = new Config { AppName = "MyApp", MaxConnections = 100 };
-var toon = ToonSerializer.Serialize(config);
-```
-
----
-
-## 🔍 Supported Types
-
-### Primitive Types
-- `string`, `int`, `long`, `short`, `byte`, `sbyte`
-- `uint`, `ulong`, `ushort`
-- `float`, `double`, `decimal`
-- `bool`, `char`, `Guid`, `DateTime`, `DateTimeOffset`
-
-### Collections
-- `List<T>`, `T[]`
-- `Dictionary<TKey, TValue>`
-- `IEnumerable<T>`, `IList<T>`, `ICollection<T>`
-
-### Complex Types
-- Nested classes with `[ToonSerializable]`
-- Nullable types (`int?`, `DateTime?`)
-- Enums
-
-### Limitations
-
-❌ **Not Supported:**
-- Abstract/interface types
-- Circular references
-- Types without parameterless constructor
-- Generic types (not instantiated)
-
----
-
-## 🔒 Thread-Safety
-
-- Generated serializers and `ToonSerializer` methods are safe to call concurrently across threads.
-- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
-- Cache entries are created on demand and retained for the process lifetime (no eviction).
-- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
-
----
-
-## 🧪 Testing
-
-```bash
-# Run source generator tests
-cd tests/ToonNet.SourceGenerators.Tests
-dotnet test
-
-# Verify generated code
-dotnet build --verbosity detailed
-# Check obj/Debug/net8.0/generated/ folder
-```
-
----
-
-## 🔗 Related Packages
-
-**Core:**
-- [`ToonNet.Core`](../ToonNet.Core) - Core serialization (required)
-
-**Extensions:**
-- [`ToonNet.Extensions.Json`](../ToonNet.Extensions.Json) - JSON ↔ TOON
-- [`ToonNet.Extensions.Yaml`](../ToonNet.Extensions.Yaml) - YAML ↔ TOON
-
-**Web:**
-- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - ASP.NET Core DI
-- [`ToonNet.AspNetCore.Mvc`](../ToonNet.AspNetCore.Mvc) - MVC formatters
-
-**Development:**
-- [`ToonNet.Benchmarks`](../ToonNet.Benchmarks) - Performance tests
-- [`ToonNet.Tests`](../../tests/ToonNet.Tests) - Test suite
-
----
-
-## 📚 Documentation
-
-- [Main Documentation](../../README.md) - Complete guide
-- [API Guide](../../docs/API-GUIDE.md) - API reference
-- [Benchmarks](../ToonNet.Benchmarks) - Performance data
+The files are written to `obj/<configuration>/<tfm>/generated/ToonNet.SourceGenerators/`. In Visual Studio and Rider
+they are also listed under **Dependencies → Analyzers → ToonNet.SourceGenerators**.
 
 ---
 
 ## 📋 Requirements
 
-- .NET 8.0 or later
-- C# 12.0+ (for partial classes)
-- ToonNet.Core
+- .NET 8.0 or later (the generated code uses `[UnsafeAccessor]` for `init`-only and private setters)
+- ToonNet.Core of the same major version
 
 ---
 
-## 📄 License
+## 📚 Links
 
-MIT License - See [LICENSE](../../LICENSE) file for details.
+- [Documentation](https://selcukgural.github.io/ToonNet/docs/advanced/source-generators)
+- [ToonNet on GitHub](https://github.com/selcukgural/ToonNet)
+- [ToonNet.Core on NuGet](https://www.nuget.org/packages/ToonNet.Core/)
 
----
-
-## 🤝 Contributing
-
-Contributions welcome! Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) first.
-
----
-
-**Part of the [ToonNet](../../README.md) serialization library family.**
+MIT License.

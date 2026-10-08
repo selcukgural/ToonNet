@@ -72,7 +72,7 @@ Payload Size    Speed Improvement    Memory Saved    GC Pressure
 - **Expression Trees** - Compiled property accessors (10-100x faster than reflection)
 - **ArrayPool<T>** - Reusable memory buffers, zero heap allocations
 - **SIMD Vectorization** - Hardware-accelerated parallel processing
-- **Source Generators** - Compile-time code generation for AOT compatibility
+- **Source Generator** - Optional static `Serialize`/`Deserialize` methods with the same output as `ToonSerializer`
 - **Thread-Safe Caching** - `ConcurrentDictionary` for concurrent scenarios
 - **ConfigureAwait(false)** - No deadlocks in WPF/WinForms/legacy environments
 
@@ -129,7 +129,6 @@ ToonNet is **engineered for extreme performance** in production environments:
 **Zero-Allocation Hot Paths:**
 - **ArrayPool<T>** - Reusable byte buffers eliminate heap allocations (99.99% reduction)
 - **Expression Trees** - Compiled property accessors (10-100x faster than reflection)
-- **Source Generators** - Compile-time code generation for zero-allocation serialization
 - **Metadata Caching** - Thread-safe `ConcurrentDictionary` for type metadata
 - **SIMD Operations** - Hardware-accelerated string processing
 - **No runtime reflection** overhead after first access
@@ -153,7 +152,6 @@ await ToonSerializer.SerializeToStreamAsync(data, stream);
 - **Compiled getters/setters** - Expression trees compiled to IL, not reflection calls
 - **Memory pooling** - ArrayPool<byte> for stream operations
 - **Span<T> and Memory<T>** - Modern .NET APIs for reduced allocations
-- **Source generator option** - AOT-compatible, zero-allocation code generation
 
 **Thread-Safety:**
 - **Concurrent use:** `ToonSerializer` methods are safe to call from multiple threads.
@@ -176,7 +174,7 @@ ToonNet is modular - install only what you need:
 | **ToonNet.Extensions.Yaml** | YAML ↔ TOON conversion | [![NuGet](https://img.shields.io/nuget/v/ToonNet.Extensions.Yaml.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Extensions.Yaml/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Extensions.Yaml.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Extensions.Yaml/) | ✅ Stable |
 | **ToonNet.AspNetCore** | ASP.NET Core middleware & formatters | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore/) | ✅ Stable |
 | **ToonNet.AspNetCore.Mvc** | MVC input/output formatters | [![NuGet](https://img.shields.io/nuget/v/ToonNet.AspNetCore.Mvc.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.AspNetCore.Mvc.svg?style=flat)](https://www.nuget.org/packages/ToonNet.AspNetCore.Mvc/) | ✅ Stable |
-| **ToonNet.SourceGenerators** | Compile-time code generation (AOT-compatible, zero-allocation) | [![NuGet](https://img.shields.io/nuget/v/ToonNet.SourceGenerators.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.SourceGenerators.svg?style=flat)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | ✅ Stable |
+| **ToonNet.SourceGenerators** | Generates static `Serialize`/`Deserialize` methods for `[ToonSerializable]` types | [![NuGet](https://img.shields.io/nuget/v/ToonNet.SourceGenerators.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | [![Downloads](https://img.shields.io/nuget/dt/ToonNet.SourceGenerators.svg?style=flat)](https://www.nuget.org/packages/ToonNet.SourceGenerators/) | ✅ Stable |
 
 ### Quick Install
 
@@ -194,7 +192,7 @@ dotnet add package ToonNet.Extensions.Yaml
 dotnet add package ToonNet.AspNetCore
 dotnet add package ToonNet.AspNetCore.Mvc
 
-# Performance (source generators)
+# Generated Serialize/Deserialize methods (source generator)
 dotnet add package ToonNet.SourceGenerators
 ```
 

@@ -27,6 +27,19 @@ public sealed class ToonDocument(ToonValue root)
     public ToonValue Root { get; } = root ?? throw new ArgumentNullException(nameof(root));
 
     /// <summary>
+    ///     Parses TOON text into a document.
+    /// </summary>
+    /// <param name="toon">The TOON text to parse.</param>
+    /// <param name="options">Parsing options (indentation, strict mode, limits); defaults when null.</param>
+    /// <returns>The parsed document.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="toon"/> is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
+    public static ToonDocument Parse(string toon, ToonOptions? options = null)
+    {
+        return new Parsing.ToonParser(options).Parse(toon);
+    }
+
+    /// <summary>
     ///     Attempts to treat the document root as an object.
     /// </summary>
     /// <returns>

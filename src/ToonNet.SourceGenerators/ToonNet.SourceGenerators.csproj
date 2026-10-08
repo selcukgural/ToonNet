@@ -1,26 +1,33 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <IsRoslynComponent>true</IsRoslynComponent>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <NoWarn>$(NoWarn);RS2008</NoWarn>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
         
         <!-- Package Information -->
         <PackageId>ToonNet.SourceGenerators</PackageId>
         <Version>1.4.0</Version>
         <Title>ToonNet Source Generators</Title>
-        <Description>Compile-time code generation for zero-allocation serialization. AOT-compatible, generates static Serialize/Deserialize methods. Perfect for hot paths and maximum performance.</Description>
-        <PackageTags>toon;source-generator;aot;roslyn;performance;zero-allocation;codegen</PackageTags>
+        <Description>Roslyn source generator for ToonNet: adds static Serialize/Deserialize methods to partial classes, structs and records marked with [ToonSerializable]. Use together with ToonNet.Core.</Description>
+        <PackageTags>toon;source-generator;roslyn;codegen;serialization</PackageTags>
         <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>
         <DevelopmentDependency>true</DevelopmentDependency>
+
+        <!-- Analyzer packaging: the generator ships under analyzers/, not lib/, and must not be referenced as a library -->
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
         <None Include="README.md" Pack="true" PackagePath="\"/>
+        <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -29,10 +36,6 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="..\ToonNet.Core\ToonNet.Core.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -1,14 +1,12 @@
 namespace ToonNet.Core.Serialization.Attributes;
 
 /// <summary>
-///     Marks a class for automatic TOON serialization code generation via source generator.
-///     The source generator will create Serialize and Deserialize methods at compile-time,
-///     eliminating reflection overhead and enabling AOT-ready deployments.
+///     Marks a class, struct or record for TOON serialization code generation by the
+///     <c>ToonNet.SourceGenerators</c> package, which adds static <c>Serialize</c> and <c>Deserialize</c> methods.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The attributed class MUST be declared as <c>partial</c> to allow the source generator
-///         to inject generated code.
+///         The attributed type (and any type it is nested in) must be declared <c>partial</c>.
 ///     </para>
 ///     <para>
 ///         Usage example:
@@ -34,14 +32,14 @@ namespace ToonNet.Core.Serialization.Attributes;
 /// </code>
 ///     </para>
 ///     <para>
-///         Performance benefits:
-///         - 3-5x faster than reflection-based serialization
-///         - Zero allocation in hot paths
-///         - Full compile-time type safety
-///         - Native AOT compatible
+///         The generated code follows the same rules as <see cref="ToonSerializer"/> (property selection and order,
+///         constructor selection, <c>[ToonProperty]</c>, <c>[ToonIgnore]</c>, <c>[ToonConverter]</c>, null handling) and
+///         produces the same output. Strings, booleans and numbers are converted inline; other property types
+///         (collections, enums, dates, nested objects) are delegated to <see cref="ToonSerializer.SerializeToValue{T}"/>
+///         and <see cref="ToonSerializer.DeserializeFromValue{T}"/>, which use reflection.
 ///     </para>
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public sealed class ToonSerializableAttribute : Attribute
 {
     /// <summary>
@@ -54,12 +52,11 @@ public sealed class ToonSerializableAttribute : Attribute
     public bool GeneratePublicMethods { get; init; } = true;
 
     /// <summary>
-    ///     Gets or sets the property naming policy for generated serialization code.
-    ///     This policy is applied to all properties but can be overridden per-property
-    ///     using the [ToonProperty(name)] attribute.
+    ///     Gets or sets a fixed property naming policy for generated serialization code.
+    ///     When set, it replaces <see cref="ToonSerializerOptions.PropertyNamingPolicy"/>; when not set, the generated code
+    ///     uses the naming policy of the options passed at runtime. <c>[ToonProperty(name)]</c> overrides both.
     /// </summary>
     /// <remarks>
-    ///     Default: <see cref="PropertyNamingPolicy.Default" /> (property names as-is)
     ///     Examples:
     ///     <code>
     /// [ToonSerializable(NamingPolicy = PropertyNamingPolicy.CamelCase)]
@@ -72,13 +69,10 @@ public sealed class ToonSerializableAttribute : Attribute
     public PropertyNamingPolicy NamingPolicy { get; init; } = PropertyNamingPolicy.Default;
 
     /// <summary>
-    ///     Gets or sets whether to include null-check guards in generated code.
-    ///     When enabled, the generator includes ArgumentNullException checks for non-nullable properties.
+    ///     Gets or sets whether the generated methods throw <see cref="ArgumentNullException"/> for a null argument.
     /// </summary>
     /// <remarks>
-    ///     Default: <c>true</c> (include null checks)
-    ///     Set to <c>false</c> for performance-critical scenarios where null checking
-    ///     is handled elsewhere, or for maximum code size reduction.
+    ///     Default: <c>true</c>. Has no effect on the <c>Serialize</c> method of structs.
     /// </remarks>
     public bool IncludeNullChecks { get; init; } = true;
 

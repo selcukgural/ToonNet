@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests:** The official TOON spec v3.3.2 conformance fixtures now run in the test suite. Cases that do not pass yet are
   tracked in `tests/ToonNet.Tests/SpecCompliance/KnownNonConformance.txt`.
 - **CI:** Build, test, pack and docs build on every push and pull request; manual, test-gated NuGet publishing.
+- **ToonNet.Core:** `ToonSerializer.SerializeToValue` / `DeserializeFromValue` convert between objects and `ToonValue`
+  without going through text, and `ToonDocument.Parse(string, ToonOptions?)` parses TOON text into a document.
+- **ToonNet.Core:** `[ToonSerializable]` can be applied to structs.
 
 ### Changed
 - **ToonNet.Core (breaking output change):** The encoder was rewritten to follow TOON spec v3.3.2 and now passes all
@@ -60,6 +63,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is no longer ignored as whitespace.
 - **Docs:** Replaced the "100% TOON v3.0 compliance" claims with the measured conformance against spec v3.3.2.
 
+- **ToonNet.SourceGenerators (breaking):** Rewritten. The generated `Serialize`/`Deserialize` methods now follow the
+  rules of `ToonSerializer` and produce the same TOON (verified by parity tests for every supported shape):
+  - Collections, dictionaries, enums, dates, `Guid` and nested objects are written as real TOON values through
+    `ToonSerializer.SerializeToValue` (they were written as a quoted TOON string and could not be read back), and
+    enum/`DateTime`/`Guid` properties no longer produce code that does not compile.
+  - `long`, `ulong` and `decimal` keep their exact value (they went through `double`).
+  - Supports structs, records, record structs, positional constructors (with parameter defaults), `init`-only and
+    `required` properties, private setters, inherited properties, nested and generic types and the global namespace.
+  - Property order, `[ToonPropertyOrder]` (default 0), constructor selection and the `IgnoreNullValues`,
+    `IncludeReadOnlyProperties`, `PropertyNamingPolicy` and `Converters` options now match `ToonSerializer`; when the
+    attribute does not set `NamingPolicy`, the policy from the options is used at runtime.
+  - Keys are escaped in the generated code; generated files are named after the full type name, so types with the same
+    name in different namespaces no longer collide.
+  - The generator targets `netstandard2.0` and is packed under `analyzers/dotnet/cs` (it was a `net8.0` library in
+    `lib/`, which compilers running on .NET Framework could not load). It no longer depends on `ToonNet.Core`; install
+    both packages.
+  - Uses the incremental `ForAttributeWithMetadataName` pipeline; diagnostics point at the type declaration. New warning
+    `TOON005` when a type has no public constructor (only `Serialize` is generated); `TOON004` was never reported and is
+    removed.
+  - The package description no longer claims zero allocations or Native AOT support: non-primitive properties use the
+    reflection-based serializer.
 ### Security
 - **ToonNet.Core:** The parser now enforces `ToonOptions.MaxDepth` while parsing (previously only after parsing) and checks
   the remaining stack space, so deeply nested input throws `ToonParseException` instead of terminating the process.

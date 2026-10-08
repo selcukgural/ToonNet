@@ -21,10 +21,9 @@ internal static class DiagnosticHelper
                                                                       DiagnosticSeverity.Error, true);
 
     /// <summary>
-    /// Error: The class structure is invalid for TOON serialization.
-    /// This diagnostic is reported when a class decorated with the [ToonSerializable] attribute is not declared as 'partial.'
+    /// Error: a type decorated with [ToonSerializable], or a type it is nested in, is not declared 'partial'.
     /// </summary>
-    public static readonly DiagnosticDescriptor InvalidClassStructure = new("TOON002", "Invalid class structure for TOON serialization",
+    public static readonly DiagnosticDescriptor InvalidClassStructure = new("TOON002", "Invalid type structure for TOON serialization",
                                                                             "Type '{0}' must be declared as 'partial' to use [ToonSerializable]",
                                                                             Category, DiagnosticSeverity.Error, true);
 
@@ -36,9 +35,20 @@ internal static class DiagnosticHelper
                                                                    DiagnosticSeverity.Warning, true);
 
     /// <summary>
-    /// Error: Type argument is not supported for code generation.
+    /// Warning: the type has no public constructor, so no Deserialize method is generated.
     /// </summary>
-    public static readonly DiagnosticDescriptor UnsupportedType = new("TOON004", "Unsupported type for code generation",
-                                                                      "Type '{0}' is not supported for automatic serialization code generation",
-                                                                      Category, DiagnosticSeverity.Error, true);
+    public static readonly DiagnosticDescriptor NoPublicConstructor = new("TOON005", "No public constructor for deserialization",
+                                                                          "Type '{0}' has no public constructor; no Deserialize method is generated",
+                                                                          Category, DiagnosticSeverity.Warning, true);
+
+    /// <summary>
+    /// Looks up a descriptor by id (used when replaying diagnostics stored in the generator model).
+    /// </summary>
+    public static DiagnosticDescriptor Get(string id) => id switch
+    {
+        "TOON002" => InvalidClassStructure,
+        "TOON003" => NoProperties,
+        "TOON005" => NoPublicConstructor,
+        _         => GenerationError
+    };
 }

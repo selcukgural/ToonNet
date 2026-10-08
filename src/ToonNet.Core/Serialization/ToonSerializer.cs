@@ -62,6 +62,36 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
+    ///     Converts an object to a <see cref="ToonValue"/> without encoding it to text.
+    /// </summary>
+    /// <typeparam name="T">The declared type of the value.</typeparam>
+    /// <param name="value">The value to convert.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <returns>The TOON value; <see cref="ToonNull.Instance"/> when <paramref name="value"/> is null.</returns>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    public static ToonValue SerializeToValue<T>(T? value, ToonSerializerOptions? options = null)
+    {
+        return SerializeToValue(value, typeof(T), options);
+    }
+
+    /// <summary>
+    ///     Converts an object to a <see cref="ToonValue"/> without encoding it to text (non-generic overload).
+    /// </summary>
+    /// <param name="value">The value to convert.</param>
+    /// <param name="type">The declared type of the value.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <returns>The TOON value; <see cref="ToonNull.Instance"/> when <paramref name="value"/> is null.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the type is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    public static ToonValue SerializeToValue(object? value, Type type, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        options ??= ToonSerializerOptions.Default;
+
+        return SerializeValue(value, type, options, 0, new SerializerState()) ?? ToonNull.Instance;
+    }
+
+    /// <summary>
     ///     Asynchronously serializes an object to TOON format string.
     /// </summary>
     /// <typeparam name="T">The type of object to serialize.</typeparam>
@@ -483,6 +513,38 @@ public static partial class ToonSerializer
         var document = parser.Parse(toonString);
 
         return DeserializeValue(document.Root, type, options, 0, new SerializerState());
+    }
+
+    /// <summary>
+    ///     Converts a <see cref="ToonValue"/> to an object, for example a value taken from a parsed <see cref="ToonDocument"/>.
+    /// </summary>
+    /// <typeparam name="T">The type to convert to.</typeparam>
+    /// <param name="value">The TOON value to convert.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The converted object, or null for <see cref="ToonNull"/> and nullable targets.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the value is null.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when the value cannot be converted to the target type.</exception>
+    public static T? DeserializeFromValue<T>(ToonValue value, ToonSerializerOptions? options = null)
+    {
+        return (T?)DeserializeFromValue(value, typeof(T), options);
+    }
+
+    /// <summary>
+    ///     Converts a <see cref="ToonValue"/> to an object of the specified type.
+    /// </summary>
+    /// <param name="value">The TOON value to convert.</param>
+    /// <param name="type">The type to convert to.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The converted object, or null for <see cref="ToonNull"/> and nullable targets.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the value or type is null.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when the value cannot be converted to the target type.</exception>
+    public static object? DeserializeFromValue(ToonValue value, Type type, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(type);
+        options ??= ToonSerializerOptions.Default;
+
+        return DeserializeValue(value, type, options, 0, new SerializerState());
     }
 
     #region Async APIs
