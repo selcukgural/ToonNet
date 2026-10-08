@@ -768,4 +768,45 @@ monitoring:
     }
 
     #endregion
+
+    #region Number precision (spec §2/§4: lossless-first, canonical form)
+
+    [Theory]
+    [InlineData("12345678901234567890", "12345678901234567890")]
+    [InlineData("0.1", "0.1")]
+    [InlineData("35.00", "35")]
+    [InlineData("-0", "0")]
+    [InlineData("1e-30", "1e-30")]
+    [InlineData("79228162514264337593543950335", "79228162514264337593543950335")]
+    public void FromJson_Numbers_KeepExactValueInCanonicalForm(string json, string toon)
+    {
+        Assert.Equal($"n: {toon}", ToonConvert.FromJson($$"""{"n":{{json}}}"""));
+    }
+
+    [Fact]
+    public void FromJson_NumberOutsideDoubleRange_IsKeptAsString()
+    {
+        Assert.Equal("n: \"1e400\"", ToonConvert.FromJson("""{"n":1e400}"""));
+    }
+
+    [Fact]
+    public void ToJson_LargeAndDecimalNumbers_RoundTripExactly()
+    {
+        const string json = """{"big":12345678901234567890,"price":1299.99,"tiny":1e-7}""";
+
+        // 1e-7 fits in a decimal, so it is written as the exact plain decimal (same value; spec §2 allows both forms)
+        Assert.Equal("""{"big":12345678901234567890,"price":1299.99,"tiny":0.0000001}""", ToonConvert.ToJson(ToonConvert.FromJson(json)));
+    }
+
+    [Fact]
+    public void ToJson_UsesToonOptions()
+    {
+        // Indentation of 4 is rejected by the default strict parser (IndentSize = 2)
+        const string toon = "a:\n    b: 1";
+
+        Assert.Throws<ToonNet.Core.ToonParseException>(() => ToonConvert.ToJson(toon));
+        Assert.Equal("""{"a":{"b":1}}""", ToonConvert.ToJson(toon, toonOptions: new ToonNet.Core.ToonOptions { IndentSize = 4 }));
+    }
+
+    #endregion
 }

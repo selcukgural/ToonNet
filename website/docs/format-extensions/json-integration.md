@@ -191,10 +191,11 @@ Console.WriteLine(prettyJson);
 
 ## Conversion Notes
 
-- JSON numbers are read as `double`, so integers beyond 2^53 and long decimals lose precision
-  (`12345678901234567890` becomes `12345678901234567000`). `35.00` is written as `35`.
+- JSON numbers keep their exact value when it fits in a `decimal` (`12345678901234567890` and `1299.99` round-trip
+  unchanged); other magnitudes use the nearest `double`, and a number that is not finite as a `double` (`1e400`) is
+  kept as a string. Numbers are written in canonical form as TOON spec §2 requires: `35.00` becomes `35`.
 - `ToonJsonConverter.FromJson(string)` uses `JsonDocument.Parse` with its default maximum depth of 64.
-- `ToonConvert.ToJson` parses TOON with the default `ToonOptions` (strict mode).
+- `ToonConvert.ToJson` parses TOON with the default `ToonOptions` (strict mode); pass `toonOptions:` to change that.
 
 ## Use Cases
 

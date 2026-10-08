@@ -163,12 +163,24 @@ public static class ToonJsonConverter
             JsonValueKind.Object                          => ConvertJsonObject(element),
             JsonValueKind.Array                           => ConvertJsonArray(element),
             JsonValueKind.String                          => new ToonString(element.GetString()!),
-            JsonValueKind.Number                          => new ToonNumber(element.GetDouble()),
+            JsonValueKind.Number                          => ConvertJsonNumber(element),
             JsonValueKind.True                            => new ToonBoolean(true),
             JsonValueKind.False                           => new ToonBoolean(false),
             JsonValueKind.Null or JsonValueKind.Undefined => ToonNull.Instance,
             _                                             => throw new JsonException($"Unsupported JSON value kind: {element.ValueKind}")
         };
+    }
+
+    /// <summary>
+    ///     Converts a JSON number with the same rules as the TOON decoder: the exact value when it fits in a
+    ///     <see cref="decimal"/> (so large integers and decimals are not rounded through <see cref="double"/>),
+    ///     otherwise the nearest <see cref="double"/>. A number that is not finite as a double (e.g. <c>1e400</c>)
+    ///     is kept as a string, so no value is lost silently.
+    /// </summary>
+    private static ToonValue ConvertJsonNumber(JsonElement element)
+    {
+        var text = element.GetRawText();
+        return (ToonValue?)Core.Parsing.ToonParser.TryParseNumber(text) ?? new ToonString(text);
     }
 
     /// <summary>
@@ -272,7 +284,16 @@ public static class ToonJsonConverter
                 break;
 
             case ToonNumber n:
-                writer.WriteNumberValue(n.Value);
+                // Canonical TOON number text is also a valid JSON number, and keeps exact decimal values.
+                if (Core.Encoding.ToonNumberFormatter.Format(n) is { } number)
+                {
+                    writer.WriteRawValue(number, skipInputValidation: true);
+                }
+                else
+                {
+                    writer.WriteNullValue(); // NaN and infinities, as in TOON (§3)
+                }
+
                 break;
 
             case ToonString s:

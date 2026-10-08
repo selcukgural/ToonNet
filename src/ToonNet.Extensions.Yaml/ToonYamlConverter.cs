@@ -145,7 +145,8 @@ public static class ToonYamlConverter
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        var serializer = new SerializerBuilder().WithIndentedSequences().Build();
+        // Quote strings a YAML reader would otherwise resolve to another type ("42", "true", "null", "")
+        var serializer = new SerializerBuilder().WithIndentedSequences().WithQuotingNecessaryStrings().Build();
 
         var obj = ConvertToonValueToObject(value);
         return serializer.Serialize(obj);
@@ -260,40 +261,35 @@ public static class ToonYamlConverter
     ///     to a null, boolean, number, or string value depending on its content.
     /// </returns>
     /// <remarks>
-    ///     This method handles special cases for null/empty values, boolean values, and numeric
-    ///     values. If the scalar does not match any of these cases, it is treated as a string.
+    ///     Quoted and block scalars (<c>"42"</c>, <c>'true'</c>, <c>|</c>, <c>&gt;</c>) are always strings. Plain scalars
+    ///     are typed by their text: <c>null</c>, <c>~</c> or nothing is null; <c>true</c>/<c>false</c> (also
+    ///     <c>yes</c>/<c>no</c>/<c>on</c>/<c>off</c>, in lowercase, capitalized or uppercase) are booleans; numbers follow
+    ///     the TOON number rules (JSON number grammar, optional leading <c>+</c>, exact value when it fits in a
+    ///     <see cref="decimal"/>). Everything else, including <c>007</c>, <c>1,000</c>, <c>0xFF</c> and <c>.inf</c>,
+    ///     stays a string, so no value is changed silently.
     /// </remarks>
     private static ToonValue ConvertYamlScalar(YamlScalarNode scalar)
     {
-        var value = scalar.Value;
+        var value = scalar.Value ?? string.Empty;
 
-        // Handle null/empty
-        if (string.IsNullOrEmpty(value) || value == "~" || value == "null")
+        if (scalar.Style is not (ScalarStyle.Plain or ScalarStyle.Any))
         {
-            return ToonNull.Instance;
+            return new ToonString(value);
         }
 
         switch (value)
         {
-            // Handle booleans
-            case "true":
-            case "yes":
-            case "on":
+            case "" or "~" or "null" or "Null" or "NULL":
+                return ToonNull.Instance;
+            case "true" or "True" or "TRUE" or "yes" or "Yes" or "YES" or "on" or "On" or "ON":
                 return new ToonBoolean(true);
-            case "false":
-            case "no":
-            case "off":
+            case "false" or "False" or "FALSE" or "no" or "No" or "NO" or "off" or "Off" or "OFF":
                 return new ToonBoolean(false);
         }
 
-        // Handle numbers
-        if (double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var number))
-        {
-            return new ToonNumber(number);
-        }
+        var numberText = value.Length > 1 && value[0] == '+' ? value[1..] : value;
 
-        // Default to string
-        return new ToonString(value);
+        return (ToonValue?)Core.Parsing.ToonParser.TryParseNumber(numberText) ?? new ToonString(value);
     }
 
     /// <summary>
@@ -400,7 +396,7 @@ public static class ToonYamlConverter
     ///     A plain .NET object representing the TOON value. The returned object can be:
     ///     - null for <see cref="ToonNull"/>
     ///     - a boolean for <see cref="ToonBoolean"/>
-    ///     - a double for <see cref="ToonNumber"/>
+    ///     - a decimal (exact, canonical scale) or double for <see cref="ToonNumber"/>
     ///     - a string for <see cref="ToonString"/>
     ///     - a Dictionary for <see cref="ToonObject"/>
     ///     - a List for <see cref="ToonArray"/>
@@ -419,12 +415,23 @@ public static class ToonYamlConverter
         {
             ToonNull      => null,
             ToonBoolean b => b.Value,
-            ToonNumber n  => n.Value,
+            ToonNumber n  => ToYamlNumber(n),
             ToonString s  => s.Value,
             ToonObject o  => ConvertToonObjectToDict(o),
             ToonArray a   => ConvertToonArrayToList(a),
             _             => throw new InvalidOperationException($"Unsupported TOON value type: {value.GetType().Name}")
         };
+    }
+
+    /// <summary>
+    ///     The exact value of a number when it fits in a <see cref="decimal"/> (written without trailing fractional
+    ///     zeros, as in TOON), otherwise its <see cref="double"/> value.
+    /// </summary>
+    private static object ToYamlNumber(ToonNumber number)
+    {
+        return number.DecimalValue is { } exact
+            ? decimal.Parse(Core.Encoding.ToonNumberFormatter.Format(exact), System.Globalization.CultureInfo.InvariantCulture)
+            : number.Value;
     }
 
     /// <summary>

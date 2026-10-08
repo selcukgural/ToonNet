@@ -418,4 +418,53 @@ public class ToonYamlConverterTests
     }
 
     #endregion
+
+    #region Scalar typing
+
+    [Fact]
+    public void FromYaml_QuotedAndBlockScalars_StayStrings()
+    {
+        var toon = ToonYamlConvert.FromYaml("a: \"42\"\nb: 'true'\nc: \"null\"\nd: ''\ne: |\n  7\n");
+
+        Assert.Equal("a: \"42\"\nb: \"true\"\nc: \"null\"\nd: \"\"\ne: \"7\\n\"", toon);
+    }
+
+    [Theory]
+    [InlineData("42", "42")]
+    [InlineData("+5", "5")]
+    [InlineData("-1.50", "-1.5")]
+    [InlineData("12345678901234567890", "12345678901234567890")]
+    [InlineData("True", "true")]
+    [InlineData("NO", "false")]
+    [InlineData("~", "null")]
+    [InlineData("007", "\"007\"")]
+    [InlineData("1,000", "\"1,000\"")]
+    [InlineData("(5)", "(5)")]
+    [InlineData("0xFF", "0xFF")]
+    [InlineData(".inf", ".inf")]
+    public void FromYaml_PlainScalars_AreTypedWithoutChangingValues(string yaml, string toon)
+    {
+        Assert.Equal($"v: {toon}", ToonYamlConvert.FromYaml($"v: {yaml}"));
+    }
+
+    [Fact]
+    public void ToYaml_StringsThatLookLikeOtherTypes_AreQuoted_AndRoundTrip()
+    {
+        const string toon = "a: \"42\"\nb: \"true\"\nc: \"null\"\nd: \"\"\nn: 42\nbig: 12345678901234567890";
+
+        var yaml = ToonYamlConvert.ToYaml(toon);
+
+        Assert.Equal(toon, ToonYamlConvert.FromYaml(yaml));
+    }
+
+    [Fact]
+    public void ToYaml_UsesToonOptions()
+    {
+        const string toon = "a:\n    b: 1";
+
+        Assert.Throws<ToonNet.Core.ToonParseException>(() => ToonYamlConvert.ToYaml(toon));
+        Assert.Contains("b: 1", ToonYamlConvert.ToYaml(toon, new ToonNet.Core.ToonOptions { IndentSize = 4 }));
+    }
+
+    #endregion
 }

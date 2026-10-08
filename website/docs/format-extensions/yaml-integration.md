@@ -149,9 +149,12 @@ foreach (var service in services.Properties)
 ## Conversion Notes
 
 - Only the first document of a multi-document YAML stream (`---`) is converted.
-- Scalars are typed by their text: lowercase `true`/`false` (also `yes`/`no`, `on`/`off`), `null`/`~`/empty
-  and anything .NET can parse as a number become TOON booleans, nulls and numbers; everything else is a string.
-  Quoting does not change this (`"42"` becomes a number), and the number check is lenient (`'1,000'` becomes `1000`).
+- Quoted and block scalars are always strings (`"42"` stays a string). Plain scalars are typed by their text:
+  `true`/`false` (also `yes`/`no`, `on`/`off`, in lowercase, capitalized or uppercase), `null`/`~`/empty, and numbers
+  in JSON number grammar (optional leading `+`, exact value when it fits in a `decimal`). Everything else, such as
+  `007`, `1,000`, `0xFF` or `.inf`, stays a string.
+- `ToonYamlConvert.ToYaml` quotes strings that YAML would otherwise read as another type, so conversions round-trip,
+  and accepts `ToonOptions` for parsing the TOON input.
 - Anchors and aliases are expanded into copies; comments are not preserved.
 
 ## Use Cases

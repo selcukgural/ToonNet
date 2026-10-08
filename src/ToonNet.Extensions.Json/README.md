@@ -16,7 +16,7 @@ ToonNet.Extensions.Json provides **seamless bidirectional conversion** between J
 - ✅ **JSON → TOON** - Convert JSON strings/documents to TOON format
 - ✅ **TOON → JSON** - Convert TOON strings/documents to JSON format
 - ✅ **System.Text.Json integration** - Familiar API patterns
-- ✅ **Preserves structure** - Round-trip conversions keep objects, arrays and values (numbers go through `double`)
+- ✅ **Preserves structure** - Round-trip conversions keep objects, arrays and values (numbers keep their exact value)
 - ✅ **Developer-friendly** - Static `ToonConvert` (string-based) and `ToonJsonConverter` (document-based) helpers
 
 **Perfect for:**
@@ -223,7 +223,7 @@ var roundtrip = JsonSerializer.Deserialize<object>(roundtripJson);
 | `object` | `ToonObject` | Key-value pairs |
 | `array` | `ToonArray` | Ordered items |
 | `string` | `ToonString` | UTF-8 text |
-| `number` | `ToonNumber` | Float64 precision |
+| `number` | `ToonNumber` | Exact `decimal` when it fits, otherwise `double` |
 | `true/false` | `ToonBoolean` | Boolean values |
 | `null` | `ToonNull` | Null/undefined |
 
@@ -237,8 +237,10 @@ var roundtrip = JsonSerializer.Deserialize<object>(roundtripJson);
 // JSON (roundtrip): {"price":35}  ← Format differs, value identical
 ```
 
-JSON numbers are read as `double`, so integers beyond 2^53 and long decimals lose precision
-(`12345678901234567890` becomes `12345678901234567000`). `ToonJsonConverter.FromJson(string)` uses
+JSON numbers are converted with the TOON number rules: the exact value is kept when it fits in a `decimal`
+(so `12345678901234567890` and `1299.99` round-trip unchanged), smaller or larger magnitudes use the nearest
+`double`, and a number that is not finite as a `double` (e.g. `1e400`) is kept as a string. As TOON spec §2
+requires, numbers are written in canonical form, so `35.00` becomes `35` and `1.0` becomes `1` (same value). `ToonJsonConverter.FromJson(string)` uses
 `JsonDocument.Parse` with its default maximum depth of 64.
 
 See [Roundtrip Guarantees](../../docs/API-GUIDE.md) for details.

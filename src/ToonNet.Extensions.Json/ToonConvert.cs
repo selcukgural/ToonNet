@@ -16,15 +16,19 @@ namespace ToonNet.Extensions.Json;
 public static class ToonConvert
 {
     /// <summary>
-    /// Deserializes a JSON string to a .NET object using TOON as the intermediate format.
+    /// Deserializes a JSON string to a .NET object with System.Text.Json.
     /// </summary>
+    /// <remarks>
+    /// This does not go through TOON; it is <see cref="JsonSerializer.Deserialize{TValue}(string, JsonSerializerOptions)"/>,
+    /// offered next to the other conversions for convenience. Use <see cref="ParseJson{T}"/> to deserialize with the
+    /// TOON serializer's rules (attributes, naming policy, converters).
+    /// </remarks>
     /// <typeparam name="T">The type of the object to deserialize to.</typeparam>
     /// <param name="jsonString">The JSON string to be deserialized.</param>
     /// <param name="options">Optional serialization options provided for JSON deserialization.</param>
     /// <returns>The deserialized object of type <typeparamref name="T"/>.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="jsonString"/> is null.</exception>
     /// <exception cref="JsonException">Thrown if the JSON string cannot be parsed properly.</exception>
-    /// <exception cref="NotSupportedException">Thrown if an error occurs during TOON deserialization.</exception>
     public static T? DeserializeFromJson<T>(string jsonString, JsonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(jsonString);
@@ -81,6 +85,7 @@ public static class ToonConvert
     /// </summary>
     /// <param name="toonString">The TOON string to convert.</param>
     /// <param name="writerOptions">Optional JSON writer options to control formatting.</param>
+    /// <param name="toonOptions">Optional options for parsing the TOON input (strict mode, indentation, limits).</param>
     /// <returns>JSON format string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when toonString is null.</exception>
     /// <exception cref="ToonParseException">Thrown when TOON parsing fails.</exception>
@@ -94,11 +99,11 @@ public static class ToonConvert
     /// string jsonString = ToonConvert.ToJson(toonString, new JsonWriterOptions { Indented = true });
     /// </code>
     /// </remarks>
-    public static string ToJson(string toonString, JsonWriterOptions? writerOptions = null)
+    public static string ToJson(string toonString, JsonWriterOptions? writerOptions = null, ToonOptions? toonOptions = null)
     {
         ArgumentNullException.ThrowIfNull(toonString);
 
-        var parser = new Core.Parsing.ToonParser();
+        var parser = new Core.Parsing.ToonParser(toonOptions);
         var toonDocument = parser.Parse(toonString);
         return ToonJsonConverter.ToJson(toonDocument, writerOptions);
     }
@@ -121,7 +126,7 @@ public static class ToonConvert
     {
         ArgumentNullException.ThrowIfNull(jsonString);
 
-        var toonString = FromJson(jsonString);
+        var toonString = FromJson(jsonString, options?.ToonOptions);
         return ToonSerializer.Deserialize<T>(toonString, options);
     }
 }

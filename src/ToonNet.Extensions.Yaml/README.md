@@ -286,10 +286,12 @@ Keys that are not plain identifiers are quoted in TOON (`"runs-on": ubuntu-lates
 
 ## ✨ YAML Features Supported
 
-Scalars are typed by their text: lowercase `true`/`yes`/`on` and `false`/`no`/`off` become booleans,
-`null`, `~` and empty values become null, and anything that .NET can parse as a number becomes a number.
-Quoting does not change this (`"42"` and `"true"` also become a number and a boolean), and the number check is
-lenient (`'1,000'` becomes `1000`, `(5)` becomes `-5`). Values that must stay strings may need post-processing.
+Quoted and block scalars (`"42"`, `'true'`, `|`, `>`) are always strings. Plain scalars are typed by their
+text: `true`/`yes`/`on` and `false`/`no`/`off` (lowercase, capitalized or uppercase) become booleans, `null`, `~`
+and empty values become null, and numbers follow the TOON number rules (JSON number grammar plus an optional
+leading `+`, exact value when it fits in a `decimal`). Anything else stays a string, so values such as `007`,
+`1,000` or `(5)` are not changed. When converting back, strings that would otherwise read as another type are
+quoted (`"42"`, `"true"`, `""`).
 
 ### Boolean Variants
 ```yaml
@@ -309,6 +311,8 @@ float: 3.14
 scientific: 1.5e-10
 hex: 0xFF      # kept as the string "0xFF"
 octal: 0o77    # kept as the string "0o77"
+zip: 007       # kept as the string "007" (leading zero)
+quoted: "42"   # a string
 ```
 
 ### Complex Structures
