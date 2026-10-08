@@ -73,7 +73,7 @@ Optimization and customization:
 ### 📚 Reference
 Additional resources:
 - **[API Guide](api-guide)** - Complete API reference
-- **[TOON Spec](toon-spec)** - TOON v3.0 specification
+- **[TOON Spec](toon-spec)** - TOON spec v3.3.2 conformance and implementation notes
 
 ## Quick Links
 

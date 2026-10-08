@@ -33,7 +33,10 @@ ToonNet is a **.NET serialization library** that provides:
 - **Configuration files** - Clean, readable syntax
 - **Data exchange** - Human and machine friendly
 
-> **TOON Specification:** This library implements [TOON v3.0](https://github.com/toon-format/spec/blob/main/SPEC.md) (Date: 2025-11-24, Status: Working Draft)
+> **TOON Specification:** ToonNet implements [TOON spec v3.3.2](https://github.com/toon-format/spec/blob/v3.3.2/SPEC.md)
+> and passes all 378 of its official encode/decode conformance fixtures, which run in CI
+> ([details](docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)). The optional key folding and path expansion
+> features (§13.4) are not implemented. TOON spec v4 is not supported yet.
 
 ---
 

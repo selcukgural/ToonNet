@@ -121,7 +121,7 @@ const config: Config = {
               href: 'https://github.com/selcukgural/ToonNet/blob/main/LICENSE',
             },
             {
-              label: 'TOON Spec v3.0',
+              label: 'TOON Spec v3.3.2',
               to: '/docs/toon-spec',
             },
           ],
