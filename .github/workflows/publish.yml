@@ -1,0 +1,118 @@
+name: Publish to NuGet
+
+# Manual only: run from the Actions tab after bumping <Version> in the csproj files.
+# Every package under src/ whose version is not yet on NuGet.org is packed and pushed;
+# packages whose version already exists are skipped.
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Pack and list the packages without pushing them'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-nuget
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Pack and publish
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: write # create the GitHub release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Pack packages with new versions
+        id: pack
+        run: |
+          set -euo pipefail
+          mkdir -p nupkgs
+          : > published.txt
+
+          for project in src/*/*.csproj; do
+            package_id=$(dotnet msbuild "$project" -getProperty:PackageId)
+            version=$(dotnet msbuild "$project" -getProperty:Version)
+            lower_id=$(echo "$package_id" | tr '[:upper:]' '[:lower:]')
+
+            status=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://api.nuget.org/v3-flatcontainer/$lower_id/$version/$lower_id.$version.nupkg")
+
+            if [ "$status" = "200" ]; then
+              echo "⏭️  $package_id $version already on NuGet.org, skipping"
+              continue
+            fi
+
+            echo "📦 Packing $package_id $version"
+            dotnet pack "$project" --configuration Release --output ./nupkgs
+            echo "$package_id $version" >> published.txt
+          done
+
+          echo "Packages to publish:"
+          cat published.txt
+
+      - name: Push to NuGet.org
+        if: ${{ !inputs.dry-run }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for package in ./nupkgs/*.nupkg; do
+            dotnet nuget push "$package" \
+              --api-key "$NUGET_API_KEY" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+      - name: Create GitHub release
+        if: ${{ !inputs.dry-run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -s published.txt ]; then
+            echo "Nothing was published; no release created."
+            exit 0
+          fi
+
+          core_version=$(dotnet msbuild src/ToonNet.Core/ToonNet.Core.csproj -getProperty:Version)
+          tag="v$core_version"
+
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already exists; uploading packages to it."
+            gh release upload "$tag" ./nupkgs/*.nupkg --clobber
+          else
+            {
+              echo "## Published packages"
+              echo
+              sed 's/^/- /' published.txt
+            } > release-notes.md
+            gh release create "$tag" ./nupkgs/*.nupkg \
+              --target "$GITHUB_SHA" \
+              --title "$tag" \
+              --notes-file release-notes.md \
+              --generate-notes
+          fi

@@ -124,7 +124,7 @@ await ToonSerializer.SerializeStreamAsync(
 ```
 
 **Batch size guidelines:**
-- **Small items (<1KB)**: Use 100-200 for best throughput
+- **Small items (&lt;1KB)**: Use 100-200 for best throughput
 - **Medium items (1-10KB)**: Use 50-100 (default: 50)
 - **Large items (>10KB)**: Use 10-50 to limit memory spikes
 

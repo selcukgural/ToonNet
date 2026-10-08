@@ -33,5 +33,8 @@
         <Project Path="tests/ToonNet.Tests/ToonNet.Tests.csproj">
             <BuildType Project="Release" />
         </Project>
+        <Project Path="tests/ToonNet.SourceGenerators.Tests/ToonNet.SourceGenerators.Tests.csproj">
+            <BuildType Project="Release" />
+        </Project>
     </Folder>
 </Solution>

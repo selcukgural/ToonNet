@@ -190,6 +190,26 @@ public static string Serialize<T>(T value, ToonSerializerOptions? options = null
 - **Benchmark critical code** paths
 - **Profile before optimizing**
 
+## Continuous Integration
+
+Every push to `master` and every pull request runs [`ci.yml`](.github/workflows/ci.yml): it builds the solution,
+runs all test projects, packs every package under `src/` and builds the documentation site. Please make sure
+`dotnet test ToonNet.slnx` passes locally before opening a pull request.
+
+## Releasing (maintainers)
+
+Publishing to NuGet is manual:
+
+1. Bump `<Version>` (and `<PackageReleaseNotes>`) in the `.csproj` of every package that changed, and add the
+   release to `CHANGELOG.md`.
+2. Merge to `master` and wait for CI to pass.
+3. Run the **Publish to NuGet** workflow from the Actions tab. Use **dry-run** first to see which packages would
+   be published.
+
+The workflow runs CI again, then packs and pushes only packages whose version is not yet on NuGet.org, and creates
+a GitHub release `v<ToonNet.Core version>` with the packages attached. It uses the `NUGET_API_KEY` secret of the
+`nuget` environment; protect that environment with required reviewers.
+
 ## Questions?
 
 - **Issues:** [GitHub Issues](https://github.com/selcukgural/ToonNet/issues)
