@@ -21,6 +21,7 @@ ToonNet.SourceGenerators.Tests/
     ├── SerializationGeneratorTests.cs   # round trips of the simple models
     ├── Phase4FeatureTests.cs            # nesting, converters, constructors
     ├── ReflectionParityTests.cs         # generated output == ToonSerializer output, for every model and option
+    ├── GeneratedPathTests.cs            # collections/dictionaries/nesting without reflection metadata, cycles, depth
     └── GeneratorDriverTests.cs          # runs the generator on source snippets: diagnostics, unusual shapes compile
 ```
 

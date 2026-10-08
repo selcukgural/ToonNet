@@ -24,11 +24,27 @@ the same properties in the same order, the same constructor selection, `[ToonPro
 
 **What is generated and what is not:**
 
-- Properties of type `string`, `bool` and the built-in numeric types are read and written directly, without reflection
-  (unless converters are registered in the options).
-- Every other property type (collections, dictionaries, enums, dates, `Guid`, nested objects) is handed to
-  `ToonSerializer.SerializeToValue` / `DeserializeFromValue`, which use reflection. The generator is therefore **not** a
-  Native AOT or trimming solution, and it makes no zero-allocation promise.
+Generated code converts these property types itself, without reflection:
+
+- `string`, `bool`, all built-in numeric types, `char`, enums, `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`,
+  `TimeSpan`, `Guid`, `Uri`, `Half`, `Int128`, `UInt128`, `BigInteger` (and their nullable forms);
+- other `[ToonSerializable]` types (their generated methods are called directly);
+- `T[]`, `List<T>`, `IList<T>`, `ICollection<T>`, `IEnumerable<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`,
+  `HashSet<T>`, `ISet<T>`, `IReadOnlySet<T>`, and `Dictionary<K,V>`, `IDictionary<K,V>`, `IReadOnlyDictionary<K,V>` with
+  primitive keys, when their elements are supported too (nesting is fine, e.g. `Dictionary<Guid, List<int>[]>`);
+- `ToonValue` properties.
+
+Everything else is handed to the reflection-based `ToonSerializer`, and the generator reports each such property as
+warning **`TOON006`** with the reason: `object`, interfaces, abstract types and type parameters (the runtime type is
+unknown), classes without `[ToonSerializable]`, other collection types (`ImmutableArray`, `SortedDictionary`, ...).
+Set `[ToonSerializable(AllowReflectionFallback = false)]` to make these errors (`TOON007`).
+
+At runtime the generated methods defer to `ToonSerializer` when the options contain converters, and when a property
+holds an instance of a type derived from the declared `[ToonSerializable]` class (`ToonSerializer` writes the runtime
+type). The output is the same either way.
+
+The library itself is not yet annotated for trimming or Native AOT, so the generator makes no AOT guarantee, and it
+makes no zero-allocation promise.
 
 ---
 
@@ -96,7 +112,8 @@ parameterless constructor, otherwise the public constructor with the most parame
   the document resets it to `default` instead of keeping its initializer value. Non-generic types keep the initializer
   value (the setter is called through `[UnsafeAccessor]`).
 - A `required` property whose key is missing from the document is set to `default`.
-- Converters registered in the options for the declaring type itself are not consulted (they are for its properties).
+- A circular reference is reported as "maximum depth exceeded" (`ToonEncodingException`), where `ToonSerializer`
+  reports "circular reference" (also a `ToonEncodingException`).
 
 ---
 
@@ -109,7 +126,8 @@ All attributes live in `ToonNet.Core.Serialization.Attributes`.
     NamingPolicy = PropertyNamingPolicy.CamelCase, // fixed naming; omit to use options.PropertyNamingPolicy at runtime
     GeneratePublicMethods = true,                  // false = internal methods
     IncludeNullChecks = true,                      // ArgumentNullException for a null argument
-    IncludeDocumentation = true)]                  // XML docs on the generated methods
+    IncludeDocumentation = true,                   // XML docs on the generated methods
+    AllowReflectionFallback = true)]               // false turns TOON006 warnings into TOON007 errors
 public partial class User
 {
     [ToonPropertyOrder(-1)]
@@ -136,6 +154,8 @@ public partial class User
 | `TOON002` | Error | The type, or a type it is nested in, is not `partial` |
 | `TOON003` | Warning | The type has no public properties to serialize |
 | `TOON005` | Warning | The type has no public constructor; only `Serialize` is generated |
+| `TOON006` | Warning | A property (or constructor parameter) is converted with reflection; the message says why |
+| `TOON007` | Error | Same as `TOON006`, on a type with `AllowReflectionFallback = false` |
 
 ---
 

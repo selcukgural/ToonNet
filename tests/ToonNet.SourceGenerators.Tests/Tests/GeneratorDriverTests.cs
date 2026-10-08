@@ -129,8 +129,76 @@ public class GeneratorDriverTests
             }
             """);
 
-        Assert.Empty(diagnostics);
+        // Only the generic Entry's TKey/TValue values need reflection
+        Assert.All(diagnostics, d => Assert.Equal("TOON006", d.Id));
+        Assert.Equal(["Key", "Value"], diagnostics.Select(d => d.GetMessage()).Select(m => m.Split('\'')[1]).Order());
         Assert.Empty(errors);
         Assert.Equal(3, generated.Length);
+    }
+
+    [Fact]
+    public void ReflectionFallback_ReportsToon006_PerMember()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using System.Collections.Generic;
+            using ToonNet.Core.Serialization.Attributes;
+            public class Plain { public int A { get; set; } }
+            public interface IShape { }
+            [ToonSerializable]
+            public partial class Holder
+            {
+                public object? Anything { get; set; }
+                public IShape? Shape { get; set; }
+                public List<Plain> Plains { get; set; } = new();
+                public Dictionary<Plain, int> ByPlain { get; set; } = new();
+                public List<int> Fine { get; set; } = new();
+            }
+            """);
+
+        Assert.Empty(errors);
+        Assert.All(diagnostics, d => Assert.Equal("TOON006", d.Id));
+
+        var messages = diagnostics.Select(d => d.GetMessage()).ToList();
+        Assert.Equal(4, messages.Count);
+        Assert.Contains(messages, m => m.Contains("'Anything'") && m.Contains("not known at compile time"));
+        Assert.Contains(messages, m => m.Contains("'Shape'"));
+        Assert.Contains(messages, m => m.Contains("'Plains'") && m.Contains("'Plain' is not marked [ToonSerializable]"));
+        Assert.Contains(messages, m => m.Contains("'ByPlain'") && m.Contains("dictionary keys"));
+        Assert.All(diagnostics, d => Assert.True(d.Location.GetLineSpan().StartLinePosition.Line > 0)); // points at the member
+    }
+
+    [Fact]
+    public void AllowReflectionFallbackFalse_ReportsToon007()
+    {
+        var (diagnostics, _, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            [ToonSerializable(AllowReflectionFallback = false)]
+            public partial class Strict { public object? Anything { get; set; } public int Fine { get; set; } }
+            """);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("TOON007", diagnostic.Id);
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
+    public void ConverterProperty_DoesNotReportFallback()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Models;
+            using ToonNet.Core.Serialization;
+            using ToonNet.Core.Serialization.Attributes;
+            public class Plain { }
+            public sealed class PlainConverter : ToonConverter<Plain>
+            {
+                public override ToonValue? Write(Plain? value, ToonSerializerOptions options) => new ToonString("p");
+                public override Plain? Read(ToonValue value, ToonSerializerOptions options) => new Plain();
+            }
+            [ToonSerializable]
+            public partial record Holder([property: ToonConverter(typeof(PlainConverter))] Plain Item);
+            """);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(errors);
     }
 }

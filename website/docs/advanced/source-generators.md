@@ -59,13 +59,26 @@ produce the same TOON for the same object:
 
 ### What is generated
 
-`string`, `bool` and the built-in numeric properties are read and written directly. All other property types
-(collections, dictionaries, enums, dates, `Guid`, nested objects) are handed to `ToonSerializer.SerializeToValue` and
-`ToonSerializer.DeserializeFromValue`, which use reflection.
+Generated code converts these property types itself, without reflection:
+
+- `string`, `bool`, all built-in numeric types, `char`, enums, `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`,
+  `TimeSpan`, `Guid`, `Uri`, `Half`, `Int128`, `UInt128`, `BigInteger` (and their nullable forms);
+- other `[ToonSerializable]` types, whose generated methods are called directly;
+- arrays, `List<T>` and the interfaces it implements, `HashSet<T>`/`ISet<T>`/`IReadOnlySet<T>`, and
+  `Dictionary<K,V>`/`IDictionary<K,V>`/`IReadOnlyDictionary<K,V>` with primitive keys, when their elements are
+  supported (nesting is fine);
+- `ToonValue` properties.
+
+Any other property type (`object`, interfaces, abstract types, type parameters, classes without `[ToonSerializable]`,
+other collection types) is handed to the reflection-based serializer and reported as warning `TOON006`, with the
+reason. Use `[ToonSerializable(AllowReflectionFallback = false)]` to turn these into errors (`TOON007`).
+
+At runtime the generated methods defer to `ToonSerializer` when the options contain converters, or when a property
+holds an instance of a class derived from its declared `[ToonSerializable]` type. The output is the same either way.
 
 :::note
-The generator is not a Native AOT or trimming solution, and it does not make serialization allocation-free. Use it when
-you want static, discoverable `Serialize`/`Deserialize` methods with the same behavior as `ToonSerializer`.
+ToonNet is not yet annotated for trimming or Native AOT, so the generator makes no AOT guarantee, and it does not make
+serialization allocation-free.
 :::
 
 ## Supported shapes
@@ -84,6 +97,8 @@ Known differences from `ToonSerializer`:
 - A non-`required` `init` property of a **generic** type is set through the object initializer, so a missing key resets
   it to `default` instead of keeping its initializer value.
 - A `required` property whose key is missing from the document is set to `default`.
+- A circular reference is reported as "maximum depth exceeded" instead of "circular reference" (both throw
+  `ToonEncodingException`).
 
 ## Attribute options
 
@@ -92,7 +107,8 @@ Known differences from `ToonSerializer`:
     NamingPolicy = PropertyNamingPolicy.CamelCase, // fixed; omit to follow options.PropertyNamingPolicy at runtime
     GeneratePublicMethods = true,                  // false generates internal methods
     IncludeNullChecks = true,                      // ArgumentNullException for a null argument
-    IncludeDocumentation = true)]                  // XML docs on the generated methods
+    IncludeDocumentation = true,                   // XML docs on the generated methods
+    AllowReflectionFallback = true)]               // false turns TOON006 warnings into TOON007 errors
 public partial class User
 {
     [ToonProperty("display_name")]
@@ -111,6 +127,8 @@ public partial class User
 | `TOON002` | Error | The type, or a type it is nested in, is not `partial` |
 | `TOON003` | Warning | The type has no public properties to serialize |
 | `TOON005` | Warning | The type has no public constructor; only `Serialize` is generated |
+| `TOON006` | Warning | A property or constructor parameter is converted with reflection; the message says why |
+| `TOON007` | Error | Same as `TOON006`, on a type with `AllowReflectionFallback = false` |
 
 ## Viewing generated code
 

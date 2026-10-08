@@ -34,9 +34,11 @@ namespace ToonNet.Core.Serialization.Attributes;
 ///     <para>
 ///         The generated code follows the same rules as <see cref="ToonSerializer"/> (property selection and order,
 ///         constructor selection, <c>[ToonProperty]</c>, <c>[ToonIgnore]</c>, <c>[ToonConverter]</c>, null handling) and
-///         produces the same output. Strings, booleans and numbers are converted inline; other property types
-///         (collections, enums, dates, nested objects) are delegated to <see cref="ToonSerializer.SerializeToValue{T}"/>
-///         and <see cref="ToonSerializer.DeserializeFromValue{T}"/>, which use reflection.
+///         produces the same output. Primitives, enums, dates, other <c>[ToonSerializable]</c> types, arrays, lists, sets
+///         and dictionaries are converted by generated code. Other property types (for example <c>object</c>, interfaces or
+///         classes without the attribute) are handed to the reflection-based serializer and reported as warning
+///         <c>TOON006</c>. When the options contain converters, the generated methods defer to
+///         <see cref="ToonSerializer"/> entirely.
 ///     </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
@@ -85,4 +87,15 @@ public sealed class ToonSerializableAttribute : Attribute
     ///     Set to <c>false</c> to reduce generated code size if documentation is not needed.
     /// </remarks>
     public bool IncludeDocumentation { get; init; } = true;
+
+    /// <summary>
+    ///     Gets or sets whether property values the generator cannot convert itself may be handed to the reflection-based
+    ///     <see cref="ToonSerializer"/>.
+    /// </summary>
+    /// <remarks>
+    ///     Default: <c>true</c>, and each such property is reported as warning <c>TOON006</c>. Set to <c>false</c> to turn
+    ///     these into error <c>TOON007</c>, so the type is guaranteed to be converted without reflection when the options
+    ///     contain no converters.
+    /// </remarks>
+    public bool AllowReflectionFallback { get; init; } = true;
 }

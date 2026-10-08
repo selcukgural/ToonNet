@@ -165,3 +165,76 @@ public partial class Positional
 
     public string Mode { get; }
 }
+
+// Used only by GeneratedPathTests, so the reflection-based serializer never caches metadata for them elsewhere.
+[ToonSerializable(AllowReflectionFallback = false)]
+public sealed partial class Warehouse
+{
+    public string Name { get; set; } = "";
+
+    public List<Shelf> Shelves { get; set; } = [];
+
+    public Dictionary<string, Shelf> ByCode { get; set; } = new();
+
+    public Dictionary<Guid, int[]> Counts { get; set; } = new();
+
+    public Dictionary<Status, List<string?>> Notes { get; set; } = new();
+
+    public HashSet<Status> Flags { get; set; } = [];
+
+    public IReadOnlyList<int?> Readings { get; set; } = [];
+
+    public int[][] Grid { get; set; } = [];
+
+    public DateTimeOffset OpenedAt { get; set; }
+
+    public TimeSpan? Window { get; set; }
+
+    public Shelf? Spare { get; set; }
+
+    public Bin? Bin { get; set; }
+
+    public ToonValue? Extra { get; set; }
+}
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public sealed partial record Shelf(string Code, int Capacity, Status Status);
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public partial record struct Bin(int Row, int Column);
+
+/// <summary>Self-referencing type, for cycle handling.</summary>
+[ToonSerializable]
+public partial class Node
+{
+    public string Name { get; set; } = "";
+
+    public Node? Next { get; set; }
+}
+
+/// <summary>A derived instance stored in a property declared as the [ToonSerializable] base type.</summary>
+public class SpecialAddress : Address
+{
+    public string Floor { get; set; } = "";
+}
+
+// Used only by GeneratedPathTests.SupportedGraph_UsesNoReflectionMetadata: no test may pass these to ToonSerializer.
+[ToonSerializable(AllowReflectionFallback = false)]
+public sealed partial class Depot
+{
+    public List<Crate> Crates { get; set; } = [];
+
+    public Dictionary<Guid, Crate[]> ByOwner { get; set; } = new();
+
+    public Dictionary<Status, HashSet<Slot>> Slots { get; set; } = new();
+
+    public Crate? Spare { get; set; }
+
+    public Slot? Entrance { get; set; }
+}
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public sealed partial record Crate(string Label, decimal Weight, DateOnly PackedOn);
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public partial record struct Slot(int Row, int Column);

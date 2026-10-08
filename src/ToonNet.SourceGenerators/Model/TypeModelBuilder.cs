@@ -63,6 +63,9 @@ internal static class TypeModelBuilder
         var parameters = constructor?.Parameters ?? ImmutableArray<IParameterSymbol>.Empty;
         var boundProperties = new HashSet<int>();
         var parameterModels = new List<ParameterModel>();
+        var planBuilder = new ValuePlanBuilder(compilation);
+        var allowFallback = GetBool(attribute, "AllowReflectionFallback", true);
+        var fallbackDescriptor = allowFallback ? DiagnosticHelper.ReflectionFallback : DiagnosticHelper.ReflectionFallbackNotAllowed;
 
         foreach (var parameter in parameters)
         {
@@ -73,11 +76,25 @@ internal static class TypeModelBuilder
                 boundProperties.Add(index);
             }
 
-            parameterModels.Add(new ParameterModel(parameter.Name, parameter.Type.ToDisplayString(TypeNameFormat), index, FormatDefaultValue(parameter)));
+            // A parameter bound to a property with [ToonConverter] is read by the converter, like in ToonSerializer.
+            // ... and a parameter of the same type as its property is reported with the property, not twice.
+            var reasons = new List<string>();
+            var reportedWithProperty = index >= 0 && (HasConverter(properties[index]) ||
+                                                      SymbolEqualityComparer.Default.Equals(parameter.Type, properties[index].Type));
+            var plan = planBuilder.Build(parameter.Type, reportedWithProperty ? [] : reasons);
+            ReportFallback(diagnostics, fallbackDescriptor, reasons, $"constructor parameter '{parameter.Name}'", type, parameter.Locations, location);
+
+            parameterModels.Add(new ParameterModel(parameter.Name, parameter.Type.ToDisplayString(TypeNameFormat), index, FormatDefaultValue(parameter), plan));
         }
 
-        var propertyModels = properties.Select((property, index) => CreatePropertyModel(
-            property, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers)).ToImmutableArray();
+        var propertyModels = properties.Select((property, index) =>
+        {
+            var reasons = new List<string>();
+            var plan = planBuilder.Build(property.Type, HasConverter(property) ? [] : reasons);
+            ReportFallback(diagnostics, fallbackDescriptor, reasons, $"property '{property.Name}'", type, property.Locations, location);
+
+            return CreatePropertyModel(property, plan, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers);
+        }).ToImmutableArray();
 
         var namingPolicy = attribute.NamedArguments.FirstOrDefault(a => a.Key == "NamingPolicy").Value.Value as int?;
 
@@ -99,6 +116,8 @@ internal static class TypeModelBuilder
             NullChecks: GetBool(attribute, "IncludeNullChecks", true),
             Documentation: GetBool(attribute, "IncludeDocumentation", true),
             CanUseUnsafeAccessor: canUseUnsafeAccessor,
+            CheckRuntimeType: !type.IsValueType && !type.IsSealed,
+            HasTypeConverter: type.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute"),
             FixedNamingPolicy: namingPolicy,
             Properties: new EquatableArray<PropertyModel>(propertyModels),
             Constructor: type.IsAbstract ? null : constructorModel,
@@ -108,11 +127,11 @@ internal static class TypeModelBuilder
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
     {
         return new TypeModel(false, null, default, Declaration(type), type.ToDisplayString(TypeNameFormat), type.ToDisplayString(TypeOfFormat),
-                             HintName(type), type.IsValueType, true, true, true, false, null, default, null,
+                             HintName(type), type.IsValueType, true, true, true, false, false, false, null, default, null,
                              new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()));
     }
 
-    private static bool IsPartial(INamedTypeSymbol type)
+    internal static bool IsPartial(INamedTypeSymbol type)
     {
         return type.DeclaringSyntaxReferences.Any(r => r.GetSyntax() is TypeDeclarationSyntax declaration &&
                                                        declaration.Modifiers.Any(SyntaxKind.PartialKeyword));
@@ -204,7 +223,7 @@ internal static class TypeModelBuilder
     /// A <c>[ToonConstructor]</c> constructor, otherwise the public parameterless one, otherwise the public constructor
     /// with the most parameters (e.g. the primary constructor of a positional record).
     /// </summary>
-    private static IMethodSymbol? SelectConstructor(INamedTypeSymbol type)
+    internal static IMethodSymbol? SelectConstructor(INamedTypeSymbol type)
     {
         if (type.IsAbstract)
         {
@@ -222,13 +241,25 @@ internal static class TypeModelBuilder
                ?? constructors.OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
     }
 
-    private static PropertyModel CreatePropertyModel(IPropertySymbol property, INamedTypeSymbol type, Compilation compilation, bool canUseUnsafeAccessor,
-                                                     bool boundToConstructor, bool setsRequiredMembers)
+    private static bool HasConverter(IPropertySymbol property) => FindAttribute(property, "ToonConverterAttribute") != null;
+
+    /// <summary>Reports TOON006 (or TOON007 when fallback is not allowed) for a member whose value uses reflection.</summary>
+    private static void ReportFallback(List<DiagnosticInfo> diagnostics, DiagnosticDescriptor descriptor, List<string> reasons, string member,
+                                       INamedTypeSymbol type, ImmutableArray<Location> memberLocations, Location? typeLocation)
+    {
+        if (reasons.Count == 0)
+        {
+            return;
+        }
+
+        var location = memberLocations.FirstOrDefault(l => l.IsInSource) ?? typeLocation;
+        diagnostics.Add(DiagnosticInfo.Create(descriptor, location, member, type.Name, string.Join("; ", reasons.Distinct())));
+    }
+
+    private static PropertyModel CreatePropertyModel(IPropertySymbol property, ValuePlan plan, INamedTypeSymbol type, Compilation compilation,
+                                                     bool canUseUnsafeAccessor, bool boundToConstructor, bool setsRequiredMembers)
     {
         var propertyType = property.Type;
-        var isNullableValueType = propertyType is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T };
-        var underlying = isNullableValueType ? ((INamedTypeSymbol)propertyType).TypeArguments[0] : propertyType;
-        var primitive = GetPrimitiveKind(underlying);
 
         var attributeName = FindAttribute(property, "ToonPropertyAttribute") is { ConstructorArguments.Length: > 0 } nameAttribute
             ? nameAttribute.ConstructorArguments[0].Value as string
@@ -251,10 +282,7 @@ internal static class TypeModelBuilder
             TypeName: propertyType.ToDisplayString(TypeNameFormat),
             TypeOfName: propertyType.ToDisplayString(TypeOfFormat),
             Names: new EquatableArray<string>(names),
-            Primitive: primitive,
-            PrimitiveTypeName: primitive == PrimitiveKind.None ? null : underlying.ToDisplayString(TypeOfFormat),
-            CanBeNull: !propertyType.IsValueType || isNullableValueType,
-            IsNullableValueType: isNullableValueType,
+            Plan: plan,
             ConverterTypeName: converter,
             IsReadOnly: setter == null,
             Write: write,
@@ -309,22 +337,6 @@ internal static class TypeModelBuilder
 
         // Generic types cannot use [UnsafeAccessor] on .NET 8; an init-only property is then always initialized.
         return accessible ? WriteKind.Initializer : WriteKind.None;
-    }
-
-    private static PrimitiveKind GetPrimitiveKind(ITypeSymbol type)
-    {
-        return type.SpecialType switch
-        {
-            SpecialType.System_String => PrimitiveKind.String,
-            SpecialType.System_Boolean => PrimitiveKind.Boolean,
-            SpecialType.System_SByte or SpecialType.System_Byte or SpecialType.System_Int16 or SpecialType.System_UInt16 or
-                SpecialType.System_Int32 or SpecialType.System_UInt32 or SpecialType.System_Int64 => PrimitiveKind.Integer,
-            SpecialType.System_UInt64 => PrimitiveKind.UInt64,
-            SpecialType.System_Single => PrimitiveKind.Single,
-            SpecialType.System_Double => PrimitiveKind.Double,
-            SpecialType.System_Decimal => PrimitiveKind.Decimal,
-            _ => PrimitiveKind.None
-        };
     }
 
     // Same algorithms as ToonSerializer.ToCamelCase / ToSnakeCase, so both produce identical keys.

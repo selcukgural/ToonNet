@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI:** Build, test, pack and docs build on every push and pull request; manual, test-gated NuGet publishing.
 - **ToonNet.Core:** `ToonSerializer.SerializeToValue` / `DeserializeFromValue` convert between objects and `ToonValue`
   without going through text, and `ToonDocument.Parse(string, ToonOptions?)` parses TOON text into a document.
-- **ToonNet.Core:** `[ToonSerializable]` can be applied to structs.
+- **ToonNet.Core:** `[ToonSerializable]` can be applied to structs and has a new `AllowReflectionFallback` option.
+- **ToonNet.Core:** `ToonSourceGenerationHelpers` (hidden from IntelliSense) is the entry point generated code uses;
+  it shares the conversion rules of `ToonSerializer`.
 
 ### Changed
 - **ToonNet.Core (breaking output change):** The encoder was rewritten to follow TOON spec v3.3.2 and now passes all
@@ -82,8 +84,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses the incremental `ForAttributeWithMetadataName` pipeline; diagnostics point at the type declaration. New warning
     `TOON005` when a type has no public constructor (only `Serialize` is generated); `TOON004` was never reported and is
     removed.
-  - The package description no longer claims zero allocations or Native AOT support: non-primitive properties use the
-    reflection-based serializer.
+  - Generated code converts primitives, enums, dates, `Guid`, `Uri`, big integers, other `[ToonSerializable]` types,
+    arrays, lists, sets and dictionaries with primitive keys itself, without reflection metadata. Other property types
+    are handed to `ToonSerializer` and reported as warning `TOON006`; `[ToonSerializable(AllowReflectionFallback = false)]`
+    turns them into error `TOON007`. When the options contain converters, or a property holds a derived instance, the
+    generated methods defer to `ToonSerializer`, so the output stays the same.
+  - Generated methods enforce `MaxDepth`, so circular references throw `ToonEncodingException` instead of overflowing
+    the stack.
+  - The package description no longer claims zero allocations or Native AOT support.
 ### Security
 - **ToonNet.Core:** The parser now enforces `ToonOptions.MaxDepth` while parsing (previously only after parsing) and checks
   the remaining stack space, so deeply nested input throws `ToonParseException` instead of terminating the process.

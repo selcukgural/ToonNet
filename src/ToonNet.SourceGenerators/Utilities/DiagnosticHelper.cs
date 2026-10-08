@@ -42,6 +42,21 @@ internal static class DiagnosticHelper
                                                                           Category, DiagnosticSeverity.Warning, true);
 
     /// <summary>
+    /// Warning: a property or constructor parameter is converted by the reflection-based serializer.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ReflectionFallback = new("TOON006", "Value is serialized with reflection",
+                                                                         "The {0} of '{1}' is serialized with reflection: {2}", Category,
+                                                                         DiagnosticSeverity.Warning, true,
+                                                                         "Generated code hands this value to ToonSerializer, which uses reflection and is not trim or AOT safe. Mark the type [ToonSerializable], use a supported collection type, or add a [ToonConverter].");
+
+    /// <summary>
+    /// Error: like TOON006, for a type declared with <c>[ToonSerializable(AllowReflectionFallback = false)]</c>.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ReflectionFallbackNotAllowed = new("TOON007", "Reflection fallback is not allowed",
+                                                                                   "The {0} of '{1}' would be serialized with reflection ({2}), but AllowReflectionFallback is false",
+                                                                                   Category, DiagnosticSeverity.Error, true);
+
+    /// <summary>
     /// Looks up a descriptor by id (used when replaying diagnostics stored in the generator model).
     /// </summary>
     public static DiagnosticDescriptor Get(string id) => id switch
@@ -49,6 +64,8 @@ internal static class DiagnosticHelper
         "TOON002" => InvalidClassStructure,
         "TOON003" => NoProperties,
         "TOON005" => NoPublicConstructor,
+        "TOON006" => ReflectionFallback,
+        "TOON007" => ReflectionFallbackNotAllowed,
         _         => GenerationError
     };
 }
