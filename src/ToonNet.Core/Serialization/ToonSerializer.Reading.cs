@@ -53,6 +53,12 @@ public static partial class ToonSerializer
 
         targetType = underlyingType ?? targetType;
 
+        // A converter for T also reads T? (it is used for T? values when writing, through their runtime type)
+        if (underlyingType != null && propertyConverter == null && options.GetConverter(underlyingType) is { } underlyingConverter)
+        {
+            return underlyingConverter.Read(value, underlyingType, options);
+        }
+
         if (targetType == typeof(object))
         {
             return ToUntyped(value);

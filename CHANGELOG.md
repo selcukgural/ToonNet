@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** `ToonSerializer.SerializeToValue` / `DeserializeFromValue` convert between objects and `ToonValue`
   without going through text, and `ToonDocument.Parse(string, ToonOptions?)` parses TOON text into a document.
 - **ToonNet.Core:** `[ToonSerializable]` can be applied to structs and has a new `AllowReflectionFallback` option.
+- **ToonNet.Extensions.Json / Yaml:** `ToonConvert.ToJson` and `ToonYamlConvert.ToYaml` accept `ToonOptions` for
+  parsing the TOON input.
 - **ToonNet.Core:** `ToonSourceGenerationHelpers` (hidden from IntelliSense) is the entry point generated code uses;
   it shares the conversion rules of `ToonSerializer`.
 
@@ -103,6 +105,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expand to more than `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes. New `FromYaml(string, ToonOptions?)` overload.
 
 ### Fixed
+- **ToonNet.Extensions.Json:** JSON numbers are no longer rounded through `double`. The exact value is kept when it
+  fits in a `decimal` (`12345678901234567890` was read as `12345678901234567000`), numbers that are not finite as a
+  `double` (`1e400`) are kept as strings, and `ToJson` writes the canonical TOON number text. Canonical form is kept
+  as TOON spec §2 requires (`35.00` → `35`).
+- **ToonNet.Extensions.Yaml:** Quoted and block scalars stay strings (`"42"` and `'true'` were turned into a number
+  and a boolean). Plain scalars use the TOON number rules (exact values; `1,000`, `(5)` and `007` stay strings instead
+  of becoming `1000`, `-5` and `7`), booleans and nulls also accept the capitalized and uppercase forms, and
+  `ToYaml` quotes strings that YAML would read as another type, so conversions round-trip. Numbers are written to
+  YAML with their exact value.
+- **ToonNet.AspNetCore:** The configuration provider stores numbers with their exact value in canonical form
+  (large integers were rounded through `double` and written as `1.2345678901234567E+19`), and `AddToonFile` accepts
+  absolute paths.
+- **ToonNet.AspNetCore.Mvc (behavior change):** `AddToonFormatters` uses the application's
+  `IOptions<ToonSerializerOptions>`, so options set with `AddToonNet` apply to the formatters, and its
+  `configureOptions` delegate now configures those shared options (also used by `ToonResult`).
+- **ToonNet.Core:** A converter registered for `T` is also used when reading `T?` (it was already used when writing).
 - **ToonNet.Core:** `SerializeStreamAsync` and `SerializeCollectionToStreamAsync` now write a real blank line (or the
   explicit `---` separator on its own line) between documents, so `DeserializeStreamAsync` reads them back one by one.
   The separator is always `\n`, independent of the platform line ending.

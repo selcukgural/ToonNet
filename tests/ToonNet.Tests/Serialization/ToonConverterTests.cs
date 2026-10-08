@@ -772,4 +772,35 @@ public class ToonConverterTests
     }
 
     #endregion
+
+    private sealed class UnixDateConverter : ToonConverter<DateTime>
+    {
+        public override ToonValue? Write(DateTime value, ToonSerializerOptions options) =>
+            new ToonNumber(new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeSeconds());
+
+        public override DateTime Read(ToonValue value, ToonSerializerOptions options) =>
+            DateTimeOffset.FromUnixTimeSeconds((long)((ToonNumber)value).Value).UtcDateTime;
+    }
+
+    private sealed class Schedule
+    {
+        public DateTime? Start { get; set; }
+
+        public DateTime? End { get; set; }
+    }
+
+    [Fact]
+    public void ConverterForT_IsUsedForNullableT_InBothDirections()
+    {
+        var options = new ToonSerializerOptions();
+        options.AddConverter(new UnixDateConverter());
+        var schedule = new Schedule { Start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), End = null };
+
+        var toon = ToonSerializer.Serialize(schedule, options);
+        var copy = ToonSerializer.Deserialize<Schedule>(toon, options)!;
+
+        Assert.Equal("Start: 1767225600\nEnd: null", toon);
+        Assert.Equal(schedule.Start, copy.Start);
+        Assert.Null(copy.End);
+    }
 }
