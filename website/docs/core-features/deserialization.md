@@ -543,7 +543,7 @@ catch (ToonSerializationException ex)
 {
     // Valid TOON that does not fit the target type
     Console.WriteLine($"Deserialization failed: {ex.Message}");
-    Console.WriteLine($"Path: {ex.PropertyName}");        // e.g. $.Items[2].Price
+    Console.WriteLine($"Path: {ex.Path}");        // e.g. $.Items[2].Price
     Console.WriteLine($"Target type: {ex.TargetType}");
 }
 ```

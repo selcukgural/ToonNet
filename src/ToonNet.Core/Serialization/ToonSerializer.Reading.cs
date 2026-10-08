@@ -17,15 +17,7 @@ public static partial class ToonSerializer
     private static object? DeserializeValue(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, SerializerState state,
                                             IToonConverter? propertyConverter = null)
     {
-        if (depth > options.MaxDepth)
-        {
-            throw new ToonParseException($"Maximum depth of {options.MaxDepth} exceeded during deserialization", 0, 0);
-        }
-
-        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
-        {
-            throw new ToonParseException("Document is nested too deeply to deserialize with the available stack space", 0, 0);
-        }
+        EnsureDepth(options, depth);
 
         var converter = propertyConverter ?? options.GetConverter(targetType);
 
@@ -61,7 +53,7 @@ public static partial class ToonSerializer
 
         if (targetType == typeof(object))
         {
-            return ToUntyped(value);
+            return ToUntyped(value, options, depth);
         }
 
         if (TryDeserializePrimitive(value, targetType, state, out var primitiveResult))
@@ -72,6 +64,11 @@ public static partial class ToonSerializer
         if (GetTypeMetadata(targetType).TypeConverter is { } typeConverter)
         {
             return typeConverter.Read(value, targetType, options);
+        }
+
+        if (IsScalarType(targetType))
+        {
+            throw Error($"Cannot convert {value.ValueType} to {targetType.Name}", targetType, value, state);
         }
 
         if (TryDeserializeDictionary(value, targetType, options, depth, state, out var dictionaryResult))
@@ -87,6 +84,20 @@ public static partial class ToonSerializer
         return DeserializeObject(value, targetType, options, depth, state);
     }
 
+    /// <exception cref="ToonParseException">Thrown when the maximum depth or the available stack space is exceeded.</exception>
+    private static void EnsureDepth(ToonSerializerOptions options, int depth)
+    {
+        if (depth > options.MaxDepth)
+        {
+            throw new ToonParseException($"Maximum depth of {options.MaxDepth} exceeded during deserialization", 0, 0);
+        }
+
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            throw new ToonParseException("Document is nested too deeply to deserialize with the available stack space", 0, 0);
+        }
+    }
+
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
     {
         var path = state.Path;
@@ -98,8 +109,8 @@ public static partial class ToonSerializer
         }
 
         return inner == null
-            ? new ToonSerializationException(text) { TargetType = targetType, PropertyName = path }
-            : new ToonSerializationException(text, inner) { TargetType = targetType, PropertyName = path };
+            ? new ToonSerializationException(text) { TargetType = targetType, Path = path }
+            : new ToonSerializationException(text, inner) { TargetType = targetType, Path = path };
     }
 
     /// <summary>
@@ -107,8 +118,10 @@ public static partial class ToonSerializer
     ///     <see cref="Dictionary{TKey,TValue}"/>, arrays <see cref="List{T}"/>, integers <see cref="long"/>,
     ///     other exact numbers <see cref="decimal"/> and the rest <see cref="double"/>.
     /// </summary>
-    private static object? ToUntyped(ToonValue value)
+    private static object? ToUntyped(ToonValue value, ToonSerializerOptions options, int depth)
     {
+        EnsureDepth(options, depth);
+
         return value switch
         {
             ToonNull      => null,
@@ -118,8 +131,8 @@ public static partial class ToonSerializer
                 => (long)exact,
             ToonNumber { DecimalValue: { } exact } => exact,
             ToonNumber n  => n.Value,
-            ToonArray a   => a.Items.Select(ToUntyped).ToList(),
-            ToonObject o  => o.Properties.ToDictionary(p => p.Key, p => ToUntyped(p.Value)),
+            ToonArray a   => a.Items.Select(item => ToUntyped(item, options, depth + 1)).ToList(),
+            ToonObject o  => o.Properties.ToDictionary(p => p.Key, p => ToUntyped(p.Value, options, depth + 1)),
             _             => value
         };
     }
@@ -214,6 +227,16 @@ public static partial class ToonSerializer
         {
             throw Error($"Cannot convert the value to {targetType.Name}: {ex.Message}", targetType, value, state, ex);
         }
+    }
+
+    /// <summary>
+    ///     Types that are read from a single TOON primitive; an object or array cannot be converted to them.
+    /// </summary>
+    private static bool IsScalarType(Type type)
+    {
+        return type == typeof(string) || type == typeof(bool) || type.IsEnum || IsNumericType(type) || type == typeof(char) ||
+               type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(DateOnly) || type == typeof(TimeOnly) ||
+               type == typeof(TimeSpan) || type == typeof(Guid) || type == typeof(Uri);
     }
 
     private static bool IsNumericType(Type type)

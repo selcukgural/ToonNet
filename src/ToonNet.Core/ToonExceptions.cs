@@ -80,11 +80,15 @@ public sealed class ToonParseException : ToonException
     /// <summary>
     ///     Gets the actual token that was encountered.
     /// </summary>
+    /// <remarks>The line-based parser does not report tokens; this is only set by <see cref="Create"/> callers.</remarks>
+    [Obsolete("The parser does not set this property. Use Line, Column and the message instead.")]
     public string? ActualToken { get; init; }
-    
+
     /// <summary>
     ///     Gets the expected token type.
     /// </summary>
+    /// <remarks>The line-based parser does not report tokens; this is only set by <see cref="Create"/> callers.</remarks>
+    [Obsolete("The parser does not set this property. Use Line, Column and the message instead.")]
     public string? ExpectedToken { get; init; }
 
     /// <summary>
@@ -118,6 +122,7 @@ public sealed class ToonParseException : ToonException
     public static ToonParseException Create(string message, int line, int column, string? actual = null, string? expected = null,
                                             string? suggestion = null, string? codeSnippet = null)
     {
+#pragma warning disable CS0618 // kept for callers that still pass tokens
         var ex = new ToonParseException(message, line, column)
         {
             ActualToken = actual,
@@ -125,6 +130,7 @@ public sealed class ToonParseException : ToonException
             Suggestion = suggestion,
             CodeSnippet = codeSnippet
         };
+#pragma warning restore CS0618
 
         return ex;
     }
@@ -216,9 +222,20 @@ public sealed class ToonSerializationException : ToonException
     public Type? TargetType { get; init; }
     
     /// <summary>
-    ///     Gets the property name where the error occurred.
+    ///     Gets where the error occurred: a path such as <c>$.Items[2].Price</c> for errors raised by
+    ///     <see cref="Serialization.ToonSerializer"/>, or the property name passed to <see cref="Create"/>.
     /// </summary>
-    public string? PropertyName { get; init; }
+    public string? Path { get; init; }
+
+    /// <summary>
+    ///     Gets where the error occurred. Same value as <see cref="Path"/>.
+    /// </summary>
+    [Obsolete("Use Path. This property returns the same value, which is a path such as $.Items[2].Price rather than a property name.")]
+    public string? PropertyName
+    {
+        get => Path;
+        init => Path = value;
+    }
     
     /// <summary>
     ///     Gets the value that caused the error.
@@ -257,7 +274,7 @@ public sealed class ToonSerializationException : ToonException
         var ex = new ToonSerializationException(fullMessage)
         {
             TargetType = targetType,
-            PropertyName = propertyName,
+            Path = propertyName,
             Value = value,
             Suggestion = suggestion
         };

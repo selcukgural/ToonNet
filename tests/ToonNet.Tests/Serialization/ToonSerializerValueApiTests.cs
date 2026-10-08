@@ -96,4 +96,68 @@ public class ToonSerializerValueApiTests
     {
         Assert.Throws<ArgumentNullException>(() => ToonDocument.Parse(null!));
     }
+
+    private static ToonValue Nest(int levels)
+    {
+        ToonValue value = new ToonNumber(1);
+
+        for (var i = 0; i < levels; i++)
+        {
+            value = i % 2 == 0 ? new ToonObject { ["a"] = value } : new ToonArray([value]);
+        }
+
+        return value;
+    }
+
+    [Fact]
+    public void DeserializeFromValue_ObjectTarget_EnforcesMaxDepth()
+    {
+        var options = new ToonSerializerOptions { MaxDepth = 10 };
+
+        Assert.NotNull(ToonSerializer.DeserializeFromValue<object>(Nest(8), options));
+        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeFromValue<object>(Nest(20), options));
+    }
+
+    [Fact]
+    public void DeserializeFromValue_UntypedDictionaryValues_EnforceMaxDepth()
+    {
+        var options = new ToonSerializerOptions { MaxDepth = 10 };
+        var root = new ToonObject { ["x"] = Nest(20) };
+
+        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeFromValue<Dictionary<string, object>>(root, options));
+    }
+
+    [Fact]
+    public void DeserializeFromValue_ObjectTarget_EnforcesDefaultMaxDepth()
+    {
+        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeFromValue<object>(Nest(10_000)));
+    }
+
+    [Theory]
+    [InlineData(typeof(DateTime))]
+    [InlineData(typeof(Guid))]
+    [InlineData(typeof(int))]
+    [InlineData(typeof(string))]
+    public void DeserializeFromValue_ObjectToScalarType_ThrowsClearError(Type targetType)
+    {
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.DeserializeFromValue(new ToonObject { ["a"] = new ToonNumber(1) }, targetType));
+
+        Assert.Contains($"Cannot convert Object to {targetType.Name}", ex.Message);
+        Assert.Equal(targetType, ex.TargetType);
+        Assert.Equal("$", ex.Path);
+    }
+
+    [Fact]
+    public void Deserialize_NumberToDateTimeProperty_ReportsPath()
+    {
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Dated>("When: 5"));
+
+        Assert.Contains("Cannot convert Number to DateTime", ex.Message);
+        Assert.Equal("$.When", ex.Path);
+    }
+
+    private sealed class Dated
+    {
+        public DateTime When { get; set; }
+    }
 }

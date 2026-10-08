@@ -55,7 +55,9 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
         // Serialize first, then write with the negotiated encoding so the body matches the Content-Type charset
         var toonString = ToonSerializer.Serialize(context.Object, context.Object.GetType(), _options);
 
-        await using var writer = context.WriterFactory(response.Body, selectedEncoding);
+        var writer = context.WriterFactory(response.Body, selectedEncoding);
+
+        await using var writerDisposal = writer.ConfigureAwait(false);
         await writer.WriteAsync(toonString.AsMemory(), httpContext.RequestAborted).ConfigureAwait(false);
         await writer.FlushAsync().ConfigureAwait(false);
     }

@@ -260,8 +260,8 @@ dotnet run
 Demo otomatik olarak:
 1. `ecommerce-order.toon` ve `healthcare-patient.toon` dosyalarını okuyup typed object'lere deserialize eder
 2. TOON → JSON ve JSON → TOON dönüşümleri yapar
-3. JSON → TOON → JSON roundtrip kontrolü yapar
-4. Sonuçları console'a yazdırır
+3. JSON → TOON → JSON roundtrip kontrolünü değer bazında yapar (`35.00` ile `35` eşit sayılır)
+4. Sonuçları console'a yazdırır; bir değer farklıysa ilk farkın yolunu yazar ve exit code 1 ile çıkar
 
 ---
 
@@ -270,20 +270,20 @@ Demo otomatik olarak:
 ### E-Commerce Order Sample
 | Format | Dosya Boyutu |
 |--------|--------------|
-| TOON   | 2.7 KB       |
+| TOON   | 2.6 KB       |
 | JSON   | 3.6 KB       |
 | YAML   | 2.7 KB       |
 
 ### Healthcare Patient Record Sample
 | Format | Dosya Boyutu |
 |--------|--------------|
-| TOON   | 4.9 KB       |
+| TOON   | 4.5 KB       |
 | JSON   | 6.2 KB       |
 | YAML   | 4.8 KB       |
 
 **TOON avantajları:**
-- Bu örneklerde indent'li JSON'dan yaklaşık %21-24 daha küçük
-- YAML ile benzer boyutta
+- Bu örneklerde indent'li JSON'dan yaklaşık %27-28 daha küçük
+- YAML'dan biraz daha küçük (%3-7)
 - Human-readable ve kolay düzenlenebilir
 
 Parse hızı ölçülmedi; performans için [benchmark projesine](../../../benchmark/ToonNet.Benchmarks/README.md) bakın.

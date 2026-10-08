@@ -134,8 +134,10 @@ age: 30"; // Unterminated string
         // Assert
         Assert.Equal(10, ex.Line);
         Assert.Equal(5, ex.Column);
+#pragma warning disable CS0618 // obsolete token properties are still populated by Create
         Assert.Equal("Something", ex.ActualToken);
         Assert.Equal("SomethingElse", ex.ExpectedToken);
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -146,7 +148,10 @@ age: 30"; // Unterminated string
 
         // Assert
         Assert.Equal(typeof(string), ex.TargetType);
+        Assert.Equal("Name", ex.Path);
+#pragma warning disable CS0618 // PropertyName is an obsolete alias of Path
         Assert.Equal("Name", ex.PropertyName);
+#pragma warning restore CS0618
         Assert.Equal(123, ex.Value);
     }
 }

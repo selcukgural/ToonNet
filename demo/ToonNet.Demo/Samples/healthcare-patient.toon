@@ -1,5 +1,5 @@
 PatientId: MRN-2026-987654
-RecordNumber: "EMR-HSP-00142857"
+RecordNumber: EMR-HSP-00142857
 AdmissionDate: "2026-01-10T08:15:00.0000000Z"
 DischargeDate: null
 Status: Active
@@ -10,17 +10,17 @@ PatientInfo:
   DateOfBirth: "1985-06-15T00:00:00.0000000"
   Age: 40
   Gender: Male
-  BloodType: "A+"
-  SSN: "XXX-XX-6789"
+  BloodType: A+
+  SSN: XXX-XX-6789
   EmergencyContact:
-    Name: "Emily Chen"
+    Name: Emily Chen
     Relationship: Spouse
-    Phone: "+1-555-987-6543"
+    Phone: +1-555-987-6543
     Email: emily.chen@example.com
   Insurance:
-    Provider: "Blue Cross Blue Shield"
-    PolicyNumber: "BCBS-2026-12345"
-    GroupNumber: "GRP-98765"
+    Provider: Blue Cross Blue Shield
+    PolicyNumber: BCBS-2026-12345
+    GroupNumber: GRP-98765
     CoverageStartDate: "2025-01-01T00:00:00.0000000"
     IsActive: true
 VitalSigns[4]:
@@ -64,52 +64,42 @@ VitalSigns[4]:
     HeartRate: 73
     RespiratoryRate: 17
     OxygenSaturation: 98
-Diagnoses[2]:
-  - Code: J18.9
-    Description: "Pneumonia, unspecified organism"
-    Type: Primary
-    DateDiagnosed: "2026-01-10T00:00:00.0000000"
-    Severity: Moderate
-    IsConfirmed: true
-  - Code: E11.9
-    Description: "Type 2 diabetes mellitus without complications"
-    Type: Secondary
-    DateDiagnosed: "2022-03-01T00:00:00.0000000"
-    Severity: Mild
-    IsConfirmed: true
+Diagnoses[2]{Code,Description,Type,DateDiagnosed,Severity,IsConfirmed}:
+  J18.9,"Pneumonia, unspecified organism",Primary,"2026-01-10T00:00:00.0000000",Moderate,true
+  E11.9,Type 2 diabetes mellitus without complications,Secondary,"2022-03-01T00:00:00.0000000",Mild,true
 Medications[3]:
   - Name: Azithromycin
     GenericName: Azithromycin
-    Dosage: "500mg"
-    Frequency: "Once daily"
+    Dosage: 500mg
+    Frequency: Once daily
     Route: Oral
     StartDate: "2026-01-10T00:00:00.0000000"
     EndDate: "2026-01-15T00:00:00.0000000"
-    PrescribedBy: "Dr. Sarah Williams"
+    PrescribedBy: Dr. Sarah Williams
     IsActive: true
-    SideEffects[2]: Nausea,"Mild headache"
+    SideEffects[2]: Nausea,Mild headache
   - Name: Metformin
     GenericName: Metformin
-    Dosage: "1000mg"
-    Frequency: "Twice daily"
+    Dosage: 1000mg
+    Frequency: Twice daily
     Route: Oral
     StartDate: "2022-03-15T00:00:00.0000000"
     EndDate: null
-    PrescribedBy: "Dr. James Rodriguez"
+    PrescribedBy: Dr. James Rodriguez
     IsActive: true
-    SideEffects[1]: "Stomach upset"
+    SideEffects[1]: Stomach upset
   - Name: Lisinopril
     GenericName: Lisinopril
-    Dosage: "10mg"
-    Frequency: "Once daily"
+    Dosage: 10mg
+    Frequency: Once daily
     Route: Oral
     StartDate: "2023-06-01T00:00:00.0000000"
     EndDate: null
-    PrescribedBy: "Dr. James Rodriguez"
+    PrescribedBy: Dr. James Rodriguez
     IsActive: true
-    SideEffects[0]:
+    SideEffects: []
 LabResults[3]:
-  - TestName: "Complete Blood Count"
+  - TestName: Complete Blood Count
     TestCode: CBC
     OrderedDate: "2026-01-10T09:00:00.0000000Z"
     ResultDate: "2026-01-10T14:30:00.0000000Z"
@@ -121,25 +111,25 @@ LabResults[3]:
       Hematocrit: "45.2"
       Platelets: "250"
     Units:
-      WBC: "10^3/uL"
-      RBC: "10^6/uL"
+      WBC: 10^3/uL
+      RBC: 10^6/uL
       Hemoglobin: g/dL
-      Hematocrit: "%"
-      Platelets: "10^3/uL"
+      Hematocrit: %
+      Platelets: 10^3/uL
     IsAbnormal: true
-    Notes: "Elevated WBC consistent with infection"
-  - TestName: "Chest X-Ray"
+    Notes: Elevated WBC consistent with infection
+  - TestName: Chest X-Ray
     TestCode: CXR
     OrderedDate: "2026-01-10T09:15:00.0000000Z"
     ResultDate: "2026-01-10T11:00:00.0000000Z"
     Status: Final
     Results:
-      Finding: "Right lower lobe infiltrate"
+      Finding: Right lower lobe infiltrate
       ImageUrl: "https://hospital.example.com/images/CXR-2026-001"
     Units: null
     IsAbnormal: true
-    Notes: "Findings consistent with pneumonia"
-  - TestName: "HbA1c"
+    Notes: Findings consistent with pneumonia
+  - TestName: HbA1c
     TestCode: A1C
     OrderedDate: "2026-01-10T09:00:00.0000000Z"
     ResultDate: "2026-01-10T16:00:00.0000000Z"
@@ -147,37 +137,14 @@ LabResults[3]:
     Results:
       Value: "6.8"
     Units:
-      Value: "%"
+      Value: %
     IsAbnormal: false
-    Notes: "Diabetes well controlled"
-Procedures[1]:
-  - Name: "Chest X-Ray"
-    Code: CPT-71045
-    PerformedDate: "2026-01-10T10:30:00.0000000Z"
-    PerformedBy: "Dr. Emily Martinez, MD"
-    Department: Radiology
-    Status: Completed
-    Duration: 15
-    Notes: "Patient tolerated procedure well"
-AttendingPhysicians[2]:
-  - Name: "Dr. Sarah Williams, MD"
-    Specialty: "Internal Medicine"
-    LicenseNumber: "MD-12345-IL"
-    Phone: "+1-555-111-2222"
-    Email: s.williams@hospital.example.com
-    IsActive: true
-  - Name: "Dr. Emily Martinez, MD"
-    Specialty: Radiology
-    LicenseNumber: "MD-67890-IL"
-    Phone: "+1-555-333-4444"
-    Email: e.martinez@hospital.example.com
-    IsActive: true
-Allergies[2]:
-  - Allergen: Penicillin
-    Reaction: "Severe rash"
-    Severity: High
-    OnsetDate: "1995-08-20T00:00:00.0000000"
-  - Allergen: Shellfish
-    Reaction: Anaphylaxis
-    Severity: Critical
-    OnsetDate: "2010-05-15T00:00:00.0000000"
+    Notes: Diabetes well controlled
+Procedures[1]{Name,Code,PerformedDate,PerformedBy,Department,Status,Duration,Notes}:
+  Chest X-Ray,CPT-71045,"2026-01-10T10:30:00.0000000Z","Dr. Emily Martinez, MD",Radiology,Completed,15,Patient tolerated procedure well
+AttendingPhysicians[2]{Name,Specialty,LicenseNumber,Phone,Email,IsActive}:
+  "Dr. Sarah Williams, MD",Internal Medicine,MD-12345-IL,+1-555-111-2222,s.williams@hospital.example.com,true
+  "Dr. Emily Martinez, MD",Radiology,MD-67890-IL,+1-555-333-4444,e.martinez@hospital.example.com,true
+Allergies[2]{Allergen,Reaction,Severity,OnsetDate}:
+  Penicillin,Severe rash,High,"1995-08-20T00:00:00.0000000"
+  Shellfish,Anaphylaxis,Critical,"2010-05-15T00:00:00.0000000"

@@ -416,7 +416,7 @@ catch (ToonSerializationException ex)
 {
     // Valid TOON that does not fit the target type, e.g. "Age: abc"
     Console.WriteLine($"Serialization error: {ex.Message}");
-    Console.WriteLine($"Path: {ex.PropertyName}, Type: {ex.TargetType}");  // e.g. Path: $.Age, Type: System.Int32
+    Console.WriteLine($"Path: {ex.Path}, Type: {ex.TargetType}");  // e.g. Path: $.Age, Type: System.Int32
 }
 ```
 

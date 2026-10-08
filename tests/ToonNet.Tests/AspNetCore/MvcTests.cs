@@ -94,7 +94,7 @@ public class MvcTests
 
         await result.ExecuteAsync(httpContext);
 
-        Assert.Equal(ToonFormatterDefaults.MediaType, httpContext.Response.ContentType);
+        Assert.Equal("application/toon; charset=utf-8", httpContext.Response.ContentType);
 
         stream.Position = 0;
         using var reader = new StreamReader(stream);

@@ -47,7 +47,8 @@ public sealed class ToonResult : IResult
     {
         ArgumentNullException.ThrowIfNull(httpContext);
 
-        httpContext.Response.ContentType = ToonFormatterDefaults.MediaType;
+        // ToonSerializer writes UTF-8 without a byte order mark
+        httpContext.Response.ContentType = $"{ToonFormatterDefaults.MediaType}; charset=utf-8";
 
         if (_value is null)
         {

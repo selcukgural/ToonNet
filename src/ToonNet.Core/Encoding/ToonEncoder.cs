@@ -621,7 +621,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         ArgumentNullException.ThrowIfNull(filePath);
         
         var encodedString = await EncodeAsync(document, cancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(filePath, encodedString, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(filePath, encodedString, ToonTextEncoding.Utf8NoBom, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

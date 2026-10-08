@@ -174,7 +174,7 @@ public static partial class ToonSerializer
 
         var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
 
-        await File.WriteAllTextAsync(filePath, toonString, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(filePath, toonString, ToonTextEncoding.Utf8NoBom, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -242,8 +242,11 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(filePath);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
-        await using var writer = new StreamWriter(fileStream, System.Text.Encoding.UTF8);
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+
+        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
+        var writer = new StreamWriter(fileStream, ToonTextEncoding.Utf8NoBom);
+        await using var writerDisposal = writer.ConfigureAwait(false);
 
         var isFirst = true;
 
@@ -288,7 +291,9 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(stream);
 
-        await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        var writer = new StreamWriter(stream, ToonTextEncoding.Utf8NoBom, leaveOpen: true);
+
+        await using var writerDisposal = writer.ConfigureAwait(false);
 
         var isFirst = true;
 
@@ -343,7 +348,9 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(filePath);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+
+        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
         await SerializeStreamAsync(items, fileStream, options, cancellationToken).ConfigureAwait(false);
     }
 
@@ -373,7 +380,9 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(filePath);
         ArgumentNullException.ThrowIfNull(writeOptions);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+
+        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
         await SerializeStreamAsync(items, fileStream, options, writeOptions, cancellationToken).ConfigureAwait(false);
     }
 
@@ -428,7 +437,9 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentNullException.ThrowIfNull(writeOptions);
 
-        await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        var writer = new StreamWriter(stream, ToonTextEncoding.Utf8NoBom, leaveOpen: true);
+
+        await using var writerDisposal = writer.ConfigureAwait(false);
 
         var isFirst = true;
         var batch = new StringBuilder();
@@ -640,10 +651,12 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
+        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
+
+        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
         using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
 
-        await foreach (var item in DeserializeStreamAsync<T>(reader, options, cancellationToken))
+        await foreach (var item in DeserializeStreamAsync<T>(reader, options, cancellationToken).ConfigureAwait(false))
         {
             yield return item;
         }
@@ -673,10 +686,12 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(filePath);
         ArgumentNullException.ThrowIfNull(multiDocumentOptions);
 
-        await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
+        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
+
+        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
         using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
 
-        await foreach (var item in DeserializeStreamAsync<T>(reader, options, multiDocumentOptions, cancellationToken))
+        await foreach (var item in DeserializeStreamAsync<T>(reader, options, multiDocumentOptions, cancellationToken).ConfigureAwait(false))
         {
             yield return item;
         }
@@ -703,7 +718,7 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(reader);
 
-        await foreach (var item in DeserializeStreamAsync<T>(reader, options, ToonMultiDocumentReadOptions.BlankLine, cancellationToken))
+        await foreach (var item in DeserializeStreamAsync<T>(reader, options, ToonMultiDocumentReadOptions.BlankLine, cancellationToken).ConfigureAwait(false))
         {
             yield return item;
         }

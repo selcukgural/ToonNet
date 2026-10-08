@@ -99,10 +99,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Generated methods enforce `MaxDepth`, so circular references throw `ToonEncodingException` instead of overflowing
     the stack.
   - The package description no longer claims zero allocations or Native AOT support.
+### Deprecated
+- **ToonNet.Core:** `ToonSerializationException.PropertyName` is replaced by `Path` (same value: a path such as
+  `$.Items[2].Price`, not a property name). `ToonParseException.ActualToken` and `ExpectedToken` are obsolete; the
+  line-based parser does not report tokens, so they were always null.
+
 ### Security
 - **ToonNet.Core:** The parser now enforces `ToonOptions.MaxDepth` while parsing (previously only after parsing) and checks
   the remaining stack space, so deeply nested input throws `ToonParseException` instead of terminating the process.
   Serialization, deserialization and encoding also fail with an exception rather than overflowing the stack.
+  This includes values deserialized to `object` or `Dictionary<string, object>` from a `ToonValue` built in code
+  (`DeserializeFromValue`), which skipped the depth check.
 - **ToonNet.AspNetCore.Mvc:** `ToonInputFormatter` limits request bodies to 4 MB by default
   (`ToonFormatterDefaults.MaxRequestBodySize`) and answers larger bodies with `413 Payload Too Large`.
   A new `AddToonFormatters(configureOptions, maxRequestBodySize)` overload and formatter constructor make it configurable.
@@ -133,6 +140,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the output formatter writes with the negotiated encoding so the body matches the `Content-Type` charset.
 - **ToonNet.AspNetCore.Mvc:** The input formatter only reports TOON errors to model state, keyed by the model name; other
   exceptions are no longer swallowed and their messages are no longer returned to the client.
+- **ToonNet.Core:** Files and streams are written as UTF-8 without a byte order mark (`SerializeToFileAsync`,
+  `SerializeCollectionToFileAsync`, `SerializeCollectionToStreamAsync`, `SerializeStreamAsync`,
+  `ToonEncoder.EncodeToFileAsync`); other TOON decoders read the BOM as part of the first key.
+- **ToonNet.Core:** Reading an object, array or (for dates, `Guid`, `Uri`, ...) a number into a scalar type throws
+  `ToonSerializationException` "Cannot convert Object to DateTime" with the path, instead of a misleading error from
+  object deserialization.
+- **ToonNet.Core:** Async file and stream methods use `ConfigureAwait(false)` for disposal and enumeration as well.
+- **ToonNet.AspNetCore.Mvc:** `ToonResult` sets `Content-Type: application/toon; charset=utf-8`.
+- **Demo / benchmarks:** The demo compares roundtrip values (it printed "SEMANTIC MATCH" for any difference) and exits
+  with code 1 on failure; its sample `.toon` files are re-encoded with the current encoder. The benchmark project
+  uses `BenchmarkSwitcher`, so every benchmark class can be selected with `--filter`.
 - **Docs:** Removed non-existent options (`PreferInlineArrays`, `MaxInlineArrayLength`, `CaseSensitive`, `application/x-toon`)
   and corrected `MaxDepth` defaults and limits.
 

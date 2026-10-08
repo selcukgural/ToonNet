@@ -49,7 +49,7 @@ Prices and decimals are formatted with the current culture (shown here with `.` 
   SAMPLE #1: E-Commerce Order System
 ═══════════════════════════════════════════════════════════════════════════════
 
-Loaded TOON file: ecommerce-order.toon (2731 chars)
+Loaded TOON file: ecommerce-order.toon (2609 chars)
 
 ORDER DETAILS:
    Order ID: ORD-2026-00142857
@@ -68,10 +68,7 @@ ORDER DETAILS:
 Testing Format Conversions:
    TOON -> JSON: 2578 chars
    JSON -> TOON: 2600 chars
-   Roundtrip verification: SEMANTIC MATCH
-   Note: Format differs (e.g., 35.00 -> 35) but values are equivalent
-   Original JSON length: 2579
-   Roundtrip JSON length: 2570
+   Roundtrip verification: PASSED (JSON -> TOON -> JSON keeps every value)
 
 E-Commerce sample completed successfully!
 
@@ -79,7 +76,7 @@ E-Commerce sample completed successfully!
   SAMPLE #2: Healthcare Patient Record (EMR System)
 ═══════════════════════════════════════════════════════════════════════════════
 
-Loaded TOON file: healthcare-patient.toon (4882 chars)
+Loaded TOON file: healthcare-patient.toon (4476 chars)
 
 PATIENT DETAILS:
    Patient ID: MRN-2026-987654
@@ -111,14 +108,14 @@ PATIENT DETAILS:
 Testing Format Conversions:
    TOON -> JSON: 4523 chars
    JSON -> TOON: 4475 chars
-   Roundtrip verification: PASSED
+   Roundtrip verification: PASSED (JSON -> TOON -> JSON keeps every value)
 
 Healthcare sample completed successfully!
 ```
 
-> **Note:** For the e-commerce sample, "SEMANTIC MATCH" is printed whenever the normalized JSON strings differ; the demo
-> does not compare the values themselves. The difference comes from numbers such as `35.00`, which are written back
-> as `35`.
+> **Note:** The roundtrip check compares values, not JSON text: TOON writes numbers in canonical form (spec §2), so
+> `35.00` comes back as `35`. If any value differs, the demo prints the path of the first difference and exits with
+> code 1 (also when a sample is missing or fails to load).
 
 ---
 
@@ -129,7 +126,7 @@ Healthcare sample completed successfully!
 **Location:** `Samples/ecommerce-order.*`
 
 **Files:**
-- `ecommerce-order.toon` (2.7 KB) - TOON format
+- `ecommerce-order.toon` (2.6 KB) - TOON format
 - `ecommerce-order.json` (3.6 KB) - JSON format
 - `ecommerce-order.yaml` (2.7 KB) - YAML format
 - `ECommerceModels.cs` - C# model classes
@@ -173,23 +170,22 @@ Customer:
   ...
 Items[3]:
   - ProductId: PROD-12345
-    Name: "Premium Wireless Headphones"
+    Name: Premium Wireless Headphones
     Category: Electronics
     SKU: WH-1000XM5-BLK
     Quantity: 2
     UnitPrice: 349.99
-    Discount: 35.00
+    Discount: 35
     TaxRate: 0.08
     Total: 664.98
     Attributes:
       Color: Black
-      Warranty: "2 years"
+      Warranty: 2 years
       InStock: "true"
-    Reviews[2]:
-      - Rating: 5
-        Comment: "Excellent sound quality!"
-        Verified: true
-      ...
+    Reviews[2]{Rating,Comment,Verified}:
+      5,Excellent sound quality!,true
+      4,Great but a bit pricey,true
+  ...
 ```
 
 ### Sample #2: Healthcare Patient Record
@@ -197,7 +193,7 @@ Items[3]:
 **Location:** `Samples/healthcare-patient.*`
 
 **Files:**
-- `healthcare-patient.toon` (4.9 KB) - TOON format
+- `healthcare-patient.toon` (4.5 KB) - TOON format
 - `healthcare-patient.json` (6.2 KB) - JSON format
 - `healthcare-patient.yaml` (4.8 KB) - YAML format
 - `HealthcareModels.cs` - C# model classes
@@ -233,7 +229,7 @@ public class PatientRecord
 **TOON Sample (excerpt; see the `Samples` folder for the full file):**
 ```toon
 PatientId: MRN-2026-987654
-RecordNumber: "EMR-HSP-00142857"
+RecordNumber: EMR-HSP-00142857
 AdmissionDate: "2026-01-10T08:15:00.0000000Z"
 DischargeDate: null
 Status: Active
@@ -244,7 +240,7 @@ PatientInfo:
   DateOfBirth: "1985-06-15T00:00:00.0000000"
   Age: 40
   Gender: Male
-  BloodType: "A+"
+  BloodType: A+
   ...
 VitalSigns[4]:
   - Timestamp: "2026-01-10T08:30:00.0000000Z"
@@ -342,8 +338,8 @@ var diagnoses = patient.Diagnoses
 
 | Sample | TOON Size | JSON Size | YAML Size | Models | Properties |
 |--------|-----------|-----------|-----------|--------|------------|
-| **E-Commerce** | 2.7 KB | 3.6 KB | 2.7 KB | 10 | 70+ |
-| **Healthcare** | 4.9 KB | 6.2 KB | 4.8 KB | 12 | 80+ |
+| **E-Commerce** | 2.6 KB | 3.6 KB | 2.7 KB | 10 | 70+ |
+| **Healthcare** | 4.5 KB | 6.2 KB | 4.8 KB | 12 | 80+ |
 
 Sizes are of the indented files in `Samples/` (the JSON uses camelCase keys, the TOON files PascalCase). The demo does
 not count tokens; token savings depend on the tokenizer and on the shape of the data.

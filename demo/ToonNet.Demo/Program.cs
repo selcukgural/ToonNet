@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ToonNet.Core.Serialization;
 using ToonNet.Extensions.Json;
 
@@ -5,26 +6,29 @@ namespace ToonNet.Demo;
 
 static class Program
 {
-    private static void Main(string[] args)
+    /// <returns>0 when every sample loads and round-trips, 1 otherwise.</returns>
+    private static int Main(string[] args)
     {
         // Demo: Real-World Sample Files with Full Type Support
-        DemoRealWorldSamples();
+        return DemoRealWorldSamples() ? 0 : 1;
     }
 
-    private static void DemoRealWorldSamples()
+    private static bool DemoRealWorldSamples()
     {
         PrintSectionHeader("Real-World Sample Files Demo");
 
         var samplesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Samples");
         
         // Demo 1: E-Commerce Order
-        DemoECommerceOrder(samplesPath);
+        var ecommerceOk = DemoECommerceOrder(samplesPath);
         
         // Demo 2: Healthcare Patient Record
-        DemoHealthcarePatient(samplesPath);
+        var healthcareOk = DemoHealthcarePatient(samplesPath);
+
+        return ecommerceOk && healthcareOk;
     }
 
-    private static void DemoECommerceOrder(string samplesPath)
+    private static bool DemoECommerceOrder(string samplesPath)
     {
         Console.WriteLine();
         Console.WriteLine("═══════════════════════════════════════════════════════════════════════════════");
@@ -39,8 +43,8 @@ static class Program
 
             if (!File.Exists(toonFile) || !File.Exists(jsonFile))
             {
-                Console.WriteLine("⚠️  Sample files not found. Skipping...");
-                return;
+                Console.WriteLine("❌ Sample files not found.");
+                return false;
             }
 
             // Load TOON file
@@ -85,40 +89,23 @@ static class Program
             var toonFromJson = ToonConvert.FromJson(jsonContent);
             Console.WriteLine($"   JSON -> TOON: {toonFromJson.Length} chars");
             
-            // Verify roundtrip: JSON -> TOON -> JSON should match original JSON
-            var roundtripJson = ToonConvert.ToJson(toonFromJson);
-            var jsonNormalized = System.Text.Json.JsonSerializer.Serialize(
-                System.Text.Json.JsonSerializer.Deserialize<object>(jsonContent),
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
-            var roundtripNormalized = System.Text.Json.JsonSerializer.Serialize(
-                System.Text.Json.JsonSerializer.Deserialize<object>(roundtripJson),
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
-            
-            bool roundtripMatch = jsonNormalized == roundtripNormalized;
-            
-            if (roundtripMatch)
+            if (!VerifyRoundtrip(jsonContent, toonFromJson))
             {
-                Console.WriteLine($"   Roundtrip verification: PASSED (exact match)");
-            }
-            else
-            {
-                // Check if semantically equivalent (values match, format differs)
-                Console.WriteLine($"   Roundtrip verification: SEMANTIC MATCH");
-                Console.WriteLine($"   Note: Format differs (e.g., 35.00 -> 35) but values are equivalent");
-                Console.WriteLine($"   Original JSON length: {jsonNormalized.Length}");
-                Console.WriteLine($"   Roundtrip JSON length: {roundtripNormalized.Length}");
+                return false;
             }
 
             Console.WriteLine();
             Console.WriteLine("E-Commerce sample completed successfully!");
+            return true;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
+            Console.WriteLine($"❌ Error: {ex.Message}");
+            return false;
         }
     }
 
-    private static void DemoHealthcarePatient(string samplesPath)
+    private static bool DemoHealthcarePatient(string samplesPath)
     {
         Console.WriteLine();
         Console.WriteLine("═══════════════════════════════════════════════════════════════════════════════");
@@ -133,8 +120,8 @@ static class Program
 
             if (!File.Exists(toonFile) || !File.Exists(jsonFile))
             {
-                Console.WriteLine("Sample files not found. Skipping...");
-                return;
+                Console.WriteLine("❌ Sample files not found.");
+                return false;
             }
 
             // Load TOON file
@@ -214,24 +201,110 @@ static class Program
             var toonFromJson = ToonConvert.FromJson(jsonContent);
             Console.WriteLine($"   JSON -> TOON: {toonFromJson.Length} chars");
             
-            // Verify roundtrip: JSON -> TOON -> JSON should match original JSON
-            var roundtripJson = ToonConvert.ToJson(toonFromJson);
-            var jsonNormalized = System.Text.Json.JsonSerializer.Serialize(
-                System.Text.Json.JsonSerializer.Deserialize<object>(jsonContent),
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
-            var roundtripNormalized = System.Text.Json.JsonSerializer.Serialize(
-                System.Text.Json.JsonSerializer.Deserialize<object>(roundtripJson),
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
-            
-            bool roundtripMatch = jsonNormalized == roundtripNormalized;
-            Console.WriteLine($"   Roundtrip verification: {(roundtripMatch ? "PASSED" : "FAILED")}");
+            if (!VerifyRoundtrip(jsonContent, toonFromJson))
+            {
+                return false;
+            }
 
             Console.WriteLine();
             Console.WriteLine("Healthcare sample completed successfully!");
+            return true;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Converts the TOON produced from <paramref name="originalJson"/> back to JSON and compares the values.
+    ///     Numbers are compared by value, because TOON writes them in canonical form (spec §2: <c>35.00</c> becomes <c>35</c>).
+    /// </summary>
+    private static bool VerifyRoundtrip(string originalJson, string toonFromJson)
+    {
+        var roundtripJson = ToonConvert.ToJson(toonFromJson);
+
+        using var original = JsonDocument.Parse(originalJson);
+        using var roundtrip = JsonDocument.Parse(roundtripJson);
+
+        var difference = FindDifference(original.RootElement, roundtrip.RootElement, "$");
+
+        if (difference == null)
+        {
+            Console.WriteLine("   Roundtrip verification: PASSED (JSON -> TOON -> JSON keeps every value)");
+            return true;
+        }
+
+        Console.WriteLine($"   Roundtrip verification: FAILED at {difference}");
+        return false;
+    }
+
+    /// <summary>
+    ///     Returns the path of the first value that differs, or null when both elements hold the same values.
+    /// </summary>
+    private static string? FindDifference(JsonElement expected, JsonElement actual, string path)
+    {
+        if (expected.ValueKind != actual.ValueKind)
+        {
+            return $"{path} ({expected.ValueKind} vs {actual.ValueKind})";
+        }
+
+        switch (expected.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var expectedProperties = expected.EnumerateObject().ToList();
+
+                if (expectedProperties.Count != actual.EnumerateObject().Count())
+                {
+                    return $"{path} (property count)";
+                }
+
+                foreach (var property in expectedProperties)
+                {
+                    if (!actual.TryGetProperty(property.Name, out var actualValue))
+                    {
+                        return $"{path}.{property.Name} (missing)";
+                    }
+
+                    if (FindDifference(property.Value, actualValue, $"{path}.{property.Name}") is { } nested)
+                    {
+                        return nested;
+                    }
+                }
+
+                return null;
+
+            case JsonValueKind.Array:
+                if (expected.GetArrayLength() != actual.GetArrayLength())
+                {
+                    return $"{path} (array length)";
+                }
+
+                var index = 0;
+
+                foreach (var (expectedItem, actualItem) in expected.EnumerateArray().Zip(actual.EnumerateArray()))
+                {
+                    if (FindDifference(expectedItem, actualItem, $"{path}[{index++}]") is { } nested)
+                    {
+                        return nested;
+                    }
+                }
+
+                return null;
+
+            case JsonValueKind.Number:
+                var same = expected.TryGetDecimal(out var left) && actual.TryGetDecimal(out var right)
+                    ? left == right
+                    : expected.GetDouble().Equals(actual.GetDouble());
+
+                return same ? null : $"{path} ({expected.GetRawText()} vs {actual.GetRawText()})";
+
+            case JsonValueKind.String:
+                return expected.GetString() == actual.GetString() ? null : $"{path} (\"{expected.GetString()}\" vs \"{actual.GetString()}\")";
+
+            default:
+                return null;
         }
     }
 

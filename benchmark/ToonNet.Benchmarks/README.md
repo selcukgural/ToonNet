@@ -26,23 +26,19 @@ All benchmark classes use `[MemoryDiagnoser]`, so allocations are reported for e
 
 ### Running Benchmarks
 
-`Program.cs` currently runs a single class, `ArrayPoolOptimizationBenchmarks`, through `BenchmarkRunner.Run<T>()`.
-Command-line arguments such as `--filter` are **not** forwarded to BenchmarkDotNet.
+`Program.cs` uses `BenchmarkSwitcher`, so every benchmark class in the project can be run and command-line
+arguments are forwarded to BenchmarkDotNet.
 
 ```bash
-# From the repository root
+# From the repository root; without arguments BenchmarkDotNet lists the classes and asks which to run
 dotnet run -c Release --project benchmark/ToonNet.Benchmarks
+
+# Select benchmarks with a filter (the filters below use this form)
+dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*ParserOnly*"
+
+# Run everything
+dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*"
 ```
-
-To run another class, change the type argument in `Program.cs`, for example:
-
-```csharp
-var summary = BenchmarkRunner.Run<ToonNet.Benchmarks.ParserOnlyBenchmarks>(config);
-```
-
-> If you want to select benchmarks from the command line, replace the `BenchmarkRunner.Run<...>` call with
-> `BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config)`. The filters below assume
-> that change (`dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*ParserOnly*"`).
 
 ---
 
@@ -161,10 +157,10 @@ public class MyCustomBenchmark
 
 ### Run Custom Benchmark
 
-Point `Program.cs` at the new class (`BenchmarkRunner.Run<MyCustomBenchmark>(config)`), then:
+Add the class to the project; `BenchmarkSwitcher` picks it up automatically:
 
 ```bash
-dotnet run -c Release --project benchmark/ToonNet.Benchmarks
+dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*MyCustomBenchmark*"
 ```
 
 ---
