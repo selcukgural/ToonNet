@@ -7,7 +7,7 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.Core</PackageId>
-        <Version>1.4.0</Version>
+        <Version>2.0.0</Version>
         <Title>ToonNet Core Library</Title>
         <Description>TOON (Token-Oriented Object Notation) serialization for .NET, implementing TOON spec v3.3.2 and tested against the official conformance fixtures. System.Text.Json-style ToonSerializer with cached metadata and compiled accessors, async and multi-document streaming, and a ToonDocument/ToonValue model. Useful for compact, LLM-friendly payloads, configuration files and data exchange.</Description>
         <PackageTags>toon;serialization;dotnet;ai;llm;token-efficient;streaming</PackageTags>

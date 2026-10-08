@@ -12,7 +12,7 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.AspNetCore</PackageId>
-        <Version>1.4.0</Version>
+        <Version>2.0.0</Version>
         <Description>ASP.NET Core integration for ToonNet. Provides dependency injection registration (AddToonNet) and a TOON configuration provider (AddToonFile).</Description>
         <PackageTags>toon;aspnetcore;configuration;di</PackageTags>
         <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>

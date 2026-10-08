@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-09
+
+> All packages move to 2.0.0: the encoder, parser, serializer and source generator follow TOON spec v3.3.2 and
+> their output and accepted input changed (see the breaking items below).
+
 ### Added
 - **Tests:** The official TOON spec v3.3.2 conformance fixtures now run in the test suite. Cases that do not pass yet are
   tracked in `tests/ToonNet.Tests/SpecCompliance/KnownNonConformance.txt`.
@@ -819,20 +824,6 @@ After:  75MB peak memory, 100ms parse time, ~500 indent allocations
 
 ---
 
-## [Unreleased]
-
-### Planned
-- NuGet package icon
-- GitHub Actions CI/CD pipeline
-- Benchmarks documentation
-- Performance comparison charts
-- VS Code extension with syntax highlighting
-- Online TOON playground/validator
-- Schema validation support
-- Streaming parser for large files
-
----
-
 ## Release Notes Format
 
 Each release includes:
@@ -845,5 +836,10 @@ Each release includes:
 
 ---
 
+[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/selcukgural/ToonNet/compare/v1.4.0...v2.0.0
+[1.4.0]: https://github.com/selcukgural/ToonNet/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/selcukgural/ToonNet/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/selcukgural/ToonNet/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/selcukgural/ToonNet/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/selcukgural/ToonNet/releases/tag/v1.0.0
-[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v1.0.0...HEAD
