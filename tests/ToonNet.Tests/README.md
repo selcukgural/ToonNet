@@ -116,6 +116,18 @@ ToonNet.Tests/
 
 ## 🎯 Test Categories
 
+### Spec conformance fixtures
+
+`SpecCompliance/SpecFixtureConformanceTests.cs` runs the official TOON spec v3.3.2 fixtures from
+`SpecCompliance/Fixtures/v3.3.2` (copied from [toon-format/spec](https://github.com/toon-format/spec)).
+Cases that do not pass yet are listed in `SpecCompliance/KnownNonConformance.txt`; a listed case that starts
+passing fails the build until it is removed. To regenerate the list:
+
+```bash
+TOONNET_WRITE_NONCONFORMANCE=/tmp/nonconformance.txt \
+  dotnet test tests/ToonNet.Tests --filter "FullyQualifiedName~WriteNonConformanceReport"
+```
+
 ### 1. Parser Tests
 
 Tests TOON format parsing:

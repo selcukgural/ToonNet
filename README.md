@@ -10,7 +10,7 @@
 [![NuGet](https://img.shields.io/nuget/v/ToonNet.Core.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Core/)
 [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/)
 [![CI](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml)
-[![Spec](https://img.shields.io/badge/TOON%20v3.0-100%25-blue?style=flat)](ToonSpec.md)
+[![Spec](https://img.shields.io/badge/TOON%20spec-v3.3.2-blue?style=flat)](docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)
 [![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
 [Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api/intro) • [Samples](demo/ToonNet.Demo/Samples)

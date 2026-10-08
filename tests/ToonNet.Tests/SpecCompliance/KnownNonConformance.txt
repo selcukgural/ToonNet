@@ -1,0 +1,169 @@
+# Spec fixture cases (see Fixtures/v3.3.2) that ToonNet does not conform to yet.
+# One "<category>/<file>/<test name>" per line. Remove a line once the case passes.
+decode/arrays-nested/parses arrays mixing objects and arrays
+decode/arrays-nested/parses arrays of arrays within objects
+decode/arrays-nested/parses empty inner arrays
+decode/arrays-nested/parses empty root-level array
+decode/arrays-nested/parses list arrays with deeply nested objects
+decode/arrays-nested/parses list arrays with empty items
+decode/arrays-nested/parses list items whose first field is a tabular array
+decode/arrays-nested/parses mixed-length inner arrays
+decode/arrays-nested/parses nested arrays of primitives
+decode/arrays-nested/parses quoted strings and mixed lengths in nested arrays
+decode/arrays-nested/parses root-level array mixing primitive, object, and array of objects in list format
+decode/arrays-nested/parses root-level array of arrays
+decode/arrays-nested/parses root-level array of non-uniform objects in list format
+decode/arrays-nested/parses root-level array of uniform objects in tabular format
+decode/arrays-nested/parses root-level primitive array inline
+decode/arrays-nested/parses single-field list-item object with tabular array
+decode/arrays-primitive/decodes canonical empty array key: []
+decode/arrays-primitive/decodes canonical empty array with empty-string key
+decode/arrays-primitive/decodes canonical empty array with quoted key
+decode/arrays-tabular/parses quoted header keys in tabular arrays
+decode/arrays-tabular/treats a key-value line at header depth whose value contains the active delimiter as end of rows, not a row
+decode/blank-lines/accepts whitespace-only line at non-multiple indent as blank in strict mode
+decode/blank-lines/throws on blank line inside list array
+decode/blank-lines/throws on blank line inside tabular array
+decode/blank-lines/throws on blank line with spaces inside array
+decode/blank-lines/throws on multiple blank lines inside array
+decode/delimiters/does not require quoting commas in object values
+decode/delimiters/does not require quoting commas with tab delimiter
+decode/delimiters/does not split on commas when using pipe delimiter
+decode/delimiters/does not split on commas when using tab delimiter
+decode/delimiters/object values in list items follow document delimiter
+decode/delimiters/parses nested array values containing pipe delimiter
+decode/delimiters/parses nested array values containing tab delimiter
+decode/delimiters/parses nested arrays inside list items with default comma delimiter
+decode/delimiters/parses nested arrays inside list items with default comma delimiter when parent uses pipe
+decode/delimiters/parses nested arrays with pipe delimiter
+decode/delimiters/parses nested arrays with tab delimiter
+decode/delimiters/parses primitive arrays with pipe delimiter
+decode/delimiters/parses primitive arrays with tab delimiter
+decode/delimiters/parses root-level array of objects with pipe delimiter
+decode/delimiters/parses root-level array of objects with tab delimiter
+decode/delimiters/parses root-level array with pipe delimiter
+decode/delimiters/parses root-level array with tab delimiter
+decode/delimiters/parses structural-looking strings when quoted with pipe delimiter
+decode/delimiters/parses structural-looking strings when quoted with tab delimiter
+decode/delimiters/parses tabular arrays with pipe delimiter
+decode/delimiters/parses tabular arrays with tab delimiter
+decode/delimiters/parses tabular headers with keys containing the active delimiter
+decode/delimiters/parses values containing pipe delimiter when quoted
+decode/delimiters/parses values containing tab delimiter when quoted
+decode/delimiters/preserves quoted ambiguity with pipe delimiter
+decode/delimiters/preserves quoted ambiguity with tab delimiter
+decode/indentation-errors/accepts deeply nested non-multiples when strict=false
+decode/indentation-errors/accepts non-multiple indentation when strict=false
+decode/indentation-errors/throws on list item with non-multiple indentation (3 spaces with indent=2)
+decode/indentation-errors/throws on mixed tabs and spaces in indentation
+decode/indentation-errors/throws on non-multiple indentation with custom indent=4 (3 spaces)
+decode/indentation-errors/throws on tab at start of line
+decode/indentation-errors/throws on tab character used in indentation
+decode/numbers/treats leading zero as string not number
+decode/numbers/treats leading-zero in object value as string
+decode/numbers/treats leading-zeros in array as strings
+decode/numbers/treats negative leading-zeros in array as strings
+decode/numbers/treats unquoted leading-zero number as string
+decode/numbers/treats unquoted multi-leading-zero as string
+decode/numbers/treats unquoted negative leading-zero number as string
+decode/numbers/treats unquoted octal-like as string
+decode/objects/decodes \uXXXX in quoted key (U+0004 control character)
+decode/objects/decodes \uXXXX in quoted key (case-insensitive hex)
+decode/objects/parses unquoted value shaped like a tabular array header after the key
+decode/objects/parses unquoted value shaped like an inline array header after the key
+decode/objects/treats extra brackets after valid array segment as literal key (non-strict)
+decode/objects/treats non-integer bracket content as literal key (non-strict)
+decode/objects/treats text between bracket segment and colon as literal key (non-strict)
+decode/primitives/decodes \uXXXX escape (U+0004)
+decode/primitives/decodes \uXXXX with mixed-case hex digits
+decode/root-form/parses literal [] at root as empty array
+decode/validation-errors/rejects lone surrogate code point \uD800
+decode/validation-errors/rejects truncated unicode escape \u00b
+decode/validation-errors/throws on array length mismatch (list format - too many)
+decode/validation-errors/throws on bracket length in exponent form in strict mode
+decode/validation-errors/throws on bracket length with leading zeros in strict mode
+decode/validation-errors/throws on bracket length with plus sign in strict mode
+decode/validation-errors/throws on decimal bracket length in strict mode
+decode/validation-errors/throws on duplicate keys within a list-item object in strict mode
+decode/validation-errors/throws on duplicate sibling keys in strict mode
+decode/validation-errors/throws on invalid escape sequence
+decode/validation-errors/throws on list items length mismatch (too few)
+decode/validation-errors/throws on missing colon in key-value context
+decode/validation-errors/throws on nested duplicate sibling keys in strict mode
+decode/validation-errors/throws on non-integer bracket segment in strict mode
+decode/validation-errors/throws on two primitives at root depth in strict mode
+decode/whitespace/parses empty tokens as empty string
+decode/whitespace/tolerates spaces around pipes in inline arrays
+decode/whitespace/tolerates spaces around tabs in inline arrays
+encode/arrays-nested/encodes complex nested structure
+encode/arrays-nested/encodes empty inner arrays
+encode/arrays-nested/encodes empty root-level array
+encode/arrays-nested/encodes mixed-length inner arrays
+encode/arrays-nested/encodes nested arrays of primitives
+encode/arrays-nested/encodes root-level array mixing primitive, object, and array of objects in list format
+encode/arrays-nested/encodes root-level array of non-uniform objects in list format
+encode/arrays-nested/encodes root-level array of uniform objects in tabular format
+encode/arrays-nested/encodes root-level arrays of arrays
+encode/arrays-nested/encodes root-level primitive array
+encode/arrays-nested/quotes strings containing delimiters in nested arrays
+encode/arrays-nested/uses list format for arrays mixing objects and arrays
+encode/arrays-nested/uses list format for arrays mixing primitives and objects
+encode/arrays-objects/encodes empty object list items as bare hyphen
+encode/arrays-objects/encodes objects with empty arrays in list format
+encode/arrays-objects/places empty arrays on hyphen line when first
+encode/arrays-objects/preserves field order in list items - array first
+encode/arrays-objects/preserves field order in list items - primitive first
+encode/arrays-objects/uses canonical encoding for multi-field list-item objects with tabular arrays
+encode/arrays-objects/uses canonical encoding for single-field list-item tabular arrays
+encode/arrays-objects/uses expanded list for arrays containing empty objects
+encode/arrays-objects/uses field order from first object for tabular headers
+encode/arrays-objects/uses list format for nested object arrays with mismatched keys
+encode/arrays-objects/uses list format for objects containing arrays of arrays
+encode/arrays-objects/uses list format for objects with different fields
+encode/arrays-objects/uses list format for objects with multiple array fields
+encode/arrays-objects/uses list format for objects with nested values
+encode/arrays-objects/uses list format for objects with only array fields
+encode/arrays-objects/uses list format when one object has nested field
+encode/arrays-objects/uses tabular format for nested uniform object arrays
+encode/arrays-primitive/encodes empty arrays
+encode/arrays-primitive/encodes empty string keys for empty arrays
+encode/arrays-tabular/encodes arrays of uniform objects in tabular format
+encode/arrays-tabular/encodes null values in tabular format
+encode/arrays-tabular/encodes tabular arrays with empty string keys
+encode/arrays-tabular/encodes tabular arrays with keys needing quotes
+encode/arrays-tabular/quotes ambiguous strings in tabular rows
+encode/arrays-tabular/quotes strings containing delimiters in tabular rows
+encode/delimiters/does not quote commas in object values with pipe delimiter
+encode/delimiters/does not quote commas in object values with tab delimiter
+encode/delimiters/does not quote commas in tabular values with tab delimiter
+encode/delimiters/does not quote commas with pipe delimiter
+encode/delimiters/does not quote commas with tab delimiter
+encode/delimiters/encodes nested arrays with pipe delimiter
+encode/delimiters/encodes nested arrays with tab delimiter
+encode/delimiters/encodes primitive arrays with pipe delimiter
+encode/delimiters/encodes primitive arrays with tab delimiter
+encode/delimiters/encodes root-level array of objects with pipe delimiter
+encode/delimiters/encodes root-level array of objects with tab delimiter
+encode/delimiters/encodes root-level array with pipe delimiter
+encode/delimiters/encodes root-level array with tab delimiter
+encode/delimiters/encodes tabular arrays with pipe delimiter
+encode/delimiters/encodes tabular arrays with tab delimiter
+encode/delimiters/preserves ambiguity quoting regardless of delimiter
+encode/delimiters/quotes nested array values containing pipe delimiter
+encode/delimiters/quotes nested array values containing tab delimiter
+encode/delimiters/quotes strings containing pipe delimiter
+encode/delimiters/quotes strings containing tab delimiter
+encode/delimiters/quotes tabular values containing comma delimiter
+encode/objects/encodes empty nested object
+encode/objects/escapes U+0004 control character in key via \uXXXX
+encode/objects/escapes U+001F control character in key via \uXXXX
+encode/objects/escapes tab in key
+encode/objects/quotes key with leading hyphen
+encode/primitives/encodes decimal number
+encode/primitives/encodes large number
+encode/primitives/encodes repeating decimal with full precision
+encode/primitives/encodes string with U+0004 control character via \uXXXX
+encode/primitives/encodes string with emoji and spaces
+encode/primitives/escapes tab in string
+encode/primitives/quotes single hyphen as object value
+encode/primitives/quotes single hyphen in array

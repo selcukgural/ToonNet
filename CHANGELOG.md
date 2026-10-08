@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Tests:** The official TOON spec v3.3.2 conformance fixtures now run in the test suite. Cases that do not pass yet are
+  tracked in `tests/ToonNet.Tests/SpecCompliance/KnownNonConformance.txt`.
+- **CI:** Build, test, pack and docs build on every push and pull request; manual, test-gated NuGet publishing.
+
+### Changed
+- **Docs:** Replaced the "100% TOON v3.0 compliance" claims with the measured conformance against spec v3.3.2.
+
 ### Security
 - **ToonNet.Core:** The parser now enforces `ToonOptions.MaxDepth` while parsing (previously only after parsing) and checks
   the remaining stack space, so deeply nested input throws `ToonParseException` instead of terminating the process.

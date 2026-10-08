@@ -28,6 +28,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <None Include="SpecCompliance/Fixtures/**/*" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="SpecCompliance/KnownNonConformance.txt" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\..\src\ToonNet.Core\ToonNet.Core.csproj" />
         <ProjectReference Include="..\..\src\ToonNet.Extensions.Json\ToonNet.Extensions.Json.csproj" />
         <ProjectReference Include="..\..\src\ToonNet.Extensions.Yaml\ToonNet.Extensions.Yaml.csproj" />

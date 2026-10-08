@@ -1301,26 +1301,23 @@ Excludes (optional):
 
 ## ToonNet Implementation Status
 
-### Completed (Phases 1-2) ✅
+### Measured conformance
 
-| Feature | Status | Details |
-|---------|--------|---------|
-| **Lexer** | ✅ Complete | Tokenization with QuotedString support |
-| **Parser** | ✅ Complete | Recursive descent, all array forms |
-| **Data Model** | ✅ Complete | ToonNull, Boolean, Number, String, Object, Array |
-| **Encoder** | ✅ Complete | Canonical format, proper quoting |
-| **Serializer** | ✅ Complete | C# object ↔ TOON serialization |
-| **Strict Mode** | ✅ Complete | Array count, indentation, delimiters |
-| **Error Handling** | ✅ Complete | ToonParseException with line/column |
-| **Internationalization** | ✅ Complete | InvariantCulture for numbers |
-| **Escape Handling** | ✅ Complete | Only valid sequences |
-| **Number Canonicalization** | ✅ Complete | No exponent, no trailing zeros |
-| **Test Coverage** | ✅ Complete | 168/168 tests passing |
+ToonNet runs the official conformance fixtures of TOON spec **v3.3.2**
+(`tests/ToonNet.Tests/SpecCompliance/Fixtures/v3.3.2`, 378 cases excluding the optional
+key folding and path expansion features). Cases that do not pass yet are listed in
+`tests/ToonNet.Tests/SpecCompliance/KnownNonConformance.txt`; CI fails if a listed case starts
+passing without being removed, so the list always reflects the current state.
 
-### Planned (Phase 3-5) ⬜
+| Fixture set | Cases | Passing |
+|-------------|-------|---------|
+| Encode | 142 | 70 |
+| Decode | 236 | 141 |
+| **Total** | **378** | **211 (56%)** |
 
-| Feature | Phase | Status |
-|---------|-------|--------|
+Not implemented (optional, §13.4): key folding, path expansion.
+
+---------|-------|--------|
 | **Source Generator** | 3 | [ToonSerializable] attribute |
 | **Key Folding** | 3 | Safe path folding |
 | **Path Expansion** | 3 | Safe path expansion |
@@ -1382,7 +1379,7 @@ Excludes (optional):
 ---
 
 **Document Status:** COMPLETE & AUTHORITATIVE  
-**Compliance Level:** 95%+ (Phases 1-2 fully compliant)  
+**Compliance Level:** see [measured conformance](#measured-conformance)  
 **Last Updated:** 2026-01-10  
 **Spec Version:** 3.0 (2025-11-24)
 
