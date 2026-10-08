@@ -36,10 +36,7 @@ Database:
 Logging:
   Level: Information
   EnableConsole: true
-Features:
-  - Authentication
-  - Caching
-  - Compression
+Features[3]: Authentication,Caching,Compression
 ```
 
 ## Reading Configuration

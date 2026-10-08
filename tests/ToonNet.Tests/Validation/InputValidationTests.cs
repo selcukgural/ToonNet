@@ -38,38 +38,6 @@ public class InputValidationTests
 
     #endregion
 
-    #region ToonLexer Input Validation
-
-    [Fact]
-    public void ToonLexer_Constructor_NullString_ThrowsArgumentNullException()
-    {
-        // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => new ToonLexer((string)null!));
-        Assert.Equal("input", ex.ParamName);
-    }
-
-    [Fact]
-    public void ToonLexer_Constructor_EmptyString_DoesNotThrow()
-    {
-        // Act
-        var lexer = new ToonLexer("");
-
-        // Assert
-        Assert.NotNull(lexer);
-    }
-
-    [Fact]
-    public void ToonLexer_Constructor_EmptyMemory_DoesNotThrow()
-    {
-        // Act
-        var lexer = new ToonLexer(ReadOnlyMemory<char>.Empty);
-
-        // Assert
-        Assert.NotNull(lexer);
-    }
-
-    #endregion
-
     #region ToonEncoder Input Validation
 
     [Fact]

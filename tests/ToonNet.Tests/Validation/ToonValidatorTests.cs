@@ -90,7 +90,7 @@ public sealed class ToonValidatorTests
 root:
   name: sample
   tags[3]: alpha,beta,gamma
-  items:
+  items[2]:
     - id: 1
       name: first
     - id: 2

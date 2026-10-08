@@ -10,7 +10,7 @@
 [![NuGet](https://img.shields.io/nuget/v/ToonNet.Core.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Core/)
 [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/)
 [![CI](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml)
-[![Spec](https://img.shields.io/badge/TOON%20spec-v3.3.2-blue?style=flat)](docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)
+[![Spec](https://img.shields.io/badge/TOON%20spec%20v3.3.2-378%2F378%20fixtures-brightgreen?style=flat)](docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)
 [![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
 [Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api/intro) • [Samples](demo/ToonNet.Demo/Samples)
@@ -261,12 +261,10 @@ var restored = ToonSerializer.Deserialize<UserContext>(toonContext);
 ```toon
 Name: Alice
 Age: 28
-Interests[3]: AI, Machine Learning, Photography
-RecentPurchases[2]:
-  - Product: Camera Lens
-    Amount: 450.00
-  - Product: ML Course
-    Amount: 99.99
+Interests[3]: AI,Machine Learning,Photography
+RecentPurchases[2]{Product,Amount}:
+  Camera Lens,450
+  ML Course,99.99
 ```
 
 **Token savings:** ~40% fewer tokens than JSON = lower AI API costs!
@@ -440,14 +438,10 @@ Generate personalized product recommendations.
 **Output (compact, AI-friendly):**
 ```toon
 Name: Alice Johnson
-RecentOrders[2]:
-  - Id: ORD-001
-    Total: 299.99
-    Status: Delivered
-  - Id: ORD-002
-    Total: 149.50
-    Status: Shipped
-Preferences[3]: Electronics, Fast Shipping, Eco-Friendly
+RecentOrders[2]{Id,Total,Status}:
+  ORD-001,299.99,Delivered
+  ORD-002,149.5,Shipped
+Preferences[3]: Electronics,Fast Shipping,Eco-Friendly
 ```
 
 ---

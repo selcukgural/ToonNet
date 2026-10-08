@@ -57,11 +57,7 @@ string toon = ToonSerializer.Serialize(numbers);
 
 **Output:**
 ```toon
-- 1
-- 2
-- 3
-- 4
-- 5
+[5]: 1,2,3,4,5
 ```
 
 ### Lists
@@ -73,9 +69,7 @@ string toon = ToonSerializer.Serialize(fruits);
 
 **Output:**
 ```toon
-- Apple
-- Banana
-- Cherry
+[3]: Apple,Banana,Cherry
 ```
 
 ### Dictionaries
@@ -188,15 +182,10 @@ string toon = ToonSerializer.Serialize(employees);
 
 **Output:**
 ```toon
-- Name: Alice
-  Department: Engineering
-  Salary: 85000
-- Name: Bob
-  Department: Marketing
-  Salary: 65000
-- Name: Charlie
-  Department: Sales
-  Salary: 70000
+[3]{Name,Department,Salary}:
+  Alice,Engineering,85000
+  Bob,Marketing,65000
+  Charlie,Sales,70000
 ```
 
 ## Nullable Types
@@ -320,8 +309,8 @@ string toon = ToonSerializer.Serialize(evt);
 **Output:**
 ```toon
 Name: Conference 2026
-EventDate: 2026-06-15T09:00:00.0000000
-RegisteredAt: 2026-01-24T17:00:00.0000000+00:00
+EventDate: "2026-06-15T09:00:00.0000000"
+RegisteredAt: "2026-01-24T17:00:00.0000000+00:00"
 ```
 
 ## Common Patterns
@@ -377,10 +366,7 @@ string toon = ToonSerializer.Serialize(dept);
 **Output:**
 ```toon
 Name: Engineering
-Teams:
-  - Backend
-  - Frontend
-  - DevOps
+Teams[3]: Backend,Frontend,DevOps
 ```
 
 ## Deserialization Examples

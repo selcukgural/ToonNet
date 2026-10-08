@@ -31,8 +31,13 @@ public class SpecFixtureConformanceTests
     public static IEnumerable<object[]> ConformingCases =>
         Cases.Value.Keys.Where(id => !KnownFailures.Value.Contains(id)).Order(StringComparer.Ordinal).Select(id => new object[] { id });
 
+    // xUnit fails a theory without data, so an empty list yields a placeholder row
+    private const string NoKnownFailures = "(none)";
+
     public static IEnumerable<object[]> NonConformingCases =>
-        Cases.Value.Keys.Where(id => KnownFailures.Value.Contains(id)).Order(StringComparer.Ordinal).Select(id => new object[] { id });
+        KnownFailures.Value.Count == 0
+            ? [[NoKnownFailures]]
+            : Cases.Value.Keys.Where(id => KnownFailures.Value.Contains(id)).Order(StringComparer.Ordinal).Select(id => new object[] { id });
 
     [Theory]
     [MemberData(nameof(ConformingCases))]
@@ -47,6 +52,11 @@ public class SpecFixtureConformanceTests
     [MemberData(nameof(NonConformingCases))]
     public void KnownNonConformance_StillFails(string id)
     {
+        if (id == NoKnownFailures)
+        {
+            return;
+        }
+
         var failure = Run(Cases.Value[id]);
 
         Assert.True(failure is not null, $"{id} now conforms; remove it from KnownNonConformance.txt");

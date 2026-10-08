@@ -92,7 +92,7 @@ public class SerializerCoverageTests
     [Fact]
     public void Deserialize_ListOfStrings_Success()
     {
-        var toon = "Tags:\n  - tag1\n  - tag2\n  - tag3";
+        var toon = "Tags[3]:\n  - tag1\n  - tag2\n  - tag3";
         var model = ToonSerializer.Deserialize<ModelWithCollections>(toon);
 
         Assert.NotNull(model);
@@ -199,7 +199,7 @@ public class SerializerCoverageTests
     {
         var toon = @"
 Name: Container
-Items:
+Items[2]:
   - Name: Item1
     Age: 20
     Active: true

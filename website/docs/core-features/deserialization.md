@@ -505,6 +505,38 @@ Guid id = ToonSerializer.Deserialize<Guid>("3f2504e0-4f89-11d3-9a0c-0305e82c3301
 | `DeserializeFromFile<T>(string)` | Deserialize from file | File input |
 | `DeserializeFromFileAsync<T>(string)` | Async file deserialization | Async file I/O |
 
+## Parsing Rules and Strict Mode
+
+ToonNet decodes TOON as defined by spec v3.3.2 and passes all of its decode conformance fixtures.
+
+- **Type inference:** unquoted `true`, `false` and `null` are literals; tokens matching the JSON number grammar are numbers;
+  everything else is a string. Leading zeros make a token a string (`zip: 01234` stays `"01234"`), and so does any other text
+  such as `(5)` or `1.2.3`. Quoted values are always strings.
+- **Arrays need headers:** `tags[3]: a,b,c`, `users[2]{id,name}:` followed by rows, or `items[2]:` followed by `- ` items.
+  Empty arrays are written `key: []`. A bare `key:` always opens an object.
+- **Delimiters:** each header declares its own delimiter (`[3]` comma, `[3|]` pipe, `[3<TAB>]` tab).
+- **Precision:** numbers that fit in a `decimal` keep their exact value, so `long` and `decimal` properties round-trip exactly.
+
+`ToonOptions.StrictMode` is `true` by default. Strict mode reports every error of spec §14:
+
+| Rule | Strict (default) | Non-strict |
+|------|------------------|------------|
+| `[N]` must match the number of items, rows and row values | error | not checked |
+| Malformed header such as `items[03]:` or `x[bar]:` | error | read as a literal key |
+| Duplicate keys in one object | error | last value wins |
+| Indentation must be a multiple of `IndentSize`; no tabs | error | depth = spaces / `IndentSize`, a tab counts as `IndentSize` spaces |
+| Blank lines inside an array | error | ignored |
+| List items under a bare `key:` (no header) | error with a hint | read as an array |
+
+```csharp
+var lenient = new ToonSerializerOptions
+{
+    ToonOptions = new ToonOptions { StrictMode = false }
+};
+
+var config = ToonSerializer.Deserialize<AppConfig>(handWrittenToon, lenient);
+```
+
 ## Error Handling
 
 ```csharp

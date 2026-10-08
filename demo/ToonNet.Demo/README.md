@@ -121,7 +121,7 @@ public class ECommerceOrder
 - DateTime handling
 - Enum-like status strings
 
-**TOON Sample:**
+**TOON Sample (excerpt; see the `Samples` folder for the full file):**
 ```toon
 OrderId: ORD-2026-00142857
 OrderDate: 2026-01-11T14:30:00Z
@@ -176,7 +176,7 @@ public class PatientRecord
 - Units of measurement
 - Complex nested hierarchies (14 classes)
 
-**TOON Sample:**
+**TOON Sample (excerpt; see the `Samples` folder for the full file):**
 ```toon
 RecordId: EMR-2026-001
 Patient:

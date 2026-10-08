@@ -284,13 +284,13 @@ string toon = ToonSerializer.Serialize(company);
 **Output:**
 ```toon
 Name: TechCorp
-Departments:
+Departments[1]:
   - Name: Engineering
-    Employees:
+    Employees[1]:
       - Name: Alice
         Position: Senior Engineer
         Skills:
-          C#: 9
+          "C#": 9
           Python: 7
 ```
 

@@ -95,16 +95,10 @@ public class ProductsController : ControllerBase
 
 **TOON Response:**
 ```toon
-products[3]:
-  - Id: 1
-    Name: Laptop
-    Price: 1299.99
-  - Id: 2
-    Name: Mouse
-    Price: 29.99
-  - Id: 3
-    Name: Keyboard
-    Price: 89.99
+[3]{Id,Name,Price}:
+  1,Laptop,1299.99
+  2,Mouse,29.99
+  3,Keyboard,89.99
 ```
 
 ### Example 2: Accept TOON Input
@@ -172,13 +166,9 @@ Id: 12345
 Customer:
   Name: Alice Johnson
   Email: alice@example.com
-Items[2]:
-  - ProductName: Laptop
-    Quantity: 1
-    Price: 1299.99
-  - ProductName: Mouse
-    Quantity: 2
-    Price: 29.99
+Items[2]{ProductName,Quantity,Price}:
+  Laptop,1,1299.99
+  Mouse,2,29.99
 Total: 1359.97
 ```
 

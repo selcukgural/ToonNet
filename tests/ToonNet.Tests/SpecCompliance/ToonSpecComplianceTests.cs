@@ -238,7 +238,7 @@ mixed[4]: 42, true, hello, null";
     public void TabularArrays_WithHeaders_Parsed()
     {
         var toonString = @"
-people{name,age,city}:
+people[3]{name,age,city}:
   Alice, 30, New York
   Bob, 25, Los Angeles
   Charlie, 35, Chicago";
@@ -300,7 +300,7 @@ user:
     public void ArraysOfObjects_ListItemFormat_Parsed()
     {
         var toonString = @"
-products:
+products[3]:
   - name: Laptop
     price: 999.99
     inStock: true

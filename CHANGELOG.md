@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     containing control characters or the delimiter are now quoted; other control characters are escaped as `\uXXXX`.
   - Keys that are not `^[A-Za-z_][A-Za-z0-9_.]*$` are quoted, including tabular field names.
   - No trailing newline and no blank lines after tabular or list arrays.
+- **ToonNet.Core (breaking input change):** The parser was rewritten as a line-based decoder for TOON spec v3.3.2 and passes
+  all 236 decode conformance fixtures (378/378 overall, excluding the optional key folding and path expansion features).
+  - Reads everything the encoder writes: root arrays, `[N]` headers in list items, list items whose first field is an array
+    or object, tab and pipe delimiters, quoted keys and field names, `key: []`, `\uXXXX` escapes.
+  - Numbers follow the JSON grammar: `05`, `(5)` or `$5` are strings (previously `(5)` became -5); numbers that fit in a
+    `decimal` keep their exact value.
+  - Strict mode (default) now enforces all spec §14 errors: count and width mismatches, malformed headers, duplicate keys,
+    indentation that is not a multiple of `IndentSize`, tabs in indentation, blank lines inside arrays, invalid escapes.
+    Documents that relied on the old lenient behaviour may need `StrictMode = false`.
+  - List items under a bare `key:` require an `key[N]:` header in strict mode (with a hint in the error message);
+    non-strict mode still reads them as an array.
+  - Removed the internal `ToonLexer` and token types.
 - **ToonNet.Core (breaking):** `ToonOptions.Delimiter` only accepts comma, tab or pipe (spec §11); tab was rejected
   before and other characters produced output no TOON decoder can read. Tab and pipe are declared in headers.
 - **ToonNet.Core:** `ToonNumber` keeps the exact value of `long`, `ulong` and `decimal` numbers (`DecimalValue`), so

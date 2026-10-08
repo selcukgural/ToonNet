@@ -83,11 +83,10 @@ Transform property names during serialization/deserialization.
 ```csharp
 public enum PropertyNamingPolicy
 {
-    Default,        // Keep original C# names
+    Default,        // Keep original C# names (FirstName)
     CamelCase,      // firstName, lastName
     SnakeCase,      // first_name, last_name
-    KebabCase,      // first-name, last-name
-    PascalCase      // FirstName, LastName
+    LowerCase       // firstname, lastname
 }
 ```
 
@@ -160,20 +159,20 @@ last_name: Smith
 age: 30
 ```
 
-#### KebabCase
+#### LowerCase
 
 ```csharp
 var options = new ToonSerializerOptions
 {
-    PropertyNamingPolicy = PropertyNamingPolicy.KebabCase
+    PropertyNamingPolicy = PropertyNamingPolicy.LowerCase
 };
 string toon = ToonSerializer.Serialize(person, options);
 ```
 
 **Output:**
 ```toon
-first-name: Alice
-last-name: Smith
+firstname: Alice
+lastname: Smith
 age: 30
 ```
 

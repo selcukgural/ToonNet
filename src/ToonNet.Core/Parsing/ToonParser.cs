@@ -1,29 +1,54 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.Core.Parsing;
 
 /// <summary>
-/// Parses TOON tokens into a document structure.
+/// Parses TOON text into a document structure following TOON spec v3.3.2.
 /// </summary>
 /// <remarks>
+/// <para>
 /// This is an internal implementation detail. Users should use <see cref="ToonSerializer"/> instead.
+/// </para>
+/// <para>
+/// The parser is line based: each line's depth is derived from its leading spaces and
+/// <see cref="ToonOptions.IndentSize"/>. With <see cref="ToonOptions.StrictMode"/> enabled, every strict-mode error of
+/// spec §14 is reported (count and width mismatches, malformed headers, duplicate keys, indentation that is not a
+/// multiple of the indent size, tabs in indentation, blank lines inside arrays). In non-strict mode depth is
+/// floor(spaces / indent size), a tab in indentation counts as <see cref="ToonOptions.IndentSize"/> spaces,
+/// malformed headers are read as literal keys, duplicate keys use the last value, array lengths are not checked,
+/// and list items under a bare <c>key:</c> (without an <c>[N]</c> header) are read as an array.
+/// </para>
+/// <para>
+/// Numbers follow the JSON number grammar; tokens with leading zeros (<c>05</c>) or other text decode as strings.
+/// Numbers that fit in a <see cref="decimal"/> keep their exact value in <see cref="ToonNumber.DecimalValue"/>;
+/// numbers outside the <see cref="double"/> range decode as strings.
+/// </para>
 /// </remarks>
 internal sealed class ToonParser(ToonOptions? options = null)
 {
-    // Cached EndOfInput token to avoid repeated allocations
-    private static readonly ToonToken EndOfInputToken = new(ToonTokenType.EndOfInput, ReadOnlyMemory<char>.Empty, 0, 0);
-
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
-    private readonly List<ToonToken> _tokens = [];
+    private Line[] _lines = [];
     private int _position;
     private int _depth;
-    
-    // Current token cache to avoid repeated Peek() calls at same position
-    private ToonToken _currentToken;
-    private int _currentTokenPosition = -1;
+
+    /// <summary>
+    ///     A physical line of input.
+    /// </summary>
+    /// <param name="Number">The 1-based line number.</param>
+    /// <param name="Depth">The indentation depth; meaningless for blank lines.</param>
+    /// <param name="Indent">The number of indentation columns.</param>
+    /// <param name="Content">The text after the indentation, without trailing spaces.</param>
+    /// <param name="IsBlank">Whether the line contains only spaces and tabs.</param>
+    private readonly record struct Line(int Number, int Depth, int Indent, string Content, bool IsBlank);
+
+    /// <summary>
+    ///     A parsed array header: <c>key?[N&lt;delim?&gt;]{fields?}:</c> (spec §6).
+    /// </summary>
+    private sealed record Header(string? Key, int Length, char Delimiter, string[]? Fields, string InlineValues);
 
     #region Public API
 
@@ -38,15 +63,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var lexer = new ToonLexer(input);
-        _tokens.Clear();
-        _tokens.AddRange(lexer.Tokenize());
+        _lines = SplitLines(input);
         _position = 0;
         _depth = 0;
-        _currentTokenPosition = -1; // Reset token cache
 
-        var root = ParseValue(0);
-        return new ToonDocument(root);
+        return new ToonDocument(ParseRoot());
     }
 
     /// <summary>
@@ -105,922 +126,916 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
     #endregion
 
-    #region Core Parsing Methods
+    #region Lines
 
-    /// <summary>
-    ///     Parses a value at the specified indentation level.
-    /// </summary>
-    /// <param name="indentLevel">The current indentation level.</param>
-    /// <returns>The parsed ToonValue.</returns>
-    /// <exception cref="ToonParseException">Thrown when an unexpected token is encountered.</exception>
-    private ToonValue ParseValue(int indentLevel)
+    private Line[] SplitLines(string input)
     {
-        SkipNewlines();
+        var rawLines = input.Split('\n');
+        var lines = new Line[rawLines.Length];
 
-        if (IsAtEnd())
+        for (var i = 0; i < rawLines.Length; i++)
         {
-            return new ToonObject();
-        }
+            var raw = rawLines[i];
 
-        var token = Peek();
-        var tokenType = token.Type;
-
-        // STEP 1.2: Detect list items (Indent followed by ListItem)
-        // This handles: key:\n  - item1\n  - item2
-        if (tokenType != ToonTokenType.Indent)
-        {
-            // Fast path: Use bitmask check for value types
-            if (tokenType.IsActualValue())
+            if (raw.EndsWith('\r'))
             {
-                return tokenType == ToonTokenType.QuotedString 
-                    ? new ToonString(new string(Advance().Value.Span)) 
-                    : ParsePrimitiveValue(Advance().Value);
+                raw = raw[..^1];
             }
 
-            return tokenType switch
-            {
-                // Check if this is an object (has key-value pairs)
-                ToonTokenType.Key => ParseObject(indentLevel),
-                // List item
-                ToonTokenType.ListItem => ParseList(indentLevel),
-                // End of input - return an empty object
-                ToonTokenType.EndOfInput => new ToonObject(),
-                _                        => throw new ToonParseException($"Unexpected token: {tokenType}", token.Line, token.Column)
-            };
+            lines[i] = CreateLine(raw, i + 1);
         }
 
-        var nextIdx = _position + 1;
-        var hasListItems = nextIdx < _tokens.Count && _tokens[nextIdx].Type == ToonTokenType.ListItem;
-
-        if (hasListItems)
-        {
-            // It's a list of items - parse as an array
-            return ParseList(indentLevel);
-        }
-
-        return token.Type switch
-        {
-            // Check if this is an object (has key-value pairs)
-            ToonTokenType.Key or ToonTokenType.Indent => ParseObject(indentLevel),
-            // List item
-            ToonTokenType.ListItem => ParseList(indentLevel),
-            // Quoted string - always return as string
-            ToonTokenType.QuotedString => new ToonString(new string(Advance().Value.Span)),
-            // Simple value
-            ToonTokenType.Value => ParsePrimitiveValue(Advance().Value),
-            // End of input - return an empty object
-            ToonTokenType.EndOfInput => new ToonObject(),
-            _                        => throw new ToonParseException($"Unexpected token: {token.Type}", token.Line, token.Column)
-        };
+        return lines;
     }
 
-    /// <summary>
-    ///     Parses an object from the token stream.
-    /// </summary>
-    /// <param name="indentLevel">The current indentation level.</param>
-    /// <returns>A ToonObject containing the parsed key-value pairs.</returns>
-    /// <exception cref="ToonParseException">Thrown when the object structure is invalid.</exception>
-    private ToonObject ParseObject(int indentLevel)
+    private Line CreateLine(string raw, int number)
     {
-        var obj = new ToonObject();
+        var columns = 0;
+        var index = 0;
 
-        while (!IsAtEnd())
+        while (index < raw.Length && raw[index] is ' ' or '\t')
         {
-            SkipNewlines();
-
-            if (IsAtEnd())
+            if (raw[index] == '\t')
             {
-                break;
-            }
-
-            // Get indent if present (but don't consume yet)
-            var currentIndent = 0;
-            var hasIndent = false;
-
-            if (ExpectToken(ToonTokenType.Indent))
-            {
-                currentIndent = Peek().Value.Length;
-                hasIndent = true;
-            }
-
-            // If we've decreased indent, we're done with this object (don't consume the indent)
-            if (currentIndent < indentLevel)
-            {
-                break;
-            }
-
-            // Now consume the indent if we're continuing
-            if (hasIndent)
-            {
-                Advance();
-            }
-
-            // Skip if not at our indent level (shouldn't happen with proper input)
-            if (currentIndent > indentLevel && indentLevel > 0)
-            {
-                throw new ToonParseException("Unexpected indentation", Peek().Line, Peek().Column);
-            }
-
-            var keyToken = Peek();
-
-            if (keyToken.Type != ToonTokenType.Key)
-            {
-                break;
-            }
-
-            Advance(); // consume key
-
-            var key = new string(keyToken.Value.Span);
-
-            // Parse array notation (if present)
-            var (arrayLength, fieldNames) = ParseArrayNotation();
-
-            // Expect colon
-            if (Peek().Type != ToonTokenType.Colon)
-            {
-                throw new ToonParseException($"Expected ':' after key '{key}'", Peek().Line, Peek().Column);
-            }
-
-            Advance(); // consume colon
-
-            // Parse the value after colon
-            var value = ParseValueAfterColon(indentLevel, arrayLength, fieldNames);
-
-            obj.Properties[key] = value;
-
-            // Consume optional trailing newline
-            if (Peek().Type == ToonTokenType.Newline)
-            {
-                Advance();
-            }
-        }
-
-        return obj;
-    }
-
-    /// <summary>
-    ///     Parses a tabular array (array of objects with field names).
-    /// </summary>
-    /// <param name="indentLevel">The current indentation level.</param>
-    /// <param name="expectedLength">The expected number of array elements, if specified.</param>
-    /// <param name="fieldNames">The field names for tabular data, if specified.</param>
-    /// <returns>A ToonArray with the parsed tabular data.</returns>
-    /// <exception cref="ToonParseException">Thrown when array length mismatch occurs in strict mode.</exception>
-    private ToonArray ParseTabularArray(int indentLevel, int? expectedLength, string[]? fieldNames)
-    {
-        var array = new ToonArray { FieldNames = fieldNames };
-
-        while (!IsAtEnd())
-        {
-            SkipNewlines();
-
-            if (IsAtEnd())
-            {
-                break;
-            }
-
-            // Get and consume indent if present
-            var currentIndent = 0;
-
-            if (ExpectToken(ToonTokenType.Indent))
-            {
-                currentIndent = GetCurrentIndentAndAdvance();
-            }
-
-            if (currentIndent < indentLevel)
-            {
-                break;
-            }
-
-            if (currentIndent > indentLevel)
-            {
-                throw new ToonParseException("Unexpected indentation in tabular array", Peek().Line, Peek().Column);
-            }
-
-            // Read row values (inline, separated by commas)
-            if (IsValueToken(Peek().Type))
-            {
-                var rowValues = new List<ToonValue>();
-
-                // Read first value
-                var firstToken = Advance();
-                rowValues.Add(ParseValueToken(firstToken));
-
-                // Read the remaining values
-                while (ExpectToken(ToonTokenType.Comma))
+                if (index == raw.Length - 1 || raw.AsSpan(index).Trim(" \t").IsEmpty)
                 {
-                    Advance(); // consume comma
-
-                    if (!IsValueToken(Peek().Type))
-                    {
-                        continue;
-                    }
-
-                    var token = Advance();
-                    rowValues.Add(ParseValueToken(token));
+                    break; // whitespace-only line, handled as blank below
                 }
 
-                if (fieldNames != null && rowValues.Count != fieldNames.Length)
+                if (_options.StrictMode)
                 {
-                    throw new ToonParseException($"Row has {rowValues.Count} values but expected {fieldNames.Length}", 0, 0);
+                    throw new ToonParseException("Tabs are not allowed in indentation", number, index + 1);
                 }
 
-                // Convert to object if field names provided
-                if (fieldNames != null)
-                {
-                    var rowObject = new ToonObject();
-
-                    for (var i = 0; i < rowValues.Count; i++)
-                    {
-                        rowObject.Properties[fieldNames[i]] = rowValues[i];
-                    }
-
-                    array.Items.Add(rowObject);
-                }
-                else
-                {
-                    // Add values directly
-                    foreach (var val in rowValues)
-                    {
-                        array.Items.Add(val);
-                    }
-                }
+                columns += _options.IndentSize;
             }
             else
             {
-                break;
+                columns++;
             }
 
-            if (ExpectToken(ToonTokenType.Newline))
-            {
-                Advance();
-            }
+            index++;
         }
 
-        if (!expectedLength.HasValue || array.Count == expectedLength.Value)
+        var content = raw[index..].TrimEnd(' ', '\t');
+
+        if (content.Length == 0)
         {
+            return new Line(number, 0, columns, string.Empty, IsBlank: true);
+        }
+
+        if (_options.StrictMode && columns % _options.IndentSize != 0)
+        {
+            throw new ToonParseException(
+                $"Indentation of {columns} spaces is not a multiple of the indent size {_options.IndentSize}", number, 1);
+        }
+
+        return new Line(number, columns / _options.IndentSize, columns, content, IsBlank: false);
+    }
+
+    /// <summary>
+    ///     Skips blank lines and returns the next non-blank line without consuming it.
+    /// </summary>
+    /// <param name="skippedBlank">Whether blank lines were skipped.</param>
+    private Line? PeekLine(out bool skippedBlank)
+    {
+        var position = _position;
+        skippedBlank = false;
+
+        while (position < _lines.Length && _lines[position].IsBlank)
+        {
+            position++;
+            skippedBlank = true;
+        }
+
+        return position < _lines.Length ? _lines[position] : null;
+    }
+
+    private Line? PeekLine()
+    {
+        return PeekLine(out _);
+    }
+
+    /// <summary>
+    ///     Consumes the next non-blank line (which must have been peeked).
+    /// </summary>
+    private Line NextLine()
+    {
+        while (_lines[_position].IsBlank)
+        {
+            _position++;
+        }
+
+        return _lines[_position++];
+    }
+
+    #endregion
+
+    #region Structure
+
+    /// <summary>
+    ///     Determines the root form (spec §5) and parses the document.
+    /// </summary>
+    private ToonValue ParseRoot()
+    {
+        var first = PeekLine();
+
+        if (first is not { } firstLine)
+        {
+            return new ToonObject(); // empty document
+        }
+
+        if (firstLine.Depth != 0 && _options.StrictMode)
+        {
+            throw new ToonParseException("The first line of a document must not be indented", firstLine.Number, firstLine.Indent + 1);
+        }
+
+        var nonBlankCount = _lines.Count(l => !l.IsBlank);
+
+        if (TryParseHeader(firstLine, firstLine.Content, requireKey: false) is { Key: null } rootHeader)
+        {
+            NextLine();
+            var array = ParseArrayBody(rootHeader, firstLine, firstLine.Depth + 1);
+            EnsureFullyConsumed();
             return array;
         }
 
-        return _options.StrictMode
-                   ? throw new ToonParseException($"Array length mismatch: expected {expectedLength.Value}, got {array.Count}", 0, 0)
-                   : array;
+        if (nonBlankCount == 1)
+        {
+            if (firstLine.Content == "[]")
+            {
+                return new ToonArray();
+            }
+
+            if (!IsKeyValueLine(firstLine.Content))
+            {
+                NextLine();
+                return ParsePrimitive(firstLine.Content, firstLine);
+            }
+        }
+
+        var root = new ToonObject();
+        ParseFields(root, firstLine.Depth);
+        EnsureFullyConsumed();
+        return root;
+    }
+
+    private void EnsureFullyConsumed()
+    {
+        if (PeekLine() is { } extra)
+        {
+            throw new ToonParseException("Unexpected content after the end of the document structure", extra.Number, extra.Indent + 1);
+        }
     }
 
     /// <summary>
-    ///     Parses an inline array of primitive values.
+    ///     Parses the fields of an object at <paramref name="depth"/> into <paramref name="target"/>.
     /// </summary>
-    /// <param name="expectedLength">The expected number of elements.</param>
-    /// <returns>A ToonArray with the parsed primitive values.</returns>
-    /// <exception cref="ToonParseException">Thrown when array length mismatch occurs in strict mode.</exception>
-    private ToonArray ParseInlinePrimitiveArray(int expectedLength)
+    private void ParseFields(ToonObject target, int depth)
     {
-        var values = new List<ToonValue>();
-
-        // Read first value
-        if (IsValueToken(Peek().Type))
+        while (PeekLine() is { } line)
         {
-            var token = Advance();
-            values.Add(ParseValueToken(token));
-        }
-
-        // Read the remaining values (separated by commas)
-        while (Peek().Type == ToonTokenType.Comma)
-        {
-            Advance(); // consume comma
-
-            if (IsValueToken(Peek().Type))
+            if (line.Depth < depth)
             {
-                var token = Advance();
-                values.Add(ParseValueToken(token));
+                return;
+            }
+
+            if (line.Depth > depth)
+            {
+                throw new ToonParseException("Unexpected indentation", line.Number, line.Indent + 1);
+            }
+
+            NextLine();
+            ParseField(target, line, line.Content, depth + 1);
+        }
+    }
+
+    /// <summary>
+    ///     Parses a key-value or array-header line (<paramref name="content"/> without indentation or list marker)
+    ///     and adds the field to <paramref name="target"/>; nested content is read at <paramref name="childDepth"/>.
+    /// </summary>
+    private void ParseField(ToonObject target, Line line, string content, int childDepth)
+    {
+        string key;
+        ToonValue value;
+
+        if (TryParseHeader(line, content, requireKey: true) is { } header)
+        {
+            key = header.Key!;
+            value = ParseArrayBody(header, line, childDepth);
+        }
+        else
+        {
+            var colon = FindKeyValueColon(content, line, out key);
+            var rest = content[(colon + 1)..].Trim(' ');
+
+            if (rest.Length == 0 && PeekLine() is { } next && next.Depth == childDepth && IsListItem(next.Content))
+            {
+                // `key:` always opens an object (§8); list items need a header. Non-strict mode reads them as an array.
+                if (_options.StrictMode)
+                {
+                    throw new ToonParseException($"List items under '{key}' require an array header such as '{key}[N]:'",
+                                                 next.Number, next.Indent + 1);
+                }
+
+                EnterNesting(line);
+                value = ParseListItems(childDepth);
+                _depth--;
+            }
+            else if (rest.Length == 0)
+            {
+                var nested = new ToonObject();
+                EnterNesting(line);
+                ParseFields(nested, childDepth);
+                _depth--;
+                value = nested;
+            }
+            else if (rest == "[]")
+            {
+                value = new ToonArray();
             }
             else
             {
-                break;
+                value = ParsePrimitive(rest, line);
             }
         }
 
-        return _options.StrictMode && values.Count != expectedLength
-                   ? throw new ToonParseException($"Array length mismatch: expected {expectedLength}, got {values.Count}", 0, 0)
-                   : new ToonArray(values);
+        if (_options.StrictMode && target.Properties.ContainsKey(key))
+        {
+            throw new ToonParseException($"Duplicate key '{key}'", line.Number, line.Indent + 1);
+        }
+
+        target.Properties[key] = value;
     }
 
     /// <summary>
-    ///     Parses a list (items prefixed with '-').
+    ///     Parses the body of an array whose header has been read: inline values, tabular rows or list items (spec §9).
     /// </summary>
-    /// <param name="indentLevel">The current indentation level.</param>
-    /// <returns>A ToonArray containing the list items.</returns>
-    private ToonArray ParseList(int indentLevel)
+    private ToonArray ParseArrayBody(Header header, Line headerLine, int childDepth)
+    {
+        EnterNesting(headerLine);
+
+        ToonArray array;
+
+        if (header.Fields != null)
+        {
+            if (header.InlineValues.Length > 0)
+            {
+                throw new ToonParseException("Unexpected values after a tabular array header", headerLine.Number, headerLine.Indent + 1);
+            }
+
+            array = ParseTabularRows(header, childDepth);
+        }
+        else if (header.InlineValues.Length > 0)
+        {
+            var items = SplitDelimited(header.InlineValues, header.Delimiter, headerLine).Select(token => ParsePrimitive(token, headerLine));
+            array = new ToonArray([.. items]);
+        }
+        else
+        {
+            array = ParseListItems(childDepth);
+        }
+
+        if (_options.StrictMode && array.Count != header.Length)
+        {
+            throw new ToonParseException($"Array length mismatch: expected {header.Length}, got {array.Count}",
+                                         headerLine.Number, headerLine.Indent + 1);
+        }
+
+        _depth--;
+        return array;
+    }
+
+    private ToonArray ParseTabularRows(Header header, int rowDepth)
+    {
+        var fields = header.Fields!;
+        var array = new ToonArray { FieldNames = fields };
+
+        while (PeekLine(out var skippedBlank) is { } line && line.Depth == rowDepth && IsTabularRow(line.Content, header.Delimiter))
+        {
+            if (skippedBlank && array.Count > 0 && _options.StrictMode)
+            {
+                throw new ToonParseException("Blank lines are not allowed inside a tabular array", line.Number - 1, 1);
+            }
+
+            NextLine();
+            var values = SplitDelimited(line.Content, header.Delimiter, line);
+
+            if (values.Count != fields.Length && _options.StrictMode)
+            {
+                throw new ToonParseException($"Row has {values.Count} values but expected {fields.Length}", line.Number, line.Indent + 1);
+            }
+
+            var row = new ToonObject();
+
+            for (var i = 0; i < fields.Length; i++)
+            {
+                row.Properties[fields[i]] = i < values.Count ? ParsePrimitive(values[i], line) : ToonNull.Instance;
+            }
+
+            array.Items.Add(row);
+        }
+
+        if (PeekLine() is { } next && next.Depth > rowDepth)
+        {
+            throw new ToonParseException("Unexpected indentation in tabular array", next.Number, next.Indent + 1);
+        }
+
+        return array;
+    }
+
+    private ToonArray ParseListItems(int itemDepth)
     {
         var array = new ToonArray();
 
-        while (!IsAtEnd())
+        while (PeekLine(out var skippedBlank) is { } line && line.Depth == itemDepth && IsListItem(line.Content))
         {
-            SkipNewlines();
-
-            if (IsAtEnd())
+            if (skippedBlank && array.Count > 0 && _options.StrictMode)
             {
-                break;
+                throw new ToonParseException("Blank lines are not allowed inside an array", line.Number - 1, 1);
             }
 
-            // Check for indentation
-            var currentIndent = GetCurrentIndent();
+            NextLine();
+            array.Items.Add(ParseListItem(line, itemDepth));
+        }
 
-            if (currentIndent < indentLevel)
-            {
-                // Demented - end of a list
-                break;
-            }
-
-            // Consume indent token if present
-            if (Peek().Type == ToonTokenType.Indent)
-            {
-                Advance();
-            }
-
-            // Now expect a list item (- marker)
-            if (Peek().Type == ToonTokenType.ListItem)
-            {
-                Advance(); // consume list marker (-)
-
-                // STEP 1.4: Parse the item (scalar value, inline first field, or nested object)
-                if (IsValueToken(Peek().Type))
-                {
-                    // Scalar list item: - value
-                    array.Items.Add(ParseListItemScalar());
-                }
-                else if (Peek().Type == ToonTokenType.Key)
-                {
-                    // Inline first field: - key: value
-                    // Parse as an object with the first field inline, rest indented
-                    var itemObject = new ToonObject();
-
-                    // Parse inline first field
-                    var firstKey = new string(Advance().Value.Span);
-
-                    if (Peek().Type != ToonTokenType.Colon)
-                    {
-                        throw new ToonParseException($"Expected ':' after key '{firstKey}'", Peek().Line, Peek().Column);
-                    }
-
-                    Advance(); // consume colon
-                    SkipWhitespace();
-
-                    // Parse first value
-                    if (IsValueToken(Peek().Type))
-                    {
-                        var valueToken = Advance();
-                        itemObject.Properties[firstKey] = ParseValueToken(valueToken);
-                    }
-                    else
-                    {
-                        throw new ToonParseException($"Expected value after ':' for key '{firstKey}'", Peek().Line, Peek().Column);
-                    }
-
-                    // Consume trailing newline
-                    if (Peek().Type == ToonTokenType.Newline)
-                    {
-                        Advance();
-                    }
-
-                    // Parse remaining fields at higher indentation
-                    ParseAdditionalObjectProperties(itemObject, indentLevel);
-
-                    array.Items.Add(itemObject);
-                }
-                else if (Peek().Type == ToonTokenType.Newline)
-                {
-                    // Object list item: - \n properties
-                    Advance(); // consume newline
-
-                    // Parse nested object properties at higher indentation
-                    var itemObject = new ToonObject();
-                    ParseAdditionalObjectProperties(itemObject, indentLevel);
-
-                    array.Items.Add(itemObject);
-                }
-            }
-            else
-            {
-                // Not a list item - end of a list
-                break;
-            }
-
-            // Consume trailing newline
-            if (Peek().Type == ToonTokenType.Newline)
-            {
-                Advance();
-            }
+        if (PeekLine() is { } next && next.Depth > itemDepth)
+        {
+            throw new ToonParseException("Unexpected indentation in list array", next.Number, next.Indent + 1);
         }
 
         return array;
     }
 
     /// <summary>
-    ///     Parses a value token (either quoted string or primitive).
+    ///     Parses a list item line at <paramref name="itemDepth"/> (spec §9.4, §10).
     /// </summary>
-    /// <param name="token">The token to parse.</param>
-    /// <returns>A ToonValue representing the token.</returns>
-    private static ToonValue ParseValueToken(ToonToken token)
+    private ToonValue ParseListItem(Line line, int itemDepth)
     {
-        return token.Type == ToonTokenType.QuotedString ? new ToonString(new string(token.Value.Span)) : ParsePrimitiveValue(token.Value);
+        if (line.Content == "-")
+        {
+            return new ToonObject(); // empty object list item
+        }
+
+        var rest = line.Content[2..].TrimStart(' ');
+
+        // Inner array: - [M]: ...
+        if (TryParseHeader(line, rest, requireKey: false) is { Key: null } innerHeader)
+        {
+            return ParseArrayBody(innerHeader, line, itemDepth + 1);
+        }
+
+        if (!IsKeyValueLine(rest))
+        {
+            return ParsePrimitive(rest, line);
+        }
+
+        // Object with its first field on the hyphen line; that field's nested content is two levels deeper
+        var item = new ToonObject();
+        EnterNesting(line);
+        ParseField(item, line, rest, itemDepth + 2);
+        ParseFields(item, itemDepth + 1);
+        _depth--;
+        return item;
     }
 
-    /// <summary>
-    ///     Parses a primitive value from a token's memory.
-    /// </summary>
-    /// <param name="valueMemory">The memory containing the value.</param>
-    /// <returns>A ToonValue representing the primitive (null, boolean, number, or string).</returns>
-    private static ToonValue ParsePrimitiveValue(ReadOnlyMemory<char> valueMemory)
+    private void EnterNesting(Line line)
     {
-        var span = valueMemory.Span.Trim();
-
-        switch (span)
+        if (++_depth > _options.MaxDepth)
         {
-            // Check for null
-            case "null":
-                return ToonNull.Instance;
-            // Check for boolean
-            case "true":
-                return new ToonBoolean(true);
-            case "false":
-                return new ToonBoolean(false);
+            _depth--;
+            throw new ToonParseException($"Maximum nesting depth of {_options.MaxDepth} exceeded", line.Number, line.Indent + 1);
         }
 
-        // Try to parse as a number
-        if (double.TryParse(span, NumberStyles.Any, CultureInfo.InvariantCulture, out var number))
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
-            return new ToonNumber(number);
+            _depth--;
+            throw new ToonParseException("Document is nested too deeply to parse with the available stack space", line.Number, line.Indent + 1);
         }
-
-        // Fallback to string
-        return new ToonString(new string(span));
     }
 
     #endregion
 
-    #region Helper Methods
+    #region Line classification
+
+    private static bool IsListItem(string content)
+    {
+        return content == "-" || content.StartsWith("- ", StringComparison.Ordinal);
+    }
 
     /// <summary>
-    /// Gets the current indentation level.
+    ///     Checks whether a line inside a tabular array is a row rather than a key-value line (spec §9.3).
     /// </summary>
-    /// <returns>The number of spaces of indentation, or 0 if not at an indent token.</returns>
-    /// <remarks>
-    ///     Optimized to avoid repeated Peek() calls by accessing tokens directly.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int GetCurrentIndent()
+    private static bool IsTabularRow(string content, char delimiter)
     {
-        if (_position >= _tokens.Count)
+        var delimiterIndex = IndexOfUnquoted(content, delimiter);
+        var colonIndex = IndexOfUnquoted(content, ':');
+
+        return colonIndex < 0 || (delimiterIndex >= 0 && delimiterIndex < colonIndex);
+    }
+
+    /// <summary>
+    ///     Checks whether content is a key-value line (a key followed by a colon) or an array header with a key.
+    /// </summary>
+    private static bool IsKeyValueLine(string content)
+    {
+        if (content.StartsWith('"'))
         {
-            return 0;
+            var end = FindClosingQuote(content, 0);
+            return end > 0 && end + 1 < content.Length && content[end + 1] is ':' or '[';
         }
 
-        var token = _tokens[_position]; // Direct access, no Peek()
-        return token.Type == ToonTokenType.Indent ? token.Value.Length : 0;
+        return content.IndexOf(':') > 0;
     }
 
     /// <summary>
-    ///     Skips all consecutive newline tokens.
+    ///     Returns the index of the first occurrence of <paramref name="target"/> outside quoted strings, or -1.
     /// </summary>
-    private void SkipNewlines()
+    private static int IndexOfUnquoted(string content, char target)
     {
-        // Optimized: Check category once instead of multiple equality checks
-        while (!IsAtEnd() && Peek().Type == ToonTokenType.Newline)
+        var inQuotes = false;
+
+        for (var i = 0; i < content.Length; i++)
         {
-            Advance();
-        }
-    }
+            var ch = content[i];
 
-    /// <summary>
-    ///     Skips all consecutive whitespace (indent and newline) tokens.
-    /// </summary>
-    private void SkipWhitespace()
-    {
-        while (!IsAtEnd() && Peek().Type == ToonTokenType.Indent)
-        {
-            Advance();
-        }
-    }
-
-    /// <summary>
-    ///     Checks if a token type represents a value (either Value or QuotedString).
-    /// </summary>
-    /// <param name="type">The token type to check.</param>
-    /// <returns>True if the token is a value token; otherwise, false.</returns>
-    private static bool IsValueToken(ToonTokenType type)
-    {
-        return type is ToonTokenType.Value or ToonTokenType.QuotedString;
-    }
-
-    /// <summary>
-    ///     Peeks at the current token without advancing.
-    /// </summary>
-    /// <returns>The current token, or a cached EndOfInput token if at end.</returns>
-    /// <remarks>
-    ///     Optimized with token cache to avoid repeated access at the same position.
-    ///     Uses AggressiveInlining for maximum performance.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ToonToken Peek()
-    {
-        // Check if the cached token is still valid for the current position
-        if (_currentTokenPosition == _position)
-        {
-            return _currentToken;
+            if (inQuotes)
+            {
+                if (ch == '\\')
+                {
+                    i++;
+                }
+                else if (ch == '"')
+                {
+                    inQuotes = false;
+                }
+            }
+            else if (ch == '"')
+            {
+                inQuotes = true;
+            }
+            else if (ch == target)
+            {
+                return i;
+            }
         }
 
-        // Update cache
-        _currentTokenPosition = _position;
-        _currentToken = _position < _tokens.Count ? _tokens[_position] : EndOfInputToken;
-        return _currentToken;
+        return -1;
     }
 
     /// <summary>
-    ///     Advances to the next token and returns the current token.
+    ///     Returns the index of the quote closing the string that starts at <paramref name="start"/>, or -1.
     /// </summary>
-    /// <returns>The current token before advancing.</returns>
-    /// <remarks>
-    ///     Invalidates the token cache since position changes.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ToonToken Advance()
+    private static int FindClosingQuote(string content, int start)
     {
-        var token = Peek(); // Get the current token (may use cache)
-
-        if (_position < _tokens.Count)
+        for (var i = start + 1; i < content.Length; i++)
         {
-            _position++;
-            // Cache is now invalid since position changed
-            // Next Peek() will refresh it
+            if (content[i] == '\\')
+            {
+                i++;
+            }
+            else if (content[i] == '"')
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    ///     Finds the colon of a key-value line and extracts the (unescaped) key.
+    /// </summary>
+    /// <returns>The index of the colon in <paramref name="content"/>.</returns>
+    /// <exception cref="ToonParseException">Thrown when the key is not followed by a colon.</exception>
+    private static int FindKeyValueColon(string content, Line line, out string key)
+    {
+        if (content.StartsWith('"'))
+        {
+            var end = FindClosingQuote(content, 0);
+
+            if (end < 0)
+            {
+                throw new ToonParseException("Unterminated string", line.Number, line.Indent + 1);
+            }
+
+            if (end + 1 >= content.Length || content[end + 1] != ':')
+            {
+                throw new ToonParseException("Missing colon after key", line.Number, line.Indent + end + 2);
+            }
+
+            key = Unescape(content[1..end], line);
+            return end + 1;
+        }
+
+        var colon = content.IndexOf(':');
+
+        if (colon <= 0)
+        {
+            throw new ToonParseException(colon == 0 ? "Missing key before colon" : "Missing colon after key", line.Number, line.Indent + 1);
+        }
+
+        key = content[..colon].TrimEnd(' ');
+        return colon;
+    }
+
+    /// <summary>
+    ///     Tries to parse an array header at the start of <paramref name="content"/> (spec §6).
+    /// </summary>
+    /// <param name="line">The line, for error positions.</param>
+    /// <param name="content">The header text (without indentation or list marker).</param>
+    /// <param name="requireKey">Whether a key prefix is required (fields) or forbidden (root and list-item arrays).</param>
+    /// <returns>The header, or null when the content is not a header.</returns>
+    /// <exception cref="ToonParseException">Thrown in strict mode for malformed bracket segments or delimiter mismatches.</exception>
+    private Header? TryParseHeader(Line line, string content, bool requireKey)
+    {
+        string? key = null;
+        int bracketStart;
+
+        if (content.StartsWith('"'))
+        {
+            var end = FindClosingQuote(content, 0);
+
+            if (end < 0 || end + 1 >= content.Length || content[end + 1] != '[')
+            {
+                return null;
+            }
+
+            key = Unescape(content[1..end], line);
+            bracketStart = end + 1;
+        }
+        else
+        {
+            bracketStart = content.IndexOf('[');
+            var colon = content.IndexOf(':');
+
+            if (bracketStart < 0 || (colon >= 0 && colon < bracketStart))
+            {
+                return null;
+            }
+
+            if (bracketStart > 0)
+            {
+                key = content[..bracketStart];
+            }
+        }
+
+        if ((key != null) != requireKey)
+        {
+            return null;
+        }
+
+        var header = TryParseHeaderSegments(content, bracketStart, key, out var malformed);
+
+        if (header == null && malformed && _options.StrictMode && (requireKey || content.IndexOf(':') > 0))
+        {
+            throw new ToonParseException("Malformed array header", line.Number, line.Indent + bracketStart + 1);
+        }
+
+        if (header?.Fields != null && _options.StrictMode)
+        {
+            foreach (var field in header.Fields)
+            {
+                if (field.IndexOfAny([',', '|', '\t']) >= 0 && !field.Contains(header.Delimiter) && IsUnquotedFieldInHeader(content, field))
+                {
+                    throw new ToonParseException("Header delimiter mismatch between bracket and fields segments", line.Number, line.Indent + 1);
+                }
+            }
+        }
+
+        return header;
+    }
+
+    private static bool IsUnquotedFieldInHeader(string content, string field)
+    {
+        return content.Contains(field, StringComparison.Ordinal) && !content.Contains("\"" + field + "\"", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     Parses <c>[N&lt;delim?&gt;]{fields?}:</c> starting at <paramref name="bracketStart"/>.
+    /// </summary>
+    /// <param name="content">The header text.</param>
+    /// <param name="bracketStart">The index of the opening bracket.</param>
+    /// <param name="key">The already parsed key, or null for key-less headers.</param>
+    /// <param name="malformed">Set when the text looks like a header but is not a valid one.</param>
+    private Header? TryParseHeaderSegments(string content, int bracketStart, string? key, out bool malformed)
+    {
+        malformed = true;
+        var bracketEnd = content.IndexOf(']', bracketStart);
+
+        if (bracketEnd < 0)
+        {
+            return null;
+        }
+
+        var inner = content.AsSpan(bracketStart + 1, bracketEnd - bracketStart - 1);
+        var delimiter = ',';
+
+        if (inner.Length > 0 && inner[^1] is '\t' or '|')
+        {
+            delimiter = inner[^1];
+            inner = inner[..^1];
+        }
+
+        if (!IsCanonicalLength(inner) || !int.TryParse(inner, NumberStyles.None, CultureInfo.InvariantCulture, out var length))
+        {
+            return null;
+        }
+
+        var position = bracketEnd + 1;
+        string[]? fields = null;
+
+        if (position < content.Length && content[position] == '{')
+        {
+            var fieldsEnd = IndexOfUnquoted(content[position..], '}');
+
+            if (fieldsEnd < 0)
+            {
+                return null;
+            }
+
+            var fieldsText = content.Substring(position + 1, fieldsEnd - 1);
+            fields = [.. SplitDelimited(fieldsText, delimiter, null).Select(field => ParseKeyToken(field))];
+            position += fieldsEnd + 1;
+        }
+
+        if (position >= content.Length || content[position] != ':')
+        {
+            return null;
+        }
+
+        malformed = false;
+        var inlineValues = content[(position + 1)..].Trim(' ');
+        return new Header(key, length, delimiter, fields, inlineValues);
+    }
+
+    private static bool IsCanonicalLength(ReadOnlySpan<char> text)
+    {
+        if (text.IsEmpty || (text.Length > 1 && text[0] == '0'))
+        {
+            return false;
+        }
+
+        foreach (var ch in text)
+        {
+            if (!char.IsAsciiDigit(ch))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    #endregion
+
+    #region Tokens
+
+    /// <summary>
+    ///     Splits delimited values outside quotes, trimming surrounding spaces; empty tokens are kept (spec §11.2, B.3).
+    /// </summary>
+    private static List<string> SplitDelimited(string text, char delimiter, Line? line)
+    {
+        var tokens = new List<string>();
+        var start = 0;
+        var inQuotes = false;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var ch = text[i];
+
+            if (inQuotes)
+            {
+                if (ch == '\\')
+                {
+                    i++;
+                }
+                else if (ch == '"')
+                {
+                    inQuotes = false;
+                }
+            }
+            else if (ch == '"')
+            {
+                inQuotes = true;
+            }
+            else if (ch == delimiter)
+            {
+                tokens.Add(text[start..i].Trim(' '));
+                start = i + 1;
+            }
+        }
+
+        tokens.Add(text[start..].Trim(' '));
+        return tokens;
+    }
+
+    private static string ParseKeyToken(string token)
+    {
+        if (token.Length >= 2 && token[0] == '"' && FindClosingQuote(token, 0) == token.Length - 1)
+        {
+            return Unescape(token[1..^1], null);
         }
 
         return token;
     }
 
     /// <summary>
-    ///     Checks if the parser has reached the end of tokens.
+    ///     Parses a primitive token: quoted string, true/false/null, number, or unquoted string (spec §4, B.4).
     /// </summary>
-    /// <returns>True if at the end of tokens; otherwise, false.</returns>
-    /// <remarks>
-    ///     Optimized to check position and EndOfInput token type.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsAtEnd()
+    private static ToonValue ParsePrimitive(string token, Line line)
     {
-        return _position >= _tokens.Count || (_position < _tokens.Count && _tokens[_position].Type == ToonTokenType.EndOfInput);
-    }
-
-    /// <summary>
-    ///     Checks if the current token is of the expected type.
-    /// </summary>
-    /// <param name="expectedType">The expected token type.</param>
-    /// <returns>True if the current token matches the expected type; otherwise, false.</returns>
-    /// <remarks>
-    ///     Helper method to simplify repeated token type checks throughout the parser.
-    ///     Uses a cached Peek() result for optimal performance.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool ExpectToken(ToonTokenType expectedType)
-    {
-        return Peek().Type == expectedType;
-    }
-
-    /// <summary>
-    ///     Gets the current token's indent level and advances the parser position.
-    /// </summary>
-    /// <returns>The indent level of the current token before advancing.</returns>
-    /// <remarks>
-    ///     Helper method that combines a common pattern of reading indent level and consuming the token.
-    ///     Optimized for frequent indent processing in nested structures.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int GetCurrentIndentAndAdvance()
-    {
-        var token = Peek();
-        
-        var indentLevel = token.Type == ToonTokenType.Indent ? token.Value.Length : 0;
-        
-        Advance();
-        
-        return indentLevel;
-    }
-
-    /// <summary>
-    ///     Checks if the token stream is followed by a list item pattern (Indent + ListItem).
-    /// </summary>
-    /// <param name="startPosition">The position to start looking from.</param>
-    /// <returns>True if followed by Indent, then ListItem; otherwise, false.</returns>
-    /// <remarks>
-    ///     Helper method to detect list arrays in lookahead scenarios.
-    ///     Skips newlines to find the next meaningful token.
-    /// </remarks>
-    private bool IsFollowedByListItem(int startPosition)
-    {
-        var pos = startPosition;
-
-        // Skip consecutive newlines
-        while (pos < _tokens.Count && _tokens[pos].Type == ToonTokenType.Newline)
+        if (token.Length == 0)
         {
-            pos++;
+            return new ToonString(string.Empty);
         }
 
-        // Check for Indent + ListItem pattern
-        if (pos >= _tokens.Count || _tokens[pos].Type != ToonTokenType.Indent)
+        if (token[0] == '"')
+        {
+            var end = FindClosingQuote(token, 0);
+
+            if (end < 0)
+            {
+                throw new ToonParseException("Unterminated string", line.Number, line.Indent + 1);
+            }
+
+            if (end != token.Length - 1)
+            {
+                throw new ToonParseException("Unexpected characters after closing quote", line.Number, line.Indent + 1);
+            }
+
+            return new ToonString(Unescape(token[1..end], line));
+        }
+
+        return token switch
+        {
+            "true"  => new ToonBoolean(true),
+            "false" => new ToonBoolean(false),
+            "null"  => ToonNull.Instance,
+            _       => (ToonValue?)TryParseNumber(token) ?? new ToonString(token)
+        };
+    }
+
+    /// <summary>
+    ///     Parses a token matching the JSON number grammar without forbidden leading zeros.
+    /// </summary>
+    /// <returns>The number, or null when the token is not a number or not finite as a <see cref="double"/>.</returns>
+    internal static ToonNumber? TryParseNumber(string token)
+    {
+        if (!IsJsonNumber(token) ||
+            !double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+            !double.IsFinite(value))
+        {
+            return null;
+        }
+
+        // Keep the exact value when it fits in a decimal; reject decimal results that were rounded to a different double
+        if (decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) && (double)exact == value)
+        {
+            return new ToonNumber(exact);
+        }
+
+        return new ToonNumber(value);
+    }
+
+    /// <summary>
+    ///     Matches <c>-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?</c>.
+    /// </summary>
+    private static bool IsJsonNumber(string token)
+    {
+        var i = 0;
+
+        if (token[i] == '-')
+        {
+            i++;
+        }
+
+        if (i >= token.Length || !char.IsAsciiDigit(token[i]))
         {
             return false;
         }
 
-        var nextPos = pos + 1;
-        return nextPos < _tokens.Count && _tokens[nextPos].Type == ToonTokenType.ListItem;
+        if (token[i] == '0')
+        {
+            i++;
+        }
+        else
+        {
+            while (i < token.Length && char.IsAsciiDigit(token[i]))
+            {
+                i++;
+            }
+        }
 
+        if (i < token.Length && token[i] == '.')
+        {
+            i++;
+            var fractionStart = i;
+
+            while (i < token.Length && char.IsAsciiDigit(token[i]))
+            {
+                i++;
+            }
+
+            if (i == fractionStart)
+            {
+                return false;
+            }
+        }
+
+        if (i < token.Length && token[i] is 'e' or 'E')
+        {
+            i++;
+
+            if (i < token.Length && token[i] is '+' or '-')
+            {
+                i++;
+            }
+
+            var exponentStart = i;
+
+            while (i < token.Length && char.IsAsciiDigit(token[i]))
+            {
+                i++;
+            }
+
+            if (i == exponentStart)
+            {
+                return false;
+            }
+        }
+
+        return i == token.Length;
     }
 
     /// <summary>
-    ///     Parses array notation (length and/or field names) if present.
+    ///     Unescapes the content of a quoted string per spec §7.1.
     /// </summary>
-    /// <returns>Tuple of optional array length and field names.</returns>
-    /// <remarks>
-    ///     Handles [n] for array length and [field1, field2] for field names.
-    /// </remarks>
-    private (int? arrayLength, string[]? fieldNames) ParseArrayNotation()
+    /// <exception cref="ToonParseException">Thrown for unknown escapes, truncated or surrogate <c>\uXXXX</c> escapes.</exception>
+    private static string Unescape(string text, Line? line)
     {
-        int? arrayLength = null;
-        string[]? fieldNames = null;
-
-        // Check for array length [n]
-        if (Peek().Type == ToonTokenType.ArrayLength)
+        if (text.IndexOf('\\') < 0)
         {
-            var lengthToken = Advance();
-            var span = lengthToken.Value.Span;
-            // Trim '[' and ']' manually
-            if (span.Length >= 2 && span[0] == '[' && span[^1] == ']')
-            {
-                span = span[1..^1];
-            }
-            if (int.TryParse(span, out var len))
-            {
-                arrayLength = len;
-            }
+            return text;
         }
 
-        // Check for field names {field1, field2}
-        if (Peek().Type != ToonTokenType.ArrayFields)
+        var sb = new StringBuilder(text.Length);
+        var lineNumber = line?.Number ?? 0;
+
+        for (var i = 0; i < text.Length; i++)
         {
-            return (arrayLength, fieldNames);
-        }
+            var ch = text[i];
 
-        var fieldsToken = Advance();
-        var fieldsSpan = fieldsToken.Value.Span;
-        // Trim '{' and '}' manually
-        if (fieldsSpan.Length >= 2 && fieldsSpan[0] == '{' && fieldsSpan[^1] == '}')
-        {
-            fieldsSpan = fieldsSpan[1..^1];
-        }
-        
-        // Optimized: use custom SplitAndTrim instead of string.Split + LINQ
-        fieldNames = SplitAndTrim(fieldsSpan);
-
-        return (arrayLength, fieldNames);
-    }
-
-    /// <summary>
-    ///     Parses the value that comes after a colon in a key-value pair.
-    /// </summary>
-    /// <param name="indentLevel">The current indentation level.</param>
-    /// <param name="arrayLength">Optional array length from notation.</param>
-    /// <param name="fieldNames">Optional field names from notation.</param>
-    /// <returns>The parsed value.</returns>
-    private ToonValue ParseValueAfterColon(int indentLevel, int? arrayLength, string[]? fieldNames)
-    {
-        SkipWhitespace();
-
-        // If newline after colon, it's a nested object or array
-        if (Peek().Type == ToonTokenType.Newline || IsAtEnd())
-        {
-            var nestingToken = Peek();
-
-            if (nestingToken.Type == ToonTokenType.Newline)
+            if (ch != '\\')
             {
-                Advance(); // consume newline
-            }
-
-            EnterNesting(nestingToken);
-
-            try
-            {
-                // Check if this is actually a list by peeking ahead for list items
-                var isListArray = false;
-
-                if (arrayLength.HasValue || fieldNames != null)
-                {
-                    // Check if the next content is a list (Indent followed by ListItem)
-                    isListArray = IsFollowedByListItem(_position);
-                }
-
-                if ((arrayLength.HasValue || fieldNames != null) && !isListArray)
-                {
-                    // Tabular array
-                    return ParseTabularArray(indentLevel + _options.IndentSize, arrayLength, fieldNames);
-                }
-
-                // Nested object or list array
-                return ParseValue(indentLevel + _options.IndentSize);
-            }
-            finally
-            {
-                _depth--;
-            }
-        }
-
-        if (IsValueToken(Peek().Type))
-        {
-            // Inline values or primitive array
-            if (arrayLength.HasValue)
-            {
-                // Primitive array: tags[3]: a,b,c
-                return ParseInlinePrimitiveArray(arrayLength.Value);
-            }
-
-            // Simple value
-            var valueToken = Advance();
-            return ParseValueToken(valueToken);
-        }
-
-        if (!IsAtEnd())
-        {
-            throw new ToonParseException("Expected value after ':'", Peek().Line, Peek().Column);
-        }
-
-        // End of input after colon - empty value (array or object)
-        return arrayLength.HasValue ? new ToonArray() : new ToonObject();
-    }
-
-    /// <summary>
-    ///     Enters a nested structure, enforcing <see cref="ToonOptions.MaxDepth"/> and the available stack space.
-    /// </summary>
-    /// <param name="token">The token used to report the error position.</param>
-    /// <exception cref="ToonParseException">Thrown when the document is nested too deeply.</exception>
-    /// <remarks>
-    ///     The parser is recursive, so untrusted input with unbounded nesting would otherwise
-    ///     overflow the stack and terminate the process. Callers must decrement <c>_depth</c> when leaving.
-    /// </remarks>
-    private void EnterNesting(ToonToken token)
-    {
-        if (++_depth > _options.MaxDepth)
-        {
-            _depth--;
-            throw new ToonParseException($"Maximum nesting depth of {_options.MaxDepth} exceeded", token.Line, token.Column);
-        }
-
-        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
-        {
-            _depth--;
-            throw new ToonParseException("Document is nested too deeply to parse with the available stack space", token.Line, token.Column);
-        }
-    }
-
-    /// <summary>
-    ///     Parses a scalar list item (- value).
-    /// </summary>
-    /// <returns>The parsed scalar value.</returns>
-    private ToonValue ParseListItemScalar()
-    {
-        if (!IsValueToken(Peek().Type))
-        {
-            throw new ToonParseException("Expected scalar value after '-'", Peek().Line, Peek().Column);
-        }
-
-        var valueToken = Advance();
-        return ParseValueToken(valueToken);
-    }
-
-    /// <summary>
-    ///     Parses additional object properties at a higher indentation level.
-    ///     Used for list items with properties across multiple lines.
-    /// </summary>
-    /// <param name="targetObject">The object to add properties to.</param>
-    /// <param name="listIndentLevel">The indentation level of the parent list.</param>
-    private void ParseAdditionalObjectProperties(ToonObject targetObject, int listIndentLevel)
-    {
-        while (!IsAtEnd())
-        {
-            SkipNewlines();
-
-            if (IsAtEnd())
-            {
-                break;
-            }
-
-            // Check indentation
-            if (Peek().Type != ToonTokenType.Indent)
-            {
-                // No indent token - we're back at list level or less
-                break;
-            }
-
-            var propIndent = Peek().Value.Length;
-
-            // If demented to the list level or below, stop parsing this object
-            if (propIndent <= listIndentLevel)
-            {
-                break;
-            }
-
-            Advance(); // consume indent
-
-            // Parse key-value pair
-            if (Peek().Type != ToonTokenType.Key)
-            {
-                break;
-            }
-
-            var key = new string(Advance().Value.Span);
-
-            // Parse array notation (if present)
-            var (arrayLength, fieldNames) = ParseArrayNotation();
-
-            // Expect colon
-            if (Peek().Type != ToonTokenType.Colon)
-            {
-                throw new ToonParseException($"Expected ':' after key '{key}'", Peek().Line, Peek().Column);
-            }
-
-            Advance(); // consume colon
-
-            // Parse value after colon
-            var value = ParseValueAfterColon(propIndent, arrayLength, fieldNames);
-
-            targetObject.Properties[key] = value;
-
-            // Consume optional trailing newline
-            if (Peek().Type == ToonTokenType.Newline)
-            {
-                Advance();
-            }
-        }
-    }
-    
-    #region Helper Methods
-    
-    /// <summary>
-    /// Splits a ReadOnlySpan by comma and trims each segment without allocating strings.
-    /// </summary>
-    /// <param name="input">The span to split.</param>
-    /// <returns>Array of trimmed field names.</returns>
-    private static string[] SplitAndTrim(ReadOnlySpan<char> input)
-    {
-        if (input.IsEmpty)
-        {
-            return Array.Empty<string>();
-        }
-
-        // Count commas to a pre-allocate array
-        var count = 1;
-        foreach (var c in input)
-        {
-            if (c == ',')
-            {
-                count++;
-            }
-        }
-
-        var result = new string[count];
-        var resultIndex = 0;
-        var start = 0;
-
-        for (var i = 0; i <= input.Length; i++)
-        {
-            if (i != input.Length && input[i] != ',')
-            {
+                sb.Append(ch);
                 continue;
             }
 
-            var segment = input.Slice(start, i - start);
-                
-            // Trim leading and trailing spaces
-            var trimStart = 0;
-            while (trimStart < segment.Length && segment[trimStart] == ' ')
+            if (++i >= text.Length)
             {
-                trimStart++;
+                throw new ToonParseException("Unterminated escape sequence", lineNumber, 0);
             }
-                
-            var trimEnd = segment.Length - 1;
-            while (trimEnd >= trimStart && segment[trimEnd] == ' ')
+
+            switch (text[i])
             {
-                trimEnd--;
+                case '\\':
+                    sb.Append('\\');
+                    break;
+                case '"':
+                    sb.Append('"');
+                    break;
+                case 'n':
+                    sb.Append('\n');
+                    break;
+                case 'r':
+                    sb.Append('\r');
+                    break;
+                case 't':
+                    sb.Append('\t');
+                    break;
+                case 'u':
+                    if (text.Length - (i + 1) < 4 ||
+                        !int.TryParse(text.AsSpan(i + 1, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var codePoint))
+                    {
+                        throw new ToonParseException("Invalid \\u escape: expected four hex digits", lineNumber, 0);
+                    }
+
+                    if (codePoint is >= 0xD800 and <= 0xDFFF)
+                    {
+                        throw new ToonParseException("Invalid \\u escape: surrogate code points are not allowed", lineNumber, 0);
+                    }
+
+                    sb.Append((char)codePoint);
+                    i += 4;
+                    break;
+                default:
+                    throw new ToonParseException($"Invalid escape sequence '\\{text[i]}'", lineNumber, 0);
             }
-                
-            var trimmed = segment.Slice(trimStart, trimEnd - trimStart + 1);
-            result[resultIndex++] = new string(trimmed);
-                
-            start = i + 1; // Skip comma
         }
 
-        return result;
+        return sb.ToString();
     }
-    
-    #endregion
 
     #endregion
 }

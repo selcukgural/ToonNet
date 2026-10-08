@@ -45,14 +45,17 @@ public class ToonParserDepthLimitTests
     [Fact]
     public void Deserialize_DeeplyNestedListItems_ThrowsParseException()
     {
-        var sb = new StringBuilder();
+        // k[1]: / - k[1]: / ... nests an array and a list-item object per level
+        var sb = new StringBuilder("k[1]:\n");
 
         for (var i = 0; i < 500; i++)
         {
-            sb.Append(' ', i * 4).Append("- k:\n");
+            sb.Append(' ', 2 + i * 4).Append("- k[1]:\n");
         }
 
-        Assert.Throws<ToonParseException>(() => ToonSerializer.Deserialize<List<object>>(sb.ToString()));
+        var ex = Assert.Throws<ToonParseException>(() => ToonSerializer.Deserialize<Dictionary<string, object>>(sb.ToString()));
+
+        Assert.Contains("Maximum nesting depth", ex.Message);
     }
 
     [Fact]

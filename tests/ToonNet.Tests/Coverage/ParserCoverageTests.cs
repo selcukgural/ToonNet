@@ -36,7 +36,7 @@ public class ParserCoverageTests
     public void TabularArray_FieldCountMismatch_ThrowsException()
     {
         var parser = new ToonParser();
-        var input = "people{name,age,city}:\n  Alice, 30";
+        var input = "people[1]{name,age,city}:\n  Alice, 30";
 
         var ex = Assert.Throws<ToonParseException>(() => parser.Parse(input));
         Assert.Contains("expected 3", ex.Message);
@@ -46,7 +46,7 @@ public class ParserCoverageTests
     public void TabularArray_WrongIndentation_ThrowsException()
     {
         var parser = new ToonParser();
-        var input = "people{name,age}:\n  Alice, 30\n    Bob, 25";
+        var input = "people[2]{name,age}:\n  Alice, 30\n    Bob, 25";
 
         Assert.Throws<ToonParseException>(() => parser.Parse(input));
     }
@@ -54,7 +54,7 @@ public class ParserCoverageTests
     [Fact]
     public void ListItem_ScalarValues()
     {
-        var input = "tags:\n  - tag1\n  - tag2\n  - tag3";
+        var input = "tags[3]:\n  - tag1\n  - tag2\n  - tag3";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
         var tags = (ToonArray)obj["tags"];
@@ -66,7 +66,7 @@ public class ParserCoverageTests
     [Fact]
     public void ListItem_WithProperties()
     {
-        var input = "items:\n  - key: value1\n  - key: value2";
+        var input = "items[2]:\n  - key: value1\n  - key: value2";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
         var items = (ToonArray)obj["items"];
@@ -74,6 +74,25 @@ public class ParserCoverageTests
         Assert.Equal(2, items.Items.Count);
         var item1 = (ToonObject)items[0];
         Assert.Equal("value1", ((ToonString)item1["key"]).Value);
+    }
+
+    [Fact]
+    public void ListItems_WithoutHeader_StrictMode_ThrowsHelpfulError()
+    {
+        var ex = Assert.Throws<ToonParseException>(() => new ToonParser().Parse("tags:\n  - a\n  - b"));
+
+        Assert.Contains("require an array header such as 'tags[N]:'", ex.Message);
+    }
+
+    [Fact]
+    public void ListItems_WithoutHeader_NonStrictMode_ParsesArray()
+    {
+        var doc = new ToonParser(new ToonOptions { StrictMode = false }).Parse("tags:\n  - a\n  - b: 1\n    c: 2");
+        var tags = (ToonArray)doc.AsObject()["tags"]!;
+
+        Assert.Equal(2, tags.Count);
+        Assert.Equal("a", ((ToonString)tags[0]).Value);
+        Assert.Equal(2, ((ToonObject)tags[1]).Properties.Count);
     }
 
     [Fact]
@@ -173,7 +192,7 @@ nul: null";
     {
         var options = new ToonOptions { StrictMode = true };
         var parser = new ToonParser(options);
-        var input = "items[3]:\n  a\n  b";
+        var input = "items[3]:\n  - a\n  - b";
 
         var ex = Assert.Throws<ToonParseException>(() => parser.Parse(input));
         Assert.Contains("length mismatch", ex.Message);
@@ -184,7 +203,7 @@ nul: null";
     {
         var options = new ToonOptions { StrictMode = false };
         var parser = new ToonParser(options);
-        var input = "items[3]:\n  a\n  b";
+        var input = "items[3]:\n  - a\n  - b";
 
         var doc = parser.Parse(input);
         var obj = doc.AsObject();
