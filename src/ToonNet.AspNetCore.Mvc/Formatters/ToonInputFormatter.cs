@@ -1,6 +1,9 @@
+using System.Buffers;
 using System.Text;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Net.Http.Headers;
+using ToonNet.Core;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.AspNetCore.Mvc.Formatters;
@@ -14,15 +17,29 @@ namespace ToonNet.AspNetCore.Mvc.Formatters;
 /// </remarks>
 public sealed class ToonInputFormatter : TextInputFormatter
 {
+    private const int ReadBufferSize = 16 * 1024;
+
     private readonly ToonSerializerOptions _options;
+    private readonly long _maxRequestBodySize;
 
     /// <summary>
-    ///     Initializes a new instance of <see cref="ToonInputFormatter"/>.
+    ///     Initializes a new instance of <see cref="ToonInputFormatter"/> that accepts request bodies
+    ///     up to <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> bytes.
     /// </summary>
     /// <param name="options">Options for deserialization.</param>
-    public ToonInputFormatter(ToonSerializerOptions options)
+    public ToonInputFormatter(ToonSerializerOptions options) : this(options, ToonFormatterDefaults.MaxRequestBodySize) { }
+
+    /// <summary>
+    ///     Initializes a new instance of <see cref="ToonInputFormatter"/> with a custom request body size limit.
+    /// </summary>
+    /// <param name="options">Options for deserialization.</param>
+    /// <param name="maxRequestBodySize">The maximum size of the request body in bytes.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxRequestBodySize"/> is not positive.</exception>
+    public ToonInputFormatter(ToonSerializerOptions options, long maxRequestBodySize)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRequestBodySize);
+        _maxRequestBodySize = maxRequestBodySize;
 
         SupportedMediaTypes.Add(MediaTypeHeaderValue.Parse(ToonFormatterDefaults.MediaType));
         SupportedMediaTypes.Add(MediaTypeHeaderValue.Parse(ToonFormatterDefaults.TextMediaType));
@@ -40,52 +57,71 @@ public sealed class ToonInputFormatter : TextInputFormatter
     /// A <see cref="Task"/> that, when completed, contains an <see cref="InputFormatterResult"/> representing
     /// the deserialization outcome.
     /// Returns a successful result with the deserialized object if deserialization is successful;
-    /// otherwise, returns a failure result.
+    /// otherwise, returns a failure result with the TOON error added to the model state.
     /// </returns>
+    /// <exception cref="BadHttpRequestException">
+    /// Thrown with status code 413 when the request body exceeds the configured size limit.
+    /// </exception>
     public override async Task<InputFormatterResult> ReadRequestBodyAsync(InputFormatterContext context, Encoding encoding)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(encoding);
 
+        var httpContext = context.HttpContext;
+        var content = await ReadBodyAsync(httpContext.Request, encoding, httpContext.RequestAborted).ConfigureAwait(false);
+
         try
         {
-            var httpContext = context.HttpContext;
-            var request = httpContext.Request;
-            
-            var model = await DeserializeFromStreamInternalAsync(
-                context.ModelType, 
-                request.Body, 
-                _options, 
-                httpContext.RequestAborted
-            ).ConfigureAwait(false);
-
-            return await InputFormatterResult.SuccessAsync(model);
+            var model = ToonSerializer.Deserialize(content, context.ModelType, _options);
+            return await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (ToonException ex)
         {
-            context.ModelState.TryAddModelError(string.Empty, ex.Message);
-            return await InputFormatterResult.FailureAsync();
+            context.ModelState.TryAddModelError(context.ModelName, ex.Message);
+            return await InputFormatterResult.FailureAsync().ConfigureAwait(false);
         }
     }
 
     /// <summary>
-    /// Deserializes the content of a stream into an object of the specified type using the provided options.
+    /// Reads the request body as text, rejecting bodies larger than the configured limit.
     /// </summary>
-    /// <param name="type">The target type of the deserialization.</param>
-    /// <param name="stream">The input stream containing the serialized data.</param>
-    /// <param name="options">The options to control deserialization behavior.</param>
-    /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
-    /// <returns>The deserialized object, or null if the stream is empty.</returns>
-    private static async Task<object?> DeserializeFromStreamInternalAsync(Type type, 
-                                                                          Stream stream, 
-                                                                          ToonSerializerOptions options, 
-                                                                          CancellationToken cancellationToken)
+    private async Task<string> ReadBodyAsync(HttpRequest request, Encoding encoding, CancellationToken cancellationToken)
     {
-        // Read stream to string
-        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
-        var content = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        
-        // Use non-generic Deserialize method (no reflection needed)
-        return ToonSerializer.Deserialize(content, type, options);
+        if (request.ContentLength > _maxRequestBodySize)
+        {
+            throw CreatePayloadTooLargeException();
+        }
+
+        using var bodyBytes = new MemoryStream();
+        var buffer = ArrayPool<byte>.Shared.Rent(ReadBufferSize);
+
+        try
+        {
+            int read;
+
+            while ((read = await request.Body.ReadAsync(buffer.AsMemory(0, ReadBufferSize), cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                if (bodyBytes.Length + read > _maxRequestBodySize)
+                {
+                    throw CreatePayloadTooLargeException();
+                }
+
+                bodyBytes.Write(buffer, 0, read);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        bodyBytes.Position = 0;
+        using var reader = new StreamReader(bodyBytes, encoding, detectEncodingFromByteOrderMarks: true);
+        return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private BadHttpRequestException CreatePayloadTooLargeException()
+    {
+        return new BadHttpRequestException($"The TOON request body exceeds the maximum allowed size of {_maxRequestBodySize} bytes.",
+                                           StatusCodes.Status413PayloadTooLarge);
     }
 }

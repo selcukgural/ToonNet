@@ -192,11 +192,24 @@ Total: 1359.97
 builder.Services.AddControllers()
     .AddToonFormatters(options =>
     {
-        options.IndentSize = 4;
-        options.PreferInlineArrays = true;
-        options.MaxDepth = 100;
+        options.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase;
+        options.ToonOptions = new ToonOptions { IndentSize = 4, MaxDepth = 50 };
     });
 ```
+
+### Request Size and Depth Limits
+
+The input formatter rejects request bodies larger than **4 MB** (`ToonFormatterDefaults.MaxRequestBodySize`) with
+`413 Payload Too Large`, independently of the server's own limit. Pass a different limit in bytes if you need one:
+
+```csharp
+builder.Services.AddControllers()
+    .AddToonFormatters(configureOptions: null, maxRequestBodySize: 512 * 1024);
+```
+
+Parsing enforces `ToonOptions.MaxDepth` (default 100). Bodies that are nested too deeply, or that are not valid TOON,
+produce a model-state error (`400 Bad Request` with `[ApiController]`) instead of an exception. Only TOON errors are
+reported to the client; other exceptions are not swallowed.
 
 ### Formatter Priority
 
@@ -215,7 +228,9 @@ builder.Services.AddControllers(options =>
 TOON formatters register these media types:
 - `application/toon`
 - `text/toon`
-- `application/x-toon`
+
+Both formatters support UTF-8 and UTF-16 (`charset=utf-16`); the request charset is used for reading and the negotiated
+charset for writing.
 
 ---
 
@@ -228,6 +243,9 @@ Deserializes TOON request bodies to C# objects:
 ```csharp
 // Automatically registered with AddToonFormatters()
 // Handles Content-Type: application/toon
+// Rejects bodies over 4 MB by default (413)
+new ToonInputFormatter(serializerOptions);
+new ToonInputFormatter(serializerOptions, maxRequestBodySize: 1024 * 1024);
 ```
 
 ### ToonOutputFormatter
@@ -241,20 +259,19 @@ Serializes C# objects to TOON response bodies:
 
 ### ToonResult
 
-Explicit TOON response result:
+Explicit TOON response for Minimal APIs (`IResult`):
 
 ```csharp
-public class ToonResult : IActionResult
+public sealed class ToonResult : IResult
 {
-    public ToonResult(object value)
-    public ToonResult(object value, ToonSerializerOptions options)
-    
-    public Task ExecuteResultAsync(ActionContext context)
+    public ToonResult(object? value, ToonSerializerOptions? options = null)
+
+    public Task ExecuteAsync(HttpContext httpContext)
 }
 
 // Usage:
-return new ToonResult(data);
-return new ToonResult(data, customOptions);
+app.MapGet("/data", () => new ToonResult(data));
+app.MapGet("/data-custom", () => new ToonResult(data, customOptions));
 ```
 
 ---

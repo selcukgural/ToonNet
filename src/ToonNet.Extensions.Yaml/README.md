@@ -115,6 +115,7 @@ using ToonNet.Extensions.Yaml;
 
 // YAML string → ToonDocument
 ToonDocument doc = ToonYamlConverter.FromYaml(yamlString);
+ToonDocument doc = ToonYamlConverter.FromYaml(yamlString, new ToonOptions { MaxDepth = 50 });
 
 // ToonDocument → YAML string
 string yaml = ToonYamlConverter.ToYaml(document);
@@ -129,6 +130,14 @@ string yaml = ToonYamlConverter.ToYaml(toonValue);
 - **`ToonYamlConvert`** - High-level, developer-friendly API (similar to `ToonConvert` for JSON). Provides simple string-based conversions and internally uses `ToonYamlConverter`.
 
 This separation of concerns ensures clean architecture: `ToonYamlConverter` handles the conversion logic, while `ToonYamlConvert` provides an ergonomic interface familiar to .NET developers.
+
+### Limits
+
+YAML input is checked before it is loaded:
+
+- Nesting deeper than `ToonOptions.MaxDepth` (default 100) throws a `YamlException`.
+- Aliases (`*anchor`) are expanded into copies; input whose aliases expand to more than
+  `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes throws a `YamlException`.
 
 ### Type Support
 

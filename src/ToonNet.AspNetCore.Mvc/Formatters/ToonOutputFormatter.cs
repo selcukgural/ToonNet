@@ -27,7 +27,6 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
         _options = options ?? throw new ArgumentNullException(nameof(options));
 
         SupportedMediaTypes.Add(MediaTypeHeaderValue.Parse(ToonFormatterDefaults.MediaType));
-        SupportedMediaTypes.Add(MediaTypeHeaderValue.Parse(ToonFormatterDefaults.TextMediaType));
         
         SupportedEncodings.Add(Encoding.UTF8);
         SupportedEncodings.Add(Encoding.Unicode);
@@ -53,14 +52,11 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
             return;
         }
 
-        // Use non-generic overload to avoid reflection - much faster!
-        var objectType = context.Object.GetType();
-        await ToonSerializer.SerializeToStreamAsync(
-            objectType,
-            context.Object,
-            response.Body,
-            _options,
-            httpContext.RequestAborted
-        ).ConfigureAwait(false);
+        // Serialize first, then write with the negotiated encoding so the body matches the Content-Type charset
+        var toonString = ToonSerializer.Serialize(context.Object, context.Object.GetType(), _options);
+
+        await using var writer = context.WriterFactory(response.Body, selectedEncoding);
+        await writer.WriteAsync(toonString.AsMemory(), httpContext.RequestAborted).ConfigureAwait(false);
+        await writer.FlushAsync().ConfigureAwait(false);
     }
 }

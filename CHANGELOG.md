@@ -5,6 +5,26 @@ All notable changes to ToonNet will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- **ToonNet.Core:** The parser now enforces `ToonOptions.MaxDepth` while parsing (previously only after parsing) and checks
+  the remaining stack space, so deeply nested input throws `ToonParseException` instead of terminating the process.
+  Serialization, deserialization and encoding also fail with an exception rather than overflowing the stack.
+- **ToonNet.AspNetCore.Mvc:** `ToonInputFormatter` limits request bodies to 4 MB by default
+  (`ToonFormatterDefaults.MaxRequestBodySize`) and answers larger bodies with `413 Payload Too Large`.
+  A new `AddToonFormatters(configureOptions, maxRequestBodySize)` overload and formatter constructor make it configurable.
+- **ToonNet.Extensions.Yaml:** `FromYaml` rejects input nested deeper than `ToonOptions.MaxDepth` and input whose aliases
+  expand to more than `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes. New `FromYaml(string, ToonOptions?)` overload.
+
+### Fixed
+- **ToonNet.AspNetCore.Mvc:** The input formatter now decodes the body with the request charset (UTF-16 bodies were read as UTF-8),
+  and the output formatter writes with the negotiated encoding so the body matches the `Content-Type` charset.
+- **ToonNet.AspNetCore.Mvc:** The input formatter only reports TOON errors to model state, keyed by the model name; other
+  exceptions are no longer swallowed and their messages are no longer returned to the client.
+- **Docs:** Removed non-existent options (`PreferInlineArrays`, `MaxInlineArrayLength`, `CaseSensitive`, `application/x-toon`)
+  and corrected `MaxDepth` defaults and limits.
+
 ## [1.4.0] - 2026-02-08
 
 ### Added - Streaming Serialization & Validation Framework

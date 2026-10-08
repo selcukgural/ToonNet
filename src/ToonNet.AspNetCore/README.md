@@ -75,17 +75,14 @@ This registers:
   "ToonNet": {
     "ToonOptions": {
       "IndentSize": 2,
-      "MaxDepth": 64,
-      "PreferInlineArrays": true,
-      "PreferInlineObjects": false,
-      "MaxInlineArrayLength": 80,
+      "MaxDepth": 100,
       "Delimiter": ",",
-      "StrictMode": false,
+      "StrictMode": true,
       "AllowExtendedLimits": false
     },
     "ToonSerializerOptions": {
       "IncludeReadOnlyProperties": false,
-      "MaxDepth": 64,
+      "MaxDepth": 100,
       "AllowExtendedLimits": false
     }
   }
@@ -109,8 +106,7 @@ app.Run();
 builder.Services.AddToon(toonOptions =>
 {
     toonOptions.IndentSize = 4;
-    toonOptions.PreferInlineArrays = true;
-    toonOptions.MaxDepth = 100;
+    toonOptions.MaxDepth = 50;
 }, serializerOptions =>
 {
     serializerOptions.IncludeReadOnlyProperties = false;
@@ -146,14 +142,11 @@ Controls TOON format encoding behavior:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `IndentSize` | `int` | `2` | Number of spaces per indentation level |
-| `MaxDepth` | `int` | `64` | Maximum nesting depth |
-| `PreferInlineArrays` | `bool` | `true` | Use inline format for simple arrays |
-| `PreferInlineObjects` | `bool` | `false` | Use inline format for simple objects |
-| `MaxInlineArrayLength` | `int` | `80` | Max character length for inline arrays |
+| `IndentSize` | `int` | `2` | Number of spaces per indentation level (even, 2-100) |
+| `MaxDepth` | `int` | `100` | Maximum nesting depth when encoding **and parsing**; deeper input is rejected with `ToonParseException` |
 | `Delimiter` | `char` | `,` | Array item delimiter |
-| `StrictMode` | `bool` | `false` | Enable strict parsing rules |
-| `AllowExtendedLimits` | `bool` | `false` | Allow depths beyond 64 levels |
+| `StrictMode` | `bool` | `true` | Enable strict parsing rules (e.g. array length checks) |
+| `AllowExtendedLimits` | `bool` | `false` | Allow `MaxDepth` above 200 (up to 1000) |
 
 ### ToonSerializerOptions
 
@@ -161,9 +154,12 @@ Controls C# object serialization behavior:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `IncludeReadOnlyProperties` | `bool` | `false` | Include read-only properties |
-| `MaxDepth` | `int` | `64` | Maximum object graph depth |
-| `AllowExtendedLimits` | `bool` | `false` | Allow depths beyond 64 levels |
+| `IncludeReadOnlyProperties` | `bool` | `true` | Include read-only properties when serializing |
+| `MaxDepth` | `int` | `100` | Maximum object graph depth |
+| `AllowExtendedLimits` | `bool` | `false` | Allow `MaxDepth` above 200 (up to 1000) |
+
+> **Untrusted input:** parsing enforces `ToonOptions.MaxDepth` and also checks the remaining stack space, so hostile, deeply nested
+> input fails with a `ToonParseException` instead of crashing the process. Keep `AllowExtendedLimits` off for input you don't control.
 
 ---
 
@@ -362,10 +358,9 @@ builder.Services.AddToon(builder.Configuration)
 
 ### Validation Rules (Built-in)
 
-- `IndentSize`: Must be 1-8
-- `MaxDepth`: Must be 1-1024 (or 1-64 if AllowExtendedLimits=false)
-- `MaxInlineArrayLength`: Must be 1-1024
-- `Delimiter`: Must be a valid character
+- `IndentSize`: Must be an even number between 2 and 100
+- `MaxDepth`: Must be 1-200 (or 1-1000 if `AllowExtendedLimits = true`)
+- `Delimiter`: Must not be whitespace, a newline or a control character
 
 ---
 

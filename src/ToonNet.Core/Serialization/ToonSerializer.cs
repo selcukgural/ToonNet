@@ -644,6 +644,11 @@ public static class ToonSerializer
             throw new ToonEncodingException($"Maximum depth of {options.MaxDepth} exceeded during serialization");
         }
 
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            throw new ToonEncodingException("Object graph is nested too deeply to serialize with the available stack space");
+        }
+
         if (value == null)
         {
             return options.IgnoreNullValues ? null : ToonNull.Instance;
@@ -978,6 +983,11 @@ public static class ToonSerializer
             if (depth > options.MaxDepth)
             {
                 throw new ToonParseException($"Maximum depth of {options.MaxDepth} exceeded during deserialization", 0, 0);
+            }
+
+            if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+            {
+                throw new ToonParseException("Document is nested too deeply to deserialize with the available stack space", 0, 0);
             }
 
             if (value is ToonNull)

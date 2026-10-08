@@ -14,4 +14,9 @@ public static class ToonFormatterDefaults
     /// Alternative content type for TOON format (text/toon).
     /// </summary>
     public const string TextMediaType = "text/toon";
+
+    /// <summary>
+    /// The default maximum size, in bytes, of a TOON request body accepted by <see cref="ToonInputFormatter"/> (4 MB).
+    /// </summary>
+    public const long MaxRequestBodySize = 4 * 1024 * 1024;
 }

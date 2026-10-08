@@ -1,5 +1,8 @@
+using System.Runtime.CompilerServices;
+using ToonNet.Core;
 using ToonNet.Core.Models;
 using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 
@@ -16,6 +19,15 @@ namespace ToonNet.Extensions.Yaml;
 /// </remarks>
 public static class ToonYamlConverter
 {
+    /// <summary>
+    ///     The maximum number of nodes that YAML aliases (<c>*anchor</c>) may expand to in a single input.
+    /// </summary>
+    /// <remarks>
+    ///     Aliases are expanded into independent copies during conversion, so nested anchors can grow
+    ///     exponentially ("billion laughs"). Inputs exceeding this budget are rejected with a <see cref="YamlException"/>.
+    /// </remarks>
+    public const int MaxAliasExpansionNodes = 100_000;
+
     /// <summary>
     ///     Converts a YAML string to a TOON document.
     /// </summary>
@@ -38,7 +50,36 @@ public static class ToonYamlConverter
     /// </remarks>
     public static ToonDocument FromYaml(string yaml)
     {
+        return FromYaml(yaml, null);
+    }
+
+    /// <summary>
+    ///     Converts a YAML string to a TOON document, enforcing the limits from the specified options.
+    /// </summary>
+    /// <param name="yaml">
+    ///     The YAML string to convert. This parameter must not be null.
+    /// </param>
+    /// <param name="options">
+    ///     Options whose <see cref="ToonOptions.MaxDepth"/> limits the nesting depth of the input.
+    ///     If null, <see cref="ToonOptions.Default"/> is used.
+    /// </param>
+    /// <returns>
+    ///     A <see cref="ToonDocument"/> representing the YAML data.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    ///     Thrown when the <paramref name="yaml"/> parameter is null.
+    /// </exception>
+    /// <exception cref="YamlException">
+    ///     Thrown when YAML parsing fails, the input is nested deeper than <see cref="ToonOptions.MaxDepth"/>,
+    ///     or aliases expand to more than <see cref="MaxAliasExpansionNodes"/> nodes.
+    /// </exception>
+    public static ToonDocument FromYaml(string yaml, ToonOptions? options)
+    {
         ArgumentNullException.ThrowIfNull(yaml);
+
+        // YamlStream.Load is recursive and expands aliases, so untrusted input is checked
+        // with the iterative event parser first to avoid stack overflows and alias bombs.
+        EnsureWithinLimits(yaml, (options ?? ToonOptions.Default).MaxDepth);
 
         using var reader = new StringReader(yaml);
         var yamlStream = new YamlStream();
@@ -113,6 +154,68 @@ public static class ToonYamlConverter
     #region YAML to TOON Conversion
 
     /// <summary>
+    ///     Scans the YAML event stream and rejects input that is nested too deeply or whose aliases expand too much.
+    /// </summary>
+    /// <param name="yaml">The YAML string to scan.</param>
+    /// <param name="maxDepth">The maximum allowed nesting depth of mappings and sequences.</param>
+    /// <exception cref="YamlException">Thrown when a limit is exceeded or the YAML is malformed.</exception>
+    private static void EnsureWithinLimits(string yaml, int maxDepth)
+    {
+        var parser = new Parser(new StringReader(yaml));
+        var anchorSizes = new Dictionary<string, long>(StringComparer.Ordinal);
+        var openNodes = new Stack<(string? Anchor, long StartCount)>();
+        long nodeCount = 0;
+        long aliasNodeCount = 0;
+
+        while (parser.MoveNext())
+        {
+            var current = parser.Current!;
+
+            switch (current)
+            {
+                case Scalar scalar:
+                    nodeCount++;
+
+                    if (!scalar.Anchor.IsEmpty)
+                    {
+                        anchorSizes[scalar.Anchor.Value] = 1;
+                    }
+
+                    break;
+                case NodeEvent nodeEvent and (SequenceStart or MappingStart):
+                    if (openNodes.Count >= maxDepth)
+                    {
+                        throw new YamlException(current.Start, current.End, $"Maximum nesting depth of {maxDepth} exceeded");
+                    }
+
+                    openNodes.Push((nodeEvent.Anchor.IsEmpty ? null : nodeEvent.Anchor.Value, nodeCount));
+                    nodeCount++;
+                    break;
+                case SequenceEnd or MappingEnd:
+                    var (anchor, startCount) = openNodes.Pop();
+
+                    if (anchor != null)
+                    {
+                        anchorSizes[anchor] = nodeCount - startCount;
+                    }
+
+                    break;
+                case AnchorAlias alias when anchorSizes.TryGetValue(alias.Value.Value, out var size):
+                    nodeCount += size;
+                    aliasNodeCount += size;
+
+                    if (aliasNodeCount > MaxAliasExpansionNodes)
+                    {
+                        throw new YamlException(current.Start, current.End,
+                                                $"YAML aliases expand to more than {MaxAliasExpansionNodes} nodes");
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
     ///     Converts a YamlNode to a ToonValue.
     /// </summary>
     /// <param name="node">
@@ -132,6 +235,11 @@ public static class ToonYamlConverter
     /// </remarks>
     private static ToonValue ConvertYamlNodeToToonValue(YamlNode node)
     {
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            throw new YamlException("YAML document is nested too deeply to convert with the available stack space");
+        }
+
         return node switch
         {
             YamlScalarNode scalar   => ConvertYamlScalar(scalar),

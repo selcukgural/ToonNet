@@ -32,8 +32,10 @@ public static class ToonYamlConvert
     {
         ArgumentNullException.ThrowIfNull(yamlString);
 
-        var toonDocument = ToonYamlConverter.FromYaml(yamlString);
-        var encoder = new ToonEncoder(options ?? ToonOptions.Default);
+        options ??= ToonOptions.Default;
+
+        var toonDocument = ToonYamlConverter.FromYaml(yamlString, options);
+        var encoder = new ToonEncoder(options);
         return encoder.Encode(toonDocument);
     }
 

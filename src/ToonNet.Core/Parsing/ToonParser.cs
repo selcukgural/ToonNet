@@ -19,6 +19,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
     private readonly List<ToonToken> _tokens = [];
     private int _position;
+    private int _depth;
     
     // Current token cache to avoid repeated Peek() calls at same position
     private ToonToken _currentToken;
@@ -41,6 +42,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _tokens.Clear();
         _tokens.AddRange(lexer.Tokenize());
         _position = 0;
+        _depth = 0;
         _currentTokenPosition = -1; // Reset token cache
 
         var root = ParseValue(0);
@@ -796,28 +798,39 @@ internal sealed class ToonParser(ToonOptions? options = null)
         // If newline after colon, it's a nested object or array
         if (Peek().Type == ToonTokenType.Newline || IsAtEnd())
         {
-            if (Peek().Type == ToonTokenType.Newline)
+            var nestingToken = Peek();
+
+            if (nestingToken.Type == ToonTokenType.Newline)
             {
                 Advance(); // consume newline
             }
 
-            // Check if this is actually a list by peeking ahead for list items
-            var isListArray = false;
+            EnterNesting(nestingToken);
 
-            if (arrayLength.HasValue || fieldNames != null)
+            try
             {
-                // Check if the next content is a list (Indent followed by ListItem)
-                isListArray = IsFollowedByListItem(_position);
-            }
+                // Check if this is actually a list by peeking ahead for list items
+                var isListArray = false;
 
-            if ((arrayLength.HasValue || fieldNames != null) && !isListArray)
+                if (arrayLength.HasValue || fieldNames != null)
+                {
+                    // Check if the next content is a list (Indent followed by ListItem)
+                    isListArray = IsFollowedByListItem(_position);
+                }
+
+                if ((arrayLength.HasValue || fieldNames != null) && !isListArray)
+                {
+                    // Tabular array
+                    return ParseTabularArray(indentLevel + _options.IndentSize, arrayLength, fieldNames);
+                }
+
+                // Nested object or list array
+                return ParseValue(indentLevel + _options.IndentSize);
+            }
+            finally
             {
-                // Tabular array
-                return ParseTabularArray(indentLevel + _options.IndentSize, arrayLength, fieldNames);
+                _depth--;
             }
-
-            // Nested object or list array
-            return ParseValue(indentLevel + _options.IndentSize);
         }
 
         if (IsValueToken(Peek().Type))
@@ -841,6 +854,30 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         // End of input after colon - empty value (array or object)
         return arrayLength.HasValue ? new ToonArray() : new ToonObject();
+    }
+
+    /// <summary>
+    ///     Enters a nested structure, enforcing <see cref="ToonOptions.MaxDepth"/> and the available stack space.
+    /// </summary>
+    /// <param name="token">The token used to report the error position.</param>
+    /// <exception cref="ToonParseException">Thrown when the document is nested too deeply.</exception>
+    /// <remarks>
+    ///     The parser is recursive, so untrusted input with unbounded nesting would otherwise
+    ///     overflow the stack and terminate the process. Callers must decrement <c>_depth</c> when leaving.
+    /// </remarks>
+    private void EnterNesting(ToonToken token)
+    {
+        if (++_depth > _options.MaxDepth)
+        {
+            _depth--;
+            throw new ToonParseException($"Maximum nesting depth of {_options.MaxDepth} exceeded", token.Line, token.Column);
+        }
+
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            _depth--;
+            throw new ToonParseException("Document is nested too deeply to parse with the available stack space", token.Line, token.Column);
+        }
     }
 
     /// <summary>

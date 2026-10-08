@@ -113,6 +113,11 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             throw new ToonEncodingException($"Maximum depth of {_options.MaxDepth} exceeded");
         }
 
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            throw new ToonEncodingException("Document is nested too deeply to encode with the available stack space");
+        }
+
         _depth++;
 
         switch (value)

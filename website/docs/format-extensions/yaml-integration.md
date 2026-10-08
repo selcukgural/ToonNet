@@ -69,6 +69,15 @@ ToonDocument doc = ToonDocument.Parse(toonInput);
 string yaml = ToonYamlConverter.ToYaml(doc);
 ```
 
+## Limits
+
+`FromYaml` checks the input before loading it, so untrusted YAML cannot exhaust the stack or memory:
+
+- Nesting deeper than `ToonOptions.MaxDepth` (default 100) throws a `YamlException`.
+  Pass options to change it: `ToonYamlConverter.FromYaml(yaml, new ToonOptions { MaxDepth = 50 })`.
+- Aliases (`*anchor`) are expanded into copies. Input whose aliases expand to more than
+  `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes throws a `YamlException`.
+
 ## Complete Examples
 
 ### Configuration File Migration

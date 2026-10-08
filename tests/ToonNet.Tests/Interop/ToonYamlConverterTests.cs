@@ -8,6 +8,74 @@ namespace ToonNet.Tests.Interop;
 /// </summary>
 public class ToonYamlConverterTests
 {
+    #region Limit Tests
+
+    [Fact]
+    public void FromYaml_NestingBeyondMaxDepth_ThrowsYamlException()
+    {
+        var yaml = new string('[', 5_000) + new string(']', 5_000);
+
+        var ex = Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml));
+
+        Assert.Contains("Maximum nesting depth of 100 exceeded", ex.Message);
+    }
+
+    [Fact]
+    public void FromYaml_NestingAtMaxDepth_Succeeds()
+    {
+        var yaml = new string('[', 100) + new string(']', 100);
+
+        var doc = ToonYamlConverter.FromYaml(yaml);
+
+        Assert.IsType<ToonArray>(doc.Root);
+    }
+
+    [Fact]
+    public void FromYaml_CustomMaxDepth_IsEnforced()
+    {
+        var yaml = "a:\n  b:\n    c: 1\n";
+
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 2 }));
+    }
+
+    [Fact]
+    public void FromYaml_AliasBomb_ThrowsYamlException()
+    {
+        var sb = new System.Text.StringBuilder("a: &a [x,x,x,x,x,x,x,x,x,x]\n");
+        var previous = 'a';
+
+        foreach (var name in "bcdefghi")
+        {
+            sb.Append(name).Append(": &").Append(name).Append(" [")
+              .AppendJoin(',', Enumerable.Repeat("*" + previous, 10))
+              .Append("]\n");
+            previous = name;
+        }
+
+        var ex = Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(sb.ToString()));
+
+        Assert.Contains("aliases expand", ex.Message);
+    }
+
+    [Fact]
+    public void FromYaml_OrdinaryAliases_AreExpanded()
+    {
+        var yaml = """
+                   base: &base
+                     host: localhost
+                     port: 5432
+                   dev:
+                     db: *base
+                   """;
+
+        var root = (ToonObject)ToonYamlConverter.FromYaml(yaml).Root;
+        var db = (ToonObject)((ToonObject)root["dev"]!)["db"]!;
+
+        Assert.Equal("localhost", ((ToonString)db["host"]!).Value);
+    }
+
+    #endregion
+
     #region YAML to TOON Tests
 
     [Fact]
