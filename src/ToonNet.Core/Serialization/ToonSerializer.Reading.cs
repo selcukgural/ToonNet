@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -328,7 +329,19 @@ public static partial class ToonSerializer
 
         try
         {
-            return Convert.ChangeType(integral, targetType, CultureInfo.InvariantCulture);
+            // Decimal conversions to integer types throw OverflowException when the value is out of range
+            return Type.GetTypeCode(targetType) switch
+            {
+                TypeCode.Int32  => (int)integral,
+                TypeCode.Int64  => (long)integral,
+                TypeCode.Int16  => (short)integral,
+                TypeCode.Byte   => (byte)integral,
+                TypeCode.SByte  => (sbyte)integral,
+                TypeCode.UInt16 => (ushort)integral,
+                TypeCode.UInt32 => (uint)integral,
+                TypeCode.UInt64 => (ulong)integral,
+                _               => Convert.ChangeType(integral, targetType, CultureInfo.InvariantCulture)
+            };
         }
         catch (OverflowException ex)
         {
@@ -415,7 +428,8 @@ public static partial class ToonSerializer
             throw Error($"Expected an array but got {value.ValueType}", targetType, value, state);
         }
 
-        var items = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType), array.Count)!;
+        var factory = CollectionFactories.GetOrAdd(targetType, static (t, e) => CollectionFactory.Create(t, e), elementType);
+        var items = factory.CreateList(array.Count);
 
         for (var i = 0; i < array.Count; i++)
         {
@@ -424,9 +438,107 @@ public static partial class ToonSerializer
             state.Pop();
         }
 
-        result = CreateCollection(targetType, elementType, items)
-                 ?? throw Error($"Cannot create a collection of type {targetType.Name}", targetType, value, state);
+        result = factory.Complete(items) ?? throw Error($"Cannot create a collection of type {targetType.Name}", targetType, value, state);
         return true;
+    }
+
+    /// <summary>How to build each collection type read so far.</summary>
+    private static readonly ConcurrentDictionary<Type, CollectionFactory> CollectionFactories = new();
+
+    /// <summary>
+    ///     Builds a collection type from a <see cref="List{T}"/> of its items, with delegates chosen once per type.
+    /// </summary>
+    private sealed class CollectionFactory
+    {
+        /// <summary>Creates the <see cref="List{T}"/> the items are read into, with the given capacity.</summary>
+        public required Func<int, IList> CreateList { get; init; }
+
+        /// <summary>Creates the target from the list, or returns null when the target type cannot be created.</summary>
+        public required Func<IList, object?> Complete { get; init; }
+
+        /// <summary>
+        ///     Supports arrays, types <see cref="List{T}"/> is assignable to, interfaces <see cref="HashSet{T}"/>
+        ///     implements, System.Collections.Immutable types (through <c>CreateRange</c>) and concrete
+        ///     <see cref="ICollection{T}"/> types with a parameterless constructor.
+        /// </summary>
+        public static CollectionFactory Create(Type targetType, Type elementType)
+        {
+            var helpers = (CollectionHelpers)Activator.CreateInstance(typeof(CollectionHelpers<>).MakeGenericType(elementType))!;
+
+            return new CollectionFactory { CreateList = helpers.CreateList, Complete = SelectCompletion(targetType, elementType, helpers) };
+        }
+
+        private static Func<IList, object?> SelectCompletion(Type targetType, Type elementType, CollectionHelpers helpers)
+        {
+            if (targetType.IsArray)
+            {
+                return helpers.ToArray;
+            }
+
+            if (targetType.IsAssignableFrom(typeof(List<>).MakeGenericType(elementType)))
+            {
+                return static items => items; // List<T> and the interfaces it implements
+            }
+
+            if (targetType.IsInterface)
+            {
+                return targetType.IsAssignableFrom(typeof(HashSet<>).MakeGenericType(elementType)) ? helpers.ToHashSet : static _ => null;
+            }
+
+            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
+            {
+                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
+                var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                                             .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1)
+                                             ?.MakeGenericMethod(elementType);
+                return createRange == null ? static _ => null : items => createRange.Invoke(null, [items]);
+            }
+
+            if (targetType.GetConstructor(Type.EmptyTypes) == null ||
+                !typeof(ICollection<>).MakeGenericType(elementType).IsAssignableFrom(targetType))
+            {
+                return static _ => null;
+            }
+
+            var create = Expression.Lambda<Func<object>>(Expression.Convert(Expression.New(targetType), typeof(object))).Compile();
+            return items => helpers.AddAll(create(), items);
+        }
+    }
+
+    /// <summary>
+    ///     Typed operations on the item list, so building a collection needs no reflection per call or per item.
+    /// </summary>
+    private abstract class CollectionHelpers
+    {
+        public abstract IList CreateList(int capacity);
+
+        public abstract object ToArray(IList items);
+
+        public abstract object ToHashSet(IList items);
+
+        /// <summary>Adds the items to <paramref name="collection"/>, an <see cref="ICollection{T}"/>, and returns it.</summary>
+        public abstract object AddAll(object collection, IList items);
+    }
+
+    private sealed class CollectionHelpers<T> : CollectionHelpers
+    {
+        public override IList CreateList(int capacity) => new List<T>(capacity);
+
+        public override object ToArray(IList items) => ((List<T>)items).ToArray();
+
+        public override object ToHashSet(IList items) => new HashSet<T>((List<T>)items);
+
+        public override object AddAll(object collection, IList items)
+        {
+            var target = (ICollection<T>)collection;
+
+            foreach (var item in (List<T>)items)
+            {
+                target.Add(item);
+            }
+
+            return collection;
+        }
     }
 
     private static Type? GetElementType(Type type)
@@ -454,58 +566,6 @@ public static partial class ToonSerializer
     /// <summary>The <see cref="IEnumerable{T}"/> element type per collection type, or null.</summary>
     private static readonly ConcurrentDictionary<Type, Type?> ElementTypeCache = new();
 
-    /// <summary>The <see cref="IDictionary{TKey,TValue}"/> interface per target type, or null.</summary>
-    private static readonly ConcurrentDictionary<Type, Type?> DictionaryInterfaceCache = new();
-
-    private static object? CreateCollection(Type targetType, Type elementType, IList items)
-    {
-        if (targetType.IsArray)
-        {
-            var array = Array.CreateInstance(elementType, items.Count);
-            items.CopyTo(array, 0);
-            return array;
-        }
-
-        if (targetType.IsInstanceOfType(items))
-        {
-            return items; // List<T> and the interfaces it implements
-        }
-
-        if (targetType.IsInterface)
-        {
-            var set = Activator.CreateInstance(typeof(HashSet<>).MakeGenericType(elementType), items)!;
-            return targetType.IsInstanceOfType(set) ? set : null;
-        }
-
-        if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
-        {
-            var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
-            var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                                         .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1);
-            return createRange?.MakeGenericMethod(elementType).Invoke(null, [items]);
-        }
-
-        if (targetType.GetConstructor(Type.EmptyTypes) == null)
-        {
-            return null;
-        }
-
-        var collection = Activator.CreateInstance(targetType)!;
-        var add = typeof(ICollection<>).MakeGenericType(elementType).GetMethod("Add")!;
-
-        if (!add.DeclaringType!.IsInstanceOfType(collection))
-        {
-            return null;
-        }
-
-        foreach (var item in items)
-        {
-            add.Invoke(collection, [item]);
-        }
-
-        return collection;
-    }
-
     /// <summary>
     ///     Deserializes objects into dictionaries with string, numeric, enum, <see cref="Guid"/> or other parsable keys.
     /// </summary>
@@ -513,13 +573,8 @@ public static partial class ToonSerializer
                                                  out object? result)
     {
         result = null;
-        var dictionaryInterface = targetType.IsGenericType && targetType.GetGenericTypeDefinition() is var definition &&
-                                  (definition == typeof(IDictionary<,>) || definition == typeof(IReadOnlyDictionary<,>))
-            ? targetType
-            : DictionaryInterfaceCache.GetOrAdd(targetType, static t => t.GetInterfaces()
-                                                                          .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)));
 
-        if (dictionaryInterface == null)
+        if (DictionaryFactories.GetOrAdd(targetType, static t => DictionaryFactory.Create(t)) is not { } factory)
         {
             return TryDeserializeNonGenericDictionary(value, targetType, options, depth, state, out result);
         }
@@ -529,10 +584,8 @@ public static partial class ToonSerializer
             throw Error($"Expected an object but got {value.ValueType}", targetType, value, state);
         }
 
-        var keyType = dictionaryInterface.GetGenericArguments()[0];
-        var valueType = dictionaryInterface.GetGenericArguments()[1];
-        var dictionaryType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
-        var dictionary = (IDictionary)Activator.CreateInstance(dictionaryType)!;
+        var dictionary = factory.CreateEntries();
+        var keyType = factory.KeyType;
 
         foreach (var (key, toonValue) in obj.Properties)
         {
@@ -542,86 +595,150 @@ public static partial class ToonSerializer
                 ? key
                 : DeserializeValue(new ToonString(key), keyType, options, depth + 1, state)!;
 
-            dictionary[typedKey] = DeserializeValue(toonValue, valueType, options, depth + 1, state);
+            dictionary[typedKey] = DeserializeValue(toonValue, factory.ValueType, options, depth + 1, state);
             state.Pop();
         }
 
-        result = CreateDictionary(targetType, dictionaryType, keyType, valueType, dictionary)
-                 ?? throw Error($"Cannot create a dictionary of type {targetType.Name}", targetType, value, state);
+        result = factory.Complete(dictionary) ?? throw Error($"Cannot create a dictionary of type {targetType.Name}", targetType, value, state);
         return true;
     }
 
+    /// <summary>How to build each generic dictionary type read so far; null for types that are not one.</summary>
+    private static readonly ConcurrentDictionary<Type, DictionaryFactory?> DictionaryFactories = new();
+
     /// <summary>
-    ///     Creates the target dictionary from the entries read into <paramref name="entries"/> (a
-    ///     <see cref="Dictionary{TKey,TValue}"/>): directly when the target accepts it, through <c>CreateRange</c> for
-    ///     System.Collections.Immutable types, through a constructor taking the entries (for example
-    ///     <see cref="System.Collections.ObjectModel.ReadOnlyDictionary{TKey,TValue}"/>), or by adding them to a new
-    ///     instance. Returns null when none applies.
+    ///     Builds a generic dictionary type from a <see cref="Dictionary{TKey,TValue}"/> of its entries, with the way
+    ///     to create it chosen once per type.
     /// </summary>
-    private static object? CreateDictionary(Type targetType, Type dictionaryType, Type keyType, Type valueType, IDictionary entries)
+    private sealed class DictionaryFactory
     {
-        if (targetType.IsAssignableFrom(dictionaryType))
+        public required Type KeyType { get; init; }
+
+        public required Type ValueType { get; init; }
+
+        /// <summary>Creates the <see cref="Dictionary{TKey,TValue}"/> the entries are read into.</summary>
+        public required Func<IDictionary> CreateEntries { get; init; }
+
+        /// <summary>Creates the target from the entries, or returns null when the target type cannot be created.</summary>
+        public required Func<IDictionary, object?> Complete { get; init; }
+
+        /// <summary>
+        ///     Returns null when <paramref name="targetType"/> is not <see cref="IDictionary{TKey,TValue}"/>,
+        ///     <see cref="IReadOnlyDictionary{TKey,TValue}"/> or a type implementing <see cref="IDictionary{TKey,TValue}"/>.
+        /// </summary>
+        public static DictionaryFactory? Create(Type targetType)
         {
-            return entries;
+            var dictionaryInterface = targetType.IsGenericType && targetType.GetGenericTypeDefinition() is var definition &&
+                                      (definition == typeof(IDictionary<,>) || definition == typeof(IReadOnlyDictionary<,>))
+                ? targetType
+                : targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+
+            if (dictionaryInterface == null)
+            {
+                return null;
+            }
+
+            var keyType = dictionaryInterface.GetGenericArguments()[0];
+            var valueType = dictionaryInterface.GetGenericArguments()[1];
+            var helpers = (DictionaryHelpers)Activator.CreateInstance(typeof(DictionaryHelpers<,>).MakeGenericType(keyType, valueType))!;
+
+            return new DictionaryFactory
+            {
+                KeyType = keyType,
+                ValueType = valueType,
+                CreateEntries = helpers.CreateEntries,
+                Complete = SelectCompletion(targetType, keyType, valueType, helpers)
+            };
         }
 
-        if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
+        /// <summary>
+        ///     The entries are used directly when the target accepts a <see cref="Dictionary{TKey,TValue}"/>;
+        ///     System.Collections.Immutable types use <c>CreateRange</c>; other types a constructor taking the entries
+        ///     (for example <see cref="System.Collections.ObjectModel.ReadOnlyDictionary{TKey,TValue}"/>), or a new
+        ///     instance the entries are added to.
+        /// </summary>
+        private static Func<IDictionary, object?> SelectCompletion(Type targetType, Type keyType, Type valueType, DictionaryHelpers helpers)
         {
-            var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
-            var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                                         .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1 &&
-                                                              m.GetGenericArguments().Length == 2);
-            return createRange?.MakeGenericMethod(keyType, valueType).Invoke(null, [entries]);
+            if (targetType.IsAssignableFrom(typeof(Dictionary<,>).MakeGenericType(keyType, valueType)))
+            {
+                return static entries => entries;
+            }
+
+            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
+            {
+                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
+                var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                                             .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1 &&
+                                                                  m.GetGenericArguments().Length == 2)
+                                             ?.MakeGenericMethod(keyType, valueType);
+                return createRange == null ? static _ => null : entries => createRange.Invoke(null, [entries]);
+            }
+
+            if (targetType.IsInterface || targetType.IsAbstract)
+            {
+                return static _ => null;
+            }
+
+            var genericDictionary = typeof(IDictionary<,>).MakeGenericType(keyType, valueType);
+            var pairs = typeof(IEnumerable<>).MakeGenericType(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
+
+            if ((targetType.GetConstructor([genericDictionary]) ?? targetType.GetConstructor([pairs])) is { } fromEntries)
+            {
+                return entries => fromEntries.Invoke([entries]);
+            }
+
+            if (targetType.GetConstructor(Type.EmptyTypes) == null)
+            {
+                return static _ => null;
+            }
+
+            var create = Expression.Lambda<Func<object>>(Expression.Convert(Expression.New(targetType), typeof(object))).Compile();
+
+            if (typeof(IDictionary).IsAssignableFrom(targetType))
+            {
+                return entries => CopyEntries(entries, (IDictionary)create());
+            }
+
+            return genericDictionary.IsAssignableFrom(targetType) ? entries => helpers.AddAll(create(), entries) : static _ => null;
         }
 
-        if (targetType.IsInterface || targetType.IsAbstract)
-        {
-            return null;
-        }
-
-        var genericDictionary = typeof(IDictionary<,>).MakeGenericType(keyType, valueType);
-        var pairs = typeof(IEnumerable<>).MakeGenericType(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
-
-        if (targetType.GetConstructor([genericDictionary]) is { } fromDictionary)
-        {
-            return fromDictionary.Invoke([entries]);
-        }
-
-        if (targetType.GetConstructor([pairs]) is { } fromPairs)
-        {
-            return fromPairs.Invoke([entries]);
-        }
-
-        if (targetType.GetConstructor(Type.EmptyTypes) == null)
-        {
-            return null;
-        }
-
-        var instance = Activator.CreateInstance(targetType)!;
-
-        if (instance is IDictionary nonGeneric)
+        private static IDictionary CopyEntries(IDictionary entries, IDictionary target)
         {
             foreach (DictionaryEntry entry in entries)
             {
-                nonGeneric[entry.Key] = entry.Value;
+                target[entry.Key] = entry.Value;
             }
 
-            return instance;
+            return target;
         }
+    }
 
-        var add = genericDictionary.GetMethod("Add")!;
+    /// <summary>
+    ///     Typed operations on the entry dictionary, so building a dictionary needs no reflection per call or per entry.
+    /// </summary>
+    private abstract class DictionaryHelpers
+    {
+        public abstract IDictionary CreateEntries();
 
-        if (!genericDictionary.IsInstanceOfType(instance))
+        /// <summary>Adds the entries to <paramref name="dictionary"/>, an <see cref="IDictionary{TKey,TValue}"/>, and returns it.</summary>
+        public abstract object AddAll(object dictionary, IDictionary entries);
+    }
+
+    private sealed class DictionaryHelpers<TKey, TValue> : DictionaryHelpers where TKey : notnull
+    {
+        public override IDictionary CreateEntries() => new Dictionary<TKey, TValue>();
+
+        public override object AddAll(object dictionary, IDictionary entries)
         {
-            return null;
-        }
+            var target = (IDictionary<TKey, TValue>)dictionary;
 
-        foreach (DictionaryEntry entry in entries)
-        {
-            add.Invoke(instance, [entry.Key, entry.Value]);
-        }
+            foreach (var (key, value) in (Dictionary<TKey, TValue>)entries)
+            {
+                target.Add(key, value);
+            }
 
-        return instance;
+            return dictionary;
+        }
     }
 
     /// <summary>
@@ -722,54 +839,43 @@ public static partial class ToonSerializer
             throw Error($"{targetType.Name} has no public constructor", targetType, value, state);
         }
 
-        var boundProperties = new HashSet<PropertyMetadata>();
+        var activator = metadata.Activator;
+        var arguments = activator.Arguments.Length == 0 ? [] : new object?[activator.Arguments.Length];
+
+        for (var i = 0; i < arguments.Length; i++)
+        {
+            var (parameter, property, missingValue) = activator.Arguments[i];
+            var name = property != null ? GetPropertyName(property, metadata, options) : parameter.Name!;
+
+            if (obj.Properties.TryGetValue(name, out var argumentValue))
+            {
+                state.Push(name);
+                arguments[i] = DeserializeValue(argumentValue, parameter.ParameterType, options, depth + 1, state, property?.Converter);
+                state.Pop();
+            }
+            else
+            {
+                arguments[i] = missingValue;
+            }
+        }
+
         object instance;
 
-        if (metadata.ConstructorParameters.Length == 0)
+        try
         {
-            instance = metadata.Constructor != null ? metadata.Constructor.Invoke(null) : Activator.CreateInstance(targetType)!;
+            instance = activator.New(arguments);
         }
-        else
+        catch (Exception ex) when (ex is not ToonException)
         {
-            var arguments = new object?[metadata.ConstructorParameters.Length];
-
-            for (var i = 0; i < arguments.Length; i++)
-            {
-                var parameter = metadata.ConstructorParameters[i];
-                var property = metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
-                var name = property != null ? GetPropertyName(property, metadata, options) : parameter.Name!;
-
-                if (property != null)
-                {
-                    boundProperties.Add(property);
-                }
-
-                if (obj.Properties.TryGetValue(name, out var argumentValue))
-                {
-                    state.Push(name);
-                    arguments[i] = DeserializeValue(argumentValue, parameter.ParameterType, options, depth + 1, state, property?.Converter);
-                    state.Pop();
-                }
-                else
-                {
-                    arguments[i] = parameter.HasDefaultValue ? parameter.DefaultValue
-                        : parameter.ParameterType.IsValueType ? Activator.CreateInstance(parameter.ParameterType) : null;
-                }
-            }
-
-            try
-            {
-                instance = metadata.Constructor!.Invoke(arguments);
-            }
-            catch (TargetInvocationException ex)
-            {
-                throw Error($"The constructor of {targetType.Name} threw: {ex.InnerException?.Message}", targetType, value, state, ex.InnerException);
-            }
+            var inner = ex is TargetInvocationException { InnerException: { } thrown } ? thrown : ex;
+            throw Error($"The constructor of {targetType.Name} threw: {inner.Message}", targetType, value, state, inner);
         }
 
-        foreach (var property in metadata.Properties)
+        for (var p = 0; p < metadata.Properties.Length; p++)
         {
-            if (property.Setter == null || boundProperties.Contains(property))
+            var property = metadata.Properties[p];
+
+            if (property.Setter == null || activator.BoundToConstructor[p])
             {
                 continue;
             }

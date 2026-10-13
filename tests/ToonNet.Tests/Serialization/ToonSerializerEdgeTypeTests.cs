@@ -101,6 +101,116 @@ public class ToonSerializerEdgeTypeTests
         Assert.True(copy.FromConstructor);
     }
 
+    [Fact]
+    public void CollectionTargets_AreCreatedFromTheReadItems()
+    {
+        const string toon = "[3]: 3,1,2";
+
+        Assert.Equal(new[] { 3, 1, 2 }, ToonSerializer.Deserialize<int[]>(toon));
+        Assert.Equal(new[] { 3, 1, 2 }, ToonSerializer.Deserialize<LinkedList<int>>(toon));
+        Assert.Equal(new[] { 3, 1, 2 }, ToonSerializer.Deserialize<Collection<int>>(toon));
+        Assert.Equal(new[] { 3, 1, 2 }, ToonSerializer.Deserialize<ImmutableList<int>>(toon));
+        Assert.Equal(new[] { 1, 2, 3 }, ToonSerializer.Deserialize<SortedSet<int>>(toon));
+        Assert.Equal(new[] { 3, 1, 2 }, ToonSerializer.Deserialize<IReadOnlySet<int>>(toon)!.ToArray());
+        Assert.Equal(new[] { 3, 1, 2 }, ToonSerializer.Deserialize<IEnumerable<int>>(toon));
+    }
+
+    [Fact]
+    public void CollectionTarget_ThatCannotBeCreated_Throws()
+    {
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<ReadOnlyCollection<int>>("[1]: 1"));
+
+        Assert.Contains("Cannot create a collection of type ReadOnlyCollection", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(typeof(byte), "255", (byte)255)]
+    [InlineData(typeof(sbyte), "-128", (sbyte)-128)]
+    [InlineData(typeof(short), "-32768", short.MinValue)]
+    [InlineData(typeof(ushort), "65535", ushort.MaxValue)]
+    [InlineData(typeof(int), "-2147483648", int.MinValue)]
+    [InlineData(typeof(uint), "4294967295", uint.MaxValue)]
+    [InlineData(typeof(long), "9223372036854775807", long.MaxValue)]
+    [InlineData(typeof(ulong), "18446744073709551615", ulong.MaxValue)]
+    public void IntegerTargets_ReadTheirWholeRange(Type type, string number, object expected)
+    {
+        var value = ToonSerializer.Deserialize(number, type);
+
+        Assert.IsType(type, value);
+        Assert.Equal(expected, value);
+    }
+
+    [Theory]
+    [InlineData(typeof(byte), "256")]
+    [InlineData(typeof(sbyte), "-129")]
+    [InlineData(typeof(short), "32768")]
+    [InlineData(typeof(ushort), "-1")]
+    [InlineData(typeof(int), "2147483648")]
+    [InlineData(typeof(uint), "-1")]
+    [InlineData(typeof(long), "9223372036854775808")]
+    [InlineData(typeof(ulong), "-1")]
+    public void IntegerTargets_RejectValuesOutsideTheirRange(Type type, string number)
+    {
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize(number, type));
+
+        Assert.Contains($"outside the range of {type.Name}", ex.Message);
+    }
+
+    [Fact]
+    public void ThrowingConstructor_IsReportedWithTheTargetType()
+    {
+        var parameterless = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<ThrowingConstructor>("Name: x"));
+        var parameterized = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<ThrowingRecord>("Name: x"));
+
+        Assert.IsType<InvalidOperationException>(parameterless.InnerException);
+        Assert.Contains("The constructor of ThrowingConstructor threw: boom", parameterless.Message);
+        Assert.IsType<ArgumentException>(parameterized.InnerException);
+        Assert.Contains("The constructor of ThrowingRecord threw", parameterized.Message);
+    }
+
+    [Fact]
+    public void ConstructorParameters_WithoutEntries_UseTheirDefaults()
+    {
+        var copy = ToonSerializer.Deserialize<WithDefaults>("Name: x")!;
+
+        Assert.Equal(("x", 7, 0, default(Guid)), (copy.Name, copy.Count, copy.Other, copy.Id));
+    }
+
+    [Fact]
+    public void ConverterReturningNull_ForValueTypeParameter_PassesTheDefault()
+    {
+        var options = new ToonSerializerOptions();
+        options.AddConverter(new NullIntConverter());
+
+        Assert.Equal(0, ToonSerializer.Deserialize<WithDefaults>("Name: x\nCount: 5", options)!.Count);
+    }
+
+    public sealed class ThrowingConstructor
+    {
+        public ThrowingConstructor() => throw new InvalidOperationException("boom");
+
+        public string Name { get; set; } = "";
+    }
+
+    public sealed record ThrowingRecord
+    {
+        public ThrowingRecord(string name) => Name = name.Length > 0 ? throw new ArgumentException("bad name", nameof(name)) : name;
+
+        public string Name { get; }
+    }
+
+    public sealed record WithDefaults(string Name, int Count = 7, int Other = default, Guid Id = default);
+
+    /// <summary>Reads every <see cref="int"/> as null, which a value type parameter receives as 0.</summary>
+    private sealed class NullIntConverter : IToonConverter
+    {
+        public bool CanConvert(Type type) => type == typeof(int);
+
+        public ToonNet.Core.Models.ToonValue Write(object? value, ToonSerializerOptions options) => (int)value!;
+
+        public object? Read(ToonNet.Core.Models.ToonValue value, Type targetType, ToonSerializerOptions options) => null;
+    }
+
     public sealed class Holder<T>
     {
         public T V { get; set; } = default!;

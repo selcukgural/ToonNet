@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** Less per-value overhead in the reflection-based serializer: the dictionary and collection interface
   lookups are cached per type, `ToonSerializerOptions.GetConverter` no longer allocates a closure, and the encoder's
   `StringBuilder` pool keeps builders up to 64K characters (the default policy discarded anything above 4K).
+- **ToonNet.Core:** Faster reflection-based deserialization (about 15% less time and allocation for lists of objects
+  with constructors): constructors are called through compiled delegates instead of `ConstructorInfo.Invoke`, the
+  binding of constructor parameters to properties is computed once per type, collections and dictionaries are built
+  with typed helpers chosen once per type (no `MakeGenericType`, `Activator` or `MethodInfo.Invoke` per value or item),
+  and integer targets no longer go through `Convert.ChangeType`. An exception thrown by a parameterless constructor is
+  now wrapped in a `ToonSerializationException` with the path and target type, like one thrown by a parameterized
+  constructor (it escaped as a `TargetInvocationException`).
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common

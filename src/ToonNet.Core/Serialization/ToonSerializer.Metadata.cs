@@ -48,6 +48,96 @@ public static partial class ToonSerializer
         ///     options (as in generated code); null when it is not set.
         /// </summary>
         public PropertyNamingPolicy? FixedNamingPolicy { get; init; }
+
+        /// <summary>The type the metadata describes.</summary>
+        public required Type Type { get; init; }
+
+        private ObjectActivator? _activator;
+
+        /// <summary>
+        ///     How to create an instance when deserializing; built on first use, as most types are only serialized.
+        /// </summary>
+        public ObjectActivator Activator => _activator ??= ObjectActivator.For(this);
+    }
+
+    /// <summary>
+    ///     A constructor parameter and what is bound to it: the property with the same name (case-insensitive), if any,
+    ///     and the value used when the document has no entry for it.
+    /// </summary>
+    private sealed record ConstructorArgument(ParameterInfo Parameter, PropertyMetadata? Property, object? MissingValue);
+
+    /// <summary>
+    ///     Creates instances of a type for deserialization through a compiled delegate instead of
+    ///     <see cref="ConstructorInfo.Invoke(object[])"/>.
+    /// </summary>
+    private sealed class ObjectActivator
+    {
+        /// <summary>Calls the selected constructor (or creates a default struct) with the given arguments.</summary>
+        public required Func<object?[], object> New { get; init; }
+
+        /// <summary>The constructor arguments, in parameter order; empty for a parameterless constructor.</summary>
+        public required ConstructorArgument[] Arguments { get; init; }
+
+        /// <summary>Per entry of <see cref="TypeMetadata.Properties"/>, whether it is set through the constructor.</summary>
+        public required bool[] BoundToConstructor { get; init; }
+
+        public static ObjectActivator For(TypeMetadata metadata)
+        {
+            var arguments = metadata.ConstructorParameters
+                                    .Select(parameter => new ConstructorArgument(
+                                                parameter,
+                                                metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name,
+                                                                                                      StringComparison.OrdinalIgnoreCase)),
+                                                parameter.HasDefaultValue ? parameter.DefaultValue
+                                                : parameter.ParameterType.IsValueType ? System.Activator.CreateInstance(parameter.ParameterType)
+                                                : null))
+                                    .ToArray();
+
+            return new ObjectActivator
+            {
+                New = CompileFactory(metadata.Type, metadata.Constructor),
+                Arguments = arguments,
+                BoundToConstructor = [.. metadata.Properties.Select(p => arguments.Any(a => a.Property == p))]
+            };
+        }
+
+        /// <summary>
+        ///     Compiles <c>args =&gt; (object)new T((P0)args[0], ...)</c>, or <c>new T()</c> for a struct without a
+        ///     selected constructor. Abstract types and classes without a constructor get a delegate that is never called.
+        /// </summary>
+        /// <remarks>
+        ///     A null argument for a non-nullable value type parameter is passed as its default value, as
+        ///     <see cref="ConstructorInfo.Invoke(object[])"/> does.
+        /// </remarks>
+        private static Func<object?[], object> CompileFactory(Type type, ConstructorInfo? constructor)
+        {
+            if (type.IsAbstract || type.IsInterface || (constructor == null && !type.IsValueType))
+            {
+                return _ => throw new InvalidOperationException($"{type.Name} cannot be created");
+            }
+
+            if (constructor != null && constructor.GetParameters().Any(p => p.ParameterType.IsByRef))
+            {
+                return args => constructor.Invoke(args); // in/ref parameters cannot be passed from an expression tree
+            }
+
+            var args = Expression.Parameter(typeof(object?[]), "args");
+            Expression creation = constructor == null
+                ? Expression.New(type)
+                : Expression.New(constructor, constructor.GetParameters().Select((p, i) => Argument(args, i, p.ParameterType)));
+
+            return Expression.Lambda<Func<object?[], object>>(Expression.Convert(creation, typeof(object)), args).Compile();
+
+            static Expression Argument(ParameterExpression args, int index, Type parameterType)
+            {
+                var item = Expression.ArrayIndex(args, Expression.Constant(index));
+
+                return parameterType.IsValueType && Nullable.GetUnderlyingType(parameterType) == null
+                    ? Expression.Condition(Expression.Equal(item, Expression.Constant(null)), Expression.Default(parameterType),
+                                           Expression.Convert(item, parameterType))
+                    : Expression.Convert(item, parameterType);
+            }
+        }
     }
 
     /// <summary>
@@ -103,6 +193,7 @@ public static partial class ToonSerializer
 
             return new TypeMetadata
             {
+                Type = t,
                 Properties = [.. properties.OrderBy(p => p.Order).ThenBy(p => p.Index).Select(p => p.Metadata)],
                 Constructor = constructor,
                 ConstructorParameters = parameters,
