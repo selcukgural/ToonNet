@@ -108,8 +108,9 @@ dotnet test tests/ToonNet.SourceGenerators.Tests/
 dotnet test tests/ToonNet.Tests/ --collect:"XPlat Code Coverage"
 ```
 
-The official TOON spec v3.3.2 conformance fixtures run as part of `ToonNet.Tests`. If your change makes a case in
+The official TOON spec v4.4 conformance fixtures run as part of `ToonNet.Tests`. If your change makes a case in
 `tests/ToonNet.Tests/SpecCompliance/KnownNonConformance.txt` pass, remove it from that file (the test fails otherwise).
+To list the failing cases again, run the tests with `TOONNET_WRITE_NONCONFORMANCE=<path>`.
 
 ### Writing Tests
 

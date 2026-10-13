@@ -146,6 +146,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `ToonResult` no longer use reflection for them. Generic types and types nested in a `private`/`protected` type
   are still converted with reflection. The generator only emits the registration when the referenced `ToonNet.Core`
   has the new API.
+- **Tests:** The conformance tests run the official TOON spec v4.4 fixtures (were v3.3.2). Cases are identified by file
+  and index (`decode/objects/12`), and cases for a newer spec version than the targeted one are skipped. ToonNet does
+  not conform to 93 of the 564 cases yet; they are listed in `KnownNonConformance.txt` until the move to spec 4.4 is
+  finished.
 
 ### Fixed
 - **ToonNet.Core:** Some doubles did not read back exactly: a number that also fits a `decimal` took its `double` value

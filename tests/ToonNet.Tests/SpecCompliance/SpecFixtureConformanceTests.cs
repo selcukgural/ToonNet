@@ -7,25 +7,29 @@ using ToonNet.Core.Parsing;
 namespace ToonNet.Tests.SpecCompliance;
 
 /// <summary>
-///     Runs the official TOON spec conformance fixtures (see Fixtures/v3.3.2/README.md).
+///     Runs the official TOON spec conformance fixtures (see Fixtures/v4.4/README.md).
 /// </summary>
 /// <remarks>
-///     Cases listed in KnownNonConformance.txt are expected to fail; <see cref="KnownNonConformance_StillFails"/>
-///     fails once such a case starts passing, so the list has to shrink as conformance improves.
-///     Fixtures for the optional key folding and path expansion features (§13.4) are not run.
+///     Cases are identified by file and index (<c>decode/objects/12</c>), as upstream asks. Cases listed in
+///     KnownNonConformance.txt are expected to fail; <see cref="KnownNonConformance_StillFails"/> fails once such a case
+///     starts passing, so the list has to shrink as conformance improves. Cases whose <c>minSpecVersion</c> is newer
+///     than <see cref="TargetSpecVersion"/> are not run.
 /// </remarks>
 public class SpecFixtureConformanceTests
 {
-    private const string SpecVersion = "v3.3.2";
+    private const string FixtureVersion = "v4.4";
 
-    private static readonly string FixtureRoot = Path.Combine(AppContext.BaseDirectory, "SpecCompliance", "Fixtures", SpecVersion);
+    /// <summary>The spec version ToonNet targets; newer cases are skipped.</summary>
+    private static readonly Version TargetSpecVersion = new(4, 4);
+
+    private static readonly string FixtureRoot = Path.Combine(AppContext.BaseDirectory, "SpecCompliance", "Fixtures", FixtureVersion);
 
     private static readonly Lazy<IReadOnlyDictionary<string, FixtureCase>> Cases = new(LoadCases);
 
     private static readonly Lazy<HashSet<string>> KnownFailures = new(() =>
         File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "SpecCompliance", "KnownNonConformance.txt"))
-            .Select(line => line.Trim())
-            .Where(line => line.Length > 0 && !line.StartsWith('#'))
+            .Select(line => line.Split('#')[0].Trim()) // "id  # name"
+            .Where(line => line.Length > 0)
             .ToHashSet(StringComparer.Ordinal));
 
     public static IEnumerable<object[]> ConformingCases =>
@@ -45,7 +49,7 @@ public class SpecFixtureConformanceTests
     {
         var failure = Run(Cases.Value[id]);
 
-        Assert.True(failure is null, $"{id}: {failure}");
+        Assert.True(failure is null, $"{id} ({Cases.Value[id].Test.GetProperty("name").GetString()}): {failure}");
     }
 
     [Theory]
@@ -84,7 +88,9 @@ public class SpecFixtureConformanceTests
             return;
         }
 
-        var failing = Cases.Value.Where(c => Run(c.Value) is not null).Select(c => c.Key).Order(StringComparer.Ordinal);
+        var failing = Cases.Value.Where(c => Run(c.Value) is not null)
+                           .OrderBy(c => c.Key, StringComparer.Ordinal)
+                           .Select(c => $"{c.Key}  # {c.Value.Test.GetProperty("name").GetString()}");
         File.WriteAllLines(path, failing);
     }
 
@@ -103,31 +109,23 @@ public class SpecFixtureConformanceTests
                 using var doc = JsonDocument.Parse(File.ReadAllText(file));
                 var fileName = Path.GetFileNameWithoutExtension(file);
 
+                var index = 0;
+
                 foreach (var test in doc.RootElement.GetProperty("tests").EnumerateArray())
                 {
-                    if (UsesOptionalFeature(test))
+                    var id = $"{category}/{fileName}/{index++}";
+
+                    if (test.TryGetProperty("minSpecVersion", out var minimum) && Version.Parse(minimum.GetString()!) > TargetSpecVersion)
                     {
                         continue;
                     }
 
-                    var id = $"{category}/{fileName}/{test.GetProperty("name").GetString()}";
                     cases.Add(id, new FixtureCase(category, test.Clone()));
                 }
             }
         }
 
         return cases;
-    }
-
-    private static bool UsesOptionalFeature(JsonElement test)
-    {
-        if (!test.TryGetProperty("options", out var options))
-        {
-            return false;
-        }
-
-        return (options.TryGetProperty("keyFolding", out var folding) && folding.GetString() != "off") ||
-               (options.TryGetProperty("expandPaths", out var expand) && expand.GetString() != "off");
     }
 
     #endregion
@@ -212,9 +210,18 @@ public class SpecFixtureConformanceTests
             return options;
         }
 
-        if (json.TryGetProperty("indent", out var indent))
+        // "indentSize" since fixtures 4.0; "indent" in older fixtures
+        if (json.TryGetProperty("indentSize", out var indent) || json.TryGetProperty("indent", out indent))
         {
             options.IndentSize = indent.GetInt32();
+        }
+
+        foreach (var option in json.EnumerateObject())
+        {
+            if (option.Name is not ("indentSize" or "indent" or "delimiter" or "strict"))
+            {
+                throw new NotSupportedException($"Unknown fixture option '{option.Name}'");
+            }
         }
 
         if (json.TryGetProperty("delimiter", out var delimiter))

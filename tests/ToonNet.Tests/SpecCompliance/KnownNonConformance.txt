@@ -1,2 +1,95 @@
-# Spec fixture cases (see Fixtures/v3.3.2) that ToonNet does not conform to yet.
-# One "<category>/<file>/<test name>" per line. Remove a line once the case passes.
+# Spec fixture cases (see Fixtures/v4.4) that ToonNet does not conform to yet.
+# One "<category>/<file>/<index>  # <test name>" per line. Remove a line once the case passes.
+decode/arrays-nested/17  # accepts bare bracket pair as empty inner array list item
+decode/arrays-primitive/16  # keeps a header whose length exceeds integer range in non-strict mode
+decode/arrays-tabular/10  # parses nested field groups with the pipe delimiter
+decode/arrays-tabular/12  # parses quoted subfield names inside nested field groups
+decode/arrays-tabular/13  # applies last-write-wins for duplicate field names, bare or grouped, in non-strict mode
+decode/arrays-tabular/17  # trims spaces around field names
+decode/arrays-tabular/19  # throws on a row with more cells than fields in non-strict mode
+decode/arrays-tabular/7  # parses nested field groups into nested objects
+decode/arrays-tabular/8  # parses sibling nested field groups by depth-first cell assignment, with a name repeated across levels
+decode/arrays-tabular/9  # parses nested field groups recursively without a depth cap
+decode/blank-lines/13  # ignores blank lines between tabular rows and entry rows in non-strict mode
+decode/blank-lines/18  # accepts blank line between header and first entry row
+decode/blank-lines/22  # throws on a tab-only line, which is not blank
+decode/blank-lines/9  # accepts blank lines after list, tabular, and keyed scopes end, at root and in a nested object
+decode/comments/0  # strips comment lines after the header and between tabular rows
+decode/comments/1  # strips comment line whose indentation is not a multiple of indentSize
+decode/comments/2  # strips outdented comment inside nested object scope without closing it
+decode/comments/3  # strips comment inside list array without counting as item
+decode/comments/4  # strips comment before root array header
+decode/comments/5  # strips comment containing an unterminated quote without unescaping
+decode/comments/6  # decodes comments and blank lines only to empty object
+decode/comments/7  # decodes a hash-leading root line as a comment, yielding an empty object
+decode/comments/8  # throws when a stripped hash-leading row breaks the declared count
+decode/comments/9  # strips a hash-leading row as a comment in non-strict mode
+decode/delimiters/24  # matches a delimiter, colon, space, or comment marker followed by a combining mark as syntax
+decode/indentation-errors/24  # adopts the depth of a jumped first line in non-strict mode
+decode/objects-keyed/0  # parses keyed tabular objects
+decode/objects-keyed/1  # parses a keyless keyed header as a root object
+decode/objects-keyed/10  # parses quoted cells containing the active delimiter
+decode/objects-keyed/11  # parses a keyed header on a hyphen line
+decode/objects-keyed/12  # ignores comment lines between entry rows
+decode/objects-keyed/13  # applies last-write-wins for duplicate entry keys in non-strict mode
+decode/objects-keyed/14  # accepts entry keys outside the encoder unquoted-key pattern
+decode/objects-keyed/17  # decodes every entry row whatever the declared count in non-strict mode
+decode/objects-keyed/2  # parses nested field groups in keyed headers
+decode/objects-keyed/3  # parses keyed headers with the pipe and tab delimiters
+decode/objects-keyed/4  # parses quoted entry keys
+decode/objects-keyed/5  # parses a quoted entry key containing a colon
+decode/objects-keyed/6  # treats a key-value line at the header's depth as a sibling after entries end
+decode/objects-keyed/7  # splits an entry row at its first unquoted colon before delimiter or header parsing
+decode/objects-keyed/8  # decodes the cell token [] as a string, not an empty array
+decode/objects-keyed/9  # accepts a declared entry count of zero
+decode/objects/37  # reads an NBSP before a quote, bracket segment, or nested field group as part of the name
+decode/objects/42  # materializes __proto__ entry key as an ordinary own key
+decode/objects/44  # parses a quoted key followed by spaces before the colon
+decode/objects/47  # parses an empty unquoted key as the empty key
+decode/objects/49  # parses keys whose closed mid-token quote span hides a colon or a bracket segment, or precedes one
+decode/root-form/11  # parses a root primitive whose bracket segment and colon follow an unclosed quote
+decode/root-form/12  # throws on a whole document indented by one level in non-strict mode
+decode/root-form/9  # throws on an indented root primitive in non-strict mode
+decode/validation-errors/18  # throws on a keyed header line without its colon in non-strict mode
+decode/validation-errors/35  # throws on empty field list
+decode/validation-errors/54  # throws on keyless array header in object field position
+decode/validation-errors/55  # throws on keyless array header in object field position in non-strict mode
+decode/validation-errors/56  # throws on keyless array header after a depth-0 field
+decode/validation-errors/57  # throws on keyless array header as a later field of a list-item object
+decode/validation-errors/58  # throws on keyless fields-bearing header as list item
+decode/validation-errors/59  # throws on keyless fields-bearing header as list item in non-strict mode
+decode/validation-errors/65  # throws on whitespace between a key and its bracket segment
+decode/validation-errors/66  # throws on a space before the bracket segment in non-strict mode
+decode/validation-errors/67  # throws on a tab between a key and its bracket segment
+decode/validation-errors/77  # throws on a tab after a quoted value's closing quote
+decode/validation-errors/83  # throws on a tab field list after a pipe delimiter symbol in non-strict mode
+decode/validation-errors/84  # throws on a pipe field list after a bracket segment without a delimiter symbol in non-strict mode
+decode/validation-errors/90  # throws on an empty field entry
+decode/validation-errors/93  # throws on content after a nested field group in non-strict mode
+decode/whitespace/11  # strips a leading byte-order mark
+decode/whitespace/16  # keeps a byte-order mark after the document start as content
+decode/whitespace/17  # removes a byte-order mark before a comment line
+decode/whitespace/4  # keeps a leading NBSP and a trailing tab in unquoted values
+encode/arrays-nested/10  # quotes hash-leading string as list item
+encode/arrays-objects/9  # encodes a keyed-eligible object in a tabular column as a nested field group
+encode/arrays-primitive/10  # quotes hash-leading string in inline array
+encode/arrays-tabular/10  # uses the active delimiter inside nested field groups
+encode/arrays-tabular/11  # quotes subfield names inside nested field groups per key encoding
+encode/arrays-tabular/6  # quotes hash-leading string in tabular cell
+encode/arrays-tabular/7  # collapses a uniform nested object column into a nested field group
+encode/arrays-tabular/8  # collapses sibling nested field groups with depth-first row layout
+encode/arrays-tabular/9  # collapses nested field groups recursively without a depth cap
+encode/objects-keyed/0  # encodes objects of uniform objects in keyed tabular form
+encode/objects-keyed/1  # encodes an eligible root object with a keyless keyed header
+encode/objects-keyed/11  # emits a keyed header on the hyphen line when it is the first field of a list item
+encode/objects-keyed/2  # collapses uniform nested object columns inside keyed headers
+encode/objects-keyed/3  # orders fields by the first entry value's encounter order
+encode/objects-keyed/4  # uses the active delimiter in keyed headers and entry-row cells
+encode/objects-keyed/5  # quotes entry keys per key encoding
+encode/objects-keyed/6  # quotes entry-row cells containing the active delimiter
+encode/objects/28  # quotes hash-leading string in object field value
+encode/primitives/35  # quotes leading-plus numeric-like string
+encode/primitives/36  # quotes string starting with hash
+encode/primitives/37  # quotes a root string starting with U+FEFF
+encode/primitives/39  # quotes a delimiter, colon, hyphen, or number sign that a combining mark follows
+encode/whitespace/2  # leaves non-ASCII whitespace unquoted
