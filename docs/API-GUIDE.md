@@ -34,7 +34,7 @@ string toon = ToonSerializer.Serialize(person, options);
 Person p = ToonSerializer.Deserialize<Person>(toon);
 Person p = ToonSerializer.Deserialize<Person>(toon, options);
 
-// 🆕 JSON ↔ TOON Conversion (Extension Package!)
+// JSON ↔ TOON conversion (ToonNet.Extensions.Json package)
 string toon = ToonConvert.FromJson(jsonString);  // JSON → TOON
 string json = ToonConvert.ToJson(toonString);    // TOON → JSON
 ```
@@ -62,7 +62,7 @@ Console.WriteLine(person.Name); // "John"
 Console.WriteLine(person.Age);  // 30
 ```
 
-### 3. **JSON String → TOON String** (🆕 NEW!)
+### 3. **JSON String → TOON String**
 ```csharp
 string json = """{"name": "John", "age": 30}""";
 string toon = ToonConvert.FromJson(json);
@@ -72,7 +72,7 @@ string toon = ToonConvert.FromJson(json);
 // age: 30
 ```
 
-### 4. **TOON String → JSON String** (🆕 NEW!)
+### 4. **TOON String → JSON String**
 ```csharp
 string toon = "name: John\nage: 30";
 string json = ToonConvert.ToJson(toon);
@@ -233,6 +233,88 @@ string toon = encoder.Encode(doc);           // Encode? Not Serialize?
 
 ---
 
+## 🔄 **Async & Streaming Serialization**
+
+For large datasets (millions of records, database exports, ETL pipelines), ToonNet provides memory-efficient streaming serialization:
+
+### Basic Streaming
+
+```csharp
+// Stream large dataset from database without loading all into memory
+await ToonSerializer.SerializeStreamAsync(
+    items: dbContext.Users.AsAsyncEnumerable(),
+    filePath: "users_export.toon",
+    cancellationToken: cts.Token
+);
+
+// Read back with incremental deserialization
+await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_export.toon"))
+{
+    ProcessUser(user);  // Memory-efficient: only one user in memory at a time
+}
+```
+
+### Advanced Configuration
+
+```csharp
+// Custom separator mode and batch size for optimal performance
+await ToonSerializer.SerializeStreamAsync(
+    items: GenerateLargeDatasetAsync(),
+    filePath: "export.toon",
+    options: null,
+    writeOptions: new ToonMultiDocumentWriteOptions
+    {
+        Mode = ToonMultiDocumentSeparatorMode.ExplicitSeparator,  // Use "---" separator
+        DocumentSeparator = "---",
+        BatchSize = 100  // Buffer 100 items before writing (improves throughput)
+    },
+    cancellationToken: cts.Token
+);
+```
+
+### Use Cases
+
+| Use Case | Description |
+|----------|-------------|
+| **Database Exports** | Stream large result sets (`IAsyncEnumerable<T>`) to a file without materialising them |
+| **ETL Pipelines** | Process large files one document at a time |
+| **Log Processing** | Read multi-document TOON files incrementally |
+| **Data Migration** | Convert large datasets with cancellable operations |
+
+### Performance Characteristics
+
+- **Memory:** Independent of the number of items - roughly `BatchSize × ItemSize` is buffered while writing
+- **Batching:** Items are written in batches (`BatchSize`, default 50) to reduce the number of I/O calls
+- **Separators:** Documents are separated by a blank line (default) or by `DocumentSeparator` (default `---`) on its own line
+- **Cancellation:** Full `CancellationToken` support for long-running operations
+
+**API Methods:**
+
+```csharp
+// File-based streaming
+ValueTask SerializeStreamAsync<T>(
+    IAsyncEnumerable<T> items,
+    string filePath,
+    ToonSerializerOptions? options = null,
+    CancellationToken cancellationToken = default);
+
+// Stream-based with custom options
+ValueTask SerializeStreamAsync<T>(
+    IAsyncEnumerable<T> items,
+    Stream stream,
+    ToonSerializerOptions? options,
+    ToonMultiDocumentWriteOptions writeOptions,
+    CancellationToken cancellationToken = default);
+
+// Incremental deserialization
+IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+    string filePath,
+    ToonSerializerOptions? options = null,
+    CancellationToken cancellationToken = default);
+```
+
+---
+
 ## ✨ **Summary**
 
 **ToonNet provides a System.Text.Json-style API:**
@@ -307,11 +389,11 @@ string json2 = ToonConvert.ToJson(toon);    // {"discount":35}
 **What changes in format conversion:**
 - ❌ Decimal trailing zeros: `35.00` → `35` (semantically equal)
 - ❌ Whitespace: indentation, line breaks (cosmetic)
-- ❌ Property order: may be reordered (JSON spec allows this)
 - ❌ Number representation: `1e2` → `100` (semantically equal)
 
 **What is guaranteed:**
 - ✅ All property names preserved
+- ✅ Property order preserved
 - ✅ All values preserved (semantic equality)
 - ✅ All nested structures preserved
 - ✅ null/true/false preserved exactly
@@ -671,3 +753,5 @@ Console.WriteLine(toon);
 - Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
 
 ---
+
+**No surprises. No confusion. Just works.** 🚀

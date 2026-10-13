@@ -34,7 +34,7 @@ string toon = ToonSerializer.Serialize(person, options);
 Person p = ToonSerializer.Deserialize<Person>(toon);
 Person p = ToonSerializer.Deserialize<Person>(toon, options);
 
-// 🆕 JSON ↔ TOON Conversion (Extension Package!)
+// JSON ↔ TOON conversion (ToonNet.Extensions.Json package)
 string toon = ToonConvert.FromJson(jsonString);  // JSON → TOON
 string json = ToonConvert.ToJson(toonString);    // TOON → JSON
 ```
@@ -62,7 +62,7 @@ Console.WriteLine(person.Name); // "John"
 Console.WriteLine(person.Age);  // 30
 ```
 
-### 3. **JSON String → TOON String** (🆕 NEW!)
+### 3. **JSON String → TOON String**
 ```csharp
 string json = """{"name": "John", "age": 30}""";
 string toon = ToonConvert.FromJson(json);
@@ -72,7 +72,7 @@ string toon = ToonConvert.FromJson(json);
 // age: 30
 ```
 
-### 4. **TOON String → JSON String** (🆕 NEW!)
+### 4. **TOON String → JSON String**
 ```csharp
 string toon = "name: John\nage: 30";
 string json = ToonConvert.ToJson(toon);
@@ -389,11 +389,11 @@ string json2 = ToonConvert.ToJson(toon);    // {"discount":35}
 **What changes in format conversion:**
 - ❌ Decimal trailing zeros: `35.00` → `35` (semantically equal)
 - ❌ Whitespace: indentation, line breaks (cosmetic)
-- ❌ Property order: may be reordered (JSON spec allows this)
 - ❌ Number representation: `1e2` → `100` (semantically equal)
 
 **What is guaranteed:**
 - ✅ All property names preserved
+- ✅ Property order preserved
 - ✅ All values preserved (semantic equality)
 - ✅ All nested structures preserved
 - ✅ null/true/false preserved exactly
@@ -741,6 +741,16 @@ Console.WriteLine(toon);
 | **Encode** | `obj.ToJsonString()` | `encoder.Encode(new ToonDocument(obj))` | Same |
 
 **Result:** ToonNet supports both implicit conversions (like System.Text.Json) and explicit construction.
+
+---
+
+## 🔒 Thread-Safety Notes
+
+- `ToonSerializer` methods are safe to call concurrently across threads.
+- A `ToonEncoder` instance keeps no per-call state and can be shared across threads (it is registered as a singleton by `AddToonNet`).
+- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
+- Cache entries are created on demand and retained for the process lifetime (no eviction).
+- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
 
 ---
 
