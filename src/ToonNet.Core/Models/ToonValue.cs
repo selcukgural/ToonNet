@@ -369,6 +369,14 @@ public sealed class ToonObject : ToonValue
     }
 
     /// <summary>
+    ///     Creates an empty ToonObject with room for <paramref name="capacity"/> properties.
+    /// </summary>
+    internal ToonObject(int capacity)
+    {
+        Properties = new ToonPropertyCollection(capacity);
+    }
+
+    /// <summary>
     ///     Creates a ToonObject with the given properties, in their enumeration order.
     /// </summary>
     /// <exception cref="ArgumentException">Thrown when a key occurs more than once.</exception>

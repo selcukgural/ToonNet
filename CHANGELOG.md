@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and integer targets no longer go through `Convert.ChangeType`. An exception thrown by a parameterless constructor is
   now wrapped in a `ToonSerializationException` with the path and target type, like one thrown by a parameterized
   constructor (it escaped as a `TargetInvocationException`).
+- **ToonNet.Core:** `ToonObject` is much lighter: `ToonPropertyCollection` stores its properties in one array and only
+  builds a hash index above 16 properties (smaller objects use a linear search), and the serializer and parser create
+  objects and arrays with the right capacity. Serializing lists of flat objects takes about 60% less time and half the
+  memory; lists of nested objects serialize about 40% faster and deserialize about 25% faster (10,000 items).
+  `ToonPropertyCollection.GetEnumerator()` returns a `ToonPropertyCollection.Enumerator` struct.
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common

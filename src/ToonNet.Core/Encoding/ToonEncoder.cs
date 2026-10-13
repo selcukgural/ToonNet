@@ -257,7 +257,9 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                         sb.Append(_options.Delimiter);
                     }
 
-                    sb.Append(FormatPrimitive(row.Properties[fields[i]]));
+                    // Rows usually hold the fields in header order, so the entry at the same position is checked first
+                    ref readonly var entry = ref row.Properties.EntryAt(i);
+                    sb.Append(FormatPrimitive(string.Equals(entry.Key, fields[i]) ? entry.Value : row.Properties[fields[i]]));
                 }
             }
 

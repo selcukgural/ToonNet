@@ -8,24 +8,43 @@ namespace ToonNet.Core.Models;
 /// </summary>
 /// <remarks>
 ///     Key order is significant in TOON, so unlike <see cref="Dictionary{TKey,TValue}"/> a key added after a removal is
-///     always placed last. Replacing the value of an existing key keeps its position. Lookups are O(1); removing a key is
-///     O(n).
+///     always placed last. Replacing the value of an existing key keeps its position. Lookups are O(1) (small
+///     collections use a linear search, which is faster for a few keys); removing a key is O(n).
 /// </remarks>
 public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IReadOnlyDictionary<string, ToonValue>
 {
-    private readonly List<KeyValuePair<string, ToonValue>> _entries = [];
-    private readonly Dictionary<string, int> _indexes = new(StringComparer.Ordinal);
+    /// <summary>Collections with more properties than this keep a hash index of their keys.</summary>
+    private const int IndexThreshold = 16;
+
+    private KeyValuePair<string, ToonValue>[] _entries;
+    private int _count;
+    private int _version;
+
+    /// <summary>Key positions in <see cref="_entries"/>; null until the collection exceeds <see cref="IndexThreshold"/>.</summary>
+    private Dictionary<string, int>? _indexes;
 
     /// <summary>
     ///     Creates an empty collection.
     /// </summary>
-    public ToonPropertyCollection() { }
+    public ToonPropertyCollection()
+    {
+        _entries = [];
+    }
+
+    /// <summary>
+    ///     Creates an empty collection with room for <paramref name="capacity"/> properties.
+    /// </summary>
+    internal ToonPropertyCollection(int capacity)
+    {
+        _entries = capacity > 0 ? new KeyValuePair<string, ToonValue>[capacity] : [];
+    }
 
     /// <summary>
     ///     Creates a collection with the given properties, in their enumeration order.
     /// </summary>
     /// <exception cref="ArgumentException">Thrown when a key occurs more than once.</exception>
     public ToonPropertyCollection(IEnumerable<KeyValuePair<string, ToonValue>> properties)
+        : this(properties is ICollection<KeyValuePair<string, ToonValue>> collection ? collection.Count : 0)
     {
         ArgumentNullException.ThrowIfNull(properties);
 
@@ -38,17 +57,17 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// <summary>
     ///     Gets the number of properties.
     /// </summary>
-    public int Count => _entries.Count;
+    public int Count => _count;
 
     /// <summary>
     ///     Gets the keys in order. The list is a snapshot.
     /// </summary>
-    public IReadOnlyList<string> Keys => _entries.ConvertAll(e => e.Key);
+    public IReadOnlyList<string> Keys => SnapshotKeys();
 
     /// <summary>
     ///     Gets the values in key order. The list is a snapshot.
     /// </summary>
-    public IReadOnlyList<ToonValue> Values => _entries.ConvertAll(e => e.Value);
+    public IReadOnlyList<ToonValue> Values => SnapshotValues();
 
     /// <summary>
     ///     Gets or sets the value of a key. Setting a new key appends it; setting an existing key keeps its position.
@@ -56,15 +75,15 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// <exception cref="KeyNotFoundException">Thrown by the getter when the key does not exist.</exception>
     public ToonValue this[string key]
     {
-        get => _indexes.TryGetValue(key, out var index) ? _entries[index].Value : throw new KeyNotFoundException($"The key '{key}' was not found.");
+        get => IndexOf(key) is var index and >= 0 ? _entries[index].Value : throw new KeyNotFoundException($"The key '{key}' was not found.");
         set
         {
-            ArgumentNullException.ThrowIfNull(key);
             ArgumentNullException.ThrowIfNull(value);
 
-            if (_indexes.TryGetValue(key, out var index))
+            if (IndexOf(key) is var index and >= 0)
             {
                 _entries[index] = new KeyValuePair<string, ToonValue>(key, value);
+                _version++;
             }
             else
             {
@@ -91,10 +110,9 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// <returns><c>true</c> when the property was added.</returns>
     public bool TryAdd(string key, ToonValue value)
     {
-        ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(value);
 
-        if (_indexes.ContainsKey(key))
+        if (IndexOf(key) >= 0)
         {
             return false;
         }
@@ -106,14 +124,14 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// <summary>
     ///     Determines whether the key exists.
     /// </summary>
-    public bool ContainsKey(string key) => _indexes.ContainsKey(key);
+    public bool ContainsKey(string key) => IndexOf(key) >= 0;
 
     /// <summary>
     ///     Gets the value of a key.
     /// </summary>
     public bool TryGetValue(string key, [MaybeNullWhen(false)] out ToonValue value)
     {
-        if (_indexes.TryGetValue(key, out var index))
+        if (IndexOf(key) is var index and >= 0)
         {
             value = _entries[index].Value;
             return true;
@@ -134,18 +152,28 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// </summary>
     public bool Remove(string key, [MaybeNullWhen(false)] out ToonValue value)
     {
-        if (!_indexes.Remove(key, out var index))
+        var index = IndexOf(key);
+
+        if (index < 0)
         {
             value = null;
             return false;
         }
 
         value = _entries[index].Value;
-        _entries.RemoveAt(index);
+        _count--;
+        Array.Copy(_entries, index + 1, _entries, index, _count - index);
+        _entries[_count] = default;
+        _version++;
 
-        for (var i = index; i < _entries.Count; i++)
+        if (_indexes != null)
         {
-            _indexes[_entries[i].Key] = i;
+            _indexes.Remove(key);
+
+            for (var i = index; i < _count; i++)
+            {
+                _indexes[_entries[i].Key] = i;
+            }
         }
 
         return true;
@@ -156,26 +184,169 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// </summary>
     public void Clear()
     {
-        _entries.Clear();
-        _indexes.Clear();
+        Array.Clear(_entries, 0, _count);
+        _count = 0;
+        _indexes = null;
+        _version++;
     }
 
     /// <summary>
     ///     Returns an enumerator over the properties in order.
     /// </summary>
-    public List<KeyValuePair<string, ToonValue>>.Enumerator GetEnumerator() => _entries.GetEnumerator();
+    public Enumerator GetEnumerator() => new(this);
+
+    /// <summary>
+    ///     The property at <paramref name="index"/>, in insertion order (no bounds check beyond the array's).
+    /// </summary>
+    internal ref readonly KeyValuePair<string, ToonValue> EntryAt(int index) => ref _entries[index];
+
+    /// <returns>The position of <paramref name="key"/>, or -1.</returns>
+    private int IndexOf(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        if (_indexes != null)
+        {
+            return _indexes.TryGetValue(key, out var index) ? index : -1;
+        }
+
+        var entries = _entries;
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (string.Equals(entries[i].Key, key))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     private void Append(string key, ToonValue value)
     {
-        _indexes.Add(key, _entries.Count);
-        _entries.Add(new KeyValuePair<string, ToonValue>(key, value));
+        if (_count == _entries.Length)
+        {
+            Array.Resize(ref _entries, _entries.Length == 0 ? 4 : _entries.Length * 2);
+        }
+
+        _entries[_count] = new KeyValuePair<string, ToonValue>(key, value);
+        _count++;
+        _version++;
+
+        if (_indexes != null)
+        {
+            _indexes.Add(key, _count - 1);
+        }
+        else if (_count > IndexThreshold)
+        {
+            _indexes = new Dictionary<string, int>(_count * 2, StringComparer.Ordinal);
+
+            for (var i = 0; i < _count; i++)
+            {
+                _indexes.Add(_entries[i].Key, i);
+            }
+        }
+    }
+
+    private List<string> SnapshotKeys()
+    {
+        var keys = new List<string>(_count);
+
+        for (var i = 0; i < _count; i++)
+        {
+            keys.Add(_entries[i].Key);
+        }
+
+        return keys;
+    }
+
+    private List<ToonValue> SnapshotValues()
+    {
+        var values = new List<ToonValue>(_count);
+
+        for (var i = 0; i < _count; i++)
+        {
+            values.Add(_entries[i].Value);
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    ///     Enumerates the properties in order.
+    /// </summary>
+    /// <remarks>
+    ///     Like <see cref="List{T}.Enumerator"/>, it throws when the collection is modified during enumeration.
+    /// </remarks>
+    public struct Enumerator : IEnumerator<KeyValuePair<string, ToonValue>>
+    {
+        private readonly ToonPropertyCollection _collection;
+        private readonly int _version;
+        private int _index;
+
+        internal Enumerator(ToonPropertyCollection collection)
+        {
+            _collection = collection;
+            _version = collection._version;
+            _index = -1;
+            Current = default;
+        }
+
+        /// <summary>
+        ///     Gets the property at the current position.
+        /// </summary>
+        public KeyValuePair<string, ToonValue> Current { get; private set; }
+
+        readonly object IEnumerator.Current => Current;
+
+        /// <summary>
+        ///     Advances to the next property.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Thrown when the collection was modified.</exception>
+        public bool MoveNext()
+        {
+            if (_version != _collection._version)
+            {
+                throw new InvalidOperationException("Collection was modified; enumeration operation may not execute.");
+            }
+
+            if (++_index < _collection._count)
+            {
+                Current = _collection._entries[_index];
+                return true;
+            }
+
+            _index = _collection._count;
+            Current = default;
+            return false;
+        }
+
+        /// <summary>
+        ///     Moves before the first property.
+        /// </summary>
+        public void Reset()
+        {
+            if (_version != _collection._version)
+            {
+                throw new InvalidOperationException("Collection was modified; enumeration operation may not execute.");
+            }
+
+            _index = -1;
+            Current = default;
+        }
+
+        /// <summary>
+        ///     Does nothing.
+        /// </summary>
+        public readonly void Dispose() { }
     }
 
     #region Explicit interface implementations
 
-    ICollection<string> IDictionary<string, ToonValue>.Keys => _entries.ConvertAll(e => e.Key);
+    ICollection<string> IDictionary<string, ToonValue>.Keys => SnapshotKeys();
 
-    ICollection<ToonValue> IDictionary<string, ToonValue>.Values => _entries.ConvertAll(e => e.Value);
+    ICollection<ToonValue> IDictionary<string, ToonValue>.Values => SnapshotValues();
 
     IEnumerable<string> IReadOnlyDictionary<string, ToonValue>.Keys => Keys;
 
@@ -188,14 +359,15 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     bool ICollection<KeyValuePair<string, ToonValue>>.Contains(KeyValuePair<string, ToonValue> item) =>
         TryGetValue(item.Key, out var value) && EqualityComparer<ToonValue>.Default.Equals(value, item.Value);
 
-    void ICollection<KeyValuePair<string, ToonValue>>.CopyTo(KeyValuePair<string, ToonValue>[] array, int arrayIndex) => _entries.CopyTo(array, arrayIndex);
+    void ICollection<KeyValuePair<string, ToonValue>>.CopyTo(KeyValuePair<string, ToonValue>[] array, int arrayIndex) =>
+        Array.Copy(_entries, 0, array, arrayIndex, _count);
 
     bool ICollection<KeyValuePair<string, ToonValue>>.Remove(KeyValuePair<string, ToonValue> item) =>
         ((ICollection<KeyValuePair<string, ToonValue>>)this).Contains(item) && Remove(item.Key);
 
-    IEnumerator<KeyValuePair<string, ToonValue>> IEnumerable<KeyValuePair<string, ToonValue>>.GetEnumerator() => _entries.GetEnumerator();
+    IEnumerator<KeyValuePair<string, ToonValue>> IEnumerable<KeyValuePair<string, ToonValue>>.GetEnumerator() => GetEnumerator();
 
-    IEnumerator IEnumerable.GetEnumerator() => _entries.GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     #endregion
 }

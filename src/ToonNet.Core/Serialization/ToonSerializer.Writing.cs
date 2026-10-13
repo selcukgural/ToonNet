@@ -152,7 +152,7 @@ public static partial class ToonSerializer
     /// </summary>
     private static ToonArray SerializeCollection(IEnumerable enumerable, ToonSerializerOptions options, int depth, SerializerState state)
     {
-        var array = new ToonArray();
+        var array = new ToonArray(new List<ToonValue>(enumerable is ICollection collection ? collection.Count : 0));
         var index = 0;
 
         foreach (var item in enumerable)
@@ -183,7 +183,7 @@ public static partial class ToonSerializer
             return false;
         }
 
-        var obj = new ToonObject();
+        var obj = new ToonObject(value is ICollection collection ? collection.Count : 0);
 
         foreach (var (rawKey, entryValue) in entries)
         {
@@ -253,8 +253,8 @@ public static partial class ToonSerializer
     /// </summary>
     private static ToonObject SerializeObject(object value, Type type, ToonSerializerOptions options, int depth, SerializerState state)
     {
-        var obj = new ToonObject();
         var metadata = GetTypeMetadata(type);
+        var obj = new ToonObject(metadata.Properties.Length);
 
         foreach (var property in metadata.Properties)
         {

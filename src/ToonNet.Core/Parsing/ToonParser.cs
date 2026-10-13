@@ -456,7 +456,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 EnterNesting(line);
             }
 
-            var row = new ToonObject();
+            var row = new ToonObject(fields.Length);
 
             for (var i = 0; i < fields.Length; i++)
             {

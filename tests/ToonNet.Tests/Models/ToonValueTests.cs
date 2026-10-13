@@ -210,6 +210,68 @@ public class ToonValueTests
         Assert.True(properties.ContainsKey("b"));
     }
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(40)]
+    public void ToonPropertyCollection_KeepsOrderAndLookupsAtAnySize(int count)
+    {
+        // Small collections search linearly, larger ones keep a hash index; both must behave the same
+        var properties = new ToonPropertyCollection();
+        var keys = Enumerable.Range(0, count).Select(i => $"k{i}").ToList();
+
+        foreach (var key in keys)
+        {
+            properties.Add(key, new ToonString(key));
+        }
+
+        Assert.Equal(keys, properties.Keys);
+        Assert.All(keys, key => Assert.Equal(key, ((ToonString)properties[key]).Value));
+        Assert.False(properties.ContainsKey("missing"));
+
+        // Remove from the middle, re-add at the end, replace keeps the position
+        var middle = keys[count / 2];
+        Assert.True(properties.Remove(middle, out var removed));
+        Assert.Equal(middle, ((ToonString)removed).Value);
+        Assert.False(properties.ContainsKey(middle));
+        properties[middle] = new ToonString("again");
+        properties[keys[0]] = new ToonString("first");
+
+        var expected = keys.Where(k => k != middle).Append(middle).ToList();
+        Assert.Equal(expected, properties.Keys);
+        Assert.All(expected.Skip(1).SkipLast(1), key => Assert.Equal(key, ((ToonString)properties[key]).Value));
+        Assert.Equal("again", ((ToonString)properties[middle]).Value);
+        Assert.Equal("first", ((ToonString)properties[keys[0]]).Value);
+        Assert.Equal(expected.Count, properties.Count);
+
+        var copy = new KeyValuePair<string, ToonValue>[count + 1];
+        ((ICollection<KeyValuePair<string, ToonValue>>)properties).CopyTo(copy, 1);
+        Assert.Equal(expected, copy.Skip(1).Select(entry => entry.Key));
+
+        properties.Clear();
+        Assert.Empty(properties);
+        Assert.False(properties.ContainsKey(keys[0]));
+        properties.Add(keys[0], ToonNull.Instance);
+        Assert.Single(properties);
+    }
+
+    [Fact]
+    public void ToonPropertyCollection_ModifiedDuringEnumeration_Throws()
+    {
+        var properties = new ToonPropertyCollection { { "a", ToonNull.Instance }, { "b", ToonNull.Instance } };
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            foreach (var (key, _) in properties)
+            {
+                properties[key + "x"] = ToonNull.Instance;
+            }
+        });
+        Assert.Throws<ArgumentNullException>(() => properties.ContainsKey(null!));
+        Assert.Throws<ArgumentNullException>(() => properties["c"] = null!);
+    }
+
     [Fact]
     public void ToonArray_Empty_IsValid()
     {
