@@ -5,11 +5,15 @@ Optimize ToonNet serialization and deserialization performance.
 ## Key Performance Features
 
 1. **Cached metadata and compiled accessors**: Type metadata is read with reflection once per type and cached;
-   property getters and setters are compiled expression trees
-2. **Source generator (optional)**: [`ToonNet.SourceGenerators`](source-generators) generates
+   property getters, setters and constructors are compiled, and primitive properties are read and written through
+   typed delegates without boxing
+2. **Low-allocation text handling**: The parser reads values from spans and rents its line table from `ArrayPool`;
+   the encoder writes into a pooled character buffer, and stream and file output is written as UTF-8 in pooled chunks
+   without an intermediate string
+3. **Source generator (optional)**: [`ToonNet.SourceGenerators`](source-generators) generates
    `Serialize`/`Deserialize` methods at compile time
-3. **Streaming**: Write and read large datasets one document at a time
-4. **Reusable Options**: Cache `ToonSerializerOptions` instances
+4. **Streaming**: Write and read large datasets one document at a time
+5. **Reusable Options**: Cache `ToonSerializerOptions` instances
 
 ## Best Practices
 
@@ -100,14 +104,14 @@ produces the same TOON as `ToonSerializer`; measure whether it helps for your ty
 
 ## Performance Comparison
 
-The repository's benchmarks (`benchmark/ToonNet.Benchmarks`) compare generated and reflection-based
-serialization, the encoder, the parser and streaming. They do not compare ToonNet with System.Text.Json.
-The recorded results predate the current encoder and parser, so run the benchmarks on your own hardware for
-current numbers (`Program.cs` selects which benchmark class runs, e.g. `StreamingSerializationBenchmarks`):
+The repository's benchmarks (`benchmark/ToonNet.Benchmarks`) measure generated and reflection-based
+serialization, the encoder, the parser and streaming. `TypedSerializationBenchmarks` serializes and deserializes
+lists of 100 and 10,000 objects with both serializer paths and with System.Text.Json as a reference point. TOON
+text is produced through a document model and indentation-aware parsing, so expect it to be slower than
+System.Text.Json; run the benchmarks on your own hardware and payloads for current numbers:
 
 ```bash
-cd benchmark/ToonNet.Benchmarks
-dotnet run -c Release
+dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*TypedSerialization*"
 ```
 
 ## Benchmarking

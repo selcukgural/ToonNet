@@ -28,7 +28,7 @@ var restored = ToonSerializer.Deserialize<Person>(toon);
 
 ## Key Features
 
-- 🚀 **Performance** - Compiled expression-tree property accessors and cached type metadata
+- 🚀 **Performance** - Compiled accessors, cached type metadata, span-based parsing and pooled buffers
 - 💰 **Token Efficient** - Tabular arrays declare field names once (lower AI API costs)
 - 💻 **Developer Friendly** - System.Text.Json-style API
 - 🔄 **Streaming Support** - Multi-document streaming from `IAsyncEnumerable<T>` without materialising the whole dataset

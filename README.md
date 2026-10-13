@@ -88,10 +88,13 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 ### ⚡ Performance & Architecture
 
 **How it is built:**
-- **Expression Trees** - Property getters/setters are compiled once per type instead of using reflection on every call
-- **Metadata Caching** - Thread-safe `ConcurrentDictionary` caches for type metadata and property names
+- **Compiled accessors** - Property getters/setters and constructors are compiled once per type; primitive properties
+  are read and written through typed delegates, so their values are not boxed
+- **Metadata Caching** - Thread-safe caches for type metadata, constructors and collection factories
 - **Source Generator** - Optional static `Serialize`/`Deserialize` methods with the same output as `ToonSerializer`
-- **ArrayPool<byte>** - `SerializeToStreamAsync` encodes the TOON text into a pooled buffer before writing to the stream
+- **Pooled buffers** - The encoder writes into a buffer rented from `ArrayPool<char>`, stream and file output is
+  written as UTF-8 in pooled chunks, and the parser reads values from spans and rents its line table
+- **No dependencies** - `ToonNet.Core` has no package dependencies
 
 **Async I/O:**
 - **ConfigureAwait(false)** - Awaited I/O calls do not capture the synchronization context
@@ -101,7 +104,8 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 
 **Thread-Safety:**
 - **Concurrent use:** `ToonSerializer` methods are safe to call from multiple threads.
-- **Shared caches:** Type metadata and naming caches use `ConcurrentDictionary` for safe concurrent access.
+- **Shared caches:** Type metadata and factory caches use `ConcurrentDictionary`; per-property name caches are filled
+  idempotently, so concurrent use is safe.
 - **Cache lifetime:** Metadata entries are created on demand and retained for the process lifetime (no eviction).
 - **Options caution:** Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
 
