@@ -7,16 +7,16 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.Core</PackageId>
-        <Version>2.0.0</Version>
+        <Version>3.0.0</Version>
         <Title>ToonNet Core Library</Title>
-        <Description>TOON (Token-Oriented Object Notation) serialization for .NET, implementing TOON spec v3.3.2 and tested against the official conformance fixtures. System.Text.Json-style ToonSerializer with cached metadata and compiled accessors, async and multi-document streaming, and a ToonDocument/ToonValue model. Useful for compact, LLM-friendly payloads, configuration files and data exchange.</Description>
+        <Description>TOON (Token-Oriented Object Notation) serialization for .NET, implementing TOON spec v4.4 (all 564 official conformance fixtures pass; output identical to the official library). Fast System.Text.Json-style ToonSerializer with a source generator, cached metadata and compiled accessors, async and multi-document streaming, and a ToonDocument/ToonValue model. Useful for compact, LLM-friendly payloads, configuration files and data exchange.</Description>
         <PackageTags>toon;serialization;dotnet;ai;llm;token-efficient;streaming</PackageTags>
         <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
         
-        <!-- Performance: Enable Profile-Guided Optimization -->
         <!-- Trimming and NativeAOT: reflection-based APIs are annotated; generated code and the document model are safe -->
         <IsAotCompatible>true</IsAotCompatible>
 
+        <!-- Performance: Enable Profile-Guided Optimization -->
         <TieredCompilation>true</TieredCompilation>
         <TieredPGO>true</TieredPGO>
         <DynamicPGO>true</DynamicPGO>

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-14
+
+> All packages move to 3.0.0. The encoder, parser, serializer and source generator follow TOON spec v4.4 and pass all
+> 564 official conformance fixtures, and the output is identical to the official .NET library (Toon.Format) for the
+> same data, while ToonNet is 9–28x faster at serializing and 3–8x faster at deserializing than that library. New:
+> nested field groups and keyed tables, comments, .NET 10, trimming and NativeAOT. Breaking: the TOON text itself
+> (spec 4.4 forms, quoting, dates and large numbers), stricter input rules, the members obsoleted in 2.0, and generated
+> code, which must be rebuilt with the 3.0 generator.
+
 ### Removed
 - **ToonNet.Core (breaking):** The members marked `[Obsolete]` in 2.0: `ToonSerializerOptions.IncludeTypeInformation`
   and `PublicOnly` (they had no effect), `ToonParseException.ActualToken` and `ExpectedToken` (never set by the
