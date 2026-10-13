@@ -79,7 +79,8 @@ internal sealed record ValuePlan(
     bool CheckRuntimeType,
     ValuePlan? Element,
     ValuePlan? Key,
-    bool HasFieldWriter = false);
+    bool HasFieldWriter = false,
+    EquatableArray<string> EnumCases = default);
 
 internal enum ValueKind
 {

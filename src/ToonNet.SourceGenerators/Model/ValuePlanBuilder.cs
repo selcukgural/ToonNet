@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace ToonNet.SourceGenerators.Model;
 
@@ -70,8 +72,12 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
             return Plan(ValueKind.Inline, type, inline: inline);
         }
 
-        if (type.SpecialType is SpecialType.System_Char or SpecialType.System_DateTime || type.TypeKind == TypeKind.Enum ||
-            Matches(type, _primitiveTypes))
+        if (type is INamedTypeSymbol { TypeKind: TypeKind.Enum } enumType)
+        {
+            return Plan(ValueKind.Primitive, type) with { EnumCases = EnumCases(enumType) };
+        }
+
+        if (type.SpecialType is SpecialType.System_Char or SpecialType.System_DateTime || Matches(type, _primitiveTypes))
         {
             return Plan(ValueKind.Primitive, type);
         }
@@ -174,6 +180,24 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
         }
 
         return Plan(ValueKind.Generated, type, checkRuntimeType: !type.IsValueType && !type.IsSealed) with { HasFieldWriter = hasFieldWriter };
+    }
+
+    /// <summary>
+    /// The members of an enum as <c>constant\0name</c> entries, so generated code writes their names without calling
+    /// <see cref="Enum.ToString()"/>; empty when two members share a value (which name ToString picks is not
+    /// specified).
+    /// </summary>
+    private static EquatableArray<string> EnumCases(INamedTypeSymbol type)
+    {
+        var members = type.GetMembers().OfType<IFieldSymbol>().Where(f => f.HasConstantValue && f.ConstantValue != null).ToList();
+
+        if (members.Select(f => f.ConstantValue).Distinct().Count() != members.Count)
+        {
+            return default;
+        }
+
+        return new EquatableArray<string>(members.Select(f => SymbolDisplay.FormatPrimitive(f.ConstantValue!, false, false) + "\0" + f.Name)
+                                                 .ToImmutableArray());
     }
 
     private ValuePlan Reflection(ITypeSymbol type, List<string> reasons, string reason)

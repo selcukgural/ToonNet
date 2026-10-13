@@ -366,13 +366,13 @@ internal sealed class SourceEmitter
     {
         var code = _code;
         var plan = property.Plan;
-        const string startLine = "if (__count != 0 || !firstOnCurrentLine) writer.StartLine(lineDepth);";
+        var delegated = $"writer.WriteField({NameExpression(property)}, {local}, typeof({property.TypeOfName}), " +
+                        $"{(property.ConverterTypeName != null ? ConverterField(property) : "null")}, lineDepth, childDepth, " +
+                        "__count != 0 || !firstOnCurrentLine, depth + 1)";
 
         if (property.ConverterTypeName != null || !WritesDirectly(plan))
         {
-            var converter = property.ConverterTypeName != null ? ConverterField(property) : "null";
-            code.AppendLine($"if (writer.WriteField({NameExpression(property)}, {local}, typeof({property.TypeOfName}), {converter}, lineDepth, childDepth, " +
-                            "__count != 0 || !firstOnCurrentLine, depth + 1)) __count++;");
+            code.AppendLine($"if ({delegated}) __count++;");
             return;
         }
 
@@ -380,7 +380,7 @@ internal sealed class SourceEmitter
         {
             code.BeginBlock($"if ({local} is null)");
             code.BeginBlock("if (!options.IgnoreNullValues)");
-            code.AppendLine(startLine);
+            code.AppendLine(StartLine);
             code.AppendLine($"writer.Write({EncodedNameExpression(property, ": null")});");
             code.AppendLine("__count++;");
             code.EndBlock();
@@ -389,24 +389,37 @@ internal sealed class SourceEmitter
         }
 
         var value = NonNull(plan, local);
-        code.AppendLine(startLine);
 
-        if (plan.Kind == ValueKind.Generated)
+        switch (plan.Kind)
         {
-            // The same depth check and nesting as a nested object in the tree
-            code.AppendLine("writer.EnterValue(depth + 1);");
-            code.AppendLine($"writer.Write({EncodedNameExpression(property, ":")});");
-            code.AppendLine("writer.EnterNesting();");
-            code.AppendLine($"{plan.ValueTypeName}.__ToonWriteFields({value}, writer, childDepth, childDepth + 1, false, depth + 1);");
-            code.AppendLine("writer.ExitNesting();");
-        }
-        else
-        {
-            code.AppendLine($"writer.Write({EncodedNameExpression(property, ": ")});");
-            code.AppendLine(WritePrimitiveStatement(plan, value));
-        }
+            case ValueKind.Generated:
+                // Objects of exactly the declared type are written by its field writer; derived types need their own
+                code.BeginBlock(plan.CheckRuntimeType ? $"if ({value}.GetType() == typeof({plan.ValueTypeName}))" : "");
+                code.AppendLine(StartLine);
+                code.AppendLine("writer.EnterValue(depth + 1);");
+                code.AppendLine($"writer.Write({EncodedNameExpression(property, ":")});");
+                code.AppendLine("writer.EnterNesting();");
+                code.AppendLine($"{plan.ValueTypeName}.__ToonWriteFields({value}, writer, childDepth, childDepth + 1, false, depth + 1);");
+                code.AppendLine("writer.ExitNesting();");
+                code.AppendLine("__count++;");
+                code.EndBlock();
 
-        code.AppendLine("__count++;");
+                if (plan.CheckRuntimeType)
+                {
+                    code.AppendLine($"else if ({delegated}) __count++;");
+                }
+
+                break;
+            case ValueKind.Array or ValueKind.List or ValueKind.Set:
+                EmitInlineCollection(property, value, delegated);
+                break;
+            default:
+                code.AppendLine(StartLine);
+                code.AppendLine($"writer.Write({EncodedNameExpression(property, ": ")});");
+                code.AppendLine(WritePrimitiveStatement(plan, value));
+                code.AppendLine("__count++;");
+                break;
+        }
 
         if (plan.CanBeNull)
         {
@@ -414,16 +427,70 @@ internal sealed class SourceEmitter
         }
     }
 
+    private const string StartLine = "if (__count != 0 || !firstOnCurrentLine) writer.StartLine(lineDepth);";
+
     /// <summary>
-    /// Whether <c>__ToonWriteFields</c> writes the value itself: primitives, and objects of sealed types (or structs)
-    /// with generated field writers. Others need their runtime type or ToonSerializer's collection rules.
+    /// Writes a collection of primitives as an inline array (<c>key[N]: a,b</c>, or <c>key: []</c>), like the encoder
+    /// writes the array the tree holds; a collection whose count is not known without enumerating goes to
+    /// <c>ToonWriter.WriteField</c>.
+    /// </summary>
+    private void EmitInlineCollection(PropertyModel property, string value, string delegated)
+    {
+        var code = _code;
+        var element = property.Plan.Element!;
+        var count = $"__n{_variable++}";
+        var first = $"__first{_variable++}";
+        var item = $"__item{_variable++}";
+
+        code.BeginBlock($"if (global::System.Linq.Enumerable.TryGetNonEnumeratedCount({value}, out var {count}))");
+        code.AppendLine(StartLine);
+        code.AppendLine("writer.EnterValue(depth + 1);");
+        code.BeginBlock($"if ({count} == 0)");
+        code.AppendLine("writer.CheckEmptyNesting();");
+        code.AppendLine($"writer.Write({EncodedNameExpression(property, ": []")});");
+        code.EndBlock();
+        code.BeginBlock("else");
+        code.AppendLine("writer.EnterNesting();");
+        code.AppendLine($"writer.WriteEncodedArrayHeader({EncodedNameExpression(property, "")}, {count});");
+        code.AppendLine("writer.Write(\": \");");
+        code.AppendLine($"var {first} = true;");
+        code.BeginBlock($"foreach (var {item} in {value})");
+        code.AppendLine($"if (!{first}) writer.WriteDelimiter();");
+        code.AppendLine($"{first} = false;");
+        code.AppendLine(element.CanBeNull
+                            ? $"if ({item} is null) writer.WriteNull(); else {WritePrimitiveStatement(element, NonNull(element, item))}"
+                            : WritePrimitiveStatement(element, item));
+        code.EndBlock();
+        code.AppendLine("writer.ExitNesting();");
+        code.EndBlock();
+        code.AppendLine("__count++;");
+        code.EndBlock();
+        code.AppendLine($"else if ({delegated}) __count++;");
+    }
+
+    /// <summary>
+    /// Whether <c>__ToonWriteFields</c> writes the value itself: primitives, collections of primitives, and objects with
+    /// generated field writers. Others need ToonSerializer's rules (runtime types, dictionaries, nested collections).
     /// </summary>
     private static bool WritesDirectly(ValuePlan plan) =>
         plan.Kind is ValueKind.Inline or ValueKind.Primitive ||
-        plan is { Kind: ValueKind.Generated, CheckRuntimeType: false, HasFieldWriter: true };
+        plan is { Kind: ValueKind.Generated, HasFieldWriter: true } ||
+        plan is { Kind: ValueKind.Array or ValueKind.List or ValueKind.Set, Element.Kind: ValueKind.Inline or ValueKind.Primitive };
 
     private static string WritePrimitiveStatement(ValuePlan plan, string value)
     {
+        if (plan.Kind == ValueKind.Primitive && plan.EnumCases.Length > 0)
+        {
+            // Enum names known at compile time, without boxing the value; other values (flag combinations) use ToString
+            var cases = string.Join(", ", plan.EnumCases.Items.Select(entry =>
+            {
+                var separator = entry.IndexOf('\0');
+                return $"({plan.ValueTypeName})({entry.Substring(0, separator)}) => {Literal(entry.Substring(separator + 1))}";
+            }));
+
+            return $"writer.WriteString({value} switch {{ {cases}, var __e => __e.ToString() }});";
+        }
+
         return plan.Kind == ValueKind.Primitive
             ? $"writer.WritePrimitiveValue<{plan.ValueTypeName}>({value});"
             : plan.Inline switch

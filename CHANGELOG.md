@@ -78,8 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type gets a field writer (keys encoded at compile time, primitives written typed, nested sealed types and structs
   called directly) and tabular-row methods, registered with `ToonSerializer` through a hidden `ToonObjectWriter<T>`.
   Values that need their runtime type or a converter go through the serializer's rules. Serializing 10,000 objects
-  with generated code takes 6 ms instead of 14 ms (nested) and 1.6 ms instead of 5.9 ms (flat rows), faster than the
-  reflection-based path again. Hidden public types for generated code: `ToonWriter`, `ToonObjectWriter<T>`,
+  with generated code takes 4.6 ms instead of 14 ms (nested) and 1.6 ms instead of 5.9 ms (flat rows), faster than the
+  reflection-based path again (and than System.Text.Json in the repository's benchmarks). Enum values are written by
+  name from a compile-time switch, collections of primitives inline, and nested objects whose runtime type is the
+  declared type through their field writer. Hidden public types for generated code: `ToonWriter`, `ToonObjectWriter<T>`,
   `ToonRowShape`, and a `ToonSourceGenerationHelpers.Register` overload.
 - **ToonNet.SourceGenerators:** Generated code creates objects, arrays and dictionaries with their final size (the
   property count, or the collection count when it is known without enumerating), and `WritePrimitive` converts

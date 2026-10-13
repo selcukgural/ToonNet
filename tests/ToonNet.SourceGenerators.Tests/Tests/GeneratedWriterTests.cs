@@ -71,6 +71,50 @@ public partial class CaseClash
     public int ID { get; set; } = 2;
 }
 
+[Flags]
+public enum Access
+{
+    None = 0,
+    Read = 1,
+    Write = 2
+}
+
+public enum Aliased
+{
+    First = 1,
+    Same = 1,
+    Other = -3
+}
+
+#pragma warning disable CS8981 // lowercase member names on purpose
+public enum Keywordish
+{
+    @true,
+    @null,
+    plain
+}
+#pragma warning restore CS8981
+
+[ToonSerializable]
+public sealed partial class Collections
+{
+    public Access Access { get; set; } = Access.Read | Access.Write;
+    public Access Single { get; set; } = Access.Write;
+    public Access Undefined { get; set; } = (Access)8;
+    public Aliased Alias { get; set; } = Aliased.Same;
+    public Aliased Negative { get; set; } = Aliased.Other;
+    public Keywordish Keyword { get; set; } = Keywordish.@true;
+    public Keywordish? MaybeKeyword { get; set; } = Keywordish.@null;
+    public List<Mood> Moods { get; set; } = [Mood.Busy, Mood.Calm];
+    public int?[] Numbers { get; set; } = [1, null, 3];
+    public HashSet<string> Names { get; set; } = ["a", "b c"];
+    public List<string?> Empty { get; set; } = [];
+    public IEnumerable<int> Lazy { get; set; } = Enumerable.Range(0, 3).Select(i => i * 2);
+    public List<char> Letters { get; set; } = ['x', ':'];
+    public Guid[] Ids { get; set; } = [Guid.Parse("c56a4180-65aa-42ec-a945-5fd21dec0538")];
+    public List<int>? Missing { get; set; }
+}
+
 /// <summary>
 /// ToonSerializer writes [ToonSerializable] types with their generated field writers; the text must match the
 /// generated tree and the reflection-based writer for every option combination, without falling back.
@@ -155,6 +199,19 @@ public class GeneratedWriterTests
         AssertSameText(node, WriterNode.Serialize);
         AssertSameText(new List<WriterNode> { new DerivedWriterNode(), new() });
         Assert.Contains("Extra: 7", ToonSerializer.Serialize(node));
+    }
+
+    [Fact]
+    public void EnumsAndPrimitiveCollections_MatchTheTree()
+    {
+        AssertSameText(new Collections(), Collections.Serialize);
+        AssertSameText(new List<Collections> { new(), new() { Moods = [] } });
+
+        var toon = ToonSerializer.Serialize(new Collections());
+        Assert.Contains("Access: \"Read, Write\"", toon);
+        Assert.Contains("Keyword: \"true\"", toon);
+        Assert.Contains("Lazy[3]: 0,2,4", toon);
+        Assert.Contains("Empty: []", toon);
     }
 
     [Fact]

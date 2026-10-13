@@ -155,6 +155,16 @@ public sealed class ToonWriter
     }
 
     /// <summary>
+    ///     Writes <c>key[N]</c> for a key already encoded (quoted when needed), as generated code encodes keys at
+    ///     compile time.
+    /// </summary>
+    public void WriteEncodedArrayHeader(string encodedKey, int count)
+    {
+        _buffer.Append(encodedKey);
+        WriteArrayHeader(null, count);
+    }
+
+    /// <summary>
     ///     Writes the field list of a tabular array header, <c>{a,b}:</c> (spec §9.3).
     /// </summary>
     internal void WriteFieldList(ReadOnlySpan<string> fields)
