@@ -544,10 +544,7 @@ public static partial class ToonSerializer
     {
         options ??= ToonSerializerOptions.Default;
 
-        var parser = new ToonParser(options.ToonOptions);
-        var document = parser.Parse(toonString);
-
-        return DeserializeValue(document.Root, type, options, 0, new SerializerState());
+        return DeserializeText(toonString, type, options);
     }
 
     /// <summary>

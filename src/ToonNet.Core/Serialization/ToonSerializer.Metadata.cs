@@ -61,6 +61,9 @@ public static partial class ToonSerializer
         /// </summary>
         public string[]?[] DistinctNames { get; } = new string[]?[NamingPolicyCount];
 
+        /// <summary>Key lookups for direct reading per naming policy (see <see cref="GetReadLookup"/>).</summary>
+        public ReadLookup?[] ReadLookups { get; } = new ReadLookup?[NamingPolicyCount];
+
         private ObjectActivator? _activator;
 
         /// <summary>

@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
+using ToonNet.Core.Parsing;
 
 namespace ToonNet.Core.Serialization;
 
@@ -28,6 +29,11 @@ public static partial class ToonSerializer
         ///     general path, which also reports errors.
         /// </summary>
         public abstract bool TryRead(object instance, ToonValue value);
+
+        /// <summary>
+        ///     Sets the property from a primitive token when it is an exact match, like <see cref="TryRead"/>.
+        /// </summary>
+        public abstract bool TryReadToken(object instance, ToonParser parser, in ToonParser.ValueRef value);
 
         /// <summary>Whether the property value of <paramref name="instance"/> is null.</summary>
         public abstract bool IsNull(object instance);
@@ -88,6 +94,17 @@ public static partial class ToonSerializer
             return true;
         }
 
+        public override bool TryReadToken(object instance, ToonParser parser, in ToonParser.ValueRef value)
+        {
+            if (_set == null || !ToonSerializer.TryReadToken(parser, value, out TValue result))
+            {
+                return false;
+            }
+
+            _set((TDeclaring)instance, result);
+            return true;
+        }
+
         public override bool IsNull(object instance) => _get((TDeclaring)instance) is null;
 
         public override void WriteText(ToonWriter writer, object instance) => WriteTypedText(writer, _get((TDeclaring)instance));
@@ -110,6 +127,17 @@ public static partial class ToonSerializer
         public override bool TryRead(object instance, ToonValue value)
         {
             if (_set == null || !TryReadTyped<TValue?>(value, out var result))
+            {
+                return false;
+            }
+
+            _set((TDeclaring)instance, result);
+            return true;
+        }
+
+        public override bool TryReadToken(object instance, ToonParser parser, in ToonParser.ValueRef value)
+        {
+            if (_set == null || !ToonSerializer.TryReadToken<TValue?>(parser, value, out var result))
             {
                 return false;
             }

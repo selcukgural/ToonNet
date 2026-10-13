@@ -78,6 +78,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   messages are unchanged too. Serializing 10,000 objects with the reflection-based path takes 7 ms instead of 20 ms
   (nested) and 2.4 ms instead of 6.5 ms (flat rows), allocating little more than the result string.
   `SerializeToValue` still builds the tree.
+- **ToonNet.Core:** `ToonSerializer.Deserialize` (and the file, stream and multi-document methods built on it) reads
+  objects straight from the text instead of parsing a `ToonValue` tree first: objects, collections, dictionaries and
+  primitives are read from the parser's cursors, with primitive properties and items read from their tokens without
+  boxing. `ToonValue` and `object` targets, property converters, types with generated code or `[ToonConverter]`, and
+  non-generic collections are built as a tree for that value. Documents whose keys are not in property order (or
+  repeat), options with converters, and every error take the tree-based path, so results, exceptions and messages
+  are unchanged. Deserializing 10,000 objects with the reflection-based path takes 18 ms instead of 41 ms (nested)
+  and 4 ms instead of 7 ms (flat rows), allocating 55-70% less.
 - **ToonNet.SourceGenerators:** Generated code writes `[ToonSerializable]` objects straight to TOON text as well: each
   type gets a field writer (keys encoded at compile time, primitives written typed, nested sealed types and structs
   called directly) and tabular-row methods, registered with `ToonSerializer` through a hidden `ToonObjectWriter<T>`.

@@ -1094,8 +1094,75 @@ internal sealed class ToonParser(ToonOptions? options = null)
         return new ValueRef(RefKind.ListItemObject, lineIndex, OffsetOf(rest), rest.Length, depth: itemDepth);
     }
 
-    /// <summary>The text of a primitive token.</summary>
+    /// <summary>The text of a primitive token (empty for a missing tabular value).</summary>
     internal ReadOnlySpan<char> TokenOf(in ValueRef value) => _input.AsSpan(value.Start, value.Length);
+
+    /// <summary>Whether a primitive value is <c>null</c> (the unquoted token, or a missing tabular value).</summary>
+    internal bool IsNull(in ValueRef value) =>
+        value.Kind == RefKind.MissingValue || (value.Kind == RefKind.Primitive && TokenOf(value).SequenceEqual("null"));
+
+    /// <summary>
+    ///     Reads a quoted string token (its first character is a quote) with the checks of <see cref="ParsePrimitive"/>.
+    /// </summary>
+    /// <exception cref="ToonParseException">Thrown for an unterminated string, text after the closing quote or invalid escapes.</exception>
+    internal string ReadQuotedString(in ValueRef value)
+    {
+        var token = TokenOf(value);
+        var line = _lines[value.LineIndex];
+        var end = FindClosingQuote(token, 0);
+
+        if (end < 0)
+        {
+            throw new ToonParseException("Unterminated string", line.Number, value.Column);
+        }
+
+        if (end != token.Length - 1)
+        {
+            throw new ToonParseException("Unexpected characters after closing quote", line.Number, value.Column + end + 1);
+        }
+
+        return Unescape(token[1..end], line.Number, value.Column + 1);
+    }
+
+    /// <summary>
+    ///     Reads past a value without building it, making the same checks as reading it (a quoted token is unescaped and
+    ///     dropped).
+    /// </summary>
+    internal void Skip(in ValueRef value)
+    {
+        switch (value.NodeKind)
+        {
+            case ToonNodeKind.Primitive:
+                if (value.Kind == RefKind.Primitive && value.Length > 0 && _input[value.Start] == '"')
+                {
+                    ReadQuotedString(value);
+                }
+
+                break;
+            case ToonNodeKind.Array:
+            {
+                var cursor = BeginArray(value);
+
+                while (NextItem(ref cursor, out var item))
+                {
+                    Skip(item);
+                }
+
+                break;
+            }
+            default:
+            {
+                var cursor = BeginObject(value);
+
+                while (NextProperty(ref cursor, out _, out var fieldValue))
+                {
+                    Skip(fieldValue);
+                }
+
+                break;
+            }
+        }
+    }
 
     /// <summary>Converts a primitive value to a <see cref="ToonValue"/>.</summary>
     internal ToonValue ReadPrimitive(in ValueRef value)
@@ -1662,9 +1729,28 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <returns>The number, or null when the token is not a number or not finite as a <see cref="double"/>.</returns>
     internal static ToonNumber? TryParseNumber(ReadOnlySpan<char> token)
     {
-        if (!IsJsonNumber(token, out var isInteger))
+        if (!TryParseNumberParts(token, out var value, out var exact, out var hasExact))
         {
             return null;
+        }
+
+        return hasExact ? new ToonNumber(exact) : new ToonNumber(value) { ParsedText = token.ToString() };
+    }
+
+    /// <summary>
+    ///     Parses a number token like <see cref="TryParseNumber"/> without creating a <see cref="ToonNumber"/>: the
+    ///     number's <see cref="ToonNumber.Value"/> is <c>hasExact ? (double)exact : value</c> and its
+    ///     <see cref="ToonNumber.DecimalValue"/> is <paramref name="exact"/> when <paramref name="hasExact"/>.
+    /// </summary>
+    internal static bool TryParseNumberParts(ReadOnlySpan<char> token, out double value, out decimal exact, out bool hasExact)
+    {
+        value = 0;
+        exact = 0;
+        hasExact = false;
+
+        if (!IsJsonNumber(token, out var isInteger))
+        {
+            return false;
         }
 
         // Integers of up to 18 digits are exact in a long, a decimal and (as before) the decimal's double value.
@@ -1672,23 +1758,25 @@ internal sealed class ToonParser(ToonOptions? options = null)
         if (isInteger && token.Length <= (token[0] == '-' ? 19 : 18) && !token.SequenceEqual("-0") &&
             long.TryParse(token, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var integer))
         {
-            return new ToonNumber((decimal)integer);
+            exact = integer;
+            hasExact = true;
+            return true;
         }
 
-        if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value))
+        if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || !double.IsFinite(value))
         {
-            return null;
+            return false;
         }
 
         // Keep the exact value when it fits in a decimal. Values below decimal precision (e.g. 1e-30) round to a
         // different value there, so they only keep the double.
-        if (decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact) &&
+        if (decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out exact) &&
             Math.Abs((double)exact - value) <= Math.Abs(value) * 1e-12)
         {
-            return new ToonNumber(exact);
+            hasExact = true;
         }
 
-        return new ToonNumber(value) { ParsedText = token.ToString() };
+        return true;
     }
 
     /// <summary>

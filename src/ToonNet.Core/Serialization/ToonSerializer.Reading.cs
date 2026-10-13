@@ -6,6 +6,7 @@ using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using ToonNet.Core.Models;
+using ToonNet.Core.Parsing;
 
 namespace ToonNet.Core.Serialization;
 
@@ -575,6 +576,9 @@ public static partial class ToonSerializer
         /// <summary>Adds an exact primitive match for the item type without boxing; false for anything else.</summary>
         public abstract bool TryAddTyped(IList items, ToonValue value);
 
+        /// <summary>Adds an exact primitive token match for the item type without boxing; false for anything else.</summary>
+        public abstract bool TryAddToken(IList items, ToonParser parser, in ToonParser.ValueRef value);
+
         public abstract object ToArray(IList items);
 
         public abstract object ToHashSet(IList items);
@@ -590,6 +594,17 @@ public static partial class ToonSerializer
         public override bool TryAddTyped(IList items, ToonValue value)
         {
             if (!TryReadTyped(value, out T item))
+            {
+                return false;
+            }
+
+            ((List<T>)items).Add(item);
+            return true;
+        }
+
+        public override bool TryAddToken(IList items, ToonParser parser, in ToonParser.ValueRef value)
+        {
+            if (!TryReadToken(parser, value, out T item))
             {
                 return false;
             }
