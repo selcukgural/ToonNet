@@ -108,6 +108,7 @@ public partial class Customer : EntityBase
 [ToonSerializable]
 public partial class Box<T>
 {
+    // A type parameter is converted with reflection on purpose; TOON006 is expected (suppressed in the csproj)
     public T? Value { get; set; }
 
     public string Label { get; init; } = "";

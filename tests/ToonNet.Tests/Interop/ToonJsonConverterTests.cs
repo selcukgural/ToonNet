@@ -21,8 +21,8 @@ public class ToonJsonConverterTests
         var doc = ToonJsonConverter.FromJson(json);
         var root = (ToonObject)doc.Root;
 
-        Assert.Equal("Alice", ((ToonString)root["name"]).Value);
-        Assert.Equal(30, ((ToonNumber)root["age"]).Value);
+        Assert.Equal("Alice", ((ToonString)root["name"]!).Value);
+        Assert.Equal(30, ((ToonNumber)root["age"]!).Value);
     }
 
     [Fact]
@@ -32,12 +32,12 @@ public class ToonJsonConverterTests
 
         var doc = ToonJsonConverter.FromJson(json);
         var root = (ToonObject)doc.Root;
-        var tags = (ToonArray)root["tags"];
+        var tags = (ToonArray)root["tags"]!;
 
         Assert.Equal(3, tags.Items.Count);
-        Assert.Equal("dev", ((ToonString)tags.Items[0]).Value);
-        Assert.Equal("admin", ((ToonString)tags.Items[1]).Value);
-        Assert.Equal("user", ((ToonString)tags.Items[2]).Value);
+        Assert.Equal("dev", ((ToonString)tags.Items[0]!).Value);
+        Assert.Equal("admin", ((ToonString)tags.Items[1]!).Value);
+        Assert.Equal("user", ((ToonString)tags.Items[2]!).Value);
     }
 
     [Fact]
@@ -57,12 +57,12 @@ public class ToonJsonConverterTests
 
         var doc = ToonJsonConverter.FromJson(json);
         var root = (ToonObject)doc.Root;
-        var user = (ToonObject)root["user"];
-        var profile = (ToonObject)user["profile"];
+        var user = (ToonObject)root["user"]!;
+        var profile = (ToonObject)user["profile"]!;
 
-        Assert.Equal("Bob", ((ToonString)user["name"]).Value);
-        Assert.Equal("bob@example.com", ((ToonString)profile["email"]).Value);
-        Assert.True(((ToonBoolean)profile["verified"]).Value);
+        Assert.Equal("Bob", ((ToonString)user["name"]!).Value);
+        Assert.Equal("bob@example.com", ((ToonString)profile["email"]!).Value);
+        Assert.True(((ToonBoolean)profile["verified"]!).Value);
     }
 
     [Fact]
@@ -100,13 +100,13 @@ public class ToonJsonConverterTests
 
         var doc = ToonJsonConverter.FromJson(json);
         var root = (ToonObject)doc.Root;
-        var users = (ToonArray)root["users"];
+        var users = (ToonArray)root["users"]!;
 
         Assert.Equal(2, users.Items.Count);
 
-        var user1 = (ToonObject)users.Items[0];
-        Assert.Equal(1, ((ToonNumber)user1["id"]).Value);
-        Assert.Equal("Alice", ((ToonString)user1["name"]).Value);
+        var user1 = (ToonObject)users.Items[0]!;
+        Assert.Equal(1, ((ToonNumber)user1["id"]!).Value);
+        Assert.Equal("Alice", ((ToonString)user1["name"]!).Value);
     }
 
     [Fact]
@@ -279,8 +279,8 @@ tags: dev, admin
         var originalRoot = (ToonObject)originalParsed.Root;
         var resultRoot = (ToonObject)resultParsed.Root;
 
-        Assert.Equal(((ToonString)originalRoot["name"]).Value, ((ToonString)resultRoot["name"]).Value);
-        Assert.Equal(((ToonNumber)originalRoot["age"]).Value, ((ToonNumber)resultRoot["age"]).Value);
+        Assert.Equal(((ToonString)originalRoot["name"]!).Value, ((ToonString)resultRoot["name"]!).Value);
+        Assert.Equal(((ToonNumber)originalRoot["age"]!).Value, ((ToonNumber)resultRoot["age"]!).Value);
     }
 
     [Fact]
@@ -354,7 +354,7 @@ tags: dev, admin
 
         var doc = ToonJsonConverter.FromJson(json);
         var root = (ToonObject)doc.Root;
-        var items = (ToonArray)root["items"];
+        var items = (ToonArray)root["items"]!;
 
         Assert.Empty(items.Items);
     }
@@ -391,7 +391,7 @@ tags: dev, admin
         var doc = ToonJsonConverter.FromJson(json);
         var root = (ToonObject)doc.Root;
 
-        var text = ((ToonString)root["text"]).Value;
+        var text = ((ToonString)root["text"]!).Value;
         Assert.Contains("\n", text);
         Assert.Contains("\t", text);
         Assert.Contains("\"", text);
@@ -740,31 +740,31 @@ monitoring:
         var resultRoot = (ToonObject)reparsed.Root;
 
         // Verify application section preserved
-        var originalApp = (ToonObject)originalRoot["application"];
-        var resultApp = (ToonObject)resultRoot["application"];
-        Assert.Equal(((ToonString)originalApp["name"]).Value, ((ToonString)resultApp["name"]).Value);
+        var originalApp = (ToonObject)originalRoot["application"]!;
+        var resultApp = (ToonObject)resultRoot["application"]!;
+        Assert.Equal(((ToonString)originalApp["name"]!).Value, ((ToonString)resultApp["name"]!).Value);
 
         // Verify nested database.primary.pooling preserved
-        var originalDb = (ToonObject)originalRoot["database"];
-        var resultDb = (ToonObject)resultRoot["database"];
-        var originalPrimary = (ToonObject)originalDb["primary"];
-        var resultPrimary = (ToonObject)resultDb["primary"];
-        var originalPooling = (ToonObject)originalPrimary["pooling"];
-        var resultPooling = (ToonObject)resultPrimary["pooling"];
+        var originalDb = (ToonObject)originalRoot["database"]!;
+        var resultDb = (ToonObject)resultRoot["database"]!;
+        var originalPrimary = (ToonObject)originalDb["primary"]!;
+        var resultPrimary = (ToonObject)resultDb["primary"]!;
+        var originalPooling = (ToonObject)originalPrimary["pooling"]!;
+        var resultPooling = (ToonObject)resultPrimary["pooling"]!;
 
-        Assert.Equal(((ToonNumber)originalPooling["minSize"]).Value, ((ToonNumber)resultPooling["minSize"]).Value);
+        Assert.Equal(((ToonNumber)originalPooling["minSize"]!).Value, ((ToonNumber)resultPooling["minSize"]!).Value);
 
         // Verify array of objects (cache nodes) preserved
-        var originalCache = (ToonObject)originalRoot["cache"];
-        var resultCache = (ToonObject)resultRoot["cache"];
-        var originalNodes = (ToonArray)originalCache["nodes"];
-        var resultNodes = (ToonArray)resultCache["nodes"];
+        var originalCache = (ToonObject)originalRoot["cache"]!;
+        var resultCache = (ToonObject)resultRoot["cache"]!;
+        var originalNodes = (ToonArray)originalCache["nodes"]!;
+        var resultNodes = (ToonArray)resultCache["nodes"]!;
 
         Assert.Equal(originalNodes.Items.Count, resultNodes.Items.Count);
 
-        var originalNode1 = (ToonObject)originalNodes.Items[0];
-        var resultNode1 = (ToonObject)resultNodes.Items[0];
-        Assert.Equal(((ToonString)originalNode1["host"]).Value, ((ToonString)resultNode1["host"]).Value);
+        var originalNode1 = (ToonObject)originalNodes.Items[0]!;
+        var resultNode1 = (ToonObject)resultNodes.Items[0]!;
+        Assert.Equal(((ToonString)originalNode1["host"]!).Value, ((ToonString)resultNode1["host"]!).Value);
     }
 
     #endregion

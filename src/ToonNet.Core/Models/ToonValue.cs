@@ -60,7 +60,7 @@ public abstract class ToonValue
     ///     Implicitly converts a string value to a ToonValue.
     /// </summary>
     /// <param name="value">The string value to convert. Null values are converted to ToonNull.</param>
-    public static implicit operator ToonValue?(string? value) => value == null ? ToonNull.Instance : new ToonString(value);
+    public static implicit operator ToonValue(string? value) => value == null ? ToonNull.Instance : new ToonString(value);
 }
 
 /// <summary>
@@ -345,6 +345,7 @@ public sealed class ToonString(string value) : ToonValue
     ///     Implicitly converts a string value to a ToonString.
     /// </summary>
     /// <param name="value">The string value to convert.</param>
+    [return: NotNullIfNotNull(nameof(value))]
     public static implicit operator ToonString?(string? value) => value == null ? null : new(value);
 
     /// <summary>
@@ -357,7 +358,6 @@ public sealed class ToonString(string value) : ToonValue
 /// <summary>
 ///     Represents an object (key-value pairs) in TOON format.
 /// </summary>
-/// <param name="properties">The dictionary of properties to initialize the object with.</param>
 public sealed class ToonObject : ToonValue
 {
     /// <summary>

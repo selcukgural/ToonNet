@@ -249,7 +249,7 @@ public class ToonSerializerTypeSupportTests
         Assert.Equal(collections.Set, back.Set);
         Assert.Equal([1, 2], back.ReadOnly);
         Assert.Equal([3], back.ISet);
-        Assert.Equal([4, 5], back.Immutable);
+        Assert.Equal(new[] { 4, 5 }, back.Immutable);
         Assert.Equal("one", back.ByInt[1]);
         Assert.Equal(9, back.ByGuid[guid]);
         Assert.Equal(2, back.Sorted["a"]);

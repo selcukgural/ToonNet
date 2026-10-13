@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core:** Nullable annotations: the implicit conversion from `string` to `ToonValue` is non-nullable (it
+  already returned `ToonNull` for null), and the one to `ToonString` is non-null for a non-null string, so
+  `ToonString s = "text";` no longer warns.
 - **ToonNet.AspNetCore:** The TOON configuration provider behaves like the JSON one: keys that differ only in case and
   a root that is not an object throw a `FormatException` (before: the later key silently won, and the file yielded no
   keys), and an empty object or array sets its key to null so it can clear earlier values. A misspelled

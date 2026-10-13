@@ -28,7 +28,7 @@ public class ParserCoverageTests
 
         var doc = parser.Parse("items[3]: 1, 2");
         var obj = doc.AsObject();
-        var items = (ToonArray)obj["items"];
+        var items = (ToonArray)obj["items"]!;
         Assert.Equal(2, items.Count);
     }
 
@@ -57,10 +57,10 @@ public class ParserCoverageTests
         var input = "tags[3]:\n  - tag1\n  - tag2\n  - tag3";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
-        var tags = (ToonArray)obj["tags"];
+        var tags = (ToonArray)obj["tags"]!;
 
         Assert.Equal(3, tags.Count);
-        Assert.Equal("tag1", ((ToonString)tags[0]).Value);
+        Assert.Equal("tag1", ((ToonString)tags[0]!).Value);
     }
 
     [Fact]
@@ -69,11 +69,11 @@ public class ParserCoverageTests
         var input = "items[2]:\n  - key: value1\n  - key: value2";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
-        var items = (ToonArray)obj["items"];
+        var items = (ToonArray)obj["items"]!;
 
         Assert.Equal(2, items.Items.Count);
-        var item1 = (ToonObject)items[0];
-        Assert.Equal("value1", ((ToonString)item1["key"]).Value);
+        var item1 = (ToonObject)items[0]!;
+        Assert.Equal("value1", ((ToonString)item1["key"]!).Value);
     }
 
     [Fact]
@@ -91,8 +91,8 @@ public class ParserCoverageTests
         var tags = (ToonArray)doc.AsObject()["tags"]!;
 
         Assert.Equal(2, tags.Count);
-        Assert.Equal("a", ((ToonString)tags[0]).Value);
-        Assert.Equal(2, ((ToonObject)tags[1]).Properties.Count);
+        Assert.Equal("a", ((ToonString)tags[0]!).Value);
+        Assert.Equal(2, ((ToonObject)tags[1]!).Properties.Count);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class ParserCoverageTests
         var parser = new ToonParser();
         var doc = parser.Parse("key: value");
         var obj = doc.AsObject();
-        Assert.Equal("value", ((ToonString)obj["key"]).Value);
+        Assert.Equal("value", ((ToonString)obj["key"]!).Value);
     }
 
     [Fact]
@@ -155,11 +155,11 @@ public class ParserCoverageTests
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
 
-        var a = (ToonObject)obj["a"];
-        var b = (ToonObject)a["b"];
-        var c = (ToonObject)b["c"];
-        var d = (ToonObject)c["d"];
-        Assert.Equal("value", ((ToonString)d["e"]).Value);
+        var a = (ToonObject)obj["a"]!;
+        var b = (ToonObject)a["b"]!;
+        var c = (ToonObject)b["c"]!;
+        var d = (ToonObject)c["d"]!;
+        Assert.Equal("value", ((ToonString)d["e"]!).Value);
     }
 
     [Fact]
@@ -191,7 +191,7 @@ nul: null";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
 
-        var path = ((ToonString)obj["path"]).Value;
+        var path = ((ToonString)obj["path"]!).Value;
         Assert.Contains("\\", path);
     }
 
@@ -217,7 +217,7 @@ nul: null";
         var input = "tags[3]: a, b, c";
         var doc = new ToonParser().Parse(input);
         var obj = doc.AsObject();
-        var tags = (ToonArray)obj["tags"];
+        var tags = (ToonArray)obj["tags"]!;
         Assert.Equal(3, tags.Count);
     }
 
@@ -241,7 +241,7 @@ nul: null";
 
         var doc = parser.Parse(input);
         var obj = doc.AsObject();
-        var items = (ToonArray)obj["items"];
+        var items = (ToonArray)obj["items"]!;
         Assert.Equal(2, items.Count);
     }
 

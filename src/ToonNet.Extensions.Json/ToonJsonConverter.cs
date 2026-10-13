@@ -187,6 +187,7 @@ public static class ToonJsonConverter
     ///     The <see cref="JsonElement"/> to convert. The element's <see cref="JsonValueKind"/> determines
     ///     the type of TOON value created.
     /// </param>
+    /// <param name="strict">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>).</param>
     /// <returns>
     ///     A <see cref="ToonValue"/> representing the JSON element. The returned value can be one of the following:
     ///     <list type="bullet">
@@ -240,6 +241,7 @@ public static class ToonJsonConverter
     ///     The <see cref="JsonElement"/> representing the JSON object to convert.
     ///     Must be of type <see cref="JsonValueKind.Object"/>.
     /// </param>
+    /// <param name="strict">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>).</param>
     /// <returns>
     ///     A <see cref="ToonObject"/> containing the converted TOON key-value pairs from the JSON object.
     /// </returns>
@@ -281,6 +283,7 @@ public static class ToonJsonConverter
     ///     The <see cref="JsonElement"/> representing the JSON array to convert.
     ///     Must be of type <see cref="JsonValueKind.Array"/>.
     /// </param>
+    /// <param name="strict">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>).</param>
     /// <returns>
     ///     A <see cref="ToonArray"/> containing the converted TOON values from the JSON array.
     /// </returns>

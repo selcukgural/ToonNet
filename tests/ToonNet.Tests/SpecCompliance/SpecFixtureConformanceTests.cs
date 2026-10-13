@@ -217,7 +217,8 @@ public class SpecFixtureConformanceTests
             JsonValueKind.Null   => ToonNull.Instance,
             JsonValueKind.True   => new ToonBoolean(true),
             JsonValueKind.False  => new ToonBoolean(false),
-            JsonValueKind.Number => new ToonNumber(element.GetDouble()),
+            // Keep the exact value (as ToonNet's JSON conversion does), not just a double
+            JsonValueKind.Number => ToonNumber.TryParse(element.GetRawText(), out var number) ? number : new ToonNumber(element.GetDouble()),
             JsonValueKind.String => new ToonString(element.GetString()!),
             JsonValueKind.Array  => new ToonArray(element.EnumerateArray().Select(FromJson).ToList()),
             JsonValueKind.Object => new ToonObject(element.EnumerateObject().ToDictionary(p => p.Name, p => FromJson(p.Value))),
@@ -235,7 +236,11 @@ public class SpecFixtureConformanceTests
             case JsonValueKind.False:
                 return actual is ToonBoolean b && b.Value == expected.GetBoolean();
             case JsonValueKind.Number:
-                return actual is ToonNumber n && n.Value.Equals(expected.GetDouble());
+                // Compare exactly when both sides have a decimal value; double precision would hide differences
+                return actual is ToonNumber n &&
+                       (n.DecimalValue is { } exact && expected.TryGetDecimal(out var expectedExact)
+                           ? exact == expectedExact
+                           : n.Value.Equals(expected.GetDouble()));
             case JsonValueKind.String:
                 return actual is ToonString s && s.Value == expected.GetString();
             case JsonValueKind.Array:

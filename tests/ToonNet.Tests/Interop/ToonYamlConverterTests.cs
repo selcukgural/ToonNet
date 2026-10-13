@@ -140,8 +140,8 @@ public class ToonYamlConverterTests
         var doc = ToonYamlConverter.FromYaml(yaml);
         var root = (ToonObject)doc.Root;
 
-        Assert.Equal("Alice", ((ToonString)root["name"]).Value);
-        Assert.Equal(30, ((ToonNumber)root["age"]).Value);
+        Assert.Equal("Alice", ((ToonString)root["name"]!).Value);
+        Assert.Equal(30, ((ToonNumber)root["age"]!).Value);
     }
 
     [Fact]
@@ -156,12 +156,12 @@ public class ToonYamlConverterTests
 
         var doc = ToonYamlConverter.FromYaml(yaml);
         var root = (ToonObject)doc.Root;
-        var tags = (ToonArray)root["tags"];
+        var tags = (ToonArray)root["tags"]!;
 
         Assert.Equal(3, tags.Items.Count);
-        Assert.Equal("dev", ((ToonString)tags.Items[0]).Value);
-        Assert.Equal("admin", ((ToonString)tags.Items[1]).Value);
-        Assert.Equal("user", ((ToonString)tags.Items[2]).Value);
+        Assert.Equal("dev", ((ToonString)tags.Items[0]!).Value);
+        Assert.Equal("admin", ((ToonString)tags.Items[1]!).Value);
+        Assert.Equal("user", ((ToonString)tags.Items[2]!).Value);
     }
 
     [Fact]
@@ -177,12 +177,12 @@ public class ToonYamlConverterTests
 
         var doc = ToonYamlConverter.FromYaml(yaml);
         var root = (ToonObject)doc.Root;
-        var user = (ToonObject)root["user"];
-        var profile = (ToonObject)user["profile"];
+        var user = (ToonObject)root["user"]!;
+        var profile = (ToonObject)user["profile"]!;
 
-        Assert.Equal("Bob", ((ToonString)user["name"]).Value);
-        Assert.Equal("Software Engineer", ((ToonString)profile["bio"]).Value);
-        Assert.Equal(35, ((ToonNumber)profile["age"]).Value);
+        Assert.Equal("Bob", ((ToonString)user["name"]!).Value);
+        Assert.Equal("Software Engineer", ((ToonString)profile["bio"]!).Value);
+        Assert.Equal(35, ((ToonNumber)profile["age"]!).Value);
     }
 
     [Fact]
@@ -200,12 +200,12 @@ public class ToonYamlConverterTests
         var doc = ToonYamlConverter.FromYaml(yaml);
         var root = (ToonObject)doc.Root;
 
-        Assert.True(((ToonBoolean)root["enabled"]).Value);
-        Assert.False(((ToonBoolean)root["disabled"]).Value);
-        Assert.True(((ToonBoolean)root["yesValue"]).Value);
-        Assert.False(((ToonBoolean)root["noValue"]).Value);
-        Assert.True(((ToonBoolean)root["onValue"]).Value);
-        Assert.False(((ToonBoolean)root["offValue"]).Value);
+        Assert.True(((ToonBoolean)root["enabled"]!).Value);
+        Assert.False(((ToonBoolean)root["disabled"]!).Value);
+        Assert.True(((ToonBoolean)root["yesValue"]!).Value);
+        Assert.False(((ToonBoolean)root["noValue"]!).Value);
+        Assert.True(((ToonBoolean)root["onValue"]!).Value);
+        Assert.False(((ToonBoolean)root["offValue"]!).Value);
     }
 
     [Fact]
@@ -236,10 +236,10 @@ public class ToonYamlConverterTests
         var doc = ToonYamlConverter.FromYaml(yaml);
         var root = (ToonObject)doc.Root;
 
-        Assert.Equal(42, ((ToonNumber)root["integer"]).Value);
-        Assert.Equal(3.14, ((ToonNumber)root["float"]).Value);
-        Assert.Equal(-10, ((ToonNumber)root["negative"]).Value);
-        Assert.Equal(1.5e10, ((ToonNumber)root["scientific"]).Value);
+        Assert.Equal(42, ((ToonNumber)root["integer"]!).Value);
+        Assert.Equal(3.14, ((ToonNumber)root["float"]!).Value);
+        Assert.Equal(-10, ((ToonNumber)root["negative"]!).Value);
+        Assert.Equal(1.5e10, ((ToonNumber)root["scientific"]!).Value);
     }
 
     [Fact]
@@ -377,16 +377,16 @@ public class ToonYamlConverterTests
         var root = (ToonObject)doc2.Root;
 
         // Verify structure
-        Assert.Equal("Alice", ((ToonString)root["name"]).Value);
-        Assert.Equal(30, ((ToonNumber)root["age"]).Value);
+        Assert.Equal("Alice", ((ToonString)root["name"]!).Value);
+        Assert.Equal(30, ((ToonNumber)root["age"]!).Value);
 
-        var tags = (ToonArray)root["tags"];
+        var tags = (ToonArray)root["tags"]!;
         Assert.Equal(2, tags.Items.Count);
-        Assert.Equal("dev", ((ToonString)tags.Items[0]).Value);
+        Assert.Equal("dev", ((ToonString)tags.Items[0]!).Value);
 
-        var settings = (ToonObject)root["settings"];
-        Assert.Equal("dark", ((ToonString)settings["theme"]).Value);
-        Assert.True(((ToonBoolean)settings["notifications"]).Value);
+        var settings = (ToonObject)root["settings"]!;
+        Assert.Equal("dark", ((ToonString)settings["theme"]!).Value);
+        Assert.True(((ToonBoolean)settings["notifications"]!).Value);
     }
 
     [Fact]
@@ -410,9 +410,9 @@ public class ToonYamlConverterTests
         var root = (ToonObject)doc2.Root;
 
         // Verify data
-        Assert.Equal("Bob", ((ToonString)root["name"]).Value);
-        Assert.Equal(25, ((ToonNumber)root["age"]).Value);
-        Assert.True(((ToonBoolean)root["active"]).Value);
+        Assert.Equal("Bob", ((ToonString)root["name"]!).Value);
+        Assert.Equal(25, ((ToonNumber)root["age"]!).Value);
+        Assert.True(((ToonBoolean)root["active"]!).Value);
         Assert.IsType<ToonNull>(root["data"]);
     }
 
@@ -436,14 +436,14 @@ public class ToonYamlConverterTests
         var doc2 = ToonYamlConverter.FromYaml(yaml2);
 
         var root = (ToonObject)doc2.Root;
-        var user = (ToonObject)root["user"];
-        var roles = (ToonArray)user["roles"];
+        var user = (ToonObject)root["user"]!;
+        var roles = (ToonArray)user["roles"]!;
 
-        Assert.Equal("Charlie", ((ToonString)user["name"]).Value);
-        Assert.Equal(123, ((ToonNumber)user["id"]).Value);
+        Assert.Equal("Charlie", ((ToonString)user["name"]!).Value);
+        Assert.Equal(123, ((ToonNumber)user["id"]!).Value);
         Assert.Equal(2, roles.Items.Count);
-        Assert.Equal("admin", ((ToonString)roles.Items[0]).Value);
-        Assert.Equal("editor", ((ToonString)roles.Items[1]).Value);
+        Assert.Equal("admin", ((ToonString)roles.Items[0]!).Value);
+        Assert.Equal("editor", ((ToonString)roles.Items[1]!).Value);
     }
 
     #endregion

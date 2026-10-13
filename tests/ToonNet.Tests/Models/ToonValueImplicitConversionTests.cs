@@ -79,10 +79,10 @@ public class ToonValueImplicitConversionTests
 
         // Assert
         Assert.Equal(4, numbers.Count);
-        Assert.Equal(10, ((ToonNumber)numbers[0]).Value);
-        Assert.Equal(20.5, ((ToonNumber)numbers[1]).Value);
-        Assert.Equal(30, ((ToonNumber)numbers[2]).Value);
-        Assert.Equal(40.5, ((ToonNumber)numbers[3]).Value, precision: 1);
+        Assert.Equal(10, ((ToonNumber)numbers[0]!).Value);
+        Assert.Equal(20.5, ((ToonNumber)numbers[1]!).Value);
+        Assert.Equal(30, ((ToonNumber)numbers[2]!).Value);
+        Assert.Equal(40.5, ((ToonNumber)numbers[3]!).Value, precision: 1);
     }
 
     [Fact]

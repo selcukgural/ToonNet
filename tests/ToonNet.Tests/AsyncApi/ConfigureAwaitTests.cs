@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using ToonNet.Core;
 using ToonNet.Core.Serialization;
 
+#pragma warning disable xUnit1030 // see the remarks on the class
+
 namespace ToonNet.Tests.AsyncApi;
 
 /// <summary>
@@ -11,6 +13,8 @@ namespace ToonNet.Tests.AsyncApi;
 /// These tests verify that async methods properly use ConfigureAwait(false)
 /// to avoid capturing the SynchronizationContext, which can cause deadlocks
 /// in non-ASP.NET Core environments (WPF, WinForms, legacy ASP.NET).
+/// The tests themselves await with ConfigureAwait(false) on purpose: they install a single-threaded
+/// SynchronizationContext that nothing pumps, so resuming on it would hang the test (xUnit1030 does not apply).
 /// </remarks>
 public sealed class ConfigureAwaitTests
 {

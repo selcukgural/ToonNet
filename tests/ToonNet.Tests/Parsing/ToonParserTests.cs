@@ -109,7 +109,7 @@ active: true";
         var array = (ToonArray)obj["users"]!;
         Assert.Equal(2, array.Count);
         Assert.True(array.IsTabular);
-        Assert.Equal(["id", "name", "role"], array.FieldNames);
+        Assert.Equal(["id", "name", "role"], array.FieldNames!);
 
         var firstUser = (ToonObject)array[0];
         Assert.Equal(1.0, ((ToonNumber)firstUser["id"]!).Value);

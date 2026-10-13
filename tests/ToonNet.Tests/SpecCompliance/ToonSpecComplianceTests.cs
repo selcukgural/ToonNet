@@ -70,11 +70,11 @@ smallDecimal: 0.00001";
         Assert.IsType<ToonBoolean>(obj["booleanFalse"]);
 
         // Verify values
-        Assert.Equal("Hello World", ((ToonString)obj["stringValue"]).Value);
-        Assert.Equal(42, ((ToonNumber)obj["numberValue"]).Value);
-        Assert.Equal(3.14159, ((ToonNumber)obj["floatValue"]).Value);
-        Assert.True(((ToonBoolean)obj["booleanTrue"]).Value);
-        Assert.False(((ToonBoolean)obj["booleanFalse"]).Value);
+        Assert.Equal("Hello World", ((ToonString)obj["stringValue"]!).Value);
+        Assert.Equal(42, ((ToonNumber)obj["numberValue"]!).Value);
+        Assert.Equal(3.14159, ((ToonNumber)obj["floatValue"]!).Value);
+        Assert.True(((ToonBoolean)obj["booleanTrue"]!).Value);
+        Assert.False(((ToonBoolean)obj["booleanFalse"]!).Value);
     }
 
     /// <summary>
@@ -100,12 +100,12 @@ tinyval: 0.00001";
         var obj = (ToonObject)doc.Root;
 
         // Verify all numbers parsed correctly
-        Assert.Equal(1000000, ((ToonNumber)obj["largenum"]).Value);
-        Assert.Equal(0.5, ((ToonNumber)obj["smallnum"]).Value);
-        Assert.Equal(0, ((ToonNumber)obj["zero"]).Value);
-        Assert.Equal(-42, ((ToonNumber)obj["negval"]).Value);
-        Assert.Equal(1234567, ((ToonNumber)obj["bigint"]).Value);
-        Assert.Equal(0.00001, ((ToonNumber)obj["tinyval"]).Value);
+        Assert.Equal(1000000, ((ToonNumber)obj["largenum"]!).Value);
+        Assert.Equal(0.5, ((ToonNumber)obj["smallnum"]!).Value);
+        Assert.Equal(0, ((ToonNumber)obj["zero"]!).Value);
+        Assert.Equal(-42, ((ToonNumber)obj["negval"]!).Value);
+        Assert.Equal(1234567, ((ToonNumber)obj["bigint"]!).Value);
+        Assert.Equal(0.00001, ((ToonNumber)obj["tinyval"]!).Value);
 
         // Encode back and verify no exponents in number values
         var encoded = EncodeToon(doc);
@@ -135,7 +135,7 @@ tinyval: 0.00001";
 
     /// <summary>
     ///     Test escape sequences in strings.
-    ///     Spec §7: Strings & Keys
+    ///     Spec §7: Strings &amp; Keys
     ///     - Newline: \n
     ///     - Tab: \t
     ///     - Carriage return: \r
@@ -157,16 +157,16 @@ combined: ""line1\nline2\twith\ttabs\r\nend""";
         var obj = (ToonObject)doc.Root;
 
         // Verify escapes are properly interpreted
-        var newlineStr = ((ToonString)obj["newline"]).Value;
+        var newlineStr = ((ToonString)obj["newline"]!).Value;
         Assert.Contains("\n", newlineStr);
 
-        var tabStr = ((ToonString)obj["tab"]).Value;
+        var tabStr = ((ToonString)obj["tab"]!).Value;
         Assert.Contains("\t", tabStr);
 
-        var quoteStr = ((ToonString)obj["quote"]).Value;
+        var quoteStr = ((ToonString)obj["quote"]!).Value;
         Assert.Contains("\"", quoteStr);
 
-        var backslashStr = ((ToonString)obj["backslash"]).Value;
+        var backslashStr = ((ToonString)obj["backslash"]!).Value;
         Assert.Contains("\\", backslashStr);
 
         // Round-trip test
@@ -174,10 +174,10 @@ combined: ""line1\nline2\twith\ttabs\r\nend""";
         var reparsed = ParseToon(encoded);
         var reparseObj = (ToonObject)reparsed.Root;
 
-        Assert.Equal(newlineStr, ((ToonString)reparseObj["newline"]).Value);
-        Assert.Equal(tabStr, ((ToonString)reparseObj["tab"]).Value);
-        Assert.Equal(quoteStr, ((ToonString)reparseObj["quote"]).Value);
-        Assert.Equal(backslashStr, ((ToonString)reparseObj["backslash"]).Value);
+        Assert.Equal(newlineStr, ((ToonString)reparseObj["newline"]!).Value);
+        Assert.Equal(tabStr, ((ToonString)reparseObj["tab"]!).Value);
+        Assert.Equal(quoteStr, ((ToonString)reparseObj["quote"]!).Value);
+        Assert.Equal(backslashStr, ((ToonString)reparseObj["backslash"]!).Value);
     }
 
     /// <summary>
@@ -220,13 +220,13 @@ mixed[4]: 42, true, hello, null";
         var obj = (ToonObject)doc.Root;
 
         // Verify arrays are parsed
-        var numbers = (ToonArray)obj["numbers"];
+        var numbers = (ToonArray)obj["numbers"]!;
         Assert.Equal(5, numbers.Items.Count);
 
-        var words = (ToonArray)obj["words"];
+        var words = (ToonArray)obj["words"]!;
         Assert.Equal(3, words.Items.Count);
 
-        var mixed = (ToonArray)obj["mixed"];
+        var mixed = (ToonArray)obj["mixed"]!;
         Assert.Equal(4, mixed.Items.Count);
     }
 
@@ -248,15 +248,15 @@ people[3]{name,age,city}:
 
         // Verify tabular array
         Assert.NotNull(obj["people"]);
-        var people = (ToonArray)obj["people"];
+        var people = (ToonArray)obj["people"]!;
         Assert.Equal(3, people.Items.Count);
 
         // Each row should be an object
         var firstRow = people.Items[0] as ToonObject;
         Assert.NotNull(firstRow);
-        Assert.Equal("Alice", ((ToonString)firstRow["name"]).Value);
-        Assert.Equal(30, ((ToonNumber)firstRow["age"]).Value);
-        Assert.Equal("New York", ((ToonString)firstRow["city"]).Value);
+        Assert.Equal("Alice", ((ToonString)firstRow["name"]!).Value);
+        Assert.Equal(30, ((ToonNumber)firstRow["age"]!).Value);
+        Assert.Equal("New York", ((ToonString)firstRow["city"]!).Value);
     }
 
     /// <summary>
@@ -282,14 +282,14 @@ user:
         var obj = (ToonObject)doc.Root;
 
         // Verify nesting
-        var user = (ToonObject)obj["user"];
-        Assert.Equal("Alice", ((ToonString)user["name"]).Value);
+        var user = (ToonObject)obj["user"]!;
+        Assert.Equal("Alice", ((ToonString)user["name"]!).Value);
 
-        var profile = (ToonObject)user["profile"];
-        Assert.Equal("Software Engineer", ((ToonString)profile["bio"]).Value);
+        var profile = (ToonObject)user["profile"]!;
+        Assert.Equal("Software Engineer", ((ToonString)profile["bio"]!).Value);
 
-        var social = (ToonObject)profile["social"];
-        Assert.Equal("@alice", ((ToonString)social["twitter"]).Value);
+        var social = (ToonObject)profile["social"]!;
+        Assert.Equal("@alice", ((ToonString)social["twitter"]!).Value);
     }
 
     /// <summary>
@@ -314,18 +314,18 @@ products[3]:
         var doc = ParseToon(toonString);
         var obj = (ToonObject)doc.Root;
 
-        var products = (ToonArray)obj["products"];
+        var products = (ToonArray)obj["products"]!;
         Assert.Equal(3, products.Items.Count);
 
-        var firstProduct = (ToonObject)products.Items[0];
-        Assert.Equal("Laptop", ((ToonString)firstProduct["name"]).Value);
-        Assert.Equal(999.99, ((ToonNumber)firstProduct["price"]).Value);
-        Assert.True(((ToonBoolean)firstProduct["inStock"]).Value);
+        var firstProduct = (ToonObject)products.Items[0]!;
+        Assert.Equal("Laptop", ((ToonString)firstProduct["name"]!).Value);
+        Assert.Equal(999.99, ((ToonNumber)firstProduct["price"]!).Value);
+        Assert.True(((ToonBoolean)firstProduct["inStock"]!).Value);
     }
 
     /// <summary>
     ///     Test quoted string keys and values with special characters.
-    ///     Spec §7: Strings & Keys
+    ///     Spec §7: Strings &amp; Keys
     ///     ⚠️ NOT YET SUPPORTED - Parser doesn't handle quoted key syntax
     /// </summary>
     [Fact]
@@ -369,17 +369,17 @@ arrayWithNulls[3]: first, null, third";
         Assert.IsType<ToonNull>(obj["simpleNull"]);
 
         // Null in object
-        var objectWithNulls = (ToonObject)obj["objectWithNulls"];
+        var objectWithNulls = (ToonObject)obj["objectWithNulls"]!;
         Assert.IsType<ToonNull>(objectWithNulls["field2"]);
 
         // Null in array
-        var arrayWithNulls = (ToonArray)obj["arrayWithNulls"];
+        var arrayWithNulls = (ToonArray)obj["arrayWithNulls"]!;
         Assert.IsType<ToonNull>(arrayWithNulls.Items[1]);
     }
 
     /// <summary>
     ///     Test deep nesting (multiple indentation levels).
-    ///     Spec §12: Indentation & Whitespace
+    ///     Spec §12: Indentation &amp; Whitespace
     /// </summary>
     [Fact]
     public void DeepNesting_MultipleIndentationLevels_Handled()
@@ -397,14 +397,14 @@ level1:
         var obj = (ToonObject)doc.Root;
 
         // Navigate deep nesting
-        var level1 = (ToonObject)obj["level1"];
-        var level2 = (ToonObject)level1["level2"];
-        var level3 = (ToonObject)level2["level3"];
-        var level4 = (ToonObject)level3["level4"];
-        var level5 = (ToonObject)level4["level5"];
-        var level6 = (ToonObject)level5["level6"];
+        var level1 = (ToonObject)obj["level1"]!;
+        var level2 = (ToonObject)level1["level2"]!;
+        var level3 = (ToonObject)level2["level3"]!;
+        var level4 = (ToonObject)level3["level4"]!;
+        var level5 = (ToonObject)level4["level5"]!;
+        var level6 = (ToonObject)level5["level6"]!;
 
-        Assert.Equal("deep", ((ToonString)level6["value"]).Value);
+        Assert.Equal("deep", ((ToonString)level6["value"]!).Value);
     }
 
     /// <summary>
@@ -454,35 +454,35 @@ data:
 
         // Verify structure
         var root = (ToonObject)doc.Root;
-        Assert.Equal("success", ((ToonString)root["status"]).Value);
-        Assert.Equal(200, ((ToonNumber)root["code"]).Value);
+        Assert.Equal("success", ((ToonString)root["status"]!).Value);
+        Assert.Equal(200, ((ToonNumber)root["code"]!).Value);
 
-        var data = (ToonObject)root["data"];
-        var users = (ToonArray)data["users"];
+        var data = (ToonObject)root["data"]!;
+        var users = (ToonArray)data["users"]!;
         Assert.Equal(2, users.Items.Count);
 
-        var firstUser = (ToonObject)users.Items[0];
-        Assert.Equal("alice_dev", ((ToonString)firstUser["username"]).Value);
+        var firstUser = (ToonObject)users.Items[0]!;
+        Assert.Equal("alice_dev", ((ToonString)firstUser["username"]!).Value);
 
-        var roles = (ToonArray)firstUser["roles"];
+        var roles = (ToonArray)firstUser["roles"]!;
         Assert.Equal(2, roles.Items.Count);
 
-        var profile = (ToonObject)firstUser["profile"];
-        Assert.Equal(150, ((ToonNumber)profile["followers"]).Value);
+        var profile = (ToonObject)firstUser["profile"]!;
+        Assert.Equal(150, ((ToonNumber)profile["followers"]!).Value);
 
-        var metadata = (ToonObject)firstUser["metadata"];
+        var metadata = (ToonObject)firstUser["metadata"]!;
         Assert.IsType<ToonNull>(metadata["lastLogin"]);
 
-        var pagination = (ToonObject)data["pagination"];
-        Assert.Equal(100, ((ToonNumber)pagination["total"]).Value);
+        var pagination = (ToonObject)data["pagination"]!;
+        Assert.Equal(100, ((ToonNumber)pagination["total"]!).Value);
 
         // Encode and re-parse to verify round-trip
         var encoded = EncodeToon(doc);
         var reparsed = ParseToon(encoded);
 
         var reparseRoot = (ToonObject)reparsed.Root;
-        var reparseData = (ToonObject)reparseRoot["data"];
-        var reparseUsers = (ToonArray)reparseData["users"];
+        var reparseData = (ToonObject)reparseRoot["data"]!;
+        var reparseUsers = (ToonArray)reparseData["users"]!;
 
         Assert.Equal(2, reparseUsers.Items.Count);
     }
@@ -503,8 +503,8 @@ falseValue: false";
 
         Assert.IsType<ToonBoolean>(obj["trueValue"]);
         Assert.IsType<ToonBoolean>(obj["falseValue"]);
-        Assert.True(((ToonBoolean)obj["trueValue"]).Value);
-        Assert.False(((ToonBoolean)obj["falseValue"]).Value);
+        Assert.True(((ToonBoolean)obj["trueValue"]!).Value);
+        Assert.False(((ToonBoolean)obj["falseValue"]!).Value);
     }
 
     /// <summary>
@@ -542,16 +542,16 @@ emptyObject:";
         var obj = (ToonObject)doc.Root;
 
         // Empty string
-        var emptyStr = (ToonString)obj["emptyString"];
+        var emptyStr = (ToonString)obj["emptyString"]!;
         Assert.Equal("", emptyStr.Value);
 
         // Empty array
-        var emptyArr = (ToonArray)obj["emptyArray"];
-        Assert.Equal(0, emptyArr.Items.Count);
+        var emptyArr = (ToonArray)obj["emptyArray"]!;
+        Assert.Empty(emptyArr.Items);
 
         // Empty object
-        var emptyObj = (ToonObject)obj["emptyObject"];
-        Assert.Equal(0, emptyObj.Properties.Count);
+        var emptyObj = (ToonObject)obj["emptyObject"]!;
+        Assert.Empty(emptyObj.Properties);
     }
 
     /// <summary>
@@ -569,9 +569,9 @@ veryLarge: 999999999999999";
         var doc = ParseToon(toonString);
         var obj = (ToonObject)doc.Root;
 
-        Assert.Equal(1000000000, ((ToonNumber)obj["billion"]).Value);
-        Assert.Equal(1000000000000, ((ToonNumber)obj["trillion"]).Value);
-        Assert.Equal(0.000000000001, ((ToonNumber)obj["smallDecimal"]).Value);
+        Assert.Equal(1000000000, ((ToonNumber)obj["billion"]!).Value);
+        Assert.Equal(1000000000000, ((ToonNumber)obj["trillion"]!).Value);
+        Assert.Equal(0.000000000001, ((ToonNumber)obj["smallDecimal"]!).Value);
     }
 
     /// <summary>
@@ -594,16 +594,16 @@ url: ""https://example.com/path?query=value""";
         var reparsed_obj = (ToonObject)reparsed.Root;
 
         // Check string values directly
-        var originalPath = ((ToonString)original["path"]).Value;
-        var reparesedPath = ((ToonString)reparsed_obj["path"]).Value;
+        var originalPath = ((ToonString)original["path"]!).Value;
+        var reparesedPath = ((ToonString)reparsed_obj["path"]!).Value;
         Assert.Equal(originalPath, reparesedPath);
 
-        var originalEmail = ((ToonString)original["email"]).Value;
-        var reparesedEmail = ((ToonString)reparsed_obj["email"]).Value;
+        var originalEmail = ((ToonString)original["email"]!).Value;
+        var reparesedEmail = ((ToonString)reparsed_obj["email"]!).Value;
         Assert.Equal(originalEmail, reparesedEmail);
 
-        var originalUrl = ((ToonString)original["url"]).Value;
-        var reparesedUrl = ((ToonString)reparsed_obj["url"]).Value;
+        var originalUrl = ((ToonString)original["url"]!).Value;
+        var reparesedUrl = ((ToonString)reparsed_obj["url"]!).Value;
         Assert.Equal(originalUrl, reparesedUrl);
     }
 }
