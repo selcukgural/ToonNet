@@ -86,7 +86,7 @@ public sealed class ToonNetServiceCollectionExtensionsTests
         var configuration = new ConfigurationBuilder()
                             .AddInMemoryCollection(new Dictionary<string, string?>
                             {
-                                ["ToonNet:ToonOptions:IndentSize"] = "3" // Must be even per TOON specification.
+                                ["ToonNet:ToonOptions:IndentSize"] = "0" // Must be a positive number of spaces.
                             })
                             .Build();
 

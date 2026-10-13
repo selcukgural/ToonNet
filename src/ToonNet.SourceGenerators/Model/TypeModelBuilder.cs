@@ -47,6 +47,16 @@ internal static class TypeModelBuilder
             diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.NoProperties, location, type.Name));
         }
 
+        foreach (var property in properties)
+        {
+            if (FindAttribute(property, "ToonPropertyAttribute") is { ConstructorArguments.Length: > 0 } nameAttribute &&
+                nameAttribute.ConstructorArguments[0].Value is string name && Shared.ToonKeys.HasUnpairedSurrogate(name))
+            {
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.InvalidPropertyName, location, property.Name));
+                return Empty(type, diagnostics);
+            }
+        }
+
         var canUseUnsafeAccessor = !IsGeneric(type) &&
                                    compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.UnsafeAccessorAttribute") != null;
 

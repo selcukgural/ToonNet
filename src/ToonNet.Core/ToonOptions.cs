@@ -14,18 +14,11 @@ public sealed class ToonOptions : IValidatableObject
     private const int ExtendedMaxDepth = 1000;
 
     /// <summary>
-    ///     Gets or sets the number of spaces per indentation level.
-    ///     Must be an even number between 2 and 100 per TOON specification §12.
-    ///     The default value is 2.
+    ///     Gets or sets the number of spaces per indentation level (the spec's <c>indentSize</c>, a fixed positive
+    ///     number, §1.3 and §12), between 1 and 100. The default value is 2.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">
-    ///     Thrown when the value is less than 2, greater than 100, or not an even number.
-    /// </exception>
-    /// <remarks>
-    ///     TOON specification §12 requires indentation to be a multiple of 2 spaces.
-    ///     The recommended value is 2 for consistency with the specification.
-    /// </remarks>
-    [Range(2, 100)]
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is less than 1 or greater than 100.</exception>
+    [Range(1, 100)]
     public int IndentSize
     {
         get => _indentSize;
@@ -34,25 +27,16 @@ public sealed class ToonOptions : IValidatableObject
             switch (value)
             {
                 // Check range first (more specific error messages)
-                case < 2:
+                case < 1:
                     throw new ArgumentOutOfRangeException(
                         nameof(value),
                         value,
-                        "IndentSize must be at least 2 per TOON specification §12");
+                        "IndentSize must be a positive number of spaces per TOON specification §1.3");
                 case > 100:
                     throw new ArgumentOutOfRangeException(
                         nameof(value),
                         value,
                         "IndentSize cannot exceed 100 for readability and performance");
-            }
-
-            // Then check if even (spec requirement)
-            if (value % 2 != 0)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(value),
-                    value,
-                    "IndentSize must be an even number (2, 4, 6, ...) per TOON specification §12");
             }
 
             _indentSize = value;
@@ -152,13 +136,6 @@ public sealed class ToonOptions : IValidatableObject
     /// <returns>A sequence of validation results.</returns>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (IndentSize % 2 != 0)
-        {
-            yield return new ValidationResult(
-                "IndentSize must be an even number (2, 4, 6, ...) per TOON specification §12",
-                [nameof(IndentSize)]);
-        }
-
         var maxAllowed = AllowExtendedLimits ? 1000 : 200;
         if (MaxDepth > maxAllowed)
         {

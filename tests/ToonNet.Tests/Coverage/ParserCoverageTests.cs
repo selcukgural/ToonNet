@@ -178,6 +178,41 @@ public class ParserCoverageTests
     }
 
     [Fact]
+    public async Task MultiDocumentFiles_SplitLinesAtLfOnly_AndRejectIllFormedUtf8()
+    {
+        var path = Path.GetTempFileName();
+
+        try
+        {
+            // A CR inside a quoted value is content (spec 4.4 §12); a CR before LF ends the line
+            await File.WriteAllTextAsync(path, "a: \"x\ry\"\r\n\r\nb: 1\n");
+            var documents = new List<Dictionary<string, object?>?>();
+
+            await foreach (var document in ToonNet.Core.Serialization.ToonSerializer.DeserializeStreamAsync<Dictionary<string, object?>>(path))
+            {
+                documents.Add(document);
+            }
+
+            Assert.Equal(2, documents.Count);
+            Assert.Equal("x\ry", documents[0]!["a"]);
+            Assert.Equal(1L, Convert.ToInt64(documents[1]!["b"]));
+
+            await File.WriteAllBytesAsync(path, [(byte)'a', (byte)':', (byte)' ', 0xC3, 0x28]);
+
+            await Assert.ThrowsAsync<ToonParseException>(async () =>
+            {
+                await foreach (var _ in ToonNet.Core.Serialization.ToonSerializer.DeserializeStreamAsync<Dictionary<string, object?>>(path))
+                {
+                }
+            });
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void CrLfLineEndings_AreAccepted()
     {
         var obj = new ToonParser().Parse("a: 1\r\nb[2]: x,y\r\n").AsObject();

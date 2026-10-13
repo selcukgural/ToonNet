@@ -150,6 +150,21 @@ public partial class ParcelDepot
 }
 
 /// <summary>
+///     "Item" and "item" share a name under the camelCase, snake_case and lowercase policies; the tree then keeps the
+///     object, so the type can be a keyed tabular object although it has an int property.
+/// </summary>
+[ToonSerializable]
+public partial class CaseShadow
+{
+    public int Item { get; set; }
+
+    // ReSharper disable once InconsistentNaming
+    public BoxSize? item { get; set; }
+
+    public BoxSize? Other { get; set; }
+}
+
+/// <summary>
 /// ToonSerializer writes [ToonSerializable] types with their generated field writers; the text must match the
 /// generated tree and the reflection-based writer for every option combination, without falling back.
 /// </summary>
@@ -260,6 +275,19 @@ public class GeneratedWriterTests
         AssertSameText(partial, ParcelDepot.Serialize);
         AssertSameText(new List<ParcelDepot> { full, partial });
         AssertSameText(new List<BoxedParcel> { new() { Code = "x" }, new() { Code = "y" } });
+
+        // Names shared under a policy: written like the tree (the text cannot be read back into the int property)
+        foreach (var options in OptionVariants())
+        {
+            var shadow = new CaseShadow { Item = 1, item = Size(2, 3), Other = Size(4, 5) };
+            var tree = new ToonEncoder(options.ToonOptions).Encode(CaseShadow.Serialize(shadow, options));
+
+            Assert.Equal(tree, ToonSerializer.Serialize(shadow, options));
+            Assert.Equal(ToonSerializer.Serialize(shadow, ReflectionOnly.Options(options)), ToonSerializer.Serialize(shadow, options));
+        }
+
+        Assert.StartsWith("[2:]{width,height}:", ToonSerializer.Serialize(new CaseShadow { Item = 1, item = Size(2, 3), Other = Size(4, 5) },
+                                                                          new ToonSerializerOptions { PropertyNamingPolicy = PropertyNamingPolicy.CamelCase }));
 
         var treeShapes = ToonSerializer.DirectWriteTreeShapes;
         Assert.Contains("Parcels[2]{Code,Box{Width,Height},Inner{Width,Height}}:", ToonSerializer.Serialize(full));

@@ -833,16 +833,17 @@ public static partial class ToonSerializer
         ValidateSeparator(multiDocumentOptions.Mode, multiDocumentOptions.DocumentSeparator);
 
         var currentObject = new StringBuilder();
+        var lines = new ToonLineReader(reader);
 
-        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        while (await lines.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            // A blank line has nothing but spaces (spec §12); tabs and other characters are content
             var isBoundary = multiDocumentOptions.Mode switch
             {
-                ToonMultiDocumentSeparatorMode.BlankLine         => string.IsNullOrWhiteSpace(line),
                 ToonMultiDocumentSeparatorMode.ExplicitSeparator => line == multiDocumentOptions.DocumentSeparator,
-                _                                                => string.IsNullOrWhiteSpace(line)
+                _                                                => line.AsSpan().TrimEnd(' ').IsEmpty
             };
 
             if (isBoundary)
@@ -861,7 +862,7 @@ public static partial class ToonSerializer
                 continue;
             }
 
-            currentObject.AppendLine(line);
+            currentObject.Append(line).Append('\n');
         }
 
         if (currentObject.Length <= 0)
@@ -872,6 +873,84 @@ public static partial class ToonSerializer
         var lastToonString = currentObject.ToString();
         var lastObj = await DeserializeAsync<T>(lastToonString, options, cancellationToken).ConfigureAwait(false);
         yield return lastObj;
+    }
+
+    /// <summary>
+    ///     Reads TOON lines from a <see cref="StreamReader"/>: lines end at LF only and a CR before it is removed, so a
+    ///     CR anywhere else is content, as spec §12 says (<see cref="StreamReader.ReadLineAsync()"/> also splits at a
+    ///     lone CR).
+    /// </summary>
+    private sealed class ToonLineReader(StreamReader reader)
+    {
+        private readonly char[] _buffer = new char[4096];
+        private readonly StringBuilder _line = new();
+        private int _start;
+        private int _end;
+
+        /// <summary>Returns the next line, or null at the end of the input.</summary>
+        /// <exception cref="ToonParseException">Thrown when the input is not valid UTF-8.</exception>
+        public async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            _line.Clear();
+
+            while (true)
+            {
+                if (_start == _end)
+                {
+                    int read;
+
+                    try
+                    {
+                        read = await reader.ReadAsync(_buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (DecoderFallbackException ex)
+                    {
+                        throw ToonTextEncoding.InvalidUtf8(ex);
+                    }
+
+                    if (read == 0)
+                    {
+                        return _line.Length > 0 ? Finish() : null;
+                    }
+
+                    _start = 0;
+                    _end = read;
+                }
+
+                if (TakeLine())
+                {
+                    return Finish();
+                }
+            }
+        }
+
+        /// <summary>Moves buffered text to the line; returns whether it reached the end of the line.</summary>
+        private bool TakeLine()
+        {
+            var text = _buffer.AsSpan(_start, _end - _start);
+            var newline = text.IndexOf('\n');
+
+            if (newline < 0)
+            {
+                _line.Append(text);
+                _start = _end;
+                return false;
+            }
+
+            _line.Append(text[..newline]);
+            _start += newline + 1;
+            return true;
+        }
+
+        private string Finish()
+        {
+            if (_line.Length > 0 && _line[^1] == '\r')
+            {
+                _line.Length--;
+            }
+
+            return _line.ToString();
+        }
     }
 
     /// <summary>

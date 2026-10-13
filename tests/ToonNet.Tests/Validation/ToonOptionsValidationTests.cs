@@ -13,7 +13,6 @@ public class ToonOptionsValidationTests
     [InlineData(-10)]
     [InlineData(-1)]
     [InlineData(0)]
-    [InlineData(1)]
     public void IndentSize_BelowMinimum_ThrowsArgumentOutOfRangeException(int value)
     {
         // Arrange
@@ -21,25 +20,23 @@ public class ToonOptionsValidationTests
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => options.IndentSize = value);
-        Assert.Contains("IndentSize must be at least 2", ex.Message);
+        Assert.Contains("IndentSize must be a positive number of spaces", ex.Message);
         Assert.Equal(nameof(value), ex.ParamName);
     }
 
     [Theory]
+    [InlineData(1)]
     [InlineData(3)]
-    [InlineData(5)]
-    [InlineData(7)]
     [InlineData(99)]
-    public void IndentSize_OddNumber_ThrowsArgumentOutOfRangeException(int value)
+    public void IndentSize_OddNumber_IsAllowed(int value)
     {
-        // Arrange
-        var options = new ToonOptions();
+        // The indent size is any fixed positive number of spaces (spec 4.4 §1.3)
+        var options = new ToonOptions { IndentSize = value };
+        var toon = new ToonNet.Core.Encoding.ToonEncoder(options).Encode(new ToonNet.Core.Models.ToonDocument(
+            new ToonNet.Core.Models.ToonObject { ["a"] = new ToonNet.Core.Models.ToonObject { ["b"] = new ToonNet.Core.Models.ToonNumber(1) } }));
 
-        // Act & Assert
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => options.IndentSize = value);
-        Assert.Contains("must be an even number", ex.Message);
-        Assert.Contains("TOON specification §12", ex.Message);
-        Assert.Equal(nameof(value), ex.ParamName);
+        Assert.Equal("a:\n" + new string(' ', value) + "b: 1", toon);
+        Assert.Equal(1, ((ToonNet.Core.Models.ToonNumber)((ToonNet.Core.Models.ToonObject)ToonNet.Core.Models.ToonDocument.Parse(toon, options).AsObject()["a"]!)["b"]!).Value);
     }
 
     [Theory]
@@ -347,7 +344,7 @@ public class ToonOptionsValidationTests
         var options = new ToonOptions { IndentSize = 4 };
 
         // Act & Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => options.IndentSize = 3);
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.IndentSize = 0);
         Assert.Equal(4, options.IndentSize); // Value should remain unchanged
     }
 

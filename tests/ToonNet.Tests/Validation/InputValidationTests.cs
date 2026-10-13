@@ -128,7 +128,7 @@ public class InputValidationTests
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
-            var options = new ToonOptions { IndentSize = 1 };
+            var options = new ToonOptions { IndentSize = 0 };
         });
     }
 

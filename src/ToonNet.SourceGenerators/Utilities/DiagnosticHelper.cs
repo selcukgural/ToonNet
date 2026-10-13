@@ -57,6 +57,13 @@ internal static class DiagnosticHelper
                                                                                    Category, DiagnosticSeverity.Error, true);
 
     /// <summary>
+    /// Error: a <c>[ToonProperty]</c> name contains an unpaired surrogate, which TOON cannot represent (spec §3).
+    /// </summary>
+    public static readonly DiagnosticDescriptor InvalidPropertyName = new("TOON008", "Invalid serialized property name",
+                                                                          "The [ToonProperty] name of '{0}' contains an unpaired surrogate, which TOON cannot represent",
+                                                                          Category, DiagnosticSeverity.Error, true);
+
+    /// <summary>
     /// Looks up a descriptor by id (used when replaying diagnostics stored in the generator model).
     /// </summary>
     public static DiagnosticDescriptor Get(string id) => id switch
@@ -66,6 +73,7 @@ internal static class DiagnosticHelper
         "TOON005" => NoPublicConstructor,
         "TOON006" => ReflectionFallback,
         "TOON007" => ReflectionFallbackNotAllowed,
+        "TOON008" => InvalidPropertyName,
         _         => GenerationError
     };
 }

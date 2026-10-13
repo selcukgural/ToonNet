@@ -11,6 +11,27 @@ internal static class ToonKeys
     private const string HexDigits = "0123456789abcdef";
 
     /// <summary>
+    ///     Whether <paramref name="text"/> holds a surrogate that is not part of a pair, which TOON cannot represent
+    ///     (spec §3).
+    /// </summary>
+    public static bool HasUnpairedSurrogate(string text)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                i++;
+            }
+            else if (char.IsSurrogate(text[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     ///     Whether a key can be written without quotes: it matches <c>^[A-Za-z_][A-Za-z0-9_.]*$</c>.
     /// </summary>
     public static bool IsSafeUnquoted(string key)

@@ -668,16 +668,19 @@ internal sealed class SourceEmitter
         code.AppendLine(HiddenAttribute);
         code.BeginBlock($"public static bool __ToonMayBeKeyed({model.FullyQualifiedName} value, {Writer} writer)");
 
-        if (model.Properties.Items.Any(p => !p.IsReadOnly && p.ConverterTypeName == null && IsWrittenAsPrimitive(p.Plan) && !p.Plan.CanBeNull))
+        if (duplicates == "true")
         {
-            code.AppendLine("return false;");
+            code.AppendLine("return true; // the tree decides");
             code.EndBlock();
             return;
         }
 
-        if (duplicates == "true")
+        var alwaysPrimitive = model.Properties.Items.Any(p => !p.IsReadOnly && p.ConverterTypeName == null && IsWrittenAsPrimitive(p.Plan) &&
+                                                               !p.Plan.CanBeNull);
+
+        if (alwaysPrimitive && duplicates == null)
         {
-            code.AppendLine("return true; // the tree decides");
+            code.AppendLine("return false;");
             code.EndBlock();
             return;
         }
@@ -686,8 +689,16 @@ internal sealed class SourceEmitter
 
         if (duplicates != null)
         {
+            // Properties sharing a name replace each other in the tree, so only the tree knows then
             EmitPolicyLocal();
             code.AppendLine($"if ({duplicates}) return true;");
+
+            if (alwaysPrimitive)
+            {
+                code.AppendLine("return false;");
+                code.EndBlock();
+                return;
+            }
         }
 
         code.AppendLine("var __objects = 0;");

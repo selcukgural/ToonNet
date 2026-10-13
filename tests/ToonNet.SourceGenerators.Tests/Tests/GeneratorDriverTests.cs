@@ -171,6 +171,21 @@ public class GeneratorDriverTests
     }
 
     [Fact]
+    public void PropertyNameWithUnpairedSurrogate_ReportsToon008()
+    {
+        // TOON cannot represent a lone surrogate (spec 4.4 §3); the name is encoded at compile time, so it is an error there
+        var (diagnostics, _, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            [ToonSerializable]
+            public partial class BadName { [ToonProperty("a\uD800")] public int X { get; set; } }
+            """);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("TOON008", diagnostic.Id);
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
     public void AllowReflectionFallbackFalse_ReportsToon007()
     {
         var (diagnostics, _, _) = Run("""
