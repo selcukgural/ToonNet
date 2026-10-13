@@ -255,6 +255,16 @@ public sealed class ToonNumber : ToonValue
     }
 
     /// <summary>
+    ///     A number parsed from text: <paramref name="value"/> is the double closest to the text (the cast from
+    ///     <see cref="decimal"/> is not correctly rounded, so it is not derived from <paramref name="exact"/>).
+    /// </summary>
+    internal ToonNumber(decimal exact, double value)
+    {
+        Value = value;
+        DecimalValue = exact;
+    }
+
+    /// <summary>
     ///     Gets the numeric value as a <see cref="double"/>.
     /// </summary>
     public double Value { get; }

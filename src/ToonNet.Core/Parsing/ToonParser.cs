@@ -1734,12 +1734,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return null;
         }
 
-        return hasExact ? new ToonNumber(exact) : new ToonNumber(value) { ParsedText = token.ToString() };
+        return hasExact ? new ToonNumber(exact, value) : new ToonNumber(value) { ParsedText = token.ToString() };
     }
 
     /// <summary>
     ///     Parses a number token like <see cref="TryParseNumber"/> without creating a <see cref="ToonNumber"/>: the
-    ///     number's <see cref="ToonNumber.Value"/> is <c>hasExact ? (double)exact : value</c> and its
+    ///     number's <see cref="ToonNumber.Value"/> is <paramref name="value"/> (the double closest to the text) and its
     ///     <see cref="ToonNumber.DecimalValue"/> is <paramref name="exact"/> when <paramref name="hasExact"/>.
     /// </summary>
     internal static bool TryParseNumberParts(ReadOnlySpan<char> token, out double value, out decimal exact, out bool hasExact)
@@ -1759,6 +1759,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             long.TryParse(token, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var integer))
         {
             exact = integer;
+            value = integer; // the conversion from long rounds to the nearest double, as parsing the text does
             hasExact = true;
             return true;
         }

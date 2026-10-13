@@ -140,6 +140,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core:** Some doubles did not read back exactly: a number that also fits a `decimal` took its `double` value
+  from the `decimal` (a conversion that is not correctly rounded), so `3.8000000000000003` was read as `3.8`.
+  `ToonNumber.Value` of a parsed number is now the double closest to its text, on every path (`Deserialize`,
+  `ToonDocument`, generated code, the JSON and YAML converters); `DecimalValue` still holds the exact value.
 - **ToonNet.Core:** `Int128` and `UInt128` values beyond the `decimal` range (written as quoted text) could not be read
   back: the parsed value was boxed as a `BigInteger`, and setting the property threw an `InvalidCastException`.
 - **ToonNet.SourceGenerators:** For an undefined `PropertyNamingPolicy` value (for example `(PropertyNamingPolicy)42`),

@@ -639,7 +639,7 @@ public static partial class ToonSerializer
             return false;
         }
 
-        var asDouble = isExact ? (double)decimalValue : parsed;
+        var asDouble = parsed; // the double closest to the text, as ToonNumber.Value
 
         if (typeof(T) == typeof(double) || typeof(T) == typeof(double?))
         {
