@@ -26,7 +26,7 @@ public static class ToonSourceGenerationHelpers
     public static void Register<T>(Func<T, ToonSerializerOptions, int, ToonValue> serialize,
                                    Func<ToonValue, ToonSerializerOptions, int, T>? deserialize)
     {
-        ToonSerializer.RegisterGenerated(serialize, deserialize, null);
+        ToonSerializer.RegisterGenerated(serialize, deserialize, null, null);
     }
 
     /// <summary>
@@ -40,7 +40,23 @@ public static class ToonSourceGenerationHelpers
                                    Func<ToonValue, ToonSerializerOptions, int, T>? deserialize,
                                    ToonObjectWriter<T>? writer)
     {
-        ToonSerializer.RegisterGenerated(serialize, deserialize, writer);
+        ToonSerializer.RegisterGenerated(serialize, deserialize, writer, null);
+    }
+
+    /// <summary>
+    ///     Registers the generated methods of <typeparamref name="T"/> with the generated writer and reader that write
+    ///     and read its objects straight from text.
+    /// </summary>
+    /// <param name="serialize">The generated <c>__ToonSerializeValue</c> method.</param>
+    /// <param name="deserialize">The generated <c>__ToonDeserializeValue</c> method, or null when there is none.</param>
+    /// <param name="writer">The generated writer, or null when there is none.</param>
+    /// <param name="reader">The generated reader, or null when there is none.</param>
+    public static void Register<T>(Func<T, ToonSerializerOptions, int, ToonValue> serialize,
+                                   Func<ToonValue, ToonSerializerOptions, int, T>? deserialize,
+                                   ToonObjectWriter<T>? writer,
+                                   ToonObjectReader<T>? reader)
+    {
+        ToonSerializer.RegisterGenerated(serialize, deserialize, writer, reader);
     }
 
     /// <summary>

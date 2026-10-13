@@ -49,9 +49,10 @@ the JSON/YAML helpers) convert the type without reflection. This applies to non-
 their assembly; generic types and `private` or `protected` nested types are still converted with reflection. It needs
 `ToonNet.Core` and `ToonNet.SourceGenerators` of the same release.
 
-For serialization each type also gets a field writer that `ToonSerializer` uses to write its objects straight to TOON
-text, without building `ToonValue` objects: keys are encoded at compile time, primitives and enum names are written
-without boxing, and collections of primitives inline. The static `Serialize` method still returns a `ToonDocument`.
+Each type also gets a field writer and a text reader that `ToonSerializer` uses to write and read its objects straight
+from TOON text, without building `ToonValue` objects: keys are encoded and matched at compile time, primitives and
+enum names are written without boxing, and values are read into typed locals. The static `Serialize` and
+`Deserialize` methods still work with a `ToonDocument`.
 
 The library itself is not yet annotated for trimming or Native AOT, so the generator makes no AOT guarantee, and it
 makes no zero-allocation promise.

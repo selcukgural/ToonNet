@@ -1,5 +1,6 @@
 using ToonNet.Core;
 using ToonNet.Core.Encoding;
+using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
 
@@ -133,7 +134,7 @@ public class GeneratedWriterTests
         yield return new ToonSerializerOptions { ToonOptions = new ToonOptions { Delimiter = '|', IndentSize = 4 } };
     }
 
-    private static void AssertSameText<T>(T value, Func<T, ToonSerializerOptions?, ToonNet.Core.Models.ToonDocument>? generatedTree = null)
+    private static void AssertSameText<T>(T value, Func<T, ToonSerializerOptions?, ToonDocument>? generatedTree = null)
     {
         foreach (var options in OptionVariants())
         {
@@ -151,6 +152,15 @@ public class GeneratedWriterTests
                 var tree = new ToonEncoder(options.ToonOptions).Encode(generatedTree(value, options));
                 Assert.True(tree == direct, $"generated tree differs ({variant}):\n{tree}\n---\n{direct}");
             }
+
+            // Reading the text back: the generated text readers give the object the generated tree readers give
+            var readFallbacks = ToonSerializer.DirectReadFallbacks;
+            var read = ToonSerializer.Deserialize<T>(direct, options);
+            Assert.True(readFallbacks == ToonSerializer.DirectReadFallbacks, $"reading fell back ({variant})");
+
+            var treeRead = ToonSerializer.DeserializeFromValue<T>(ToonDocument.Parse(direct, options.ToonOptions).Root, options);
+            Assert.Equivalent(treeRead, read, strict: true);
+            Assert.Equal(ToonSerializer.Serialize(treeRead, options), ToonSerializer.Serialize(read, options));
         }
     }
 

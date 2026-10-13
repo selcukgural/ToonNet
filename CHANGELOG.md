@@ -85,7 +85,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-generic collections are built as a tree for that value. Documents whose keys are not in property order (or
   repeat), options with converters, and every error take the tree-based path, so results, exceptions and messages
   are unchanged. Deserializing 10,000 objects with the reflection-based path takes 18 ms instead of 41 ms (nested)
-  and 4 ms instead of 7 ms (flat rows), allocating 55-70% less.
+  and 4 ms instead of 7 ms (flat rows), allocating 55-70% less. Strings, numbers, booleans, dates, times, `Guid` and
+  enums are read from their tokens without allocating.
+- **ToonNet.SourceGenerators:** Generated code reads `[ToonSerializable]` objects straight from the text too: each type
+  with a usable constructor gets a text reader (keys matched with a compile-time switch per naming policy, values read
+  into typed locals, nested generated types and collections through their own text readers), registered with
+  `ToonSerializer` through a hidden `ToonObjectReader<T>`. It builds the same object as the generated tree reader.
+  Deserializing 10,000 objects with generated code takes 14 ms instead of 26 ms (nested) and 3.6 ms instead of 5.5 ms
+  (flat rows). Hidden public types for generated code: `ToonReader`, `ToonReaderValue`, `ToonReaderObject`,
+  `ToonReaderArray`, `ToonObjectReader<T>`, and a `ToonSourceGenerationHelpers.Register` overload.
 - **ToonNet.SourceGenerators:** Generated code writes `[ToonSerializable]` objects straight to TOON text as well: each
   type gets a field writer (keys encoded at compile time, primitives written typed, nested sealed types and structs
   called directly) and tabular-row methods, registered with `ToonSerializer` through a hidden `ToonObjectWriter<T>`.

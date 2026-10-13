@@ -225,7 +225,7 @@ public class GeneratorDriverTests
 
         var registered = LastGeneratedSources.Where(s => s.Contains("[global::System.Runtime.CompilerServices.ModuleInitializer]")).ToList();
         Assert.Equal(2, registered.Count);
-        Assert.Contains(registered, s => s.Contains("Register<global::App.Visible>(__ToonSerializeValue, __ToonDeserializeValue, new __ToonObjectWriter())"));
+        Assert.Contains(registered, s => s.Contains("Register<global::App.Visible>(__ToonSerializeValue, __ToonDeserializeValue, new __ToonObjectWriter(), new __ToonObjectReader())"));
         Assert.Contains(registered, s => s.Contains("Register<global::App.Outer.Nested>("));
     }
 

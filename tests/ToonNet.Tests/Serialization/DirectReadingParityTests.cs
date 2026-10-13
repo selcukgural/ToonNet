@@ -83,6 +83,13 @@ public class DirectReadingParityTests
         AssertParity<Dictionary<string, object?>>("a: 1\nb[2]: x,y\nc:\n  d: true");
         AssertParity<Primitives>("C: x\nH: 0.5\nBig: 123456789012345678901234567890\nWide: 5\nDay: 2026-10-13\nLink: https://a.b");
 
+        // Dates, times, Guid and enums are read from their tokens: quoted, unquoted, escaped and odd forms
+        AssertParity<Primitives>("Day: 2026-10-13\nTime: \"01:02:03.004\"\nSpan: 1.06:00:00\nOffset: \"2026-10-13T01:02:03+03:00\"\n" +
+                                 "Id: C56A4180-65AA-42EC-A945-5FD21DEC0538\nMaybeColor: GREEN");
+        AssertParity<Primitives>("Time: \"01:0\\u0032\"\nMaybeColor: \"1\"");
+        AssertParity<Row>("Color: \" red \"\nWhen: \"2026-01-01\"");
+        AssertParity<List<Color?>>("[4]: Red,green,1,null");
+
         var lenient = new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } };
         AssertParity<List<Address>>("[5]{City,Zip}:\n  a\n  b,c,extra", lenient);
         AssertParity<Person>("Name: x\nTags:\n  - a\n  - b", lenient);
@@ -114,6 +121,10 @@ public class DirectReadingParityTests
     [InlineData("Tags[1]: \"unterminated")]
     [InlineData("Scores:\n  a: x")]
     [InlineData("Name: x\nUnknown: \"bad \\q escape\"")]
+    [InlineData("When: not-a-date")]
+    [InlineData("When: 2026")]
+    [InlineData("Color: Purple")]
+    [InlineData("Color: 1.5")]
     public void Errors_MatchTheTreeBasedPath(string toon)
     {
         var tree = Record.Exception(() =>
@@ -131,6 +142,8 @@ public class DirectReadingParityTests
     public class Combined
     {
         public int Id { get; set; }
+        public DateTime When { get; set; }
+        public Color Color { get; set; }
         public string? Name { get; set; }
         public List<Address> Places { get; set; } = [];
         public string[] Tags { get; set; } = [];

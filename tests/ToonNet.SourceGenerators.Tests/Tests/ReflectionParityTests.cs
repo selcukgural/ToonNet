@@ -29,6 +29,13 @@ public class ReflectionParityTests
         var readBack = deserialize(ToonDocument.Parse(reflection, options?.ToonOptions), options);
         Assert.Equal(reflection, ToonSerializer.Serialize(readBack, ReflectionOnly.Options(options)));
 
+        // ToonSerializer reads the type with its generated text reader, straight from the text
+        var readFallbacks = ToonSerializer.DirectReadFallbacks;
+        var direct = ToonSerializer.Deserialize<T>(reflection, options);
+        Assert.Equal(readFallbacks, ToonSerializer.DirectReadFallbacks);
+        Assert.Equal(reflection, ToonSerializer.Serialize(direct, ReflectionOnly.Options(options)));
+        Assert.Equivalent(readBack, direct, strict: true);
+
         return generated;
     }
 

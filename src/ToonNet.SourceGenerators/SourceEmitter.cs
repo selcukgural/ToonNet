@@ -31,6 +31,8 @@ internal sealed class SourceEmitter
     private readonly Dictionary<string, int> _readerIds = new(StringComparer.Ordinal);
     private readonly List<(int Id, ValuePlan Plan)> _writers = [];
     private readonly List<(int Id, ValuePlan Plan)> _readers = [];
+    private readonly Dictionary<string, int> _textReaderIds = new(StringComparer.Ordinal);
+    private readonly List<(int Id, ValuePlan Plan)> _textReaders = [];
     private int _variable;
 
     private SourceEmitter(TypeModel model) => _model = model;
@@ -80,6 +82,12 @@ internal sealed class SourceEmitter
         {
             code.AppendLine();
             EmitDeserialize(_model.Constructor);
+
+            if (EmitsTextReader)
+            {
+                EmitTextReader(_model.Constructor);
+            }
+
             EmitAccessors();
         }
 
@@ -127,7 +135,9 @@ internal sealed class SourceEmitter
         }
 
         var deserialize = _model.Constructor != null ? "__ToonDeserializeValue" : "null";
-        var writer = EmitsFieldWriter ? ", new __ToonObjectWriter()" : "";
+        var writer = EmitsFieldWriter || EmitsTextReader
+            ? $", {(EmitsFieldWriter ? "new __ToonObjectWriter()" : "null")}, {(EmitsTextReader ? "new __ToonObjectReader()" : "null")}"
+            : "";
 
         _code.AppendLine("/// <summary>Registers the generated methods with ToonSerializer.</summary>");
         _code.AppendLine("#pragma warning disable CA2255 // Registration has to run before ToonSerializer sees the type");
@@ -301,11 +311,24 @@ internal sealed class SourceEmitter
         code.AppendLine("var options = writer.SerializerOptions;");
         EmitPolicyLocal();
 
+        // Properties sharing a name: the tree keeps the last value, so write what it builds
+        var treeFields = $"return writer.WriteTreeFields(({Models}ToonObject)__ToonSerializeValue(value, options, depth), lineDepth, childDepth, firstOnCurrentLine);";
+
+        if (duplicates == "true")
+        {
+            code.AppendLine(treeFields);
+            code.EndBlock();
+            EmitRowShape(duplicates);
+            EmitWriteRow();
+            EmitGetName();
+            EmitObjectWriterClass();
+            return;
+        }
+
         if (duplicates != null)
         {
-            // Properties sharing a name: the tree keeps the last value, so write what it builds
             code.BeginBlock($"if ({duplicates})");
-            code.AppendLine($"return writer.WriteTreeFields(({Models}ToonObject)__ToonSerializeValue(value, options, depth), lineDepth, childDepth, firstOnCurrentLine);");
+            code.AppendLine(treeFields);
             code.EndBlock();
         }
 
@@ -518,6 +541,13 @@ internal sealed class SourceEmitter
         code.BeginBlock($"public static {RowShape} __ToonGetRowShape({model.FullyQualifiedName} value, {Writer} writer, global::System.Span<bool> columns)");
         code.AppendLine("var options = writer.SerializerOptions;");
 
+        if (duplicates == "true")
+        {
+            code.AppendLine($"return {RowShape}.Unknown;");
+            code.EndBlock();
+            return;
+        }
+
         if (duplicates != null)
         {
             EmitPolicyLocal();
@@ -687,6 +717,321 @@ internal sealed class SourceEmitter
 
     #endregion
 
+    #region Reading from text
+
+    private const string Reader = Serialization + "ToonReader";
+    private const string ReaderValue = Serialization + "ToonReaderValue";
+
+    /// <summary>Types with a type-level converter are always read through it, so they get no text reader.</summary>
+    private bool EmitsTextReader => !_model.HasTypeConverter && _model.Constructor != null;
+
+    /// <summary>
+    /// Emits <c>__ToonReadObject</c>, which reads an object straight from TOON text with the result of
+    /// <c>__ToonDeserializeValue</c>: values are read into locals in document order and assigned in property order
+    /// after construction. Values it does not read itself go to <c>ToonReader.ReadValue</c>.
+    /// </summary>
+    private void EmitTextReader(ConstructorModel constructor)
+    {
+        var code = _code;
+        var model = _model;
+        var type = model.FullyQualifiedName;
+        var slots = ReadSlots(constructor);
+        var duplicates = ReadSlotDuplicates(slots);
+
+        code.AppendLine();
+        code.AppendLine("/// <summary>Used by generated code and ToonSerializer; call <c>Deserialize</c> instead.</summary>");
+        code.AppendLine(HiddenAttribute);
+        code.BeginBlock($"public static {type} __ToonReadObject({Reader} reader, in {ReaderValue} value, int depth)");
+        code.AppendLine("var options = reader.Options;");
+        code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
+        code.AppendLine("// Non-object values are handled (or reported) like the tree: by ToonSerializer");
+        code.AppendLine("if (!reader.IsObject(in value)) return __ToonDeserializeValue(reader.BuildTree(in value), options, depth);");
+        EmitPolicyLocal();
+
+        // Keys shared by several members are read once per member by the tree
+        const string treeRead = "return __ToonDeserializeValue(reader.BuildTree(in value), options, depth);";
+
+        if (duplicates == "true")
+        {
+            code.AppendLine(treeRead);
+            code.EndBlock();
+            EmitObjectReaderClass();
+            return;
+        }
+
+        if (duplicates != null)
+        {
+            code.AppendLine($"if ({duplicates}) {treeRead}");
+        }
+
+        var arguments = new List<string>();
+
+        for (var j = 0; j < constructor.Parameters.Length; j++)
+        {
+            var parameter = constructor.Parameters[j];
+            code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue};");
+            code.AppendLine($"var __ha{j} = false;");
+            arguments.Add($"__a{j}");
+        }
+
+        for (var i = 0; i < model.Properties.Length; i++)
+        {
+            var property = model.Properties[i];
+
+            if (property.Write != WriteKind.None)
+            {
+                code.AppendLine($"{property.TypeName} __p{i} = default!;");
+                code.AppendLine($"var __h{i} = false;");
+            }
+        }
+
+        code.AppendLine("var __fields = reader.BeginObject(in value);");
+        code.BeginBlock("while (reader.NextProperty(ref __fields, out var __key, out var __v))");
+        code.BeginBlock(model.FixedNamingPolicy != null || slots.All(slot => slot.Names.Distinct().Count() == 1)
+                            ? "switch (__ToonSlot(__key))"
+                            : "switch (__ToonSlot(__key, __policy))");
+
+        for (var s = 0; s < slots.Count; s++)
+        {
+            var slot = slots[s];
+            var flag = slot.Parameter >= 0 ? $"__ha{slot.Parameter}" : $"__h{slot.Property}";
+            var local = slot.Parameter >= 0 ? $"__a{slot.Parameter}" : $"__p{slot.Property}";
+
+            code.AppendLine($"case {s}:");
+            code.IncrementIndent();
+            code.AppendLine($"if ({flag}) reader.Fallback(); // a repeated key keeps the last value in the tree");
+            code.AppendLine($"{local} = {slot.Read};");
+            code.AppendLine($"{flag} = true;");
+            code.AppendLine("break;");
+            code.DecrementIndent();
+        }
+
+        code.AppendLine("default:");
+        code.IncrementIndent();
+        code.AppendLine("reader.Skip(in __v);");
+        code.AppendLine("break;");
+        code.DecrementIndent();
+        code.EndBlock();
+        code.EndBlock();
+        code.AppendLine();
+
+        EmitConstruction(arguments);
+
+        code.AppendLine();
+        code.AppendLine("return __result;");
+        code.EndBlock();
+
+        EmitSlotLookup(slots);
+        EmitObjectReaderClass();
+    }
+
+    private void EmitObjectReaderClass()
+    {
+        var code = _code;
+        var type = _model.FullyQualifiedName;
+
+        code.AppendLine();
+        code.BeginBlock($"private sealed class __ToonObjectReader : {Serialization}ToonObjectReader<{type}>");
+        code.AppendLine($"public override {type} Read({Reader} reader, in {ReaderValue} value, int depth) => __ToonReadObject(reader, in value, depth);");
+        code.EndBlock();
+    }
+
+    /// <summary>A key the text reader looks for: its names per naming policy and where its value goes.</summary>
+    private sealed record ReadSlot(string[] Names, int Parameter, int Property, string Read);
+
+    /// <summary>The constructor parameters and the assignable properties, with the keys <c>__ToonDeserializeValue</c> reads.</summary>
+    private List<ReadSlot> ReadSlots(ConstructorModel constructor)
+    {
+        var model = _model;
+        var slots = new List<ReadSlot>();
+
+        for (var j = 0; j < constructor.Parameters.Length; j++)
+        {
+            var parameter = constructor.Parameters[j];
+            var bound = parameter.PropertyIndex >= 0 ? model.Properties[parameter.PropertyIndex] : null;
+            var names = bound != null ? PolicyNames(bound) : [parameter.Name, parameter.Name, parameter.Name, parameter.Name];
+            var read = bound?.ConverterTypeName != null
+                ? $"({parameter.TypeName}){ConverterField(bound)}.Read(reader.BuildTree(in __v), typeof({bound.TypeOfName}), options)"
+                : ReadTextExpression(parameter.Plan, "__v", "depth + 1");
+
+            slots.Add(new ReadSlot(names, j, -1, read));
+        }
+
+        for (var i = 0; i < model.Properties.Length; i++)
+        {
+            var property = model.Properties[i];
+
+            if (property.Write == WriteKind.None)
+            {
+                continue;
+            }
+
+            var read = property.ConverterTypeName != null
+                ? $"({property.TypeName}){ConverterField(property)}.Read(reader.BuildTree(in __v), typeof({property.TypeOfName}), options)"
+                : ReadTextExpression(property.Plan, "__v", "depth + 1");
+
+            slots.Add(new ReadSlot(PolicyNames(property), -1, i, read));
+        }
+
+        return slots;
+    }
+
+    /// <summary>The key of a property under each naming policy (default, camelCase, snake_case, lowercase).</summary>
+    private string[] PolicyNames(PropertyModel property)
+    {
+        if (_model.FixedNamingPolicy is { } policy)
+        {
+            var name = property.Names[policy is >= 0 and <= 3 ? policy : 0];
+            return [name, name, name, name];
+        }
+
+        return [property.Names[0], property.Names[1], property.Names[2], property.Names[3]];
+    }
+
+    /// <summary>A condition that is true for the naming policies under which two slots share a key, or null.</summary>
+    private string? ReadSlotDuplicates(List<ReadSlot> slots)
+    {
+        var duplicate = new bool[4];
+
+        for (var policy = 0; policy < 4; policy++)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            duplicate[policy] = slots.Any(slot => !seen.Add(slot.Names[policy]));
+        }
+
+        if (!duplicate.Any(d => d))
+        {
+            return null;
+        }
+
+        if (_model.FixedNamingPolicy != null || duplicate.All(d => d))
+        {
+            return "true";
+        }
+
+        var policyType = Serialization + "PropertyNamingPolicy";
+
+        // Undefined policy values use the property names as they are, like the default policy
+        return $"__policy switch {{ {policyType}.CamelCase => {Bool(duplicate[1])}, {policyType}.SnakeCase => {Bool(duplicate[2])}, " +
+               $"{policyType}.LowerCase => {Bool(duplicate[3])}, _ => {Bool(duplicate[0])} }}";
+
+        static string Bool(bool value) => value ? "true" : "false";
+    }
+
+    /// <summary>Emits <c>__ToonSlot</c>: the slot of a key per naming policy, or -1.</summary>
+    private void EmitSlotLookup(List<ReadSlot> slots)
+    {
+        var code = _code;
+
+        string Switch(int policy)
+        {
+            // A policy under which keys are shared never reaches the lookup (the tree reads such objects)
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            if (slots.Any(slot => !seen.Add(slot.Names[policy])))
+            {
+                return "-1";
+            }
+
+            var arms = slots.Select((slot, index) => $"{Literal(slot.Names[policy])} => {index}");
+            return $"key switch {{ {string.Join(", ", arms.Append("_ => -1"))} }}";
+        }
+
+        code.AppendLine();
+
+        if (_model.FixedNamingPolicy != null || slots.All(slot => slot.Names.Distinct().Count() == 1))
+        {
+            code.AppendLine($"private static int __ToonSlot(string key) => {Switch(0)};");
+            return;
+        }
+
+        var policyType = Serialization + "PropertyNamingPolicy";
+
+        code.AppendLine($"private static int __ToonSlot(string key, {policyType} policy) => policy switch");
+        code.AppendLine("{");
+        code.IncrementIndent();
+        code.AppendLine($"{policyType}.CamelCase => {Switch(1)},");
+        code.AppendLine($"{policyType}.SnakeCase => {Switch(2)},");
+        code.AppendLine($"{policyType}.LowerCase => {Switch(3)},");
+        code.AppendLine($"_ => {Switch(0)}");
+        code.DecrementIndent();
+        code.AppendLine("};");
+    }
+
+    /// <summary>
+    /// An expression reading a text value as the plan's declared type: exact string, boolean and number tokens inline,
+    /// nested generated types and collections through their text readers, anything else through
+    /// <c>ToonReader.ReadValue</c>, which applies ToonSerializer's rules and errors.
+    /// </summary>
+    private string ReadTextExpression(ValuePlan plan, string value, string depth)
+    {
+        var general = $"reader.ReadValue<{plan.TypeName}>(in {value}, {depth})";
+
+        switch (plan.Kind)
+        {
+            case ValueKind.Inline or ValueKind.Primitive:
+            {
+                var result = $"__r{_variable++}";
+                return $"(reader.TryReadPrimitive<{plan.TypeName}>(in {value}, out var {result}) ? {result} : {general})";
+            }
+            case ValueKind.Generated when plan.HasTextReader:
+            {
+                var call = $"{plan.ValueTypeName}.__ToonReadObject(reader, in {value}, {depth})";
+                return plan.IsNullableValueType ? $"(reader.IsNull(in {value}) ? default({plan.TypeName}) : {call})" : call;
+            }
+            case ValueKind.Array or ValueKind.List or ValueKind.Set or ValueKind.Dictionary:
+                return $"__ToonReadText{Register(_textReaderIds, _textReaders, plan.TypeName, plan)}(reader, in {value}, {depth})";
+            default:
+                return general;
+        }
+    }
+
+    /// <summary>Emits a text reader for a collection or dictionary plan, like <see cref="EmitReader"/> does for trees.</summary>
+    private void EmitTextCollectionReader(int id, ValuePlan plan)
+    {
+        var code = _code;
+        var element = plan.Element!;
+
+        code.AppendLine();
+        code.BeginBlock($"private static {plan.TypeName} __ToonReadText{id}({Reader} reader, in {ReaderValue} value, int depth)");
+        code.AppendLine($"{Helpers}.CheckDeserializationDepth(reader.Options, depth);");
+
+        if (plan.Kind == ValueKind.Dictionary)
+        {
+            var keyPlan = plan.Key!;
+            var key = keyPlan.Inline == PrimitiveKind.String
+                ? "__key"
+                : $"{Helpers}.ReadPrimitive<{keyPlan.ValueTypeName}>(new {Models}ToonString(__key))";
+
+            code.AppendLine($"if (!reader.IsObject(in value)) return reader.ReadValue<{plan.TypeName}>(in value, depth);");
+            code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>();");
+            code.AppendLine("var __fields = reader.BeginObject(in value);");
+            code.BeginBlock("while (reader.NextProperty(ref __fields, out var __key, out var __item))");
+            code.AppendLine($"__dictionary[{key}] = {ReadTextExpression(element, "__item", "depth + 1")};");
+            code.EndBlock();
+            code.AppendLine("return __dictionary;");
+        }
+        else
+        {
+            code.AppendLine($"if (!reader.IsArray(in value)) return reader.ReadValue<{plan.TypeName}>(in value, depth);");
+            code.AppendLine("var __array = reader.BeginArray(in value);");
+            code.AppendLine($"var __items = new global::System.Collections.Generic.List<{element.TypeName}>(reader.CapacityHint(in __array));");
+            code.BeginBlock("while (reader.NextItem(ref __array, out var __item))");
+            code.AppendLine($"__items.Add({ReadTextExpression(element, "__item", "depth + 1")});");
+            code.EndBlock();
+            code.AppendLine(plan.Kind switch
+            {
+                ValueKind.Array => "return __items.ToArray();",
+                ValueKind.Set => $"return new global::System.Collections.Generic.HashSet<{element.TypeName}>(__items);",
+                _ => "return __items;"
+            });
+        }
+
+        code.EndBlock();
+    }
+
+    #endregion
+
     #region Deserialize
 
     private void EmitDeserialize(ConstructorModel constructor)
@@ -775,6 +1120,23 @@ internal sealed class SourceEmitter
 
         code.AppendLine();
 
+        EmitConstruction(arguments);
+
+        code.AppendLine();
+        code.AppendLine("return __result;");
+        code.EndBlock();
+    }
+
+    /// <summary>
+    /// Emits the creation of <c>__result</c> from the constructor arguments <c>__a{j}</c> and the property values
+    /// <c>__p{i}</c> (set when <c>__h{i}</c>): object initializers for init-only properties, then assignments and
+    /// accessor calls in property order.
+    /// </summary>
+    private void EmitConstruction(List<string> arguments)
+    {
+        var code = _code;
+        var model = _model;
+
         var initializers = model.Properties.Select((p, i) => (Property: p, Index: i))
                                 .Where(p => p.Property.Write == WriteKind.Initializer)
                                 .Select(p => $"{p.Property.Name} = __h{p.Index} ? __p{p.Index} : default!")
@@ -817,9 +1179,6 @@ internal sealed class SourceEmitter
             }
         }
 
-        code.AppendLine();
-        code.AppendLine("return __result;");
-        code.EndBlock();
     }
 
     /// <summary>
@@ -909,7 +1268,7 @@ internal sealed class SourceEmitter
     /// <summary>Emits the helper methods; emitting one can register more (nested collections), so loop until done.</summary>
     private void EmitHelperMethods()
     {
-        for (int w = 0, r = 0; w < _writers.Count || r < _readers.Count;)
+        for (int w = 0, r = 0, t = 0; w < _writers.Count || r < _readers.Count || t < _textReaders.Count;)
         {
             while (w < _writers.Count)
             {
@@ -919,6 +1278,11 @@ internal sealed class SourceEmitter
             while (r < _readers.Count)
             {
                 EmitReader(_readers[r].Id, _readers[r++].Plan);
+            }
+
+            while (t < _textReaders.Count)
+            {
+                EmitTextCollectionReader(_textReaders[t].Id, _textReaders[t++].Plan);
             }
         }
     }

@@ -47,6 +47,9 @@ public static partial class ToonSerializer
     private enum ReadKind : byte
     {
         Tree,
+
+        /// <summary>An object of a type with a generated reader.</summary>
+        Generated,
         Primitive,
         Object,
         Collection,
@@ -66,6 +69,9 @@ public static partial class ToonSerializer
 
         /// <summary>Whether the target has generated code that reads objects.</summary>
         public bool HasGeneratedReader { get; init; }
+
+        /// <summary>The generated reader, which reads object values straight from the text.</summary>
+        public ToonObjectReader? Reader { get; init; }
 
         public TypeMetadata? Metadata { get; init; }
 
@@ -110,9 +116,17 @@ public static partial class ToonSerializer
             }
 
             // Types with generated code are read by it, without reflection metadata (DeserializeValue decides when)
-            if (useGeneratedCode && FindGeneratedSerializer(target)?.Deserialize != null)
+            if (useGeneratedCode && FindGeneratedSerializer(target) is { Deserialize: not null } generated)
             {
-                return new ReadTypeInfo { Kind = ReadKind.Tree, Target = target, AcceptsNull = acceptsNull, HasGeneratedReader = true };
+                // Code from a generator without readers builds the tree
+                return new ReadTypeInfo
+                {
+                    Kind = generated.Reader != null ? ReadKind.Generated : ReadKind.Tree,
+                    Target = target,
+                    AcceptsNull = acceptsNull,
+                    HasGeneratedReader = true,
+                    Reader = generated.Reader
+                };
             }
 
             if (target.GetCustomAttribute<Attributes.ToonConverterAttribute>() != null)
@@ -211,11 +225,20 @@ public static partial class ToonSerializer
     /// <summary>
     ///     Reads one document. An instance is used once and is not thread-safe.
     /// </summary>
-    private sealed class DirectReader(ToonParser parser, ToonSerializerOptions options)
+    private sealed class DirectReader(ToonParser parser, ToonSerializerOptions options) : IToonDeserializationHost
     {
         private readonly ToonParser _parser = parser;
         private readonly ToonSerializerOptions _options = options;
         private SerializerState? _state;
+        private ToonReader? _reader;
+
+        public ToonSerializerOptions Options => _options;
+
+        public object? ReadValue(in ToonParser.ValueRef value, Type targetType, int depth) => ReadValue(value, targetType, null, depth);
+
+        public void Fallback() => throw new DirectReadFallbackException();
+
+        private ToonReader Reader => _reader ??= new ToonReader(_parser, this);
 
         public static object? Read(string text, Type type, ToonSerializerOptions options)
         {
@@ -243,6 +266,14 @@ public static partial class ToonSerializer
             if (propertyConverter != null || info.Kind == ReadKind.Tree)
             {
                 return ReadTree(value, targetType, propertyConverter, depth);
+            }
+
+            if (info.Kind == ReadKind.Generated)
+            {
+                // Generated code reads objects; other values follow the rules for the type, as in DeserializeValue
+                return value.NodeKind == ToonNodeKind.Object
+                    ? info.Reader!.ReadOf(Reader, new ToonReaderValue(value), depth)
+                    : ReadTree(value, targetType, null, depth);
             }
 
             if (value.NodeKind == ToonNodeKind.Primitive && _parser.IsNull(value))
@@ -499,7 +530,7 @@ public static partial class ToonSerializer
     ///     <see cref="DeserializeValue"/> gives for the token's <see cref="ToonValue"/>: exact matches only, everything
     ///     else returns <c>false</c> for the general path.
     /// </summary>
-    private static bool TryReadToken<T>(ToonParser parser, in ToonParser.ValueRef value, out T result)
+    internal static bool TryReadToken<T>(ToonParser parser, in ToonParser.ValueRef value, out T result)
     {
         result = default!;
 
@@ -544,6 +575,63 @@ public static partial class ToonSerializer
         if (typeof(T) == typeof(bool) || typeof(T) == typeof(bool?))
         {
             return token.SequenceEqual("true") ? SetToken(true, out result) : token.SequenceEqual("false") && SetToken(false, out result);
+        }
+
+        // Types read from string values: a quoted token (without escapes, which take the general path) or an unquoted
+        // one that is not a number or boolean, parsed with the rules of TryDeserializePrimitive
+        if (typeof(T) == typeof(DateTime) || typeof(T) == typeof(DateTime?) || typeof(T) == typeof(DateTimeOffset) ||
+            typeof(T) == typeof(DateTimeOffset?) || typeof(T) == typeof(Guid) || typeof(T) == typeof(Guid?) ||
+            typeof(T) == typeof(DateOnly) || typeof(T) == typeof(DateOnly?) || typeof(T) == typeof(TimeOnly) ||
+            typeof(T) == typeof(TimeOnly?) || typeof(T) == typeof(TimeSpan) || typeof(T) == typeof(TimeSpan?) ||
+            (Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T)).IsEnum)
+        {
+            if (!TryGetStringToken(token, out var text))
+            {
+                return false;
+            }
+
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+            if (typeof(T) == typeof(DateTime) || typeof(T) == typeof(DateTime?))
+            {
+                return DateTime.TryParse(text, invariant, System.Globalization.DateTimeStyles.RoundtripKind, out var dateTime) &&
+                       SetToken(dateTime, out result);
+            }
+
+            if (typeof(T) == typeof(DateTimeOffset) || typeof(T) == typeof(DateTimeOffset?))
+            {
+                return DateTimeOffset.TryParse(text, invariant, System.Globalization.DateTimeStyles.RoundtripKind, out var offset) &&
+                       SetToken(offset, out result);
+            }
+
+            if (typeof(T) == typeof(Guid) || typeof(T) == typeof(Guid?))
+            {
+                return Guid.TryParse(text, out var guid) && SetToken(guid, out result);
+            }
+
+            if (typeof(T) == typeof(DateOnly) || typeof(T) == typeof(DateOnly?))
+            {
+                return DateOnly.TryParse(text, invariant, System.Globalization.DateTimeStyles.None, out var date) && SetToken(date, out result);
+            }
+
+            if (typeof(T) == typeof(TimeOnly) || typeof(T) == typeof(TimeOnly?))
+            {
+                return TimeOnly.TryParse(text, invariant, System.Globalization.DateTimeStyles.None, out var time) && SetToken(time, out result);
+            }
+
+            if (typeof(T) == typeof(TimeSpan) || typeof(T) == typeof(TimeSpan?))
+            {
+                return TimeSpan.TryParse(text, invariant, out var span) && SetToken(span, out result);
+            }
+
+            // Enums: names (case-insensitive), numeric strings and flag lists, like Enum.Parse
+            if (!Enum.TryParse(Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T), text, ignoreCase: true, out var parsedEnum))
+            {
+                return false;
+            }
+
+            result = (T)parsedEnum!;
+            return true;
         }
 
         if (token.Length == 0 || token[0] == '"' || !ToonParser.TryParseNumberParts(token, out var parsed, out var decimalValue, out var isExact))
@@ -620,6 +708,37 @@ public static partial class ToonSerializer
         }
 
         return false;
+
+        // The text of a string token: inside the quotes when there are no escapes, or an unquoted token that is not a
+        // number or boolean (those are other TOON types, which the general path reports)
+        static bool TryGetStringToken(ReadOnlySpan<char> token, out ReadOnlySpan<char> text)
+        {
+            text = default;
+
+            if (token.Length == 0)
+            {
+                return false;
+            }
+
+            if (token[0] == '"')
+            {
+                if (token.Length < 2 || token[^1] != '"' || token[1..^1].IndexOfAny('\\', '"') >= 0)
+                {
+                    return false;
+                }
+
+                text = token[1..^1];
+                return true;
+            }
+
+            if (token.SequenceEqual("true") || token.SequenceEqual("false") || ToonParser.TryParseNumberParts(token, out _, out _, out _))
+            {
+                return false;
+            }
+
+            text = token;
+            return true;
+        }
 
         // Stores a primitive in T, which is that primitive or its Nullable<>
         static bool SetToken<TPrimitive>(TPrimitive primitive, out T target) where TPrimitive : struct

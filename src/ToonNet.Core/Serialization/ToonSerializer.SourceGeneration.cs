@@ -14,10 +14,14 @@ public static partial class ToonSerializer
     /// </summary>
     private sealed class GeneratedSerializer(Func<object, ToonSerializerOptions, int, ToonValue> serialize,
                                              Func<ToonValue, ToonSerializerOptions, int, object?>? deserialize,
-                                             ToonObjectWriter? writer)
+                                             ToonObjectWriter? writer,
+                                             ToonObjectReader? reader)
     {
         /// <summary>Writes objects straight to text; null for code from a generator without writers.</summary>
         public ToonObjectWriter? Writer { get; } = writer;
+
+        /// <summary>Reads objects straight from text; null for code from a generator without readers.</summary>
+        public ToonObjectReader? Reader { get; } = reader;
 
         public Func<object, ToonSerializerOptions, int, ToonValue> Serialize { get; } = serialize;
 
@@ -34,14 +38,16 @@ public static partial class ToonSerializer
 
     internal static void RegisterGenerated<T>(Func<T, ToonSerializerOptions, int, ToonValue> serialize,
                                               Func<ToonValue, ToonSerializerOptions, int, T>? deserialize,
-                                              ToonObjectWriter<T>? writer)
+                                              ToonObjectWriter<T>? writer,
+                                              ToonObjectReader<T>? reader)
     {
         ArgumentNullException.ThrowIfNull(serialize);
 
         RegisteredGeneratedSerializers[typeof(T)] = new GeneratedSerializer(
             (value, options, depth) => serialize((T)value, options, depth),
             deserialize == null ? null : (value, options, depth) => deserialize(value, options, depth),
-            writer);
+            writer,
+            reader);
     }
 
     /// <summary>

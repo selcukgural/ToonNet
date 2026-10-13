@@ -80,7 +80,8 @@ internal sealed record ValuePlan(
     ValuePlan? Element,
     ValuePlan? Key,
     bool HasFieldWriter = false,
-    EquatableArray<string> EnumCases = default);
+    EquatableArray<string> EnumCases = default,
+    bool HasTextReader = false);
 
 internal enum ValueKind
 {
