@@ -58,7 +58,7 @@ const FeatureList: FeatureItem[] = [
     icon: '🌐',
     description: (
       <>
-        MVC input and output formatters for <code>application/toon</code>, dependency
+        MVC input and output formatters for <code>application/toon</code> and <code>text/toon</code>, dependency
         injection registration with <code>AddToonNet</code>, and a TOON configuration
         provider with <code>AddToonFile</code>.
       </>
@@ -70,7 +70,7 @@ const FeatureList: FeatureItem[] = [
     description: (
       <>
         Async APIs for strings, streams and files, and multi-document streaming that writes
-        and reads large collections one item at a time with{' '}
+        large collections in batches and reads them back one item at a time with{' '}
         <code>SerializeStreamAsync</code> and <code>DeserializeStreamAsync</code>.
       </>
     ),
