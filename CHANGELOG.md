@@ -149,7 +149,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Documents that relied on the old lenient behaviour may need `StrictMode = false`.
   - List items under a bare `key:` require an `key[N]:` header in strict mode (with a hint in the error message);
     non-strict mode still reads them as an array.
-  - Removed the internal `ToonLexer` and token types.
 - **ToonNet.Core (serializer):** Reworked type handling (see the type mapping in `type-system.md`):
   - Objects use their runtime type (`object`-typed properties and `Serialize<object>` were empty); base-class
     properties come first; `Deserialize<object>` returns dictionaries/lists instead of an empty object.
@@ -172,7 +171,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.AspNetCore:** The `Delimiter` configuration value also accepts `comma`, `tab` and `pipe`; a literal tab
   is no longer ignored as whitespace.
 - **Docs:** Replaced the "100% TOON v3.0 compliance" claims with the measured conformance against spec v3.3.2.
-
 - **ToonNet.SourceGenerators (breaking):** Rewritten. The generated `Serialize`/`Deserialize` methods now follow the
   rules of `ToonSerializer` and produce the same TOON (verified by parity tests for every supported shape):
   - Collections, dictionaries, enums, dates, `Guid` and nested objects are written as real TOON values through
@@ -190,8 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `lib/`, which compilers running on .NET Framework could not load). It no longer depends on `ToonNet.Core`; install
     both packages.
   - Uses the incremental `ForAttributeWithMetadataName` pipeline; diagnostics point at the type declaration. New warning
-    `TOON005` when a type has no public constructor (only `Serialize` is generated); `TOON004` was never reported and is
-    removed.
+    `TOON005` when a type has no public constructor (only `Serialize` is generated).
   - Generated code converts primitives, enums, dates, `Guid`, `Uri`, big integers, other `[ToonSerializable]` types,
     arrays, lists, sets and dictionaries with primitive keys itself, without reflection metadata. Other property types
     are handed to `ToonSerializer` and reported as warning `TOON006`; `[ToonSerializable(AllowReflectionFallback = false)]`
@@ -200,10 +197,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Generated methods enforce `MaxDepth`, so circular references throw `ToonEncodingException` instead of overflowing
     the stack.
   - The package description no longer claims zero allocations or Native AOT support.
+
 ### Deprecated
 - **ToonNet.Core:** `ToonSerializationException.PropertyName` is replaced by `Path` (same value: a path such as
   `$.Items[2].Price`, not a property name). `ToonParseException.ActualToken` and `ExpectedToken` are obsolete; the
   line-based parser does not report tokens, so they were always null.
+
+### Removed
+- **ToonNet.Core:** The internal `ToonLexer` and token types (replaced by the line-based parser).
+- **ToonNet.SourceGenerators:** Diagnostic `TOON004`, which was never reported.
 
 ### Security
 - **ToonNet.Core:** The parser now enforces `ToonOptions.MaxDepth` while parsing (previously only after parsing) and checks
@@ -871,7 +873,7 @@ After:  75MB peak memory, 100ms parse time, ~500 indent allocations
 - ✅ 0 test failures or regressions
 - ✅ Backward compatible with v1.0.0
 
-## [1.0.0] - 2025-01-12
+## [1.0.0] - 2026-01-12
 
 ### Added
 
