@@ -157,4 +157,21 @@ public sealed class ToonNetServiceCollectionExtensionsTests
         Assert.Single(services, d => d.ServiceType == typeof(IConfigureOptions<ToonSerializerOptions>) &&
                                      d.ImplementationType?.Name == "ToonOptionsLink");
     }
+
+    [Theory]
+    [InlineData("SnakeCas")]
+    [InlineData("7")]
+    public void AddToonNet_WithMisspelledNamingPolicy_Throws(string policy)
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["ToonNet:ToonSerializerOptions:PropertyNamingPolicy"] = policy })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value);
+        Assert.Contains("PropertyNamingPolicy", ex.Message);
+    }
 }

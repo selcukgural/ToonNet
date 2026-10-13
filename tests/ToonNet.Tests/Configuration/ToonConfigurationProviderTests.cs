@@ -138,4 +138,45 @@ public class ToonConfigurationProviderTests
             File.Delete(path);
         }
     }
+
+    private static ToonConfigurationProvider LoadProvider(string toon)
+    {
+        var provider = new ToonConfigurationProvider(new ToonConfigurationSource());
+        provider.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(toon)));
+        return provider;
+    }
+
+    [Theory]
+    [InlineData("Port: 1\nport: 2")]
+    [InlineData("A:\n  b: 1\na:\n  B: 2")]
+    public void Load_KeysDifferingOnlyInCase_Throw(string toon)
+    {
+        var ex = Assert.Throws<FormatException>(() => LoadProvider(toon));
+
+        Assert.Contains("duplicate key", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("[2]: 1,2")]
+    [InlineData("hello")]
+    public void Load_NonObjectRoot_Throws(string toon)
+    {
+        Assert.Throws<FormatException>(() => LoadProvider(toon));
+    }
+
+    [Fact]
+    public void Load_EmptyObjectsAndArrays_ClearValuesFromEarlierSources()
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["Hosts:0"] = "a", ["Feature"] = "on" })
+                            .Build();
+
+        var provider = LoadProvider("Hosts: []\nFeature:\nOther: 1");
+
+        Assert.True(provider.TryGet("Hosts", out var hosts));
+        Assert.Null(hosts);
+        Assert.True(provider.TryGet("Feature", out var feature));
+        Assert.Null(feature);
+        Assert.Equal("a", configuration["Hosts:0"]);
+    }
 }

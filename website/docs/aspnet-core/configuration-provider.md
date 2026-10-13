@@ -39,9 +39,11 @@ Logging:
 Features[3]: Authentication,Caching,Compression
 ```
 
-Nested objects become `Section:Key` paths and array items become index keys (`Features:0`, `Features:1`, ...). Only a
-root object is read (a root array or primitive yields no keys). Strict mode applies by default (pass a `ToonOptions`
-as the last argument of `AddToonFile` to change it), and a file that is not valid TOON throws a `FormatException`.
+Nested objects become `Section:Key` paths and array items become index keys (`Features:0`, `Features:1`, ...). An
+empty object or array (`Features: []`) sets its key to null, which clears values from earlier sources, as in JSON
+configuration files. Strict mode applies by default (pass a `ToonOptions` as the last argument of `AddToonFile` to
+change it). Like the JSON provider, the file throws a `FormatException` when it is not valid TOON, when its root is not
+an object, or when two keys differ only in case (configuration keys are case-insensitive).
 
 Values are stored as strings: booleans become `True`/`False`, and numbers keep their exact value in canonical TOON
 form (spec §2): `12345678901234567890` stays as written, while `1.0` becomes `1` and `1.50` becomes `1.5`. Quote a value

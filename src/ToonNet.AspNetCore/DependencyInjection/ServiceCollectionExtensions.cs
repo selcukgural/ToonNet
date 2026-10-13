@@ -199,9 +199,14 @@ public static class ServiceCollectionExtensions
         }
 
         var namingPolicy = section.GetValue<string?>(nameof(ToonSerializerOptions.PropertyNamingPolicy));
-        if (!string.IsNullOrWhiteSpace(namingPolicy) && Enum.TryParse<PropertyNamingPolicy>(namingPolicy, ignoreCase: true, out var policy))
+        if (!string.IsNullOrWhiteSpace(namingPolicy))
         {
-            options.PropertyNamingPolicy = policy;
+            // A misspelled policy fails at startup instead of silently keeping the default
+            options.PropertyNamingPolicy = Enum.TryParse<PropertyNamingPolicy>(namingPolicy, ignoreCase: true, out var policy) && Enum.IsDefined(policy)
+                ? policy
+                : throw new InvalidOperationException(
+                    $"Invalid {section.Path}:{nameof(ToonSerializerOptions.PropertyNamingPolicy)} value '{namingPolicy}'. " +
+                    $"Expected one of: {string.Join(", ", Enum.GetNames<PropertyNamingPolicy>())}.");
         }
     }
 }

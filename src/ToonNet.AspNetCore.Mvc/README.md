@@ -267,9 +267,10 @@ Serializes C# objects to TOON response bodies:
 Explicit TOON response for Minimal APIs (`IResult`):
 
 ```csharp
-public sealed class ToonResult : IResult
+public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResult, IContentTypeHttpResult
 {
     public ToonResult(object? value, ToonSerializerOptions? options = null)
+    public ToonResult(object? value, ToonSerializerOptions? options, int? statusCode)
 
     public Task ExecuteAsync(HttpContext httpContext)
 }
@@ -278,6 +279,7 @@ public sealed class ToonResult : IResult
 app.MapGet("/data", () => new ToonResult(data));
 app.MapGet("/data-custom", () => new ToonResult(data, customOptions));
 app.MapGet("/data-ext", () => Results.Extensions.Toon(data));  // same, via IResultExtensions
+app.MapPost("/items", (Item item) => Results.Extensions.Toon(item, StatusCodes.Status201Created));
 
 // Without options, ToonResult uses IOptions<ToonSerializerOptions> from DI (AddToonNet) or the defaults.
 // A null value is written as `null` (an empty TOON body would mean an empty object).

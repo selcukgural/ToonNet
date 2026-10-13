@@ -52,15 +52,20 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
     /// A dictionary where keys represent the flattened paths of the configuration properties
     /// and values represent the corresponding values as strings or null.
     /// </returns>
+    /// <exception cref="FormatException">
+    ///     Thrown when the root is not an object or two keys differ only in case (configuration keys are
+    ///     case-insensitive), as the JSON configuration provider does.
+    /// </exception>
     private static Dictionary<string, string?> Flatten(ToonDocument doc)
     {
         var data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        
-        if (doc.Root is ToonObject rootObj)
+
+        if (doc.Root is not ToonObject rootObj)
         {
-            VisitObject(rootObj, string.Empty, data);
+            throw new FormatException($"The top-level value of a TOON configuration file must be an object, not {doc.Root.ValueType}.");
         }
-        
+
+        VisitObject(rootObj, string.Empty, data);
         return data;
     }
 
@@ -72,6 +77,12 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
     /// <param name="data">The dictionary where flattened key-value pairs will be stored.</param>
     private static void VisitObject(ToonObject obj, string prefix, Dictionary<string, string?> data)
     {
+        // An empty object sets its key to null, so it can clear a value from another source (as in JSON configuration)
+        if (obj.Properties.Count == 0 && prefix.Length > 0)
+        {
+            Set(data, prefix, null);
+        }
+
         foreach (var property in obj.Properties)
         {
             var key = string.IsNullOrEmpty(prefix) 
@@ -91,6 +102,11 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
     /// <param name="data">The dictionary to store key-value pairs generated from the array elements.</param>
     private static void VisitArray(ToonArray array, string prefix, Dictionary<string, string?> data)
     {
+        if (array.Count == 0)
+        {
+            Set(data, prefix, null);
+        }
+
         for (var i = 0; i < array.Count; i++)
         {
             var key = ConfigurationPath.Combine(prefix, i.ToString());
@@ -120,21 +136,30 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
                 break;
                 
             case ToonString str:
-                data[key] = str.Value;
+                Set(data, key, str.Value);
                 break;
-                
+
             case ToonNumber num:
                 // Canonical TOON text with the exact value (not via double, which would round large integers)
-                data[key] = num.IsFinite ? num.ToString() : string.Empty;
+                Set(data, key, num.IsFinite ? num.ToString() : string.Empty);
                 break;
-                
+
             case ToonBoolean boolean:
-                data[key] = boolean.Value.ToString();
+                Set(data, key, boolean.Value.ToString());
                 break;
-                
+
             case ToonNull:
-                data[key] = null;
+                Set(data, key, null);
                 break;
+        }
+    }
+
+    /// <exception cref="FormatException">Thrown when the key was already set (keys are case-insensitive).</exception>
+    private static void Set(Dictionary<string, string?> data, string key, string? value)
+    {
+        if (!data.TryAdd(key, value))
+        {
+            throw new FormatException($"A duplicate key '{key}' was found. Configuration keys are case-insensitive.");
         }
     }
 }

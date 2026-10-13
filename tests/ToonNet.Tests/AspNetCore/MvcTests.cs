@@ -260,6 +260,22 @@ public class MvcTests
     }
 
     [Fact]
+    public async Task ToonResult_StatusCode_IsWritten()
+    {
+        var httpContext = new DefaultHttpContext { RequestServices = new ServiceCollection().AddOptions().BuildServiceProvider() };
+        httpContext.Response.Body = new MemoryStream();
+
+        var result = (ToonResult)Results.Extensions.Toon(new TestModel { Name = "New", Age = 1 }, StatusCodes.Status201Created);
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Equal(201, httpContext.Response.StatusCode);
+        Assert.Equal(201, result.StatusCode);
+        Assert.Equal("application/toon; charset=utf-8", result.ContentType);
+        Assert.IsType<TestModel>(result.Value);
+        Assert.Null(new ToonResult(null).StatusCode);
+    }
+
+    [Fact]
     public async Task ToonResult_NullValue_WritesToonNull()
     {
         // An empty body would read back as an empty object

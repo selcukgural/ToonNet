@@ -9,7 +9,7 @@ namespace ToonNet.AspNetCore.Mvc.Http;
 /// <summary>
 /// Represents a result that writes TOON encoded content as an <see cref="IResult"/>.
 /// </summary>
-public sealed class ToonResult : IResult
+public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResult, IContentTypeHttpResult
 {
     /// <summary>
     /// Represents the value to be serialized in the <see cref="ToonResult"/> response.
@@ -28,11 +28,37 @@ public sealed class ToonResult : IResult
     /// <summary>
     /// An <see cref="IResult"/> that writes TOON encoded content.
     /// </summary>
-    public ToonResult(object? value, ToonSerializerOptions? options = null)
+    public ToonResult(object? value, ToonSerializerOptions? options = null) : this(value, options, null)
+    {
+    }
+
+    /// <summary>
+    /// An <see cref="IResult"/> that writes TOON encoded content with the given status code.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Serializer options; the application's <c>IOptions&lt;ToonSerializerOptions&gt;</c> when null.</param>
+    /// <param name="statusCode">The response status code; the response's current status code (200 by default) when null.</param>
+    public ToonResult(object? value, ToonSerializerOptions? options, int? statusCode)
     {
         _value = value;
         _options = options;
+        StatusCode = statusCode;
     }
+
+    /// <summary>
+    /// Gets the status code written to the response, or null to leave the current one (200 by default).
+    /// </summary>
+    public int? StatusCode { get; }
+
+    /// <summary>
+    /// Gets the value written to the response.
+    /// </summary>
+    public object? Value => _value;
+
+    /// <summary>
+    /// Gets the content type of the response.
+    /// </summary>
+    public string ContentType => $"{ToonFormatterDefaults.MediaType}; charset=utf-8";
 
     /// <summary>
     /// Executes the result operation of the current context asynchronously.
@@ -51,8 +77,13 @@ public sealed class ToonResult : IResult
     {
         ArgumentNullException.ThrowIfNull(httpContext);
 
+        if (StatusCode is { } statusCode)
+        {
+            httpContext.Response.StatusCode = statusCode;
+        }
+
         // ToonSerializer writes UTF-8 without a byte order mark
-        httpContext.Response.ContentType = $"{ToonFormatterDefaults.MediaType}; charset=utf-8";
+        httpContext.Response.ContentType = ContentType;
 
         // Resolve options from DI if not provided
         var options = _options ?? httpContext.RequestServices.GetService<IOptions<ToonSerializerOptions>>()?.Value ?? ToonSerializerOptions.Default;

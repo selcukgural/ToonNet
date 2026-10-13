@@ -90,7 +90,8 @@ This registers:
 ```
 
 Only the keys shown in the tables below are read. `ToonSerializerOptions` also accepts `IgnoreNullValues` and
-`PropertyNamingPolicy` (`Default`, `CamelCase`, `SnakeCase`, `LowerCase`). Use a different root section name with
+`PropertyNamingPolicy` (`Default`, `CamelCase`, `SnakeCase`, `LowerCase`; any other value fails at startup). Use a
+different root section name with
 `AddToonNet(builder.Configuration, "MySection")`.
 
 **Program.cs:**

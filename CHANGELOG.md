@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports it.
 
 ### Added
+- **ToonNet.AspNetCore.Mvc:** `ToonResult` takes an optional status code (`new ToonResult(value, options, 201)`,
+  `Results.Extensions.Toon(value, StatusCodes.Status201Created)`) and implements `IStatusCodeHttpResult`,
+  `IValueHttpResult` and `IContentTypeHttpResult`.
 - **ToonNet.Core:** `ToonNumber.TryParse` parses a TOON number token, and `ToonNumber.IsFinite` tells whether a number
   has a TOON number form (NaN and infinities are written as `null`).
 
@@ -43,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.AspNetCore:** The TOON configuration provider behaves like the JSON one: keys that differ only in case and
+  a root that is not an object throw a `FormatException` (before: the later key silently won, and the file yielded no
+  keys), and an empty object or array sets its key to null so it can clear earlier values. A misspelled
+  `PropertyNamingPolicy` in configuration fails at startup instead of being ignored.
 - **ToonNet.Extensions.Yaml:** A mapping or sequence used as a mapping key throws a `YamlException`, and an empty key is
   kept as `""`; before, both entries were dropped silently. `ToYaml` reuses one serializer instead of building it per
   call.

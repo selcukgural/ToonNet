@@ -76,6 +76,9 @@ public IResult GetUser(int id)
 
 // Minimal API: extension method on Results.Extensions
 app.MapGet("/users/{id}", (int id) => Results.Extensions.Toon(GetUserFromDatabase(id)));
+
+// With a status code
+app.MapPost("/users", (User user) => Results.Extensions.Toon(Save(user), StatusCodes.Status201Created));
 ```
 
 `ToonResult` uses the options passed to it, otherwise the application's `IOptions<ToonSerializerOptions>`. The MVC

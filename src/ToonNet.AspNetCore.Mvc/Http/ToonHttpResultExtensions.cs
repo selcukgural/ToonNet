@@ -20,4 +20,19 @@ public static class ToonHttpResultExtensions
         ArgumentNullException.ThrowIfNull(resultExtensions);
         return new ToonResult(value, options);
     }
+
+    /// <summary>
+    /// Creates a <see cref="ToonResult"/> that serializes the specified <paramref name="value"/> to TOON format with
+    /// the given status code, for example <c>Results.Extensions.Toon(created, StatusCodes.Status201Created)</c>.
+    /// </summary>
+    /// <param name="resultExtensions">The result extensions.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="statusCode">The response status code.</param>
+    /// <param name="options">Optional serializer options.</param>
+    /// <returns>The created <see cref="ToonResult"/>.</returns>
+    public static IResult Toon(this IResultExtensions resultExtensions, object? value, int statusCode, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(resultExtensions);
+        return new ToonResult(value, options, statusCode);
+    }
 }
