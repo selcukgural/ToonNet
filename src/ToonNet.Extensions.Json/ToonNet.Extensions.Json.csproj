@@ -17,7 +17,7 @@
     <Title>ToonNet JSON Extension</Title>
     <Description>Bidirectional JSON ↔ TOON conversion with System.Text.Json. Includes ToonConvert high-level API and ToonJsonConverter engine. Seamless interoperability for JSON-based systems.</Description>
     <PackageTags>toon;json;serialization;converter;system-text-json;interop</PackageTags>
-    <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>
+    <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

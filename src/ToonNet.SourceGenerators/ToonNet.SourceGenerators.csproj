@@ -16,7 +16,7 @@
         <Title>ToonNet Source Generators</Title>
         <Description>Roslyn source generator for ToonNet: adds static Serialize/Deserialize methods to partial classes, structs and records marked with [ToonSerializable]. Use together with ToonNet.Core.</Description>
         <PackageTags>toon;source-generator;roslyn;codegen;serialization</PackageTags>
-        <PackageReleaseNotes>v1.4.0: Updated to support ToonNet.Core 1.4.0 streaming features.</PackageReleaseNotes>
+        <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
         <DevelopmentDependency>true</DevelopmentDependency>
 
         <!-- Analyzer packaging: the generator ships under analyzers/, not lib/, and must not be referenced as a library -->

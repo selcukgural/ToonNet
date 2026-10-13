@@ -222,8 +222,8 @@ documentation site. Pushes to `master` that change `website/` also deploy the si
 
 Publishing to NuGet is manual:
 
-1. Bump `<Version>` (and `<PackageReleaseNotes>`) in the `.csproj` of every package that changed, and add the
-   release to `CHANGELOG.md`.
+1. Bump `<Version>` in the `.csproj` of every package that changed, and add the release to `CHANGELOG.md`.
+   `<PackageReleaseNotes>` only links to the changelog, so it does not need to change.
 2. Merge to `master` and wait for CI to pass.
 3. Run the **Publish to NuGet** workflow from the Actions tab. Use **dry-run** first to see which packages would
    be published.

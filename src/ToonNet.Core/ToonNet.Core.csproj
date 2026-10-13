@@ -11,7 +11,7 @@
         <Title>ToonNet Core Library</Title>
         <Description>TOON (Token-Oriented Object Notation) serialization for .NET, implementing TOON spec v3.3.2 and tested against the official conformance fixtures. System.Text.Json-style ToonSerializer with cached metadata and compiled accessors, async and multi-document streaming, and a ToonDocument/ToonValue model. Useful for compact, LLM-friendly payloads, configuration files and data exchange.</Description>
         <PackageTags>toon;serialization;dotnet;ai;llm;token-efficient;streaming</PackageTags>
-        <PackageReleaseNotes>v1.4.0: Streaming serialization API for millions of records. SerializeStreamAsync/DeserializeStreamAsync with O(1) memory, 2-3x faster throughput. ToonMultiDocumentWriteOptions (batch size, separator modes). Validation framework added. All 449 tests passing.</PackageReleaseNotes>
+        <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
         
         <!-- Performance: Enable Profile-Guided Optimization -->
         <TieredCompilation>true</TieredCompilation>
