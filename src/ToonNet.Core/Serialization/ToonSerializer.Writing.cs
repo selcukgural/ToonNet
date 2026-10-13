@@ -258,7 +258,7 @@ public static partial class ToonSerializer
                 continue;
             }
 
-            var name = GetPropertyName(property, options);
+            var name = GetPropertyName(property, metadata, options);
             state.Push(name);
             var toonValue = SerializeValue(property.Getter(value), property.Property.PropertyType, options, depth + 1, state, property.Converter);
             state.Pop();

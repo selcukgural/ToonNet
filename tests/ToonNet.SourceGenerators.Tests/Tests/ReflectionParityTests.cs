@@ -214,6 +214,32 @@ public class ReflectionParityTests
         AssertParity(contact, Contact.Serialize, Contact.Deserialize, options);
     }
 
+    [Theory]
+    [InlineData(PropertyNamingPolicy.Default)]
+    [InlineData(PropertyNamingPolicy.CamelCase)]
+    public void FixedNamingPolicy_AppliesOnEveryPath(PropertyNamingPolicy runtimePolicy)
+    {
+        var options = new ToonSerializerOptions { PropertyNamingPolicy = runtimePolicy };
+        var withConverter = new ToonSerializerOptions { PropertyNamingPolicy = runtimePolicy };
+        withConverter.AddConverter(new UnusedConverter());
+        var model = new SnakeCaseModel { FirstName = "A", PhoneNumber = "5", IsVerified = true };
+        const string expected = "first_name: A\nphone_number: \"5\"\nis_verified: true";
+
+        // Generated code, the generated code's converter fallback, the reflection path and ToonSerializer all agree
+        Assert.Equal(expected, AssertParity(model, SnakeCaseModel.Serialize, SnakeCaseModel.Deserialize, options));
+        Assert.Equal(expected, new ToonEncoder().Encode(SnakeCaseModel.Serialize(model, withConverter)));
+        Assert.Equal(expected, ToonSerializer.Serialize(model, withConverter));
+        Assert.Equal(expected, ToonSerializer.Serialize(model, options));
+        Assert.Equal("A", ToonSerializer.Deserialize<SnakeCaseModel>(expected, ReflectionOnly.Options(withConverter))!.FirstName);
+    }
+
+    private sealed class UnusedConverter : ToonConverter<Guid>
+    {
+        public override ToonValue? Write(Guid value, ToonSerializerOptions options) => throw new InvalidOperationException();
+
+        public override Guid Read(ToonValue value, ToonSerializerOptions options) => throw new InvalidOperationException();
+    }
+
     [Fact]
     public void IgnoreNullValues_AndReadOnlyOption_AreHonoured()
     {

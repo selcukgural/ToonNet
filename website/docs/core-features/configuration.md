@@ -172,6 +172,9 @@ Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
 // person.LastName = "Smith"
 ```
 
+A type marked `[ToonSerializable(NamingPolicy = ...)]` uses that policy instead of the one in the options, whether it is
+converted by generated code or by reflection.
+
 Naming policies apply to property names only. Dictionary keys are written as they are, and a `[ToonProperty("name")]`
 attribute overrides the policy for that property.
 

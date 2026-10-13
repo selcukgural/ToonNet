@@ -535,7 +535,7 @@ public static partial class ToonSerializer
             {
                 var parameter = metadata.ConstructorParameters[i];
                 var property = metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
-                var name = property != null ? GetPropertyName(property, options) : parameter.Name!;
+                var name = property != null ? GetPropertyName(property, metadata, options) : parameter.Name!;
 
                 if (property != null)
                 {
@@ -572,7 +572,7 @@ public static partial class ToonSerializer
                 continue;
             }
 
-            var name = GetPropertyName(property, options);
+            var name = GetPropertyName(property, metadata, options);
 
             if (!obj.Properties.TryGetValue(name, out var toonValue))
             {

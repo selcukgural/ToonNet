@@ -42,6 +42,12 @@ public static partial class ToonSerializer
 
         /// <summary>A converter from <see cref="ToonConverterAttribute"/> on the type, if any.</summary>
         public IToonConverter? TypeConverter { get; init; }
+
+        /// <summary>
+        ///     The <see cref="ToonSerializableAttribute.NamingPolicy"/> set on the type, which replaces the policy of the
+        ///     options (as in generated code); null when it is not set.
+        /// </summary>
+        public PropertyNamingPolicy? FixedNamingPolicy { get; init; }
     }
 
     /// <summary>
@@ -100,9 +106,40 @@ public static partial class ToonSerializer
                 Properties = [.. properties.OrderBy(p => p.Order).ThenBy(p => p.Index).Select(p => p.Metadata)],
                 Constructor = constructor,
                 ConstructorParameters = parameters,
-                TypeConverter = CreateAttributeConverter(t.GetCustomAttribute<ToonConverterAttribute>())
+                TypeConverter = CreateAttributeConverter(t.GetCustomAttribute<ToonConverterAttribute>()),
+                FixedNamingPolicy = GetFixedNamingPolicy(t)
             };
         });
+    }
+
+    /// <summary>
+    /// The naming policy set explicitly with <c>[ToonSerializable(NamingPolicy = ...)]</c> on the type or, for a type
+    /// without the attribute, on its nearest base type that has it. Like the source generator, an attribute without
+    /// the named argument leaves the policy of the options in effect.
+    /// </summary>
+    private static PropertyNamingPolicy? GetFixedNamingPolicy(Type type)
+    {
+        for (var current = type; current != null; current = current.BaseType)
+        {
+            var attribute = current.GetCustomAttributesData().FirstOrDefault(a => a.AttributeType == typeof(ToonSerializableAttribute));
+
+            if (attribute == null)
+            {
+                continue;
+            }
+
+            foreach (var argument in attribute.NamedArguments)
+            {
+                if (argument.MemberName == nameof(ToonSerializableAttribute.NamingPolicy))
+                {
+                    return (PropertyNamingPolicy)(int)argument.TypedValue.Value!;
+                }
+            }
+
+            return null;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -193,16 +230,17 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
-    ///     Gets the serialized name for a property: <see cref="ToonPropertyAttribute"/> first, then the naming policy.
+    ///     Gets the serialized name for a property: <see cref="ToonPropertyAttribute"/> first, then the naming policy of
+    ///     the type's <see cref="ToonSerializableAttribute"/>, then the one of the options.
     /// </summary>
-    private static string GetPropertyName(PropertyMetadata property, ToonSerializerOptions options)
+    private static string GetPropertyName(PropertyMetadata property, TypeMetadata type, ToonSerializerOptions options)
     {
         if (property.AttributeName != null)
         {
             return property.AttributeName;
         }
 
-        return property.Names.GetOrAdd(options.PropertyNamingPolicy, static (policy, name) => policy switch
+        return property.Names.GetOrAdd(type.FixedNamingPolicy ?? options.PropertyNamingPolicy, static (policy, name) => policy switch
         {
             PropertyNamingPolicy.CamelCase => ToCamelCase(name),
             PropertyNamingPolicy.SnakeCase => ToSnakeCase(name),

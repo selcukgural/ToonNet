@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core:** `[ToonSerializable(NamingPolicy = ...)]` now also applies when the type is converted with reflection
+  (options with converters, derived runtime types, generic types). Before, only the generated code used it, so the same
+  object could be written as `first_name` or `FirstName` depending on the path.
 - **ToonNet.Core:** `ToonEncoder` keeps its per-call state local to each `Encode` call, so one instance can be shared
   across threads. Before, concurrent calls on the singleton registered by `AddToonNet` could mix their output.
 - **ToonNet.AspNetCore:** `AddToonNet` no longer registers the internal `ToonParser`, which was stateful and could not

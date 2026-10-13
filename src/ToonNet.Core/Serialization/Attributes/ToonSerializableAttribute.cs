@@ -58,9 +58,11 @@ public sealed class ToonSerializableAttribute : Attribute
     public bool GeneratePublicMethods { get; init; } = true;
 
     /// <summary>
-    ///     Gets or sets a fixed property naming policy for generated serialization code.
-    ///     When set, it replaces <see cref="ToonSerializerOptions.PropertyNamingPolicy"/>; when not set, the generated code
-    ///     uses the naming policy of the options passed at runtime. <c>[ToonProperty(name)]</c> overrides both.
+    ///     Gets or sets a fixed property naming policy for the type.
+    ///     When set, it replaces <see cref="ToonSerializerOptions.PropertyNamingPolicy"/> for the type's properties, in the
+    ///     generated code and in <see cref="ToonSerializer"/> (also when it falls back to reflection, for example because
+    ///     the options contain converters); derived types without the attribute inherit it. When not set, the naming
+    ///     policy of the options passed at runtime is used. <c>[ToonProperty(name)]</c> overrides both.
     /// </summary>
     /// <remarks>
     ///     Examples:
