@@ -97,10 +97,14 @@ await ToonSerializer.SerializeToStreamAsync(data, stream);
 
 ### 4. Use the Source Generator for Hot Paths
 
-For types serialized very often, `[ToonSerializable]` with
-[`ToonNet.SourceGenerators`](source-generators) converts supported property types without the reflection-based
-metadata path (other types, and options with converters, fall back to `ToonSerializer`). The generated code
-produces the same TOON as `ToonSerializer`; measure whether it helps for your types.
+`[ToonSerializable]` with [`ToonNet.SourceGenerators`](source-generators) converts supported property types
+without the reflection-based metadata path (other types, and options with converters, fall back to
+`ToonSerializer`). The generated code produces the same TOON as `ToonSerializer`.
+
+`ToonSerializer.Serialize` writes types without generated code straight to text, while types with generated code are
+still converted through the `ToonValue` model, so serializing them is currently slower than the reflection-based
+path; reading performs about the same. Use the generator to avoid reflection over your types, and measure before
+choosing it for speed.
 
 ## Performance Comparison
 

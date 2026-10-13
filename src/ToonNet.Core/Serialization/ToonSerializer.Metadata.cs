@@ -55,6 +55,12 @@ public static partial class ToonSerializer
         /// <summary>The type the metadata describes.</summary>
         public required Type Type { get; init; }
 
+        /// <summary>
+        ///     Property names per naming policy for direct writing (see <see cref="GetDistinctPropertyNames"/>); an empty
+        ///     array marks names that are not distinct.
+        /// </summary>
+        public string[]?[] DistinctNames { get; } = new string[]?[NamingPolicyCount];
+
         private ObjectActivator? _activator;
 
         /// <summary>

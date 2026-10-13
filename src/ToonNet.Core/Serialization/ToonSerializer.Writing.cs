@@ -217,7 +217,16 @@ public static partial class ToonSerializer
     /// </summary>
     private static IEnumerable<(object Key, object? Value)>? GetGenericDictionaryEntries(object value)
     {
-        var reader = WrittenDictionaryEntryReaders.GetOrAdd(value.GetType(), static t =>
+        return GetDictionaryEntryReader(value.GetType())?.Read(value);
+    }
+
+    /// <summary>
+    ///     The entry reader for a type implementing <see cref="IDictionary{TKey,TValue}"/> or
+    ///     <see cref="IReadOnlyDictionary{TKey,TValue}"/>, or null.
+    /// </summary>
+    private static DictionaryEntryReader? GetDictionaryEntryReader(Type type)
+    {
+        return WrittenDictionaryEntryReaders.GetOrAdd(type, static t =>
         {
             var dictionaryInterface = t.GetInterfaces().FirstOrDefault(i => i.IsGenericType &&
                 (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
@@ -226,8 +235,6 @@ public static partial class ToonSerializer
                 ? null
                 : (DictionaryEntryReader)Activator.CreateInstance(typeof(DictionaryEntryReader<,>).MakeGenericType(dictionaryInterface.GetGenericArguments()))!;
         });
-
-        return reader?.Read(value);
     }
 
     /// <summary>
@@ -239,11 +246,15 @@ public static partial class ToonSerializer
     /// <summary>Enumerates the entries of a generic dictionary without reflection per entry.</summary>
     private abstract class DictionaryEntryReader
     {
+        public abstract Type KeyType { get; }
+
         public abstract IEnumerable<(object Key, object? Value)> Read(object dictionary);
     }
 
     private sealed class DictionaryEntryReader<TKey, TValue> : DictionaryEntryReader
     {
+        public override Type KeyType => typeof(TKey);
+
         public override IEnumerable<(object Key, object? Value)> Read(object dictionary)
         {
             foreach (var (key, value) in (IEnumerable<KeyValuePair<TKey, TValue>>)dictionary)

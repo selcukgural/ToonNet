@@ -89,6 +89,13 @@ internal sealed class ToonTextBuffer : IDisposable
     /// <summary>Marks <paramref name="count"/> characters of the span from <see cref="GetSpan"/> as written.</summary>
     public void Advance(int count) => _length += count;
 
+    /// <summary>Discards the characters written after the first <paramref name="length"/>.</summary>
+    public void Truncate(int length)
+    {
+        _buffer.AsSpan(length, _length - length).Clear();
+        _length = length;
+    }
+
     /// <summary>Clears the written characters so the buffer can be reused.</summary>
     public void Clear()
     {

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Serialization;
@@ -28,6 +29,12 @@ public static partial class ToonSerializer
         /// </summary>
         public abstract bool TryRead(object instance, ToonValue value);
 
+        /// <summary>Whether the property value of <paramref name="instance"/> is null.</summary>
+        public abstract bool IsNull(object instance);
+
+        /// <summary>Writes the property value of <paramref name="instance"/> as TOON text (<c>null</c> when it is null).</summary>
+        public abstract void WriteText(ToonWriter writer, object instance);
+
         /// <summary>
         ///     Creates an accessor for a property of a class with a primitive type; null for other properties.
         /// </summary>
@@ -41,7 +48,9 @@ public static partial class ToonSerializer
                 return null;
             }
 
-            var accessorType = typeof(PrimitiveAccessor<,>).MakeGenericType(declaringType, property.PropertyType);
+            var accessorType = Nullable.GetUnderlyingType(property.PropertyType) is { } underlying
+                ? typeof(NullablePrimitiveAccessor<,>).MakeGenericType(declaringType, underlying)
+                : typeof(PrimitiveAccessor<,>).MakeGenericType(declaringType, property.PropertyType);
             return (PrimitiveAccessor)Activator.CreateInstance(accessorType, getter, property.GetSetMethod(nonPublic: true))!;
         }
 
@@ -77,6 +86,140 @@ public static partial class ToonSerializer
 
             _set((TDeclaring)instance, result);
             return true;
+        }
+
+        public override bool IsNull(object instance) => _get((TDeclaring)instance) is null;
+
+        public override void WriteText(ToonWriter writer, object instance) => WriteTypedText(writer, _get((TDeclaring)instance));
+    }
+
+    /// <summary>A <see cref="PrimitiveAccessor"/> for a <see cref="Nullable{T}"/> property, which unwraps without boxing.</summary>
+    private sealed class NullablePrimitiveAccessor<TDeclaring, TValue> : PrimitiveAccessor where TDeclaring : class where TValue : struct
+    {
+        private readonly Func<TDeclaring, TValue?> _get;
+        private readonly Action<TDeclaring, TValue?>? _set;
+
+        public NullablePrimitiveAccessor(MethodInfo getter, MethodInfo? setter)
+        {
+            _get = getter.CreateDelegate<Func<TDeclaring, TValue?>>();
+            _set = setter?.CreateDelegate<Action<TDeclaring, TValue?>>();
+        }
+
+        public override ToonValue? Write(object instance) => _get((TDeclaring)instance) is { } value ? WriteTyped(value) : null;
+
+        public override bool TryRead(object instance, ToonValue value)
+        {
+            if (_set == null || !TryReadTyped<TValue?>(value, out var result))
+            {
+                return false;
+            }
+
+            _set((TDeclaring)instance, result);
+            return true;
+        }
+
+        public override bool IsNull(object instance) => !_get((TDeclaring)instance).HasValue;
+
+        public override void WriteText(ToonWriter writer, object instance)
+        {
+            if (_get((TDeclaring)instance) is { } value)
+            {
+                WriteTypedText(writer, value);
+            }
+            else
+            {
+                writer.WriteNull();
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Writes a primitive as TOON text, exactly as <see cref="WriteTyped{T}"/> followed by the encoder would, without
+    ///     creating a <see cref="ToonValue"/>.
+    /// </summary>
+    private static void WriteTypedText<T>(ToonWriter writer, T value)
+    {
+        if (value is null)
+        {
+            writer.WriteNull();
+        }
+        else if (typeof(T) == typeof(string))
+        {
+            writer.WriteString(Unsafe.As<T, string>(ref value));
+        }
+        else if (typeof(T) == typeof(int))
+        {
+            writer.WriteInteger(Unsafe.As<T, int>(ref value));
+        }
+        else if (typeof(T) == typeof(long))
+        {
+            writer.WriteInteger(Unsafe.As<T, long>(ref value));
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            writer.WriteDouble(Unsafe.As<T, double>(ref value));
+        }
+        else if (typeof(T) == typeof(bool))
+        {
+            writer.WriteBoolean(Unsafe.As<T, bool>(ref value));
+        }
+        else if (typeof(T) == typeof(decimal))
+        {
+            writer.WriteDecimal(Unsafe.As<T, decimal>(ref value));
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            writer.WriteDouble(ToonNumber.SingleToDouble(Unsafe.As<T, float>(ref value)));
+        }
+        else if (typeof(T) == typeof(short))
+        {
+            writer.WriteInteger(Unsafe.As<T, short>(ref value));
+        }
+        else if (typeof(T) == typeof(byte))
+        {
+            writer.WriteInteger(Unsafe.As<T, byte>(ref value));
+        }
+        else if (typeof(T) == typeof(sbyte))
+        {
+            writer.WriteInteger(Unsafe.As<T, sbyte>(ref value));
+        }
+        else if (typeof(T) == typeof(ushort))
+        {
+            writer.WriteInteger(Unsafe.As<T, ushort>(ref value));
+        }
+        else if (typeof(T) == typeof(uint))
+        {
+            writer.WriteInteger(Unsafe.As<T, uint>(ref value));
+        }
+        else if (typeof(T) == typeof(ulong))
+        {
+            writer.WriteDecimal(Unsafe.As<T, ulong>(ref value));
+        }
+        else if (typeof(T) == typeof(char))
+        {
+            writer.WriteString(new ReadOnlySpan<char>(in Unsafe.As<T, char>(ref value)));
+        }
+        else if (typeof(T) == typeof(DateTime))
+        {
+            Span<char> text = stackalloc char[64];
+            Unsafe.As<T, DateTime>(ref value).TryFormat(text, out var length, "O", CultureInfo.InvariantCulture);
+            writer.WriteString(text[..length]);
+        }
+        else if (typeof(T) == typeof(DateTimeOffset))
+        {
+            Span<char> text = stackalloc char[64];
+            Unsafe.As<T, DateTimeOffset>(ref value).TryFormat(text, out var length, "O", CultureInfo.InvariantCulture);
+            writer.WriteString(text[..length]);
+        }
+        else if (typeof(T) == typeof(Guid))
+        {
+            Span<char> text = stackalloc char[36];
+            Unsafe.As<T, Guid>(ref value).TryFormat(text, out var length, "D");
+            writer.WriteString(text[..length]);
+        }
+        else
+        {
+            writer.WritePrimitive(WriteTyped(value));
         }
     }
 

@@ -66,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SerializeCollectionTo*Async`, `SerializeStreamAsync`, `ToonEncoder.EncodeToStreamAsync`/`EncodeToFileAsync`) encodes
   into the pooled text buffer and writes UTF-8 in 16 KB pooled chunks, instead of creating the whole string and then a
   byte array of up to three times its size; multi-document output reuses one buffer for all items.
+- **ToonNet.Core:** `ToonSerializer.Serialize` and the stream, file and multi-document methods write objects straight
+  to TOON text instead of building a `ToonValue` tree and encoding it: objects, primitives, collections (inline,
+  tabular and list forms) and dictionaries with string or integer keys are written directly; converter output,
+  `ToonValue` values, types with generated code or `[ToonConverter]`, and collections whose form depends on such values
+  still go through the tree. The output is unchanged, and on an error the tree-based path runs, so exceptions and
+  messages are unchanged too. Serializing 10,000 objects with the reflection-based path takes 7 ms instead of 20 ms
+  (nested) and 2.4 ms instead of 6.5 ms (flat rows), allocating little more than the result string.
+  `SerializeToValue` and generated code still build the tree.
 - **ToonNet.SourceGenerators:** Generated code creates objects, arrays and dictionaries with their final size (the
   property count, or the collection count when it is known without enumerating), and `WritePrimitive` converts
   dates, `Guid` and other common primitives without boxing. Serializing 10,000 nested objects with generated code

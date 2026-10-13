@@ -59,16 +59,6 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
-    ///     Serializes a value and appends its TOON text to <paramref name="buffer"/>, so stream output needs no
-    ///     intermediate string.
-    /// </summary>
-    private static void SerializeTo(ToonTextBuffer buffer, object? value, Type type, ToonSerializerOptions options)
-    {
-        var toonValue = SerializeValue(value, type, options, 0, new SerializerState());
-        new ToonEncoder(options.ToonOptions).Write(new ToonDocument(toonValue ?? ToonNull.Instance), buffer);
-    }
-
-    /// <summary>
     ///     Serializes a value and writes it to <paramref name="stream"/> as UTF-8 in pooled chunks.
     /// </summary>
     private static async ValueTask SerializeToUtf8StreamAsync(object? value, Type type, Stream stream, ToonSerializerOptions? options,

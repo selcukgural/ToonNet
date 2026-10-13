@@ -205,9 +205,23 @@ public sealed class ToonNumber : ToonValue
     /// <param name="value">The numeric value to be represented.</param>
     public ToonNumber(float value)
     {
-        Value = float.IsFinite(value)
-            ? double.Parse(value.ToString("R", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture)
-            : value;
+        Value = SingleToDouble(value);
+    }
+
+    /// <summary>
+    ///     The double with the shortest decimal form of <paramref name="value"/> (0.1f becomes 0.1), as stored by the
+    ///     <see cref="float"/> constructor.
+    /// </summary>
+    internal static double SingleToDouble(float value)
+    {
+        if (!float.IsFinite(value))
+        {
+            return value;
+        }
+
+        Span<char> text = stackalloc char[32];
+        value.TryFormat(text, out var length, "R", CultureInfo.InvariantCulture);
+        return double.Parse(text[..length], CultureInfo.InvariantCulture);
     }
 
     /// <summary>

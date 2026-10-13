@@ -87,6 +87,15 @@ internal sealed class ToonWriter(ToonTextBuffer buffer, ToonOptions options)
         Nesting--;
     }
 
+    /// <summary>The number of characters written to the buffer so far.</summary>
+    public int Position => _buffer.Length;
+
+    /// <summary>
+    ///     Discards what was written after <paramref name="position"/>, which must be on the current line (no line was
+    ///     started since).
+    /// </summary>
+    public void Truncate(int position) => _buffer.Truncate(position);
+
     public void Write(char value) => _buffer.Append(value);
 
     public void Write(string value) => _buffer.Append(value);
