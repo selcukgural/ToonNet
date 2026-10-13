@@ -57,8 +57,7 @@ public static class ToonYamlConvert
     {
         ArgumentNullException.ThrowIfNull(toonString);
 
-        var parser = new Core.Parsing.ToonParser(options);
-        var toonDocument = parser.Parse(toonString);
+        var toonDocument = Core.Models.ToonDocument.Parse(toonString, options);
         return ToonYamlConverter.ToYaml(toonDocument);
     }
 }

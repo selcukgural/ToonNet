@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using ToonNet.Core;
-using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
-using ToonNet.Core.Parsing;
 
 namespace ToonNet.AspNetCore.Configuration;
 
@@ -33,14 +31,11 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
     {
         try
         {
-            var parser = new ToonParser(_options);
-            // We use the sync Parse method as configuration loading is typically synchronous,
-            // But we need to read the stream content first
-            
+            // Configuration loading is synchronous; read the stream content first
             using var reader = new StreamReader(stream);
             var content = reader.ReadToEnd();
-            
-            var doc = parser.Parse(content);
+
+            var doc = ToonDocument.Parse(content, _options);
             Data = Flatten(doc);
         }
         catch (ToonParseException ex)
@@ -130,7 +125,7 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
                 
             case ToonNumber num:
                 // Canonical TOON text with the exact value (not via double, which would round large integers)
-                data[key] = ToonNumberFormatter.Format(num) ?? string.Empty;
+                data[key] = num.IsFinite ? num.ToString() : string.Empty;
                 break;
                 
             case ToonBoolean boolean:

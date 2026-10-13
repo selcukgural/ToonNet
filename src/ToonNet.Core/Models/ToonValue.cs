@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace ToonNet.Core.Models;
@@ -244,6 +245,24 @@ public sealed class ToonNumber : ToonValue
     ///     Gets the type of this value.
     /// </summary>
     public override ToonValueType ValueType => ToonValueType.Number;
+
+    /// <summary>
+    ///     Gets whether the number is finite. NaN and infinities have no TOON number form and are written as <c>null</c>.
+    /// </summary>
+    public bool IsFinite => DecimalValue != null || double.IsFinite(Value);
+
+    /// <summary>
+    ///     Parses a TOON number token: the JSON number grammar without leading zeros (<c>05</c> is not a number), keeping
+    ///     the exact value in <see cref="DecimalValue"/> when it fits in a <see cref="decimal"/>.
+    /// </summary>
+    /// <param name="text">The token to parse.</param>
+    /// <param name="number">The number, when <paramref name="text"/> is a finite TOON number.</param>
+    /// <returns><c>true</c> when <paramref name="text"/> is a number that is finite as a <see cref="double"/>.</returns>
+    public static bool TryParse([NotNullWhen(true)] string? text, [NotNullWhen(true)] out ToonNumber? number)
+    {
+        number = text == null ? null : Parsing.ToonParser.TryParseNumber(text);
+        return number != null;
+    }
 
     /// <summary>
     ///     Returns the canonical TOON representation of this number (spec §2).

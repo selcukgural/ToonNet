@@ -372,7 +372,7 @@ public static class ToonYamlConverter
 
         var numberText = value.Length > 1 && value[0] == '+' ? value[1..] : value;
 
-        return (ToonValue?)Core.Parsing.ToonParser.TryParseNumber(numberText) ?? new ToonString(value);
+        return ToonNumber.TryParse(numberText, out var number) ? number : new ToonString(value);
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ public static class ToonYamlConverter
     private static object ToYamlNumber(ToonNumber number)
     {
         return number.DecimalValue is { } exact
-            ? decimal.Parse(Core.Encoding.ToonNumberFormatter.Format(exact), System.Globalization.CultureInfo.InvariantCulture)
+            ? decimal.Parse(new ToonNumber(exact).ToString(), System.Globalization.CultureInfo.InvariantCulture)
             : number.Value;
     }
 

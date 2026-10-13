@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **ToonNet.Core:** `ToonNumber.TryParse` parses a TOON number token, and `ToonNumber.IsFinite` tells whether a number
+  has a TOON number form (NaN and infinities are written as `null`).
+
 ### Changed
+- **ToonNet.Extensions.Json / Yaml, ToonNet.AspNetCore(.Mvc):** The packages use only the public API of
+  `ToonNet.Core`; Core no longer grants them `InternalsVisibleTo`. Before, they called Core internals, so a later
+  `ToonNet.Core` 2.x that changed those internals could break them at runtime (`MissingMethodException`) although
+  NuGet considered the versions compatible.
 - **ToonNet.SourceGenerators / ToonNet.Core:** `ToonSerializer` now uses the code generated for `[ToonSerializable]`
   types. Each generated type registers its methods from a module initializer (new hidden
   `ToonSourceGenerationHelpers.Register`), so `ToonSerializer.Serialize`/`Deserialize<T>`, the ASP.NET Core formatters

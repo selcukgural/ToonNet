@@ -103,8 +103,7 @@ public static class ToonConvert
     {
         ArgumentNullException.ThrowIfNull(toonString);
 
-        var parser = new Core.Parsing.ToonParser(toonOptions);
-        var toonDocument = parser.Parse(toonString);
+        var toonDocument = Core.Models.ToonDocument.Parse(toonString, toonOptions);
         return ToonJsonConverter.ToJson(toonDocument, writerOptions);
     }
 

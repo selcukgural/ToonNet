@@ -180,7 +180,7 @@ public static class ToonJsonConverter
     private static ToonValue ConvertJsonNumber(JsonElement element)
     {
         var text = element.GetRawText();
-        return (ToonValue?)Core.Parsing.ToonParser.TryParseNumber(text) ?? new ToonString(text);
+        return ToonNumber.TryParse(text, out var number) ? number : new ToonString(text);
     }
 
     /// <summary>
@@ -285,9 +285,9 @@ public static class ToonJsonConverter
 
             case ToonNumber n:
                 // Canonical TOON number text is also a valid JSON number, and keeps exact decimal values.
-                if (Core.Encoding.ToonNumberFormatter.Format(n) is { } number)
+                if (n.IsFinite)
                 {
-                    writer.WriteRawValue(number, skipInputValidation: true);
+                    writer.WriteRawValue(n.ToString(), skipInputValidation: true);
                 }
                 else
                 {

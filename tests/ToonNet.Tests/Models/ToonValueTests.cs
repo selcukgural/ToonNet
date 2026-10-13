@@ -246,4 +246,38 @@ public class ToonValueTests
         root["string"] = new ToonString("Hello");
         Assert.Equal(4, root.Properties.Count);
     }
+
+    [Theory]
+    [InlineData("42", "42")]
+    [InlineData("-0.50", "-0.5")]
+    [InlineData("1e3", "1000")]
+    [InlineData("12345678901234567890", "12345678901234567890")]
+    public void ToonNumber_TryParse_AcceptsTheTokenGrammar(string text, string canonical)
+    {
+        Assert.True(ToonNumber.TryParse(text, out var number));
+        Assert.Equal(canonical, number.ToString());
+        Assert.True(number.IsFinite);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("05")]
+    [InlineData("+1")]
+    [InlineData("1.")]
+    [InlineData("NaN")]
+    [InlineData("1e400")]
+    public void ToonNumber_TryParse_RejectsOtherText(string? text)
+    {
+        Assert.False(ToonNumber.TryParse(text, out var number));
+        Assert.Null(number);
+    }
+
+    [Fact]
+    public void ToonNumber_IsFinite_IsFalseForNaNAndInfinity()
+    {
+        Assert.False(new ToonNumber(double.NaN).IsFinite);
+        Assert.False(new ToonNumber(double.PositiveInfinity).IsFinite);
+        Assert.Equal("null", new ToonNumber(double.NaN).ToString());
+    }
 }

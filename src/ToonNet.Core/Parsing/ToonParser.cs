@@ -907,6 +907,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         var i = 0;
 
+        if (token.Length == 0)
+        {
+            return false;
+        }
+
         if (token[i] == '-')
         {
             i++;
