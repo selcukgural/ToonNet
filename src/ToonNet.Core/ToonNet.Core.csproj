@@ -24,10 +24,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="8.0.31" />
-    </ItemGroup>
-
-    <ItemGroup>
         <Compile Include="../Shared/ToonNaming.cs" Link="Shared/ToonNaming.cs" />
     </ItemGroup>
 

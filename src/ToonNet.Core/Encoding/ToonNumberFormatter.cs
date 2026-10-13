@@ -11,10 +11,17 @@ namespace ToonNet.Core.Encoding;
 ///     exponent, leading zeros or trailing fractional zeros; -0 becomes 0. Doubles outside that range
 ///     use lowercase exponent notation with an explicit sign (e.g. <c>1e-7</c>, <c>1e+21</c>).
 ///     Doubles use the shortest representation that round-trips; exact <see cref="decimal"/> values
-///     are always written in plain decimal notation.
+///     are always written in plain decimal notation. Formatting writes into a span, so the encoder appends numbers
+///     without allocating a string for each.
 /// </remarks>
 internal static class ToonNumberFormatter
 {
+    /// <summary>
+    ///     A buffer size that fits every canonical number: a decimal has at most 29 digits plus sign and point; a double
+    ///     at most 17 significant digits, up to 20 zeros in plain form, or a sign, point and three-digit exponent.
+    /// </summary>
+    public const int MaxLength = 64;
+
     /// <summary>
     ///     Formats a TOON number.
     /// </summary>
@@ -22,7 +29,8 @@ internal static class ToonNumberFormatter
     /// <returns>The canonical text, or <c>null</c> when the value is NaN or infinite (which encode as null per §3).</returns>
     public static string? Format(ToonNumber number)
     {
-        return number.DecimalValue is { } exact ? Format(exact) : Format(number.Value);
+        Span<char> buffer = stackalloc char[MaxLength];
+        return TryFormat(number, buffer, out var written) ? new string(buffer[..written]) : null;
     }
 
     /// <summary>
@@ -30,19 +38,8 @@ internal static class ToonNumberFormatter
     /// </summary>
     public static string Format(decimal value)
     {
-        if (value == 0)
-        {
-            return "0";
-        }
-
-        var text = value.ToString(CultureInfo.InvariantCulture);
-
-        if (text.Contains('.'))
-        {
-            text = text.TrimEnd('0').TrimEnd('.');
-        }
-
-        return text;
+        Span<char> buffer = stackalloc char[MaxLength];
+        return new string(buffer[..FormatDecimal(value, buffer)]);
     }
 
     /// <summary>
@@ -51,71 +48,192 @@ internal static class ToonNumberFormatter
     /// <returns>The canonical text, or <c>null</c> when the value is NaN or infinite.</returns>
     public static string? Format(double value)
     {
+        Span<char> buffer = stackalloc char[MaxLength];
+        return TryFormatDouble(value, buffer, out var written) ? new string(buffer[..written]) : null;
+    }
+
+    /// <summary>
+    ///     Writes the canonical text of a TOON number into <paramref name="destination"/>, which must hold at least
+    ///     <see cref="MaxLength"/> characters.
+    /// </summary>
+    /// <returns><c>false</c> when the value is NaN or infinite (nothing is written).</returns>
+    public static bool TryFormat(ToonNumber number, Span<char> destination, out int written)
+    {
+        if (number.DecimalValue is { } exact)
+        {
+            written = FormatDecimal(exact, destination);
+            return true;
+        }
+
+        return TryFormatDouble(number.Value, destination, out written);
+    }
+
+    /// <returns>The number of characters written.</returns>
+    private static int FormatDecimal(decimal value, Span<char> destination)
+    {
+        if (value == 0)
+        {
+            destination[0] = '0';
+            return 1;
+        }
+
+        value.TryFormat(destination, out var written, default, CultureInfo.InvariantCulture);
+        var text = destination[..written];
+
+        if (text.IndexOf('.') >= 0)
+        {
+            text = text.TrimEnd('0').TrimEnd('.');
+        }
+
+        return text.Length;
+    }
+
+    private static bool TryFormatDouble(double value, Span<char> destination, out int written)
+    {
         if (!double.IsFinite(value))
         {
-            return null;
+            written = 0;
+            return false;
         }
 
         if (value == 0)
         {
-            return "0"; // also normalizes -0
+            destination[0] = '0'; // also normalizes -0
+            written = 1;
+            return true;
         }
 
-        // "R" yields the shortest digits that round-trip, possibly in exponent form (e.g. "1E-07", "1.5E+21")
-        var shortest = value.ToString("R", CultureInfo.InvariantCulture);
-        var negative = shortest[0] == '-';
-        var body = negative ? shortest[1..] : shortest;
+        // "R" yields the shortest digits that round-trip. Without an exponent that text is already canonical (no
+        // leading or trailing zeros); exponent forms such as "1E-07" or "1.5E+21" are rewritten below.
+        Span<char> shortest = stackalloc char[32];
+        value.TryFormat(shortest, out var length, "R", CultureInfo.InvariantCulture);
+        var text = shortest[..length];
+        var exponentIndex = text.IndexOfAny('E', 'e');
 
-        var exponent = 0;
-        var exponentIndex = body.IndexOfAny(['E', 'e']);
-
-        if (exponentIndex >= 0)
+        if (exponentIndex < 0)
         {
-            exponent = int.Parse(body.AsSpan(exponentIndex + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
-            body = body[..exponentIndex];
+            text.CopyTo(destination);
+            written = length;
+            return true;
         }
+
+        var negative = text[0] == '-';
+        var exponent = int.Parse(text[(exponentIndex + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        var body = text[(negative ? 1 : 0)..exponentIndex];
 
         // Split into a digit string and the position of the decimal point within it
-        var dotIndex = body.IndexOf('.');
-        var digits = dotIndex >= 0 ? body.Remove(dotIndex, 1) : body;
-        var pointPosition = (dotIndex >= 0 ? dotIndex : body.Length) + exponent;
+        Span<char> digitBuffer = stackalloc char[32];
+        var digitCount = 0;
+        var dotIndex = -1;
 
+        for (var i = 0; i < body.Length; i++)
+        {
+            if (body[i] == '.')
+            {
+                dotIndex = i;
+            }
+            else
+            {
+                digitBuffer[digitCount++] = body[i];
+            }
+        }
+
+        var pointPosition = (dotIndex >= 0 ? dotIndex : body.Length) + exponent;
         var leadingZeros = 0;
 
-        while (leadingZeros < digits.Length - 1 && digits[leadingZeros] == '0')
+        while (leadingZeros < digitCount - 1 && digitBuffer[leadingZeros] == '0')
         {
             leadingZeros++;
         }
 
-        digits = digits[leadingZeros..].TrimEnd('0');
+        ReadOnlySpan<char> digits = digitBuffer[leadingZeros..digitCount].TrimEnd('0');
         pointPosition -= leadingZeros;
 
-        var scientificExponent = pointPosition - 1;
-        var result = scientificExponent is >= -6 and <= 20
-            ? FormatPlain(digits, pointPosition)
-            : FormatExponent(digits, scientificExponent);
+        var writer = new SpanWriter(destination);
 
-        return negative ? "-" + result : result;
+        if (negative)
+        {
+            writer.Append('-');
+        }
+
+        var scientificExponent = pointPosition - 1;
+
+        if (scientificExponent is >= -6 and <= 20)
+        {
+            WritePlain(ref writer, digits, pointPosition);
+        }
+        else
+        {
+            WriteExponent(ref writer, digits, scientificExponent);
+        }
+
+        written = writer.Position;
+        return true;
     }
 
-    private static string FormatPlain(string digits, int pointPosition)
+    private static void WritePlain(ref SpanWriter writer, scoped ReadOnlySpan<char> digits, int pointPosition)
     {
         if (pointPosition <= 0)
         {
-            return "0." + new string('0', -pointPosition) + digits;
+            writer.Append("0.");
+            writer.Append('0', -pointPosition);
+            writer.Append(digits);
         }
-
-        if (pointPosition >= digits.Length)
+        else if (pointPosition >= digits.Length)
         {
-            return digits + new string('0', pointPosition - digits.Length);
+            writer.Append(digits);
+            writer.Append('0', pointPosition - digits.Length);
         }
-
-        return digits[..pointPosition] + "." + digits[pointPosition..];
+        else
+        {
+            writer.Append(digits[..pointPosition]);
+            writer.Append('.');
+            writer.Append(digits[pointPosition..]);
+        }
     }
 
-    private static string FormatExponent(string digits, int exponent)
+    private static void WriteExponent(ref SpanWriter writer, scoped ReadOnlySpan<char> digits, int exponent)
     {
-        var mantissa = digits.Length == 1 ? digits : digits[0] + "." + digits[1..];
-        return mantissa + "e" + (exponent < 0 ? "-" : "+") + Math.Abs(exponent).ToString(CultureInfo.InvariantCulture);
+        writer.Append(digits[0]);
+
+        if (digits.Length > 1)
+        {
+            writer.Append('.');
+            writer.Append(digits[1..]);
+        }
+
+        writer.Append('e');
+        writer.Append(exponent < 0 ? '-' : '+');
+        writer.Append(Math.Abs(exponent));
+    }
+
+    /// <summary>
+    ///     Appends characters to a span that is known to be large enough.
+    /// </summary>
+    private ref struct SpanWriter(Span<char> destination)
+    {
+        private readonly Span<char> _destination = destination;
+
+        public int Position { get; private set; }
+
+        public void Append(char value) => _destination[Position++] = value;
+
+        public void Append(char value, int count)
+        {
+            _destination.Slice(Position, count).Fill(value);
+            Position += count;
+        }
+
+        public void Append(scoped ReadOnlySpan<char> value)
+        {
+            value.CopyTo(_destination[Position..]);
+            Position += value.Length;
+        }
+
+        public void Append(int value)
+        {
+            value.TryFormat(_destination[Position..], out var written, default, CultureInfo.InvariantCulture);
+            Position += written;
+        }
     }
 }

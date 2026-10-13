@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Microsoft.Extensions.ObjectPool;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Encoding;
@@ -34,11 +33,6 @@ namespace ToonNet.Core.Encoding;
 /// </example>
 public sealed class ToonEncoder(ToonOptions? options = null)
 {
-    // StringBuilder pool for reducing allocations
-    // The default policy drops builders above 4K characters, so larger documents never reused one; keep up to 64K
-    private static readonly ObjectPool<StringBuilder> StringBuilderPool =
-        new DefaultObjectPoolProvider().CreateStringBuilderPool(initialCapacity: 256, maximumRetainedCapacity: 64 * 1024);
-
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
 
     /// <summary>
@@ -70,19 +64,21 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(document);
 
+        using var buffer = new ToonTextBuffer();
+        Write(document, buffer);
+        return buffer.ToString();
+    }
+
+    /// <summary>
+    ///     Encodes a document into <paramref name="buffer"/>, so stream output does not need an intermediate string.
+    /// </summary>
+    internal void Write(ToonDocument document, ToonTextBuffer buffer)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
         _ = _options.ValidatedMaxDepth;
 
-        var sb = StringBuilderPool.Get();
-
-        try
-        {
-            new Writer(_options, sb).WriteRoot(document.Root);
-            return sb.ToString();
-        }
-        finally
-        {
-            StringBuilderPool.Return(sb);
-        }
+        new Writer(_options, buffer).WriteRoot(document.Root);
     }
 
     #region Structure
@@ -90,10 +86,10 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <summary>
     ///     Holds the state of a single <see cref="Encode"/> call, so one encoder instance can be shared across threads.
     /// </summary>
-    private sealed class Writer(ToonOptions options, StringBuilder sb)
+    private sealed class Writer(ToonOptions options, ToonTextBuffer sb)
     {
         private readonly ToonOptions _options = options;
-        private readonly StringBuilder _sb = sb;
+        private readonly ToonTextBuffer _sb = sb;
         private bool _hasLine;
         private int _depth;
 
@@ -111,11 +107,11 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                 case ToonArray array:
                     StartLine(0);
                     _depth = -1; // the root array is at depth 0, like the root object
-                    EncodeArray(string.Empty, array, 1, ArrayPosition.Root);
+                    EncodeArray(null, array, 1, ArrayPosition.Root);
                     break;
                 default:
                     StartLine(0);
-                    _sb.Append(FormatPrimitive(root));
+                    AppendPrimitive(root);
                     break;
             }
         }
@@ -137,29 +133,30 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         /// </summary>
         private void EncodeField(string key, ToonValue value, int childDepth)
         {
-            var encodedKey = EncodeKey(key);
-
             switch (value)
             {
                 case ToonObject obj:
-                    _sb.Append(encodedKey).Append(':');
+                    AppendKey(_sb, key);
+                    _sb.Append(':');
                     EnterNesting();
                     EncodeFields(obj, childDepth);
                     _depth--;
                     break;
                 case ToonArray array:
-                    EncodeArray(encodedKey, array, childDepth, ArrayPosition.Field);
+                    EncodeArray(key, array, childDepth, ArrayPosition.Field);
                     break;
                 default:
-                    _sb.Append(encodedKey).Append(": ").Append(FormatPrimitive(value));
+                    AppendKey(_sb, key);
+                    _sb.Append(": ");
+                    AppendPrimitive(value);
                     break;
             }
         }
 
         /// <summary>
-        ///     Writes an array header (prefixed by an already encoded key, possibly empty) and its items (spec §9).
+        ///     Writes an array header (prefixed by the key, if any) and its items (spec §9).
         /// </summary>
-        private void EncodeArray(string encodedKey, ToonArray array, int childDepth, ArrayPosition position)
+        private void EncodeArray(string? key, ToonArray array, int childDepth, ArrayPosition position)
         {
             var sb = _sb;
 
@@ -171,14 +168,15 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                 switch (position)
                 {
                     case ArrayPosition.Field:
-                        sb.Append(encodedKey).Append(": []");
+                        AppendKey(sb, key!);
+                        sb.Append(": []");
                         break;
                     case ArrayPosition.Root:
                         sb.Append("[]");
                         break;
                     default:
                         // Inner arrays of list items keep the header form (§9.2)
-                        AppendBracket(encodedKey, 0);
+                        AppendBracket(key, 0);
                         sb.Append(':');
                         break;
                 }
@@ -188,7 +186,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
             EnterNesting();
 
-            AppendBracket(encodedKey, array.Count);
+            AppendBracket(key, array.Count);
 
             if (IsPrimitiveArray(array))
             {
@@ -201,7 +199,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                         sb.Append(_options.Delimiter);
                     }
 
-                    sb.Append(FormatPrimitive(array[i]));
+                    AppendPrimitive(array[i]);
                 }
             }
             else if (position != ArrayPosition.ListItem && TryGetTabularFields(array) is { } fields)
@@ -237,7 +235,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                     sb.Append(_options.Delimiter);
                 }
 
-                sb.Append(EncodeKey(fields[i]));
+                AppendKey(sb, fields[i]);
             }
 
             sb.Append("}:");
@@ -259,7 +257,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
                     // Rows usually hold the fields in header order, so the entry at the same position is checked first
                     ref readonly var entry = ref row.Properties.EntryAt(i);
-                    sb.Append(FormatPrimitive(string.Equals(entry.Key, fields[i]) ? entry.Value : row.Properties[fields[i]]));
+                    AppendPrimitive(string.Equals(entry.Key, fields[i]) ? entry.Value : row.Properties[fields[i]]);
                 }
             }
 
@@ -303,10 +301,11 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                     break;
                 case ToonArray array:
                     sb.Append("- ");
-                    EncodeArray(string.Empty, array, depth + 1, ArrayPosition.ListItem);
+                    EncodeArray(null, array, depth + 1, ArrayPosition.ListItem);
                     break;
                 default:
-                    sb.Append("- ").Append(FormatPrimitive(item));
+                    sb.Append("- ");
+                    AppendPrimitive(item);
                     break;
             }
         }
@@ -343,7 +342,14 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                 }
             }
 
-            return [.. first.Properties.Keys];
+            var fields = new string[fieldCount];
+
+            for (var i = 0; i < fields.Length; i++)
+            {
+                fields[i] = first.Properties.EntryAt(i).Key;
+            }
+
+            return fields;
         }
 
         private static bool IsPrimitiveArray(ToonArray array)
@@ -362,10 +368,18 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         /// <summary>
         ///     Appends <c>key[N]</c> including the delimiter symbol for tab and pipe (spec §6).
         /// </summary>
-        private void AppendBracket(string encodedKey, int count)
+        private void AppendBracket(string? key, int count)
         {
             var sb = _sb;
-            sb.Append(encodedKey).Append('[').Append(count.ToString(CultureInfo.InvariantCulture));
+
+            if (key != null)
+            {
+                AppendKey(sb, key);
+            }
+
+            sb.Append('[');
+            count.TryFormat(sb.GetSpan(11), out var length, default, CultureInfo.InvariantCulture);
+            sb.Advance(length);
 
             if (_options.Delimiter != ',')
             {
@@ -410,19 +424,38 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
 
         /// <summary>
-        ///     Formats a primitive value. NaN and infinities are written as null (spec §3).
+        ///     Appends a primitive value. NaN and infinities are written as null (spec §3).
         /// </summary>
         /// <exception cref="ToonEncodingException">Thrown for unknown <see cref="ToonValue"/> subclasses.</exception>
-        private string FormatPrimitive(ToonValue? value)
+        private void AppendPrimitive(ToonValue? value)
         {
-            return value switch
+            var sb = _sb;
+
+            switch (value)
             {
-                null or ToonNull => "null",
-                ToonBoolean b    => b.Value ? "true" : "false",
-                ToonNumber n     => ToonNumberFormatter.Format(n) ?? "null",
-                ToonString s     => QuoteIfNeeded(s.Value, _options.Delimiter),
-                _                => throw new ToonEncodingException($"Unsupported TOON value type: {value.GetType().Name}")
-            };
+                case null or ToonNull:
+                    sb.Append("null");
+                    break;
+                case ToonBoolean b:
+                    sb.Append(b.Value ? "true" : "false");
+                    break;
+                case ToonNumber n:
+                    if (ToonNumberFormatter.TryFormat(n, sb.GetSpan(ToonNumberFormatter.MaxLength), out var written))
+                    {
+                        sb.Advance(written);
+                    }
+                    else
+                    {
+                        sb.Append("null");
+                    }
+
+                    break;
+                case ToonString s:
+                    AppendString(sb, s.Value, _options.Delimiter);
+                    break;
+                default:
+                    throw new ToonEncodingException($"Unsupported TOON value type: {value.GetType().Name}");
+            }
         }
     }
 
@@ -431,19 +464,33 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     #region Primitives, keys and quoting
 
     /// <summary>
-    ///     Quotes a string value when spec §7.2 requires it.
+    ///     Appends a string value, quoted and escaped when spec §7.2 requires it.
     /// </summary>
-    private static string QuoteIfNeeded(string value, char delimiter)
+    private static void AppendString(ToonTextBuffer sb, string value, char delimiter)
     {
-        return NeedsQuoting(value, delimiter) ? "\"" + Escape(value) + "\"" : value;
+        if (NeedsQuoting(value, delimiter))
+        {
+            AppendQuoted(sb, value);
+        }
+        else
+        {
+            sb.Append(value);
+        }
     }
 
     /// <summary>
-    ///     Encodes a key or tabular field name, quoting it unless it matches <c>^[A-Za-z_][A-Za-z0-9_.]*$</c> (spec §7.3).
+    ///     Appends a key or tabular field name, quoting it unless it matches <c>^[A-Za-z_][A-Za-z0-9_.]*$</c> (spec §7.3).
     /// </summary>
-    private static string EncodeKey(string key)
+    private static void AppendKey(ToonTextBuffer sb, string key)
     {
-        return IsSafeUnquotedKey(key) ? key : "\"" + Escape(key) + "\"";
+        if (IsSafeUnquotedKey(key))
+        {
+            sb.Append(key);
+        }
+        else
+        {
+            AppendQuoted(sb, key);
+        }
     }
 
     private static bool IsSafeUnquotedKey(string key)
@@ -551,31 +598,28 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     }
 
     /// <summary>
-    ///     Escapes a string per spec §7.1: backslash, quote, LF, CR and tab use short escapes,
-    ///     other control characters U+0000–U+001F use lowercase <c>\uXXXX</c>.
+    ///     Appends a quoted string, escaped per spec §7.1: backslash, quote, LF, CR and tab use short escapes,
+    ///     other control characters U+0000–U+001F use lowercase <c>\uXXXX</c>. Runs of characters that need no escape
+    ///     are appended in one piece.
     /// </summary>
-    private static string Escape(string value)
+    private static void AppendQuoted(ToonTextBuffer sb, string value)
     {
-        var needsEscape = false;
+        sb.Append('"');
+        var text = value.AsSpan();
+        var start = 0;
 
-        foreach (var ch in value)
+        for (var i = 0; i < text.Length; i++)
         {
-            if (ch is '\\' or '"' || ch < '\u0020')
+            var ch = text[i];
+
+            if (ch is not ('\\' or '"') && ch >= '\u0020')
             {
-                needsEscape = true;
-                break;
+                continue;
             }
-        }
 
-        if (!needsEscape)
-        {
-            return value;
-        }
+            sb.Append(text[start..i]);
+            start = i + 1;
 
-        var sb = new StringBuilder(value.Length + 8);
-
-        foreach (var ch in value)
-        {
             switch (ch)
             {
                 case '\\':
@@ -593,17 +637,16 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                 case '\t':
                     sb.Append("\\t");
                     break;
-                case < '\u0020':
-                    sb.Append("\\u").Append(((int)ch).ToString("x4", CultureInfo.InvariantCulture));
-                    break;
                 default:
-                    sb.Append(ch);
+                    sb.Append("\\u00").Append(HexDigits[ch >> 4]).Append(HexDigits[ch & 0xF]);
                     break;
             }
         }
 
-        return sb.ToString();
+        sb.Append(text[start..]).Append('"');
     }
+
+    private const string HexDigits = "0123456789abcdef";
 
     #endregion
 

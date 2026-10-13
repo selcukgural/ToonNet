@@ -22,9 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Dependencies:** ToonNet.Extensions.Yaml requires YamlDotNet 18.1.0 (was 16.2.0); ToonNet.AspNetCore references the
   latest 8.0.x patches of its Microsoft.Extensions dependencies (still 8.x, so .NET 8 stays supported).
+  ToonNet.Core no longer depends on Microsoft.Extensions.ObjectPool (it has no package dependencies now).
 - **ToonNet.Core:** Less per-value overhead in the reflection-based serializer: the dictionary and collection interface
-  lookups are cached per type, `ToonSerializerOptions.GetConverter` no longer allocates a closure, and the encoder's
-  `StringBuilder` pool keeps builders up to 64K characters (the default policy discarded anything above 4K).
+  lookups are cached per type and `ToonSerializerOptions.GetConverter` no longer allocates a closure.
 - **ToonNet.Core:** Faster reflection-based deserialization (about 15% less time and allocation for lists of objects
   with constructors): constructors are called through compiled delegates instead of `ConstructorInfo.Invoke`, the
   binding of constructor parameters to properties is computed once per type, collections and dictionaries are built
@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build a token list and substrings per cell, keys repeated in list items share one string, integers of up to 18
   digits skip the double/decimal double parse, and arrays are created with their declared length (bounded by the
   remaining lines, so a header such as `[2000000000]:` does not reserve memory).
+- **ToonNet.Core:** The encoder writes into a character buffer rented from `ArrayPool<char>` (cleared before it is
+  returned) instead of a pooled `StringBuilder`, and formats numbers, keys and escaped strings straight into it
+  instead of building a string for each value. Encoding allocates little more than the resulting string: about half
+  the memory and a third less time for large documents.
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common
