@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="icon.png" alt="ToonNet Logo" width="128" height="128">
+<img src="https://raw.githubusercontent.com/selcukgural/ToonNet/master/icon.png" alt="ToonNet Logo" width="128" height="128">
 
 **TOON Data Format Serialization for .NET**
 
@@ -10,10 +10,10 @@
 [![NuGet](https://img.shields.io/nuget/v/ToonNet.Core.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Core/)
 [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/)
 [![CI](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml)
-[![Spec](https://img.shields.io/badge/TOON%20spec%20v3.3.2-378%2F378%20fixtures-brightgreen?style=flat)](docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)
+[![Spec](https://img.shields.io/badge/TOON%20spec%20v3.3.2-378%2F378%20fixtures-brightgreen?style=flat)](https://github.com/selcukgural/ToonNet/blob/master/docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)
 [![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
-[Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api-guide) • [Samples](demo/ToonNet.Demo/Samples)
+[Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api-guide) • [Samples](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo/Samples)
 
 </div>
 
@@ -35,7 +35,7 @@ ToonNet is a **.NET serialization library** that provides:
 
 > **TOON Specification:** ToonNet implements [TOON spec v3.3.2](https://github.com/toon-format/spec/blob/v3.3.2/SPEC.md)
 > and passes all 378 of its official encode/decode conformance fixtures, which run in CI
-> ([details](docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)). The optional key folding and path expansion
+> ([details](https://github.com/selcukgural/ToonNet/blob/master/docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)). The optional key folding and path expansion
 > features (§13.4) are not implemented. TOON spec v4 is not supported yet.
 
 ---
@@ -105,7 +105,7 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 - **Cache lifetime:** Metadata entries are created on demand and retained for the process lifetime (no eviction).
 - **Options caution:** Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
 
-> **Benchmarks:** The BenchmarkDotNet project lives in [`benchmark/ToonNet.Benchmarks`](benchmark/ToonNet.Benchmarks).
+> **Benchmarks:** The BenchmarkDotNet project lives in [`benchmark/ToonNet.Benchmarks`](https://github.com/selcukgural/ToonNet/tree/master/benchmark/ToonNet.Benchmarks).
 > The committed results predate the v3.3.2 encoder/parser rewrite, so run the benchmarks yourself for current numbers.
 
 ---
@@ -339,7 +339,7 @@ await ToonSerializer.SerializeStreamAsync(
 - **Throughput:** Writes are batched (`BatchSize`, default 50 items) to reduce I/O calls
 - **Cancellation:** Full CancellationToken support for long-running operations
 
-📖 **Full API documentation: [API-GUIDE.md](docs/API-GUIDE.md)**
+📖 **Full API documentation: [API-GUIDE.md](https://github.com/selcukgural/ToonNet/blob/master/docs/API-GUIDE.md)**
 
 ---
 

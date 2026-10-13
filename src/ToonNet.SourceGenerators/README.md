@@ -80,7 +80,8 @@ public partial record Order(string Id, List<Line> Lines)
     public string Note { get; init; } = "";
 }
 
-public record Line(string Sku, int Qty);
+[ToonSerializable]
+public partial record Line(string Sku, int Qty);
 
 // Object -> TOON
 var order = new Order("A-1", [new("pen", 2), new("ink", 1)]) { Note = "rush" };

@@ -377,26 +377,26 @@ ordinary key.
 ## 🔗 Related Packages
 
 **Core:**
-- [`ToonNet.Core`](../ToonNet.Core) - Core serialization (required)
+- [`ToonNet.Core`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.Core) - Core serialization (required)
 
 **Other Extensions:**
-- [`ToonNet.Extensions.Json`](../ToonNet.Extensions.Json) - JSON ↔ TOON conversion
+- [`ToonNet.Extensions.Json`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.Extensions.Json) - JSON ↔ TOON conversion
 
 **Web Integration:**
-- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - TOON configuration provider and DI integration
-- [`ToonNet.AspNetCore.Mvc`](../ToonNet.AspNetCore.Mvc) - MVC formatters
+- [`ToonNet.AspNetCore`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.AspNetCore) - TOON configuration provider and DI integration
+- [`ToonNet.AspNetCore.Mvc`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.AspNetCore.Mvc) - MVC formatters
 
 **Development:**
-- [`ToonNet.Demo`](../../demo/ToonNet.Demo) - Sample applications
-- [`ToonNet.Tests`](../../tests/ToonNet.Tests) - YAML conversion test suite
+- [`ToonNet.Demo`](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo) - Sample applications
+- [`ToonNet.Tests`](https://github.com/selcukgural/ToonNet/tree/master/tests/ToonNet.Tests) - YAML conversion test suite
 
 ---
 
 ## 📚 Documentation
 
-- [Main Documentation](../../README.md) - Complete ToonNet guide
-- [API Guide](../../docs/API-GUIDE.md) - Detailed API reference
-- [Samples](../../demo/ToonNet.Demo/Samples) - Real-world examples
+- [Main Documentation](https://github.com/selcukgural/ToonNet/blob/master/README.md) - Complete ToonNet guide
+- [API Guide](https://github.com/selcukgural/ToonNet/blob/master/docs/API-GUIDE.md) - Detailed API reference
+- [Samples](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo/Samples) - Real-world examples
 
 ---
 
@@ -420,14 +420,14 @@ dotnet test --filter "FullyQualifiedName~ToonYamlConverter"
 
 ## 📄 License
 
-MIT License - See [LICENSE](../../LICENSE) file for details.
+MIT License - See [LICENSE](https://github.com/selcukgural/ToonNet/blob/master/LICENSE) file for details.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions welcome! Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) first.
+Contributions welcome! Please read [CONTRIBUTING.md](https://github.com/selcukgural/ToonNet/blob/master/CONTRIBUTING.md) first.
 
 ---
 
-**Part of the [ToonNet](../../README.md) serialization library family.**
+**Part of the [ToonNet](https://github.com/selcukgural/ToonNet/blob/master/README.md) serialization library family.**

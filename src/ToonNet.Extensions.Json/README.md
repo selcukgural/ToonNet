@@ -250,7 +250,7 @@ JSON numbers are converted with the TOON number rules: the exact value is kept w
 requires, numbers are written in canonical form, so `35.00` becomes `35` and `1.0` becomes `1` (same value). `ToonJsonConverter.FromJson(string)` uses
 `JsonDocument.Parse` with its default maximum depth of 64.
 
-See [Roundtrip Guarantees](../../docs/API-GUIDE.md) for details.
+See [Roundtrip Guarantees](https://github.com/selcukgural/ToonNet/blob/master/docs/API-GUIDE.md#understanding-roundtrip-behavior) for details.
 
 ---
 
@@ -266,26 +266,26 @@ See [Roundtrip Guarantees](../../docs/API-GUIDE.md) for details.
 ## 🔗 Related Packages
 
 **Core:**
-- [`ToonNet.Core`](../ToonNet.Core) - Core serialization (required)
+- [`ToonNet.Core`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.Core) - Core serialization (required)
 
 **Other Extensions:**
-- [`ToonNet.Extensions.Yaml`](../ToonNet.Extensions.Yaml) - YAML ↔ TOON conversion
+- [`ToonNet.Extensions.Yaml`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.Extensions.Yaml) - YAML ↔ TOON conversion
 
 **Web Integration:**
-- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - TOON configuration provider and DI integration
-- [`ToonNet.AspNetCore.Mvc`](../ToonNet.AspNetCore.Mvc) - MVC formatters
+- [`ToonNet.AspNetCore`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.AspNetCore) - TOON configuration provider and DI integration
+- [`ToonNet.AspNetCore.Mvc`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.AspNetCore.Mvc) - MVC formatters
 
 **Development:**
-- [`ToonNet.Demo`](../../demo/ToonNet.Demo) - Sample applications with JSON examples
-- [`ToonNet.Tests`](../../tests/ToonNet.Tests) - JSON conversion test suite
+- [`ToonNet.Demo`](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo) - Sample applications with JSON examples
+- [`ToonNet.Tests`](https://github.com/selcukgural/ToonNet/tree/master/tests/ToonNet.Tests) - JSON conversion test suite
 
 ---
 
 ## 📚 Documentation
 
-- [Main Documentation](../../README.md) - Complete ToonNet guide
-- [API Guide](../../docs/API-GUIDE.md) - Detailed API reference
-- [Samples](../../demo/ToonNet.Demo/Samples) - Real-world JSON examples
+- [Main Documentation](https://github.com/selcukgural/ToonNet/blob/master/README.md) - Complete ToonNet guide
+- [API Guide](https://github.com/selcukgural/ToonNet/blob/master/docs/API-GUIDE.md) - Detailed API reference
+- [Samples](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo/Samples) - Real-world JSON examples
 
 ---
 
@@ -301,14 +301,14 @@ dotnet test --filter "FullyQualifiedName~ToonJsonConverter"
 
 ## 📄 License
 
-MIT License - See [LICENSE](../../LICENSE) file for details.
+MIT License - See [LICENSE](https://github.com/selcukgural/ToonNet/blob/master/LICENSE) file for details.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions welcome! Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) first.
+Contributions welcome! Please read [CONTRIBUTING.md](https://github.com/selcukgural/ToonNet/blob/master/CONTRIBUTING.md) first.
 
 ---
 
-**Part of the [ToonNet](../../README.md) serialization library family.**
+**Part of the [ToonNet](https://github.com/selcukgural/ToonNet/blob/master/README.md) serialization library family.**

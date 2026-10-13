@@ -412,24 +412,24 @@ public class ToonFormatterTests : IClassFixture<WebApplicationFactory<Program>>
 ## 🔗 Related Packages
 
 **Core:**
-- [`ToonNet.Core`](../ToonNet.Core) - Core serialization (required)
-- [`ToonNet.AspNetCore`](../ToonNet.AspNetCore) - ASP.NET Core DI (required)
+- [`ToonNet.Core`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.Core) - Core serialization (required)
+- [`ToonNet.AspNetCore`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.AspNetCore) - ASP.NET Core DI (required)
 
 **Extensions:**
-- [`ToonNet.Extensions.Json`](../ToonNet.Extensions.Json) - JSON ↔ TOON conversion
-- [`ToonNet.Extensions.Yaml`](../ToonNet.Extensions.Yaml) - YAML ↔ TOON conversion
+- [`ToonNet.Extensions.Json`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.Extensions.Json) - JSON ↔ TOON conversion
+- [`ToonNet.Extensions.Yaml`](https://github.com/selcukgural/ToonNet/tree/master/src/ToonNet.Extensions.Yaml) - YAML ↔ TOON conversion
 
 **Development:**
-- [`ToonNet.Demo`](../../demo/ToonNet.Demo) - Sample applications
-- [`ToonNet.Tests`](../../tests/ToonNet.Tests) - Test suite
+- [`ToonNet.Demo`](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo) - Sample applications
+- [`ToonNet.Tests`](https://github.com/selcukgural/ToonNet/tree/master/tests/ToonNet.Tests) - Test suite
 
 ---
 
 ## 📚 Documentation
 
-- [Main Documentation](../../README.md) - Complete ToonNet guide
-- [API Guide](../../docs/API-GUIDE.md) - Detailed API reference
-- [ASP.NET Core Guide](../ToonNet.AspNetCore/README.md) - DI and configuration
+- [Main Documentation](https://github.com/selcukgural/ToonNet/blob/master/README.md) - Complete ToonNet guide
+- [API Guide](https://github.com/selcukgural/ToonNet/blob/master/docs/API-GUIDE.md) - Detailed API reference
+- [ASP.NET Core Guide](https://github.com/selcukgural/ToonNet/blob/master/src/ToonNet.AspNetCore/README.md) - DI and configuration
 
 ---
 
@@ -444,14 +444,14 @@ public class ToonFormatterTests : IClassFixture<WebApplicationFactory<Program>>
 
 ## 📄 License
 
-MIT License - See [LICENSE](../../LICENSE) file for details.
+MIT License - See [LICENSE](https://github.com/selcukgural/ToonNet/blob/master/LICENSE) file for details.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions welcome! Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) first.
+Contributions welcome! Please read [CONTRIBUTING.md](https://github.com/selcukgural/ToonNet/blob/master/CONTRIBUTING.md) first.
 
 ---
 
-**Part of the [ToonNet](../../README.md) serialization library family.**
+**Part of the [ToonNet](https://github.com/selcukgural/ToonNet/blob/master/README.md) serialization library family.**
