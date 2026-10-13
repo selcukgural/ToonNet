@@ -81,18 +81,14 @@ public class ParserCoverageTests
     {
         var ex = Assert.Throws<ToonParseException>(() => new ToonParser().Parse("tags:\n  - a\n  - b"));
 
-        Assert.Contains("require an array header such as 'tags[N]:'", ex.Message);
+        Assert.Contains("require an array header such as 'key[N]:'", ex.Message);
     }
 
     [Fact]
-    public void ListItems_WithoutHeader_NonStrictMode_ParsesArray()
+    public void ListItems_WithoutHeader_NonStrictMode_Throws()
     {
-        var doc = new ToonParser(new ToonOptions { StrictMode = false }).Parse("tags:\n  - a\n  - b: 1\n    c: 2");
-        var tags = (ToonArray)doc.AsObject()["tags"]!;
-
-        Assert.Equal(2, tags.Count);
-        Assert.Equal("a", ((ToonString)tags[0]!).Value);
-        Assert.Equal(2, ((ToonObject)tags[1]!).Properties.Count);
+        // `key:` always opens an object (spec 4.4 §8); non-strict mode has no recovery for list items under it
+        Assert.Throws<ToonParseException>(() => new ToonParser(new ToonOptions { StrictMode = false }).Parse("tags:\n  - a\n  - b"));
     }
 
     [Fact]
@@ -114,11 +110,29 @@ public class ParserCoverageTests
     }
 
     [Fact]
-    public void TabularRows_NonStrict_PadMissingCellsWithNull()
+    public void TabularRows_NonStrict_StillCheckRowWidth()
     {
-        var obj = new ToonParser(new ToonOptions { StrictMode = false }).Parse("t[1]{a,b}:\n  1").AsObject();
+        // Non-strict mode accepts any row count, but not a row with too few or too many cells (spec 4.4 §14.4)
+        var lenient = new ToonParser(new ToonOptions { StrictMode = false });
 
-        Assert.IsType<ToonNull>(((ToonObject)((ToonArray)obj["t"]!)[0])["b"]);
+        Assert.Throws<ToonParseException>(() => lenient.Parse("t[1]{a,b}:\n  1"));
+        Assert.Equal(2, ((ToonArray)lenient.Parse("t[1]{a,b}:\n  1,2\n  3,4").AsObject()["t"]!).Count);
+    }
+
+    [Fact]
+    public void RepeatedFieldLists_ShareTheirParse_OnlyForTheSameTextAndDelimiter()
+    {
+        var parser = new ToonParser();
+
+        // Each list item repeats the header; the second differs only after the field list
+        var obj = parser.Parse("l[2]:\n  - t[1]{a,b{c}}:\n      1,2\n  - t[1]{a,b{c}}:\n      3,4\nu[1]{a,b{c},d}:\n  5,6,7").AsObject();
+        var second = (ToonObject)((ToonArray)((ToonObject)((ToonArray)obj["l"]!)[1])["t"]!)[0];
+
+        Assert.Equal("4", ((ToonObject)second["b"]!)["c"]!.ToString());
+        Assert.Equal(3, ((ToonObject)((ToonArray)obj["u"]!)[0]).Properties.Count);
+
+        // The same text under another delimiter is parsed again, and here holds a comma that is not the delimiter
+        Assert.Throws<ToonParseException>(() => parser.Parse("a[1]{x,y}:\n  1,2\nb[1|]{x,y}:\n  1|2"));
     }
 
     [Fact]

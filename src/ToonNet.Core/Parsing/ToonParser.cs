@@ -87,21 +87,36 @@ internal sealed class ToonParser(ToonOptions? options = null)
     internal readonly record struct Line(int Number, int Depth, int Indent, int Start, int Length, bool IsBlank);
 
     /// <summary>
-    ///     A delimited token: where it starts in the split text (after leading spaces) and its length (without
-    ///     trailing spaces).
+    ///     A delimited token: where it starts in the input (after leading spaces) and its length (without trailing
+    ///     spaces).
     /// </summary>
     internal readonly record struct Token(int Start, int Length);
 
     /// <summary>
-    ///     A parsed array header: <c>key?[N&lt;delim?&gt;]{fields?}:</c> (spec §6).
+    ///     A parsed header (spec §6): an array header <c>key?[N&lt;delim?&gt;]{fields?}:</c>, or a keyed header
+    ///     <c>key?[N:&lt;delim?&gt;]{fields}:</c>.
     /// </summary>
     /// <param name="Key">The key, or null for a key-less header.</param>
-    /// <param name="Length">The declared length.</param>
+    /// <param name="Length">
+    ///     The declared length or entry count; <see cref="int.MaxValue"/> for a larger one, which no content matches.
+    /// </param>
     /// <param name="Delimiter">The delimiter declared in the brackets (comma by default).</param>
-    /// <param name="Fields">The tabular field names, or null.</param>
+    /// <param name="Fields">The field list, or null.</param>
+    /// <param name="LeafCount">The number of cells of each row or entry row.</param>
+    /// <param name="Keyed">Whether the header opens a keyed tabular object (§9.5).</param>
     /// <param name="InlineStart">Where the inline values after the colon start in the input.</param>
     /// <param name="InlineLength">The length of the inline values (0 when there are none).</param>
-    internal readonly record struct Header(string? Key, int Length, char Delimiter, string[]? Fields, int InlineStart, int InlineLength);
+    internal readonly record struct Header(string? Key, int Length, char Delimiter, FieldEntry[]? Fields, int LeafCount, bool Keyed,
+                                           int InlineStart, int InlineLength);
+
+    /// <summary>
+    ///     An entry of a header's field list. The list is stored in pre-order: an entry with a nested field group (§9.3)
+    ///     is followed by the group's entries, and <see cref="End"/> is the index after them.
+    /// </summary>
+    /// <param name="Name">The field name.</param>
+    /// <param name="Leaf">The index of the field's cell in a row; for a group, of its first cell.</param>
+    /// <param name="End">The index after the entry and its group.</param>
+    internal readonly record struct FieldEntry(string Name, int Leaf, int End);
 
     #region Public API
 
@@ -167,6 +182,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _headerSpans = 0;
         _keyCount = 0;
         _headers.Clear();
+        _lastFields = null;
 
         SplitLines(input);
 
@@ -193,6 +209,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         Array.Clear(_keyStack);
         _keyCount = 0;
         _headers.Clear();
+        _lastFields = null;
     }
 
     /// <summary>
@@ -381,9 +398,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
         /// <summary>A primitive token at <see cref="ValueRef.Start"/>.</summary>
         Primitive,
 
-        /// <summary>A field missing from a short tabular row (non-strict mode): null.</summary>
-        MissingValue,
-
         /// <summary>The fields of the root object (no nesting level is entered).</summary>
         RootObject,
 
@@ -397,21 +411,24 @@ internal sealed class ToonParser(ToonOptions? options = null)
         EmptyObject,
 
         /// <summary>
-        ///     <c>- key: ...</c>: the first field at <see cref="ValueRef.Start"/>, the others one level below the item
-        ///     depth <see cref="ValueRef.Depth"/>.
+        ///     <c>- key: ...</c>: the first field on the hyphen line, the others one level below the item depth
+        ///     <see cref="ValueRef.Depth"/>.
         /// </summary>
         ListItemObject,
 
-        /// <summary>A tabular row: the fields of the header with the tokens of the line.</summary>
+        /// <summary>A tabular row or keyed entry row: the fields of the header with the cells of the line.</summary>
         Row,
+
+        /// <summary>A nested field group of a row (§9.3): the group's field entry at <see cref="ValueRef.Start"/>.</summary>
+        RowGroup,
+
+        /// <summary>A keyed tabular object after its header (§9.5); entry rows at <see cref="ValueRef.Depth"/>.</summary>
+        KeyedObject,
 
         /// <summary>An array after its header; list items or rows at <see cref="ValueRef.Depth"/>.</summary>
         HeaderArray,
 
-        /// <summary>Non-strict mode: list items at <see cref="ValueRef.Depth"/> under a bare <c>key:</c>.</summary>
-        BareList,
-
-        /// <summary><c>key: []</c>.</summary>
+        /// <summary><c>key: []</c> or <c>- []</c>.</summary>
         EmptyArray,
 
         /// <summary>A document that is only <c>[]</c>.</summary>
@@ -440,13 +457,13 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         public readonly int Depth = depth;
 
-        /// <summary>The index of the array header (header arrays and tabular rows), or -1.</summary>
+        /// <summary>The index of the header (header arrays, keyed objects, rows and row groups), or -1.</summary>
         public readonly int HeaderIndex = headerIndex;
 
         public ToonNodeKind NodeKind => Kind switch
         {
-            RefKind.Primitive or RefKind.MissingValue => ToonNodeKind.Primitive,
-            RefKind.HeaderArray or RefKind.BareList or RefKind.EmptyArray or RefKind.RootEmptyArray => ToonNodeKind.Array,
+            RefKind.Primitive => ToonNodeKind.Primitive,
+            RefKind.HeaderArray or RefKind.EmptyArray or RefKind.RootEmptyArray => ToonNodeKind.Array,
             _ => ToonNodeKind.Object
         };
     }
@@ -456,7 +473,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
         Empty,
         Block,
         ListItemFirst,
-        Row
+        Row,
+        Keyed
     }
 
     /// <summary>Reads the fields of an object; advanced with <see cref="NextProperty"/>.</summary>
@@ -465,10 +483,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
         internal ObjectMode Mode;
         internal int Depth;
         internal int LineIndex;
-        internal int FirstStart;
-        internal int FirstLength;
-        internal string[]? Fields;
+
+        // Rows: the field list, the entry read next and the end of the entries to read
+        internal FieldEntry[]? Fields;
         internal int FieldIndex;
+        internal int FieldEnd;
+
+        // Rows and keyed objects: the header; keyed objects: the entry rows read
+        internal int HeaderIndex;
+        internal int Count;
         internal bool ExitNesting;
         internal bool Done;
 
@@ -496,14 +519,13 @@ internal sealed class ToonParser(ToonOptions? options = null)
         internal bool HasHeader;
         internal int DeclaredLength;
         internal char Delimiter;
-        internal string[]? TabularFields;
-        internal int InlineStart;
+        internal FieldEntry[]? TabularFields;
+        internal int LeafCount;
         internal int LineIndex;
         internal int Depth;
         internal int Count;
         internal int TokenIndex;
         internal int TokenCount;
-        internal int InlineColumn;
         internal bool RowsEntered;
         internal bool ItemOpen;
         internal bool ExitNesting;
@@ -511,9 +533,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         /// <summary>The number of items to expect (the declared length, bounded by the lines left), for capacities.</summary>
         internal int CapacityHint;
-
-        /// <summary>The tabular field names, or null.</summary>
-        public readonly string[]? Fields => Form == ArrayForm.Tabular ? TabularFields : null;
     }
 
     /// <summary>
@@ -562,8 +581,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
     private const int LinearKeyCheckLimit = 16;
 
     /// <summary>
-    ///     Determines the root form (spec §5): an array with a key-less header, a single primitive or <c>[]</c>, or an
-    ///     object.
+    ///     Determines the root form (spec §5): an array or keyed tabular object with a key-less header, <c>[]</c>, a
+    ///     single primitive, or an object.
     /// </summary>
     internal ValueRef ReadRoot()
     {
@@ -576,36 +595,36 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         var firstLine = _lines[firstIndex];
 
-        if (firstLine.Depth != 0 && _options.StrictMode)
+        // No scope encloses the first line, so it cannot be indented (§8), in either mode
+        if (firstLine.Depth != 0)
         {
             throw new ToonParseException("The first line of a document must not be indented", firstLine.Number, firstLine.Indent + 1);
         }
 
         var content = ContentOf(firstLine);
+        var colon = FindStructuralColon(content, out var bracket);
 
-        if (TryParseHeader(firstLine, content, requireKey: false) is { Key: null } rootHeader)
+        if (colon >= 0 && bracket == 0)
+        {
+            var header = ParseHeader(firstLine, content, bracket);
+            NextLine();
+            _depth = -1; // the root value is at depth 0, like the root object
+            return new ValueRef(header.Keyed ? RefKind.KeyedObject : RefKind.HeaderArray, firstIndex, depth: 1, headerIndex: AddHeader(header));
+        }
+
+        if (content.SequenceEqual("[]"))
         {
             NextLine();
-            _depth = -1; // the root array is at depth 0, like the root object
-            return new ValueRef(RefKind.HeaderArray, firstIndex, depth: firstLine.Depth + 1, headerIndex: AddHeader(rootHeader));
+            return new ValueRef(RefKind.RootEmptyArray, firstIndex);
         }
 
-        if (HasSingleNonBlankLine())
+        if (colon < 0 && HasSingleNonBlankLine())
         {
-            if (content.SequenceEqual("[]"))
-            {
-                NextLine();
-                return new ValueRef(RefKind.RootEmptyArray, firstIndex);
-            }
-
-            if (!IsKeyValueLine(content))
-            {
-                NextLine();
-                return new ValueRef(RefKind.Primitive, firstIndex, firstLine.Start, firstLine.Length, ColumnOf(firstLine, content));
-            }
+            NextLine();
+            return new ValueRef(RefKind.Primitive, firstIndex, firstLine.Start, firstLine.Length, ColumnOf(firstLine, content));
         }
 
-        return new ValueRef(RefKind.RootObject, firstIndex, depth: firstLine.Depth);
+        return new ValueRef(RefKind.RootObject, firstIndex, depth: 0);
     }
 
     private bool HasSingleNonBlankLine()
@@ -661,15 +680,37 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 EnterNesting(_lines[value.LineIndex]);
                 cursor.Mode = ObjectMode.ListItemFirst;
                 cursor.LineIndex = value.LineIndex;
-                cursor.FirstStart = value.Start;
-                cursor.FirstLength = value.Length;
                 cursor.Depth = value.Depth;
                 cursor.ExitNesting = true;
                 break;
             case RefKind.Row:
                 cursor.Mode = ObjectMode.Row;
                 cursor.LineIndex = value.LineIndex;
+                cursor.HeaderIndex = value.HeaderIndex;
                 cursor.Fields = HeaderOf(value.HeaderIndex).Fields;
+                cursor.FieldEnd = cursor.Fields!.Length;
+                break;
+            case RefKind.RowGroup:
+            {
+                // A nested field group is an object one level below its row
+                EnterNesting(_lines[value.LineIndex]);
+                var fields = HeaderOf(value.HeaderIndex).Fields!;
+                cursor.Mode = ObjectMode.Row;
+                cursor.LineIndex = value.LineIndex;
+                cursor.HeaderIndex = value.HeaderIndex;
+                cursor.Fields = fields;
+                cursor.FieldIndex = value.Start + 1;
+                cursor.FieldEnd = fields[value.Start].End;
+                cursor.ExitNesting = true;
+                break;
+            }
+            case RefKind.KeyedObject:
+                EnterNesting(_lines[value.LineIndex]);
+                cursor.Mode = ObjectMode.Keyed;
+                cursor.LineIndex = value.LineIndex;
+                cursor.HeaderIndex = value.HeaderIndex;
+                cursor.Depth = value.Depth;
+                cursor.ExitNesting = true;
                 break;
             case RefKind.EmptyRootObject:
                 break;
@@ -695,11 +736,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 var itemDepth = cursor.Depth;
                 cursor.Mode = ObjectMode.Block;
                 cursor.Depth = itemDepth + 1;
-                key = ReadField(cursor.LineIndex, _input.AsSpan(cursor.FirstStart, cursor.FirstLength), itemDepth + 2, out value);
+                key = ReadField(cursor.LineIndex, ContentOf(_lines[cursor.LineIndex])[2..].TrimStart(' '), itemDepth + 2, out value);
                 SetPendingKey(ref cursor, key, cursor.LineIndex);
                 return true;
             }
             case ObjectMode.Block:
+            {
                 var index = PeekIndex(out var skippedBlank);
 
                 if (index >= 0 && _lines[index].Depth >= cursor.Depth)
@@ -709,7 +751,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                     // The object continues after the blank line, so the blank is inside the enclosing array's header span
                     if (skippedBlank && _headerSpans > 0 && _options.StrictMode)
                     {
-                        throw new ToonParseException("Blank lines are not allowed inside an array", line.Number - 1, 1);
+                        throw new ToonParseException("Blank lines are not allowed inside an array", _lines[index - 1].Number, 1);
                     }
 
                     if (line.Depth > cursor.Depth)
@@ -724,24 +766,33 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 }
 
                 break;
+            }
             case ObjectMode.Row:
-                if (cursor.FieldIndex < cursor.Fields!.Length)
+                if (cursor.FieldIndex < cursor.FieldEnd)
                 {
-                    var field = cursor.FieldIndex++;
-                    key = cursor.Fields[field];
+                    var index = cursor.FieldIndex;
+                    ref readonly var field = ref cursor.Fields![index];
+                    cursor.FieldIndex = field.End;
+                    key = field.Name;
 
-                    if (field < _tokens.Count)
+                    if (field.End == index + 1)
                     {
-                        var token = _tokens[field];
-                        ref readonly var rowLine = ref _lines[cursor.LineIndex];
-                        value = new ValueRef(RefKind.Primitive, cursor.LineIndex, rowLine.Start + token.Start, token.Length,
-                                             rowLine.Indent + 1 + token.Start);
+                        var token = _tokens[field.Leaf];
+                        value = new ValueRef(RefKind.Primitive, cursor.LineIndex, token.Start, token.Length,
+                                             ColumnAt(_lines[cursor.LineIndex], token.Start));
                     }
                     else
                     {
-                        value = new ValueRef(RefKind.MissingValue, cursor.LineIndex);
+                        value = new ValueRef(RefKind.RowGroup, cursor.LineIndex, index, headerIndex: cursor.HeaderIndex);
                     }
 
+                    return true;
+                }
+
+                break;
+            case ObjectMode.Keyed:
+                if (NextEntry(ref cursor, out key, out value))
+                {
                     return true;
                 }
 
@@ -752,6 +803,45 @@ internal sealed class ToonParser(ToonOptions? options = null)
         key = null!;
         value = default;
         return false;
+    }
+
+    /// <summary>Reads the next entry row of a keyed tabular object, or returns false at its end.</summary>
+    private bool NextEntry(ref ObjectCursor cursor, out string key, out ValueRef value)
+    {
+        var index = PeekIndex(out var skippedBlank);
+
+        if (index < 0 || _lines[index].Depth < cursor.Depth)
+        {
+            key = null!;
+            value = default;
+            return false;
+        }
+
+        ref readonly var line = ref _lines[index];
+
+        if (line.Depth > cursor.Depth)
+        {
+            throw new ToonParseException("Unexpected indentation in keyed tabular object", line.Number, line.Indent + 1);
+        }
+
+        // Inside this object's span after the first entry row, or inside an enclosing array's span
+        if (skippedBlank && (cursor.Count > 0 || _headerSpans > 0) && _options.StrictMode)
+        {
+            throw new ToonParseException("Blank lines are not allowed inside a keyed tabular object", _lines[index - 1].Number, 1);
+        }
+
+        _position = index + 1;
+        key = ReadEntryRow(index, cursor.HeaderIndex);
+
+        // Entry values are objects one level below the keyed object
+        if (cursor.Count++ == 0)
+        {
+            EnterNesting(line);
+        }
+
+        value = new ValueRef(RefKind.Row, index, headerIndex: cursor.HeaderIndex);
+        SetPendingKey(ref cursor, key, index);
+        return true;
     }
 
     private void SetPendingKey(ref ObjectCursor cursor, string key, int lineIndex)
@@ -830,9 +920,61 @@ internal sealed class ToonParser(ToonOptions? options = null)
         // The keys stay in the array until they are overwritten or the document is released
         _keyCount = cursor.KeysStart;
 
+        if (cursor.Mode == ObjectMode.Keyed)
+        {
+            if (cursor.Count > 0)
+            {
+                _depth--;
+            }
+
+            ref readonly var header = ref HeaderOf(cursor.HeaderIndex);
+
+            if (_options.StrictMode && cursor.Count != header.Length)
+            {
+                ref readonly var line = ref _lines[cursor.LineIndex];
+                throw new ToonParseException($"Entry count mismatch: expected {header.Length}, got {cursor.Count}", line.Number, line.Indent + 1);
+            }
+
+            _headers.RemoveRange(cursor.HeaderIndex, _headers.Count - cursor.HeaderIndex);
+        }
+
         if (cursor.ExitNesting)
         {
             _depth--;
+        }
+    }
+
+    /// <summary>
+    ///     Reads an entry row of a keyed tabular object (spec §9.5): the entry key before the first unquoted colon, then
+    ///     the cells, split as in a tabular row.
+    /// </summary>
+    /// <returns>The entry key.</returns>
+    private string ReadEntryRow(int lineIndex, int headerIndex)
+    {
+        ref readonly var line = ref _lines[lineIndex];
+        var content = ContentOf(line);
+        var colon = IndexOfUnquoted(content, ':');
+
+        if (colon < 0)
+        {
+            throw new ToonParseException("Missing colon after the entry key of a keyed tabular object", line.Number, line.Indent + 1);
+        }
+
+        ref readonly var header = ref HeaderOf(headerIndex);
+        var key = ParseKeyToken(content[..colon].TrimEnd(' '), line.Number, line.Indent + 1);
+        var cells = content[(colon + 1)..];
+
+        // Nothing after the colon is no cells, not one empty cell
+        var count = cells.TrimStart(' ').IsEmpty ? 0 : SplitDelimited(cells, header.Delimiter).Count;
+        CheckRowWidth(count, header.LeafCount, line);
+        return key;
+    }
+
+    private static void CheckRowWidth(int cells, int leafCount, in Line line)
+    {
+        if (cells != leafCount)
+        {
+            throw new ToonParseException($"Row has {cells} values but expected {leafCount}", line.Number, line.Indent + 1);
         }
     }
 
@@ -843,37 +985,35 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <returns>The key.</returns>
     private string ReadField(int lineIndex, ReadOnlySpan<char> content, int childDepth, out ValueRef value)
     {
-        var line = _lines[lineIndex];
+        ref readonly var line = ref _lines[lineIndex];
+        var colon = FindStructuralColon(content, out var bracket);
 
-        if (TryParseHeader(line, content, requireKey: true) is { } header)
+        if (colon < 0)
         {
-            value = new ValueRef(RefKind.HeaderArray, lineIndex, depth: childDepth, headerIndex: AddHeader(header));
+            throw new ToonParseException(IsListItem(content) ? "List items require an array header such as 'key[N]:'" : "Missing colon after key",
+                                         line.Number, ColumnOf(line, content));
+        }
+
+        if (bracket >= 0)
+        {
+            // A header without a key is only allowed at the root or as a list item (§6)
+            if (bracket == 0)
+            {
+                throw new ToonParseException("An array header needs a key here", line.Number, ColumnOf(line, content));
+            }
+
+            var header = ParseHeader(line, content, bracket);
+            value = new ValueRef(header.Keyed ? RefKind.KeyedObject : RefKind.HeaderArray, lineIndex, depth: childDepth,
+                                 headerIndex: AddHeader(header));
             return header.Key!;
         }
 
-        var colon = FindKeyValueColon(content, line, out var key);
-        var restStart = colon + 1;
-
-        while (restStart < content.Length && content[restStart] == ' ')
-        {
-            restStart++;
-        }
+        var key = ParseKeyToken(content[..colon].TrimEnd(' '), line.Number, ColumnOf(line, content));
 
         // Line content has no trailing spaces, so the value runs to the end
-        var rest = content[restStart..];
+        var rest = content[(colon + 1)..].TrimStart(' ');
 
-        if (rest.Length == 0 && PeekLine() is { } next && next.Depth == childDepth && IsListItem(ContentOf(next)))
-        {
-            // `key:` always opens an object (§8); list items need a header. Non-strict mode reads them as an array.
-            if (_options.StrictMode)
-            {
-                throw new ToonParseException($"List items under '{key}' require an array header such as '{key}[N]:'",
-                                             next.Number, next.Indent + 1);
-            }
-
-            value = new ValueRef(RefKind.BareList, lineIndex, depth: childDepth);
-        }
-        else if (rest.Length == 0)
+        if (rest.Length == 0)
         {
             value = new ValueRef(RefKind.NestedObject, lineIndex, depth: childDepth);
         }
@@ -883,7 +1023,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         }
         else
         {
-            value = new ValueRef(RefKind.Primitive, lineIndex, OffsetOf(rest), rest.Length, ColumnOf(line, content) + restStart);
+            value = new ValueRef(RefKind.Primitive, lineIndex, OffsetOf(rest), rest.Length, ColumnOf(line, rest));
         }
 
         return key;
@@ -910,22 +1050,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
                 if (header.Fields != null)
                 {
-                    if (header.InlineLength > 0)
-                    {
-                        throw new ToonParseException("Unexpected values after a tabular array header", line.Number, line.Indent + 1);
-                    }
-
                     cursor.Form = ArrayForm.Tabular;
                     cursor.TabularFields = header.Fields;
+                    cursor.LeafCount = header.LeafCount;
                     cursor.CapacityHint = ExpectedItemCapacity(header);
                 }
                 else if (header.InlineLength > 0)
                 {
-                    var inline = _input.AsSpan(header.InlineStart, header.InlineLength);
                     cursor.Form = ArrayForm.Inline;
-                    cursor.InlineStart = header.InlineStart;
-                    cursor.InlineColumn = ColumnOf(line, inline);
-                    cursor.TokenCount = SplitDelimited(inline, header.Delimiter).Count;
+                    cursor.TokenCount = SplitDelimited(_input.AsSpan(header.InlineStart, header.InlineLength), header.Delimiter).Count;
                     cursor.CapacityHint = cursor.TokenCount;
                 }
                 else
@@ -936,12 +1069,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
                 break;
             }
-            case RefKind.BareList:
-                EnterNesting(_lines[value.LineIndex]);
-                cursor.Form = ArrayForm.List;
-                cursor.Depth = value.Depth;
-                cursor.ExitNesting = true;
-                break;
             case RefKind.EmptyArray:
                 CheckEmptyContainerNesting(_lines[value.LineIndex]);
                 break;
@@ -966,8 +1093,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 if (cursor.TokenIndex < cursor.TokenCount)
                 {
                     var token = _tokens[cursor.TokenIndex++];
-                    item = new ValueRef(RefKind.Primitive, cursor.LineIndex, cursor.InlineStart + token.Start, token.Length,
-                                        cursor.InlineColumn + token.Start);
+                    item = new ValueRef(RefKind.Primitive, cursor.LineIndex, token.Start, token.Length, ColumnAt(_lines[cursor.LineIndex], token.Start));
                     cursor.Count++;
                     return true;
                 }
@@ -983,17 +1109,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
                     if (skippedRowBlank && (cursor.Count > 0 || _headerSpans > 0) && _options.StrictMode)
                     {
-                        throw new ToonParseException("Blank lines are not allowed inside a tabular array", row.Number - 1, 1);
+                        throw new ToonParseException("Blank lines are not allowed inside a tabular array", _lines[index - 1].Number, 1);
                     }
 
                     _position = index + 1;
-                    var values = SplitDelimited(ContentOf(row), cursor.Delimiter);
-                    var fields = cursor.TabularFields!;
-
-                    if (values.Count != fields.Length && _options.StrictMode)
-                    {
-                        throw new ToonParseException($"Row has {values.Count} values but expected {fields.Length}", row.Number, row.Indent + 1);
-                    }
+                    CheckRowWidth(SplitDelimited(ContentOf(row), cursor.Delimiter).Count, cursor.LeafCount, row);
 
                     // Rows are objects one level below the array
                     if (cursor.Count == 0)
@@ -1026,7 +1146,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                     // Inside this array's span after the first item, or inside an enclosing array's span
                     if (skippedBlank && (cursor.Count > 0 || _headerSpans > 0) && _options.StrictMode)
                     {
-                        throw new ToonParseException("Blank lines are not allowed inside an array", line.Number - 1, 1);
+                        throw new ToonParseException("Blank lines are not allowed inside an array", _lines[index - 1].Number, 1);
                     }
 
                     _position = index + 1;
@@ -1123,27 +1243,40 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         var rest = content[2..].TrimStart(' ');
 
-        // Inner array: - [M]: ...
-        if (TryParseHeader(line, rest, requireKey: false) is { Key: null } innerHeader)
+        if (rest.SequenceEqual("[]"))
         {
-            return new ValueRef(RefKind.HeaderArray, lineIndex, depth: itemDepth + 1, headerIndex: AddHeader(innerHeader));
+            return new ValueRef(RefKind.EmptyArray, lineIndex); // empty inner array (§9.2)
         }
 
-        if (!IsKeyValueLine(rest))
+        var colon = FindStructuralColon(rest, out var bracket);
+
+        if (colon < 0)
         {
             return new ValueRef(RefKind.Primitive, lineIndex, OffsetOf(rest), rest.Length, ColumnOf(line, rest));
         }
 
+        // Inner array: - [M]: ... (a key-less header with a field list is only allowed at the root, §6)
+        if (bracket == 0)
+        {
+            var header = ParseHeader(line, rest, bracket);
+
+            if (header.Fields != null)
+            {
+                throw new ToonParseException("A header with a field list needs a key here", line.Number, ColumnOf(line, rest));
+            }
+
+            return new ValueRef(RefKind.HeaderArray, lineIndex, depth: itemDepth + 1, headerIndex: AddHeader(header));
+        }
+
         // Object with its first field on the hyphen line
-        return new ValueRef(RefKind.ListItemObject, lineIndex, OffsetOf(rest), rest.Length, depth: itemDepth);
+        return new ValueRef(RefKind.ListItemObject, lineIndex, depth: itemDepth);
     }
 
-    /// <summary>The text of a primitive token (empty for a missing tabular value).</summary>
+    /// <summary>The text of a primitive token.</summary>
     internal ReadOnlySpan<char> TokenOf(in ValueRef value) => _input.AsSpan(value.Start, value.Length);
 
-    /// <summary>Whether a primitive value is <c>null</c> (the unquoted token, or a missing tabular value).</summary>
-    internal bool IsNull(in ValueRef value) =>
-        value.Kind == RefKind.MissingValue || (value.Kind == RefKind.Primitive && TokenOf(value).SequenceEqual("null"));
+    /// <summary>Whether a value is the primitive <c>null</c>.</summary>
+    internal bool IsNull(in ValueRef value) => value.Kind == RefKind.Primitive && TokenOf(value).SequenceEqual("null");
 
     /// <summary>
     ///     Reads a quoted string token (its first character is a quote) with the checks of <see cref="ParsePrimitive"/>.
@@ -1177,7 +1310,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         switch (value.NodeKind)
         {
             case ToonNodeKind.Primitive:
-                if (value.Kind == RefKind.Primitive && value.Length > 0 && _input[value.Start] == '"')
+                if (value.Length > 0 && _input[value.Start] == '"')
                 {
                     ReadQuotedString(value);
                 }
@@ -1211,7 +1344,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>Converts a primitive value to a <see cref="ToonValue"/>.</summary>
     internal ToonValue ReadPrimitive(in ValueRef value)
     {
-        return value.Kind == RefKind.MissingValue ? ToonNull.Instance : ParsePrimitive(TokenOf(value), _lines[value.LineIndex], value.Column);
+        return ParsePrimitive(TokenOf(value), _lines[value.LineIndex], value.Column);
     }
 
     /// <summary>
@@ -1227,13 +1360,14 @@ internal sealed class ToonParser(ToonOptions? options = null)
             {
                 var cursor = BeginArray(value);
                 var items = new List<ToonValue>(cursor.CapacityHint);
+                var fieldNames = cursor.Form == ArrayForm.Tabular ? TopLevelNames(cursor.TabularFields!) : null;
 
                 while (NextItem(ref cursor, out var item))
                 {
                     items.Add(BuildValue(item));
                 }
 
-                return new ToonArray(items) { FieldNames = cursor.Fields };
+                return new ToonArray(items) { FieldNames = fieldNames };
             }
             default:
             {
@@ -1256,25 +1390,81 @@ internal sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    ///     Builds a tabular row object from the tokens of its line, like reading it with a cursor (rows have no checks
-    ///     of their own); missing values are null.
+    ///     Builds a row object from the cells of its line, like reading it with a cursor (rows have no checks of their
+    ///     own). A field repeated in the field list (non-strict mode) takes its last cell.
     /// </summary>
     private ToonObject BuildRow(in ValueRef value)
     {
-        var fields = HeaderOf(value.HeaderIndex).Fields!;
-        var line = _lines[value.LineIndex];
-        var content = ContentOf(line);
+        ref readonly var header = ref HeaderOf(value.HeaderIndex);
+        var fields = header.Fields!;
+        ref readonly var line = ref _lines[value.LineIndex];
+
+        if (header.LeafCount != fields.Length)
+        {
+            return BuildRowFields(fields, 0, fields.Length, line);
+        }
+
+        // Without nested field groups, each field takes the cell at its index
         var row = new ToonObject(fields.Length);
-        var tokens = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_tokens);
+        var tokens = CollectionsMarshal.AsSpan(_tokens);
 
         for (var i = 0; i < fields.Length; i++)
         {
-            row.Properties[fields[i]] = i < tokens.Length
-                ? ParsePrimitive(content.Slice(tokens[i].Start, tokens[i].Length), line, line.Indent + 1 + tokens[i].Start)
-                : ToonNull.Instance;
+            var token = tokens[i];
+            row.Properties[fields[i].Name] = ParsePrimitive(_input.AsSpan(token.Start, token.Length), line, ColumnAt(line, token.Start));
         }
 
         return row;
+    }
+
+    /// <summary>Builds the object of the field entries from <paramref name="start"/> to <paramref name="end"/>.</summary>
+    private ToonObject BuildRowFields(FieldEntry[] fields, int start, int end, in Line line)
+    {
+        var obj = new ToonObject(end - start);
+        var tokens = CollectionsMarshal.AsSpan(_tokens);
+
+        for (var i = start; i < end; i = fields[i].End)
+        {
+            ref readonly var field = ref fields[i];
+            ToonValue value;
+
+            if (field.End == i + 1)
+            {
+                var token = tokens[field.Leaf];
+                value = ParsePrimitive(_input.AsSpan(token.Start, token.Length), line, ColumnAt(line, token.Start));
+            }
+            else
+            {
+                // A nested field group is an object one level below
+                EnterNesting(line);
+                value = BuildRowFields(fields, i + 1, field.End, line);
+                _depth--;
+            }
+
+            obj.Properties[field.Name] = value;
+        }
+
+        return obj;
+    }
+
+    /// <summary>The names of the top-level entries of a field list.</summary>
+    private static string[] TopLevelNames(FieldEntry[] fields)
+    {
+        var count = 0;
+
+        for (var i = 0; i < fields.Length; i = fields[i].End)
+        {
+            count++;
+        }
+
+        var names = new string[count];
+
+        for (int i = 0, n = 0; i < fields.Length; i = fields[i].End)
+        {
+            names[n++] = fields[i].Name;
+        }
+
+        return names;
     }
 
     /// <summary>
@@ -1314,93 +1504,125 @@ internal sealed class ToonParser(ToonOptions? options = null)
         return content.SequenceEqual("-") || content.StartsWith("- ", StringComparison.Ordinal);
     }
 
+    private static readonly SearchValues<char> ColonBracketQuote = SearchValues.Create(":[\"");
+
     /// <summary>
-    ///     Checks whether a line inside a tabular array is a row rather than a key-value line (spec §9.3).
+    ///     Finds the first unquoted colon of a line's content and the first unquoted <c>[</c> when it comes before the
+    ///     colon, which makes the line an array header (spec §5.2). A quote opens a span that the next unescaped quote
+    ///     closes, or the end of the line.
+    /// </summary>
+    /// <param name="content">The content.</param>
+    /// <param name="bracket">The index of the <c>[</c>, or -1.</param>
+    /// <returns>The index of the colon, or -1.</returns>
+    private static int FindStructuralColon(ReadOnlySpan<char> content, out int bracket)
+    {
+        bracket = -1;
+        var i = 0;
+
+        while (true)
+        {
+            var next = content[i..].IndexOfAny(ColonBracketQuote);
+
+            if (next < 0)
+            {
+                return -1;
+            }
+
+            i += next;
+
+            switch (content[i])
+            {
+                case ':':
+                    return i;
+                case '[':
+                    if (bracket < 0)
+                    {
+                        bracket = i;
+                    }
+
+                    i++;
+                    break;
+                default:
+                    i = FindClosingQuote(content, i);
+
+                    if (i < 0)
+                    {
+                        return -1;
+                    }
+
+                    i++;
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Checks whether a line inside a tabular array is a row rather than a key-value line (spec §9.3): it has no
+    ///     unquoted colon, or an unquoted delimiter comes first.
     /// </summary>
     private static bool IsTabularRow(ReadOnlySpan<char> content, char delimiter)
     {
-        // A row when there is no colon, or a delimiter comes before it
-        var inQuotes = false;
+        var i = 0;
 
-        for (var i = 0; i < content.Length; i++)
+        while (true)
         {
-            var ch = content[i];
+            var next = content[i..].IndexOfAny(delimiter, ':', '"');
 
-            if (inQuotes)
-            {
-                if (ch == '\\')
-                {
-                    i++;
-                }
-                else if (ch == '"')
-                {
-                    inQuotes = false;
-                }
-            }
-            else if (ch == '"')
-            {
-                inQuotes = true;
-            }
-            else if (ch == delimiter)
+            if (next < 0)
             {
                 return true;
             }
-            else if (ch == ':')
+
+            i += next;
+
+            if (content[i] != '"')
             {
-                return false;
+                return content[i] == delimiter;
             }
-        }
 
-        return true;
+            i = FindClosingQuote(content, i);
+
+            if (i < 0)
+            {
+                return true;
+            }
+
+            i++;
+        }
     }
 
     /// <summary>
-    ///     Checks whether content is a key-value line (a key followed by a colon) or an array header with a key.
-    /// </summary>
-    private static bool IsKeyValueLine(ReadOnlySpan<char> content)
-    {
-        if (content.Length > 0 && content[0] == '"')
-        {
-            var end = FindClosingQuote(content, 0);
-            return end > 0 && end + 1 < content.Length && content[end + 1] is ':' or '[';
-        }
-
-        return content.IndexOf(':') > 0;
-    }
-
-    /// <summary>
-    ///     Returns the index of the first occurrence of <paramref name="target"/> outside quoted strings, or -1.
+    ///     Returns the index of the first occurrence of <paramref name="target"/> outside quoted spans, or -1.
     /// </summary>
     private static int IndexOfUnquoted(ReadOnlySpan<char> content, char target)
     {
-        var inQuotes = false;
+        var i = 0;
 
-        for (var i = 0; i < content.Length; i++)
+        while (true)
         {
-            var ch = content[i];
+            var next = content[i..].IndexOfAny(target, '"');
 
-            if (inQuotes)
+            if (next < 0)
             {
-                if (ch == '\\')
-                {
-                    i++;
-                }
-                else if (ch == '"')
-                {
-                    inQuotes = false;
-                }
+                return -1;
             }
-            else if (ch == '"')
-            {
-                inQuotes = true;
-            }
-            else if (ch == target)
+
+            i += next;
+
+            if (content[i] == target)
             {
                 return i;
             }
-        }
 
-        return -1;
+            i = FindClosingQuote(content, i);
+
+            if (i < 0)
+            {
+                return -1;
+            }
+
+            i++;
+        }
     }
 
     /// <summary>
@@ -1408,213 +1630,274 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     private static int FindClosingQuote(ReadOnlySpan<char> content, int start)
     {
-        for (var i = start + 1; i < content.Length; i++)
+        var i = start + 1;
+
+        while (i < content.Length)
         {
-            if (content[i] == '\\')
+            var next = content[i..].IndexOfAny('\\', '"');
+
+            if (next < 0)
             {
-                i++;
+                return -1;
             }
-            else if (content[i] == '"')
+
+            i += next;
+
+            if (content[i] == '"')
             {
                 return i;
             }
+
+            i += 2; // the escaped character
         }
 
         return -1;
     }
 
     /// <summary>
-    ///     Finds the colon of a key-value line and extracts the (unescaped) key.
-    /// </summary>
-    /// <returns>The index of the colon in <paramref name="content"/>.</returns>
-    /// <exception cref="ToonParseException">Thrown when the key is not followed by a colon.</exception>
-    private int FindKeyValueColon(ReadOnlySpan<char> content, Line line, out string key)
-    {
-        if (content.Length > 0 && content[0] == '"')
-        {
-            var end = FindClosingQuote(content, 0);
-
-            if (end < 0)
-            {
-                throw new ToonParseException("Unterminated string", line.Number, line.Indent + 1);
-            }
-
-            if (end + 1 >= content.Length || content[end + 1] != ':')
-            {
-                throw new ToonParseException("Missing colon after key", line.Number, line.Indent + end + 2);
-            }
-
-            key = Unescape(content.Slice(1, end - 1), line.Number, ColumnOf(line, content) + 1);
-            return end + 1;
-        }
-
-        var colon = content.IndexOf(':');
-
-        if (colon <= 0)
-        {
-            throw new ToonParseException(colon == 0 ? "Missing key before colon" : "Missing colon after key", line.Number, line.Indent + 1);
-        }
-
-        key = GetKey(content[..colon].TrimEnd(' '));
-        return colon;
-    }
-
-    /// <summary>
-    ///     Tries to parse an array header at the start of <paramref name="content"/> (spec §6).
-    /// </summary>
-    /// <param name="line">The line, for error positions.</param>
-    /// <param name="content">The header text (without indentation or list marker).</param>
-    /// <param name="requireKey">Whether a key prefix is required (fields) or forbidden (root and list-item arrays).</param>
-    /// <returns>The header, or null when the content is not a header.</returns>
-    /// <exception cref="ToonParseException">Thrown in strict mode for malformed bracket segments or delimiter mismatches.</exception>
-    private Header? TryParseHeader(Line line, ReadOnlySpan<char> content, bool requireKey)
-    {
-        string? key = null;
-        int bracketStart;
-
-        if (content.Length > 0 && content[0] == '"')
-        {
-            var end = FindClosingQuote(content, 0);
-
-            if (end < 0 || end + 1 >= content.Length || content[end + 1] != '[')
-            {
-                return null;
-            }
-
-            key = Unescape(content.Slice(1, end - 1), line.Number, ColumnOf(line, content) + 1);
-            bracketStart = end + 1;
-        }
-        else
-        {
-            bracketStart = content.IndexOf('[');
-            var colon = content.IndexOf(':');
-
-            if (bracketStart < 0 || (colon >= 0 && colon < bracketStart))
-            {
-                return null;
-            }
-
-            if (bracketStart > 0)
-            {
-                key = GetKey(content[..bracketStart]);
-            }
-        }
-
-        if ((key != null) != requireKey)
-        {
-            return null;
-        }
-
-        var header = TryParseHeaderSegments(line, content, bracketStart, key, out var malformed, out var mixedDelimiters);
-
-        if (header == null && malformed && _options.StrictMode && (requireKey || content.IndexOf(':') > 0))
-        {
-            throw new ToonParseException("Malformed array header", line.Number, line.Indent + bracketStart + 1);
-        }
-
-        if (header != null && mixedDelimiters && _options.StrictMode)
-        {
-            throw new ToonParseException("Header delimiter mismatch between bracket and fields segments", line.Number, line.Indent + 1);
-        }
-
-        return header;
-    }
-
-    /// <summary>
-    ///     Parses <c>[N&lt;delim?&gt;]{fields?}:</c> starting at <paramref name="bracketStart"/>.
+    ///     Parses an array or keyed header (spec §6) whose bracket segment starts at <paramref name="bracket"/>. A line
+    ///     whose first unquoted <c>[</c> precedes its first unquoted colon must be one, in either mode.
     /// </summary>
     /// <param name="line">The header line, for error positions.</param>
-    /// <param name="content">The header text, a suffix of the line's content.</param>
-    /// <param name="bracketStart">The index of the opening bracket.</param>
-    /// <param name="key">The already parsed key, or null for key-less headers.</param>
-    /// <param name="malformed">Set when the text looks like a header but is not a valid one.</param>
-    /// <param name="mixedDelimiters">
-    ///     Set when an unquoted field name contains another delimiter character, i.e. the fields segment uses a different
-    ///     delimiter than the bracket declares.
-    /// </param>
-    private Header? TryParseHeaderSegments(Line line, ReadOnlySpan<char> content, int bracketStart, string? key, out bool malformed,
-                                           out bool mixedDelimiters)
+    /// <param name="content">The header text (without indentation or list marker), a suffix of the line's content.</param>
+    /// <param name="bracket">The index of the <c>[</c>; 0 for a key-less header.</param>
+    /// <exception cref="ToonParseException">Thrown when the header does not match the grammar.</exception>
+    private Header ParseHeader(in Line line, ReadOnlySpan<char> content, int bracket)
     {
-        malformed = true;
-        mixedDelimiters = false;
-        var bracketEnd = content[bracketStart..].IndexOf(']');
+        var column = ColumnOf(line, content);
+        string? key = null;
 
-        if (bracketEnd < 0)
+        if (bracket > 0)
         {
-            return null;
+            if (content[bracket - 1] is ' ' or '\t')
+            {
+                throw new ToonParseException("Whitespace is not allowed between a key and its bracket segment", line.Number, column + bracket - 1);
+            }
+
+            key = ParseKeyToken(content[..bracket], line.Number, column);
         }
 
-        bracketEnd += bracketStart;
-        var inner = content.Slice(bracketStart + 1, bracketEnd - bracketStart - 1);
+        // [N], [N<delim>], [N:] or [N:<delim>]; N without leading zeros
+        var i = bracket + 1;
+        var digits = content[i..];
+        var digitCount = digits.IndexOfAnyExceptInRange('0', '9');
+        digits = digits[..(digitCount < 0 ? digits.Length : digitCount)];
+        i += digits.Length;
+
+        if (digits.IsEmpty || (digits.Length > 1 && digits[0] == '0'))
+        {
+            throw new ToonParseException("Malformed array header: invalid length", line.Number, column + bracket);
+        }
+
+        // A length beyond int still forms a header; no content matches it (§6)
+        var length = int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) ? parsed : int.MaxValue;
+        var keyed = i < content.Length && content[i] == ':';
         var delimiter = ',';
 
-        if (inner.Length > 0 && inner[^1] is '\t' or '|')
+        if (keyed)
         {
-            delimiter = inner[^1];
-            inner = inner[..^1];
+            i++;
         }
 
-        if (!IsCanonicalLength(inner) || !int.TryParse(inner, NumberStyles.None, CultureInfo.InvariantCulture, out var length))
+        if (i < content.Length && content[i] is '\t' or '|')
         {
-            return null;
+            delimiter = content[i++];
         }
 
-        var position = bracketEnd + 1;
-        string[]? fields = null;
-
-        if (position < content.Length && content[position] == '{')
+        if (i >= content.Length || content[i] != ']')
         {
-            var fieldsEnd = IndexOfUnquoted(content[position..], '}');
-
-            if (fieldsEnd < 0)
-            {
-                return null;
-            }
-
-            var fieldsText = content.Slice(position + 1, fieldsEnd - 1);
-            var rawFields = SplitDelimited(fieldsText, delimiter);
-            var fieldsColumn = ColumnOf(line, content) + position + 1;
-            fields = new string[rawFields.Count];
-
-            for (var i = 0; i < fields.Length; i++)
-            {
-                var (fieldStart, fieldLength) = rawFields[i];
-                var field = fieldsText.Slice(fieldStart, fieldLength);
-
-                // The bracket's delimiter was split on, so any delimiter character left in an unquoted token is another one
-                mixedDelimiters |= (field.IsEmpty || field[0] != '"') && field.IndexOfAny(",|\t") >= 0;
-                fields[i] = ParseKeyToken(field, line.Number, fieldsColumn + fieldStart);
-            }
-
-            position += fieldsEnd + 1;
+            throw new ToonParseException("Malformed array header: invalid bracket segment", line.Number, column + bracket);
         }
 
-        if (position >= content.Length || content[position] != ':')
+        i++;
+        FieldEntry[]? fields = null;
+        var leafCount = 0;
+
+        if (i < content.Length && content[i] == '{')
         {
-            return null;
+            fields = ParseFieldList(line, content, ref i, delimiter, out leafCount);
+        }
+        else if (keyed)
+        {
+            throw new ToonParseException("A keyed header needs a field list", line.Number, column + i);
         }
 
-        malformed = false;
-        var inlineValues = content[(position + 1)..].Trim(' ');
-        return new Header(key, length, delimiter, fields, inlineValues.IsEmpty ? 0 : OffsetOf(inlineValues), inlineValues.Length);
+        if (i >= content.Length || content[i] != ':')
+        {
+            throw new ToonParseException("Malformed array header: expected ':'", line.Number, column + i);
+        }
+
+        var inline = content[(i + 1)..].TrimStart(' ');
+
+        if (fields != null && !inline.IsEmpty)
+        {
+            throw new ToonParseException("Unexpected values after a tabular array header", line.Number, ColumnOf(line, inline));
+        }
+
+        return new Header(key, length, delimiter, fields, leafCount, keyed, inline.IsEmpty ? 0 : OffsetOf(inline), inline.Length);
     }
 
-    private static bool IsCanonicalLength(ReadOnlySpan<char> text)
+    /// <summary>The entries of the field list being parsed, reused.</summary>
+    private readonly List<FieldEntry> _fieldEntries = [];
+
+    // The last field list parsed: its text (an offset into the input, braces included), delimiter and result. Objects
+    // in a list usually repeat the same header, which then shares one field list.
+    private int _lastFieldsStart;
+    private int _lastFieldsLength;
+    private char _lastFieldsDelimiter;
+    private FieldEntry[]? _lastFields;
+    private int _lastLeafCount;
+
+    /// <summary>
+    ///     Parses the field list at the <c>{</c> at <paramref name="i"/> (spec §6), leaving <paramref name="i"/> after
+    ///     its <c>}</c>. The same text as the last field list gives the same (immutable) result.
+    /// </summary>
+    private FieldEntry[] ParseFieldList(in Line line, ReadOnlySpan<char> content, ref int i, char delimiter, out int leafCount)
     {
-        if (text.IsEmpty || (text.Length > 1 && text[0] == '0'))
+        var rest = content[i..];
+
+        // Parsing reads up to the matching brace only, so a text that starts with the last list parses to it
+        if (_lastFields != null && delimiter == _lastFieldsDelimiter && rest.StartsWith(_input.AsSpan(_lastFieldsStart, _lastFieldsLength)))
         {
-            return false;
+            i += _lastFieldsLength;
+            leafCount = _lastLeafCount;
+            return _lastFields;
         }
 
-        foreach (var ch in text)
+        var start = i;
+        var entries = _fieldEntries;
+        entries.Clear();
+        leafCount = 0;
+        ParseFieldGroup(line, content, ref i, delimiter, entries, ref leafCount, 1);
+
+        _lastFieldsStart = OffsetOf(rest);
+        _lastFieldsLength = i - start;
+        _lastFieldsDelimiter = delimiter;
+        _lastLeafCount = leafCount;
+        return _lastFields = entries.ToArray();
+    }
+
+    /// <summary>
+    ///     Parses the field list or nested field group at the <c>{</c> at <paramref name="i"/> into
+    ///     <paramref name="entries"/> (spec §6), leaving <paramref name="i"/> after its <c>}</c>.
+    /// </summary>
+    private void ParseFieldGroup(in Line line, ReadOnlySpan<char> content, ref int i, char delimiter, List<FieldEntry> entries,
+                                 ref int leafCount, int level)
+    {
+        var column = ColumnOf(line, content);
+
+        if (level > _options.ValidatedMaxDepth || !RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
-            if (!char.IsAsciiDigit(ch))
+            throw new ToonParseException($"Maximum nesting depth of {_options.MaxDepth} exceeded", line.Number, column + i);
+        }
+
+        var groupStart = entries.Count;
+        i++;
+
+        while (true)
+        {
+            while (i < content.Length && content[i] == ' ')
             {
-                return false;
+                i++;
+            }
+
+            // A name runs to the next unquoted delimiter or brace
+            var nameStart = i;
+
+            while (i < content.Length)
+            {
+                var ch = content[i];
+
+                if (ch == '"')
+                {
+                    i = FindClosingQuote(content, i);
+
+                    if (i < 0)
+                    {
+                        throw new ToonParseException("Unterminated string", line.Number, column + nameStart);
+                    }
+                }
+                else if (ch == delimiter || ch is '{' or '}')
+                {
+                    break;
+                }
+                else if (ch is ',' or '|' or '\t')
+                {
+                    throw new ToonParseException("Header delimiter mismatch between bracket and fields segments", line.Number, column + i);
+                }
+
+                i++;
+            }
+
+            if (i >= content.Length)
+            {
+                throw new ToonParseException("Unclosed field list", line.Number, column + nameStart);
+            }
+
+            var name = content[nameStart..i].TrimEnd(' ');
+
+            if (name.IsEmpty)
+            {
+                throw new ToonParseException("Empty field name in field list", line.Number, column + nameStart);
+            }
+
+            var key = ParseKeyToken(name, line.Number, column + nameStart);
+            var index = entries.Count;
+
+            if (content[i] == '{')
+            {
+                if (content[i - 1] == ' ')
+                {
+                    throw new ToonParseException("Whitespace is not allowed between a field name and its nested field group", line.Number, column + i - 1);
+                }
+
+                var firstLeaf = leafCount;
+                entries.Add(default);
+                ParseFieldGroup(line, content, ref i, delimiter, entries, ref leafCount, level + 1);
+                entries[index] = new FieldEntry(key, firstLeaf, entries.Count);
+
+                while (i < content.Length && content[i] == ' ')
+                {
+                    i++;
+                }
+
+                if (i >= content.Length || (content[i] != delimiter && content[i] != '}'))
+                {
+                    throw new ToonParseException("Unexpected characters after a nested field group", line.Number, column + i);
+                }
+            }
+            else
+            {
+                entries.Add(new FieldEntry(key, leafCount++, index + 1));
+            }
+
+            if (content[i++] == '}')
+            {
+                break;
             }
         }
 
-        return true;
+        if (_options.StrictMode)
+        {
+            CheckDuplicateFields(entries, groupStart, line);
+        }
+    }
+
+    /// <summary>Checks a field list level for repeated names (spec §9.3).</summary>
+    private static void CheckDuplicateFields(List<FieldEntry> entries, int start, in Line line)
+    {
+        var span = CollectionsMarshal.AsSpan(entries);
+
+        for (var a = start; a < span.Length; a = span[a].End)
+        {
+            for (var b = span[a].End; b < span.Length; b = span[b].End)
+            {
+                if (string.Equals(span[a].Name, span[b].Name))
+                {
+                    throw new ToonParseException($"Duplicate field '{span[a].Name}' in field list", line.Number, line.Indent + 1);
+                }
+            }
+        }
     }
 
     #endregion
@@ -1629,6 +1912,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         var tokens = _tokens;
         tokens.Clear();
+        var offset = OffsetOf(text);
         var start = 0;
         var inQuotes = false;
 
@@ -1653,15 +1937,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
             else if (ch == delimiter)
             {
-                tokens.Add(CreateToken(text, start, i));
+                tokens.Add(CreateToken(text, start, i, offset));
                 start = i + 1;
             }
         }
 
-        tokens.Add(CreateToken(text, start, text.Length));
+        tokens.Add(CreateToken(text, start, text.Length, offset));
         return tokens;
 
-        static Token CreateToken(ReadOnlySpan<char> text, int start, int end)
+        static Token CreateToken(ReadOnlySpan<char> text, int start, int end, int offset)
         {
             while (start < end && text[start] == ' ')
             {
@@ -1673,14 +1957,17 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 end--;
             }
 
-            return new Token(start, end - start);
+            return new Token(offset + start, end - start);
         }
     }
 
     /// <summary>
     ///     The 1-based column of the first character of <paramref name="suffix"/>, a suffix of the line's content.
     /// </summary>
-    private static int ColumnOf(Line line, ReadOnlySpan<char> suffix) => line.Indent + line.Length - suffix.Length + 1;
+    private static int ColumnOf(in Line line, ReadOnlySpan<char> suffix) => line.Indent + line.Length - suffix.Length + 1;
+
+    /// <summary>The 1-based column of the character at <paramref name="offset"/> in the input, on the line.</summary>
+    private static int ColumnAt(in Line line, int offset) => line.Indent + 1 + offset - line.Start;
 
     /// <summary>The text of a line after its indentation.</summary>
     private ReadOnlySpan<char> ContentOf(Line line) => _input.AsSpan(line.Start, line.Length);
@@ -1709,11 +1996,28 @@ internal sealed class ToonParser(ToonOptions? options = null)
         return _keys[slot] = text.ToString();
     }
 
+    /// <summary>
+    ///     Reads a key token (spec §7.4): a quoted key must end at its closing quote; any other token, even an empty one,
+    ///     is a literal key.
+    /// </summary>
+    /// <exception cref="ToonParseException">Thrown for an unterminated quoted key, text after its closing quote or invalid escapes.</exception>
     private string ParseKeyToken(ReadOnlySpan<char> token, int lineNumber, int column)
     {
-        if (token.Length >= 2 && token[0] == '"' && FindClosingQuote(token, 0) == token.Length - 1)
+        if (token.Length > 0 && token[0] == '"')
         {
-            return Unescape(token[1..^1], lineNumber, column + 1);
+            var end = FindClosingQuote(token, 0);
+
+            if (end < 0)
+            {
+                throw new ToonParseException("Unterminated string", lineNumber, column);
+            }
+
+            if (end != token.Length - 1)
+            {
+                throw new ToonParseException("Unexpected characters after closing quote", lineNumber, column + end + 1);
+            }
+
+            return Unescape(token[1..end], lineNumber, column + 1);
         }
 
         return GetKey(token);

@@ -27,6 +27,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     content), comment lines (`#` after optional spaces, §5.1) are dropped without affecting any scope or count, and
     only trailing spaces are trimmed, so a trailing tab is part of a value (`k: "a"<TAB>` is now an error). A line of
     only tabs is not blank: strict mode reports the tab in its indentation.
+  - Keyed tabular objects (`key[N:]{fields}:` followed by `entrykey: cells` rows, §9.5) decode to objects, also at the
+    root and on a list item's hyphen line, and nested field groups (`{id,customer{name,country}}`, §9.3) decode each
+    row into nested objects. Both work on every path: `ToonDocument.Parse`, the serializer and generated code.
+  - Headers follow the §6 grammar in both modes: a line whose first unquoted `[` comes before its first unquoted colon
+    must be a valid header, so `foo [2]: x` or `a[2]{x}` is an error (non-strict mode read malformed headers as keys).
+    Field lists cannot be empty, hold an empty name or use another delimiter than the bracket segment, a repeated field
+    name is an error in strict mode, and a key-less header is only allowed at the root (or, without a field list, as a
+    list item). A length too large for `int` still forms a header.
+  - Keys follow §7.4: a quoted key may be followed by spaces before its colon, `: 1` has the empty key, and an
+    unquoted key may contain quotes (`a"b:c"d: 1` has the key `a"b:c"d`).
+  - `- []` is an empty inner array.
+  - Non-strict mode keeps only the five recoveries of §14.4. A row with too few or too many cells is an error (missing
+    cells were read as `null` and extra cells dropped), list items under `key:` without an array header are an error
+    (they were read as an array), and so is an indented first line.
 - **Dependencies:** ToonNet.Extensions.Yaml requires YamlDotNet 18.1.0 (was 16.2.0); ToonNet.AspNetCore references the
   latest 8.0.x patches of its Microsoft.Extensions dependencies (still 8.x, so .NET 8 stays supported).
   ToonNet.Core no longer depends on Microsoft.Extensions.ObjectPool (it has no package dependencies now).

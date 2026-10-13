@@ -142,6 +142,20 @@ public class GeneratedPathTests
     }
 
     [Fact]
+    public void KeyedTabularObjects_AreReadLikeReflection()
+    {
+        // A dictionary of uniform objects as a keyed tabular object (spec 4.4 §9.5)
+        const string toon = "Name: n\nShelves[1]{Code,Capacity,Status}:\n  A1,10,Active\n" +
+                            "ByCode[2:]{Code,Capacity,Status}:\n  a1: A1,10,Active\n  \"b 2\": B2,0,Suspended";
+
+        var generated = ToonSerializer.Deserialize<Warehouse>(toon)!;
+        var reflected = ToonSerializer.Deserialize<Warehouse>(toon, ReflectionOnly.Options())!;
+
+        Assert.Equal(new Shelf("B2", 0, Status.Suspended), generated.ByCode["b 2"]);
+        Assert.Equal(ToonSerializer.Serialize(reflected, ReflectionOnly.Options()), ToonSerializer.Serialize(generated, ReflectionOnly.Options()));
+    }
+
+    [Fact]
     public void IgnoreNullValues_AppliesToDictionaryValues_ButKeepsNullListItems()
     {
         var options = new ToonSerializerOptions { IgnoreNullValues = true };

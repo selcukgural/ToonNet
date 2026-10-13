@@ -1,58 +1,6 @@
 # Spec fixture cases (see Fixtures/v4.4) that ToonNet does not conform to yet.
 # One "<category>/<file>/<index>  # <test name>" per line. Remove a line once the case passes.
-decode/arrays-nested/17  # accepts bare bracket pair as empty inner array list item
-decode/arrays-primitive/16  # keeps a header whose length exceeds integer range in non-strict mode
-decode/arrays-tabular/10  # parses nested field groups with the pipe delimiter
-decode/arrays-tabular/12  # parses quoted subfield names inside nested field groups
-decode/arrays-tabular/13  # applies last-write-wins for duplicate field names, bare or grouped, in non-strict mode
-decode/arrays-tabular/17  # trims spaces around field names
-decode/arrays-tabular/19  # throws on a row with more cells than fields in non-strict mode
-decode/arrays-tabular/7  # parses nested field groups into nested objects
-decode/arrays-tabular/8  # parses sibling nested field groups by depth-first cell assignment, with a name repeated across levels
-decode/arrays-tabular/9  # parses nested field groups recursively without a depth cap
-decode/blank-lines/13  # ignores blank lines between tabular rows and entry rows in non-strict mode
-decode/blank-lines/18  # accepts blank line between header and first entry row
-decode/blank-lines/9  # accepts blank lines after list, tabular, and keyed scopes end, at root and in a nested object
 decode/indentation-errors/24  # adopts the depth of a jumped first line in non-strict mode
-decode/objects-keyed/0  # parses keyed tabular objects
-decode/objects-keyed/1  # parses a keyless keyed header as a root object
-decode/objects-keyed/10  # parses quoted cells containing the active delimiter
-decode/objects-keyed/11  # parses a keyed header on a hyphen line
-decode/objects-keyed/12  # ignores comment lines between entry rows
-decode/objects-keyed/13  # applies last-write-wins for duplicate entry keys in non-strict mode
-decode/objects-keyed/14  # accepts entry keys outside the encoder unquoted-key pattern
-decode/objects-keyed/17  # decodes every entry row whatever the declared count in non-strict mode
-decode/objects-keyed/2  # parses nested field groups in keyed headers
-decode/objects-keyed/3  # parses keyed headers with the pipe and tab delimiters
-decode/objects-keyed/4  # parses quoted entry keys
-decode/objects-keyed/5  # parses a quoted entry key containing a colon
-decode/objects-keyed/6  # treats a key-value line at the header's depth as a sibling after entries end
-decode/objects-keyed/7  # splits an entry row at its first unquoted colon before delimiter or header parsing
-decode/objects-keyed/8  # decodes the cell token [] as a string, not an empty array
-decode/objects-keyed/9  # accepts a declared entry count of zero
-decode/objects/37  # reads an NBSP before a quote, bracket segment, or nested field group as part of the name
-decode/objects/42  # materializes __proto__ entry key as an ordinary own key
-decode/objects/44  # parses a quoted key followed by spaces before the colon
-decode/objects/47  # parses an empty unquoted key as the empty key
-decode/objects/49  # parses keys whose closed mid-token quote span hides a colon or a bracket segment, or precedes one
-decode/root-form/11  # parses a root primitive whose bracket segment and colon follow an unclosed quote
-decode/root-form/12  # throws on a whole document indented by one level in non-strict mode
-decode/root-form/9  # throws on an indented root primitive in non-strict mode
-decode/validation-errors/18  # throws on a keyed header line without its colon in non-strict mode
-decode/validation-errors/35  # throws on empty field list
-decode/validation-errors/54  # throws on keyless array header in object field position
-decode/validation-errors/55  # throws on keyless array header in object field position in non-strict mode
-decode/validation-errors/56  # throws on keyless array header after a depth-0 field
-decode/validation-errors/57  # throws on keyless array header as a later field of a list-item object
-decode/validation-errors/58  # throws on keyless fields-bearing header as list item
-decode/validation-errors/59  # throws on keyless fields-bearing header as list item in non-strict mode
-decode/validation-errors/65  # throws on whitespace between a key and its bracket segment
-decode/validation-errors/66  # throws on a space before the bracket segment in non-strict mode
-decode/validation-errors/67  # throws on a tab between a key and its bracket segment
-decode/validation-errors/83  # throws on a tab field list after a pipe delimiter symbol in non-strict mode
-decode/validation-errors/84  # throws on a pipe field list after a bracket segment without a delimiter symbol in non-strict mode
-decode/validation-errors/90  # throws on an empty field entry
-decode/validation-errors/93  # throws on content after a nested field group in non-strict mode
 encode/arrays-nested/10  # quotes hash-leading string as list item
 encode/arrays-objects/9  # encodes a keyed-eligible object in a tabular column as a nested field group
 encode/arrays-primitive/10  # quotes hash-leading string in inline array

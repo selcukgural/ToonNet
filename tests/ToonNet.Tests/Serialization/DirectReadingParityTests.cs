@@ -91,8 +91,17 @@ public class DirectReadingParityTests
         AssertParity<List<Color?>>("[4]: Red,green,1,null");
 
         var lenient = new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } };
-        AssertParity<List<Address>>("[5]{City,Zip}:\n  a\n  b,c,extra", lenient);
-        AssertParity<Person>("Name: x\nTags:\n  - a\n  - b", lenient);
+        AssertParity<List<Address>>("[5]{City,Zip}:\n  a,\n\n  b,c", lenient);
+        AssertParity<Person>("Name: x\nTags[1]:\n  - a\n  - b", lenient);
+
+        // Keyed tabular objects and nested field groups (spec 4.4 §9.3, §9.5)
+        AssertParity<Dictionary<string, Address>>("[2:]{City,Zip}:\n  a: x,1\n  \"b c\": y,");
+        AssertParity<Person>("Name: x\nScores[0:]{v}:\nById[2:]{City,Zip}:\n  7: a,b\n  8: c,d");
+        AssertParity<List<Person>>("[2]{Name,Home{City,Zip}}:\n  a,x,1\n  b,y,null");
+        AssertParity<Dictionary<string, Person>>("[2:]{Name,Home{City}}:\n  p: a,x\n  q: b,y");
+        AssertParity<List<Dictionary<string, object?>>>("[1]{a,g{b,h{c}}}:\n  1,2,3");
+        AssertParity<List<Dictionary<string, object?>>>("[1]{a,a,g{b},g{c}}:\n  1,2,3,4", lenient);
+        AssertParity<List<Address>>("[1]{City,City}:\n  a,b", lenient, expectFallback: true); // a repeated property
     }
 
     [Fact]
@@ -125,6 +134,10 @@ public class DirectReadingParityTests
     [InlineData("When: 2026")]
     [InlineData("Color: Purple")]
     [InlineData("Color: 1.5")]
+    [InlineData("Places[1]{City{X}}:\n  a")]
+    [InlineData("Places[1]{City,Zip}:\n  a")]
+    [InlineData("Scores[1:]{v}:\n  a: 1")]
+    [InlineData("Scores[2:]{v}:\n  a\n  b: 1")]
     public void Errors_MatchTheTreeBasedPath(string toon)
     {
         var tree = Record.Exception(() =>
