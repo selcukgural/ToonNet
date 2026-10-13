@@ -41,7 +41,7 @@ var options = new ToonSerializerOptions
 | `Converters` | `List<IToonConverter>` | empty | Custom type converters |
 | `ToonOptions` | `ToonOptions` | `new ToonOptions()` | Lower-level parsing and encoding options; cannot be null |
 
-`IncludeTypeInformation` and `PublicOnly` still exist but are `[Obsolete]` and have no effect.
+`IncludeTypeInformation` and `PublicOnly` were removed in 3.0 (they had no effect since 2.0).
 
 There is no option to switch indentation off: TOON expresses nesting by indentation, so output is always indented
 (see `ToonOptions.IndentSize` below).

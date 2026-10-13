@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Removed
+- **ToonNet.Core (breaking):** The members marked `[Obsolete]` in 2.0: `ToonSerializerOptions.IncludeTypeInformation`
+  and `PublicOnly` (they had no effect), `ToonParseException.ActualToken` and `ExpectedToken` (never set by the
+  parser; `ToonParseException.Create` loses its `actual` and `expected` parameters) and
+  `ToonSerializationException.PropertyName` (use `Path`).
 - **ToonNet.Core (breaking):** `[ToonIgnore]`, `[ToonProperty]`, `[ToonPropertyOrder]` and `[ToonConverter]` can no
   longer be applied to fields. Only properties are serialized, so on a field they had no effect; now the compiler
   reports it.

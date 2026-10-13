@@ -20,8 +20,7 @@ public class ErrorMessageTests
     public void ParseException_WithSuggestion_ShowsHelpfulMessage()
     {
         // Arrange
-        var ex = ToonParseException.Create("Missing colon after key 'name'", 5, 10, "Value", "Colon (:)",
-                                           "Add a colon after the key. Example: name: value");
+        var ex = ToonParseException.Create("Missing colon after key 'name'", 5, 10, "Add a colon after the key. Example: name: value");
 
         // Act
         var message = ex.ToString();
@@ -131,15 +130,12 @@ age: 30"; // Unterminated string
     public void ExceptionProperties_AreAccessible()
     {
         // Arrange
-        var ex = ToonParseException.Create("Test error", 10, 5, "Something", "SomethingElse");
+        var ex = ToonParseException.Create("Test error", 10, 5, suggestion: "Fix it");
 
         // Assert
         Assert.Equal(10, ex.Line);
         Assert.Equal(5, ex.Column);
-#pragma warning disable CS0618 // obsolete token properties are still populated by Create
-        Assert.Equal("Something", ex.ActualToken);
-        Assert.Equal("SomethingElse", ex.ExpectedToken);
-#pragma warning restore CS0618
+        Assert.Equal("Fix it", ex.Suggestion);
     }
 
     [Fact]
@@ -151,9 +147,6 @@ age: 30"; // Unterminated string
         // Assert
         Assert.Equal(typeof(string), ex.TargetType);
         Assert.Equal("Name", ex.Path);
-#pragma warning disable CS0618 // PropertyName is an obsolete alias of Path
-        Assert.Equal("Name", ex.PropertyName);
-#pragma warning restore CS0618
         Assert.Equal(123, ex.Value);
     }
 

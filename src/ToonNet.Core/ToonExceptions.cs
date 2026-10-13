@@ -78,20 +78,6 @@ public sealed class ToonParseException : ToonException
     public int Column { get; }
     
     /// <summary>
-    ///     Gets the actual token that was encountered.
-    /// </summary>
-    /// <remarks>The line-based parser does not report tokens; this is only set by <see cref="Create"/> callers.</remarks>
-    [Obsolete("The parser does not set this property. Use Line, Column and the message instead.")]
-    public string? ActualToken { get; init; }
-
-    /// <summary>
-    ///     Gets the expected token type.
-    /// </summary>
-    /// <remarks>The line-based parser does not report tokens; this is only set by <see cref="Create"/> callers.</remarks>
-    [Obsolete("The parser does not set this property. Use Line, Column and the message instead.")]
-    public string? ExpectedToken { get; init; }
-
-    /// <summary>
     ///     Formats the error message with line and column information.
     /// </summary>
     /// <param name="message">The error message.</param>
@@ -114,25 +100,12 @@ public sealed class ToonParseException : ToonException
     /// <param name="message">The error message.</param>
     /// <param name="line">The line number where the error occurred.</param>
     /// <param name="column">The column number where the error occurred.</param>
-    /// <param name="actual">Optional actual token that was encountered.</param>
-    /// <param name="expected">Optional expected token type.</param>
     /// <param name="suggestion">Optional suggestion for fixing the error.</param>
     /// <param name="codeSnippet">Optional code snippet showing the problematic area.</param>
     /// <returns>A new ToonParseException instance.</returns>
-    public static ToonParseException Create(string message, int line, int column, string? actual = null, string? expected = null,
-                                            string? suggestion = null, string? codeSnippet = null)
+    public static ToonParseException Create(string message, int line, int column, string? suggestion = null, string? codeSnippet = null)
     {
-#pragma warning disable CS0618 // kept for callers that still pass tokens
-        var ex = new ToonParseException(message, line, column)
-        {
-            ActualToken = actual,
-            ExpectedToken = expected,
-            Suggestion = suggestion,
-            CodeSnippet = codeSnippet
-        };
-#pragma warning restore CS0618
-
-        return ex;
+        return new ToonParseException(message, line, column) { Suggestion = suggestion, CodeSnippet = codeSnippet };
     }
 }
 
@@ -228,16 +201,6 @@ public sealed class ToonSerializationException : ToonException
     /// </summary>
     public string? Path { get; init; }
 
-    /// <summary>
-    ///     Gets where the error occurred. Same value as <see cref="Path"/>.
-    /// </summary>
-    [Obsolete("Use Path. This property returns the same value, which is a path such as $.Items[2].Price rather than a property name.")]
-    public string? PropertyName
-    {
-        get => Path;
-        init => Path = value;
-    }
-    
     /// <summary>
     ///     Gets the value that caused the error.
     /// </summary>

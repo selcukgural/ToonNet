@@ -2,9 +2,6 @@ using ToonNet.Core;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 
-// IncludeTypeInformation and PublicOnly are obsolete but must keep working until they are removed
-#pragma warning disable CS0618
-
 namespace ToonNet.Tests.Validation;
 
 /// <summary>
@@ -271,36 +268,6 @@ public class ToonSerializerOptionsValidationTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void IncludeTypeInformation_AnyBooleanValue_Succeeds(bool value)
-    {
-        // Arrange
-        var options = new ToonSerializerOptions();
-
-        // Act
-        options.IncludeTypeInformation = value;
-
-        // Assert
-        Assert.Equal(value, options.IncludeTypeInformation);
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void PublicOnly_AnyBooleanValue_Succeeds(bool value)
-    {
-        // Arrange
-        var options = new ToonSerializerOptions();
-
-        // Act
-        options.PublicOnly = value;
-
-        // Assert
-        Assert.Equal(value, options.PublicOnly);
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
     public void IncludeReadOnlyProperties_AnyBooleanValue_Succeeds(bool value)
     {
         // Arrange
@@ -349,8 +316,6 @@ public class ToonSerializerOptionsValidationTests
         Assert.Equal(100, options.MaxDepth);
         Assert.False(options.IgnoreNullValues);
         Assert.Equal(PropertyNamingPolicy.Default, options.PropertyNamingPolicy);
-        Assert.False(options.IncludeTypeInformation);
-        Assert.True(options.PublicOnly);
         Assert.True(options.IncludeReadOnlyProperties);
         Assert.False(options.AllowExtendedLimits);
         Assert.Empty(options.Converters);

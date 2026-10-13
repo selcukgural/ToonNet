@@ -46,12 +46,6 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public PropertyNamingPolicy PropertyNamingPolicy { get; set; } = PropertyNamingPolicy.Default;
 
     /// <summary>
-    ///     Has no effect and will be removed in a future major version. Objects are always serialized with their runtime type.
-    /// </summary>
-    [Obsolete("IncludeTypeInformation has no effect and will be removed in a future major version.")]
-    public bool IncludeTypeInformation { get; set; }
-
-    /// <summary>
     ///     Gets or sets a value indicating whether extended limits are allowed.
     ///     When false (default), MaxDepth is limited to 200.
     ///     When true, MaxDepth can be set up to 1000.
@@ -109,12 +103,6 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     Use <see cref="AddConverter"/> to safely add converters with null checking.
     /// </remarks>
     public List<IToonConverter> Converters { get; } = [];
-
-    /// <summary>
-    ///     Has no effect and will be removed in a future major version. Only public properties are serialized.
-    /// </summary>
-    [Obsolete("PublicOnly has no effect and will be removed in a future major version; only public properties are serialized.")]
-    public bool PublicOnly { get; set; } = true;
 
     /// <summary>
     ///     Gets or sets whether to include read-only properties in serialization.
