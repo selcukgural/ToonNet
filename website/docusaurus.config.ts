@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'ToonNet',
-  tagline: 'High-performance TOON format serialization for .NET',
+  tagline: 'TOON (Token-Oriented Object Notation) serialization for .NET',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -25,7 +25,7 @@ const config: Config = {
   organizationName: 'selcukgural', // Usually your GitHub org/user name.
   projectName: 'ToonNet', // Usually your repo name.
 
-  onBrokenLinks: 'warn',
+  onBrokenLinks: 'throw',
   onBrokenAnchors: 'warn',
 
   // Even if you don't use internationalization, you can use this field to set
@@ -43,7 +43,7 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           editUrl:
-            'https://github.com/selcukgural/ToonNet/tree/main/website/',
+            'https://github.com/selcukgural/ToonNet/tree/master/website/',
         },
         blog: false,
         theme: {
@@ -54,8 +54,6 @@ const config: Config = {
   ],
 
   themeConfig: {
-    // Replace with your project's social card
-    image: 'img/docusaurus-social-card.jpg',
     colorMode: {
       respectPrefersColorScheme: true,
     },
@@ -118,7 +116,7 @@ const config: Config = {
           items: [
             {
               label: 'License (MIT)',
-              href: 'https://github.com/selcukgural/ToonNet/blob/main/LICENSE',
+              href: 'https://github.com/selcukgural/ToonNet/blob/master/LICENSE',
             },
             {
               label: 'TOON Spec v3.3.2',
