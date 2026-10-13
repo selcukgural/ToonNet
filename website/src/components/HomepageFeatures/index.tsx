@@ -11,35 +11,67 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: '⚡ High Performance',
-    icon: '🚀',
+    title: 'TOON Spec v3.3.2',
+    icon: '📐',
     description: (
       <>
-        Expression tree-based serialization with <strong>zero reflection overhead</strong>.
-        10-100x faster than traditional reflection-based serializers with optimized
-        memory usage and object pooling.
+        Implements <strong>TOON spec v3.3.2</strong> and is tested against the official
+        conformance fixtures. TOON is a compact, human-readable format that suits LLM
+        prompts, configuration files and data exchange.
       </>
     ),
   },
   {
-    title: '🤖 AI Token Optimized',
-    icon: '💰',
+    title: 'Familiar API',
+    icon: '🔧',
     description: (
       <>
-        TOON format uses <strong>up to 40% fewer tokens</strong> than JSON, reducing AI API costs.
-        Perfect for LLM prompts, AI training data, and agent memory.
-        Human-readable and machine-friendly.
+        A <strong>System.Text.Json-style</strong> <code>ToonSerializer</code> with options,
+        attributes and custom converters, plus a <code>ToonDocument</code>/<code>ToonValue</code>{' '}
+        model for working with TOON directly. Targets .NET 8 and later.
       </>
     ),
   },
   {
-    title: '🔧 Developer Friendly',
-    icon: '💻',
+    title: 'Source Generator',
+    icon: '⚙️',
     description: (
       <>
-        <strong>System.Text.Json-compatible API</strong> for zero learning curve.
-        Full .NET 8+ support with nullable reference types.
-        Comprehensive documentation and 444+ passing tests.
+        Mark a partial type with <code>[ToonSerializable]</code> and the generator adds
+        static <code>Serialize</code>/<code>Deserialize</code> methods.{' '}
+        <code>ToonSerializer</code> uses the generated code for those types automatically.
+      </>
+    ),
+  },
+  {
+    title: 'JSON and YAML',
+    icon: '🔄',
+    description: (
+      <>
+        Convert between TOON and JSON with <code>ToonConvert</code> (System.Text.Json), and
+        between TOON and YAML with <code>ToonYamlConvert</code> (YamlDotNet).
+      </>
+    ),
+  },
+  {
+    title: 'ASP.NET Core',
+    icon: '🌐',
+    description: (
+      <>
+        MVC input and output formatters for <code>application/toon</code>, dependency
+        injection registration with <code>AddToonNet</code>, and a TOON configuration
+        provider with <code>AddToonFile</code>.
+      </>
+    ),
+  },
+  {
+    title: 'Async and Streaming',
+    icon: '📦',
+    description: (
+      <>
+        Async APIs for strings, streams and files, and multi-document streaming that writes
+        and reads large collections one item at a time with{' '}
+        <code>SerializeStreamAsync</code> and <code>DeserializeStreamAsync</code>.
       </>
     ),
   },

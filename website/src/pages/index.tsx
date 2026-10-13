@@ -67,7 +67,7 @@ var restored = ToonSerializer
               <code className="language-toon">{`Name: Alice
 Age: 30
 
-// vs JSON (40% more tokens)
+// The same data as JSON
 {
   "Name": "Alice",
   "Age": 30
@@ -90,7 +90,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={`${siteConfig.title} - Documentation`}
-      description="High-performance TOON format serialization for .NET. AI-optimized, token-efficient, developer-friendly.">
+      description="TOON (Token-Oriented Object Notation) serialization for .NET, implementing TOON spec v3.3.2.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />
