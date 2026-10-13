@@ -361,3 +361,6 @@ website/build/
 website/.docusaurus/
 website/.cache-loader/
 website/yarn-error.log
+
+# macOS
+.DS_Store
