@@ -96,8 +96,9 @@ exception's `StatusCode`.
 
 Parsing enforces `ToonOptions.MaxDepth` (default 100). Input that is nested too deeply, is not valid TOON or does not
 match the model type becomes a model-state error, so `[ApiController]` endpoints answer with `400 Bad Request`. The
-response contains the TOON error message (line, column or property path, and the offending value); messages of other
-exceptions are not returned to the client.
+response contains the TOON error message (line and column, or property path and target type). The offending value is
+not part of the message, so request data is not echoed back or written to logs; messages of other exceptions are not
+returned to the client.
 
 ## Encoding
 

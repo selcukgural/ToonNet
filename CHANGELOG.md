@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has a TOON number form (NaN and infinities are written as `null`).
 
 ### Changed
+- **ToonNet.Core:** Exception messages no longer contain the offending value, which may be personal data and reached
+  logs and (through MVC model state) HTTP 400 responses. The value is still available as
+  `ToonSerializationException.Value` / `ToonEncodingException.ProblematicValue`; the message names the path, the
+  target type and the value's type.
 - **ToonNet.Core / SourceGenerators (breaking output change):** `CamelCase` and `SnakeCase` naming follow
   System.Text.Json, so acronyms stay together: `HTTPServer` is written as `httpServer` / `http_server` (before:
   `hTTPServer` / `h_t_t_p_server`), `URL` as `url`. Names without consecutive capitals are unchanged. The serializer and

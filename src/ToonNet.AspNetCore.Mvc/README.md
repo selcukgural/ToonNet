@@ -211,8 +211,8 @@ answer with `413`; on .NET 8, `UseExceptionHandler` answers with `500` unless yo
 
 Parsing enforces `ToonOptions.MaxDepth` (default 100). Bodies that are nested too deeply, are not valid TOON or do not
 match the model type produce a model-state error (`400 Bad Request` with `[ApiController]`) instead of an exception.
-The TOON error message (position or property path, and the offending value) is returned to the client; other
-exceptions are not swallowed and their messages are not returned.
+The TOON error message (position, or property path and target type) is returned to the client; it does not contain the
+offending value. Other exceptions are not swallowed and their messages are not returned.
 
 ### Formatter Priority
 

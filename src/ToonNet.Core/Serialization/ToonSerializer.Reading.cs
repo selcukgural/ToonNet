@@ -118,19 +118,18 @@ public static partial class ToonSerializer
         };
     }
 
+    /// <remarks>
+    ///     The message names the path and the type but not the value, which may be personal data and ends up in logs and
+    ///     (through model state) in HTTP responses; the value is available as <see cref="ToonSerializationException.Value"/>.
+    /// </remarks>
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
     {
         var path = state.Path;
         var text = $"{message}\n  📍 Path: {path}\n  🎯 Target Type: {targetType.Name}";
 
-        if (value is ToonString or ToonNumber or ToonBoolean)
-        {
-            text += $"\n  ⚠️  Value: {value}";
-        }
-
         return inner == null
-            ? new ToonSerializationException(text) { TargetType = targetType, Path = path }
-            : new ToonSerializationException(text, inner) { TargetType = targetType, Path = path };
+            ? new ToonSerializationException(text) { TargetType = targetType, Path = path, Value = value }
+            : new ToonSerializationException(text, inner) { TargetType = targetType, Path = path, Value = value };
     }
 
     /// <summary>
@@ -217,7 +216,7 @@ public static partial class ToonSerializer
                 {
                     ToonNumber n => n,
                     ToonString s => Parsing.ToonParser.TryParseNumber(s.Value.Trim())
-                                    ?? throw Error($"'{s.Value}' is not a number", targetType, value, state),
+                                    ?? throw Error("The string is not a number", targetType, value, state),
                     _            => throw Error($"Cannot convert {value.ValueType} to {targetType.Name}", targetType, value, state)
                 };
 
@@ -248,7 +247,8 @@ public static partial class ToonSerializer
         }
         catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
         {
-            throw Error($"Cannot convert the value to {targetType.Name}: {ex.Message}", targetType, value, state, ex);
+            // The inner message may quote the value (Enum.Parse does), so it is not repeated here
+            throw Error($"Cannot convert the {value.ValueType} value to {targetType.Name} ({ex.GetType().Name})", targetType, value, state, ex);
         }
     }
 
@@ -284,13 +284,13 @@ public static partial class ToonSerializer
         if (targetType == typeof(float))
         {
             var single = (float)number.Value;
-            return float.IsFinite(single) ? single : throw Error($"{number} is outside the range of Single", targetType, number, state);
+            return float.IsFinite(single) ? single : throw Error("The number is outside the range of Single", targetType, number, state);
         }
 
         if (targetType == typeof(Half))
         {
             var half = (Half)number.Value;
-            return Half.IsFinite(half) ? half : throw Error($"{number} is outside the range of Half", targetType, number, state);
+            return Half.IsFinite(half) ? half : throw Error("The number is outside the range of Half", targetType, number, state);
         }
 
         // Integers beyond the decimal range keep their parsed text, which the wide integer types read exactly
@@ -307,7 +307,7 @@ public static partial class ToonSerializer
 
         // Integral targets
         var integral = number.DecimalValue is { } exact
-            ? exact == decimal.Truncate(exact) ? exact : throw Error($"{number} is not an integer", targetType, number, state)
+            ? exact == decimal.Truncate(exact) ? exact : throw Error("The number is not an integer", targetType, number, state)
             : ToIntegralDecimal(number, targetType, state);
 
         if (targetType == typeof(BigInteger))
@@ -331,7 +331,7 @@ public static partial class ToonSerializer
         }
         catch (OverflowException ex)
         {
-            throw Error($"{number} is outside the range of {targetType.Name}", targetType, number, state, ex);
+            throw Error($"The number is outside the range of {targetType.Name}", targetType, number, state, ex);
         }
     }
 
@@ -342,7 +342,7 @@ public static partial class ToonSerializer
     {
         if (!BigInteger.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var integer))
         {
-            throw Error($"{text} is not an integer", targetType, number, state);
+            throw Error("The number is not an integer", targetType, number, state);
         }
 
         try
@@ -362,7 +362,7 @@ public static partial class ToonSerializer
         }
         catch (OverflowException ex)
         {
-            throw Error($"{text} is outside the range of {targetType.Name}", targetType, number, state, ex);
+            throw Error($"The number is outside the range of {targetType.Name}", targetType, number, state, ex);
         }
     }
 
@@ -372,7 +372,7 @@ public static partial class ToonSerializer
 
         if (value != Math.Floor(value))
         {
-            throw Error($"{number} is not an integer", targetType, number, state);
+            throw Error("The number is not an integer", targetType, number, state);
         }
 
         try
@@ -381,7 +381,7 @@ public static partial class ToonSerializer
         }
         catch (OverflowException ex)
         {
-            throw Error($"{number} is outside the range of {targetType.Name}", targetType, number, state, ex);
+            throw Error($"The number is outside the range of {targetType.Name}", targetType, number, state, ex);
         }
     }
 

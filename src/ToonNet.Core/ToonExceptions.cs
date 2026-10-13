@@ -169,7 +169,7 @@ public sealed class ToonEncodingException : ToonException
     /// </summary>
     /// <param name="message">The error message.</param>
     /// <param name="propertyPath">The optional path to the problematic property.</param>
-    /// <param name="problematicValue">The value that caused the encoding error.</param>
+    /// <param name="problematicValue">The value that caused the encoding error; only its type is written to the message.</param>
     /// <param name="suggestion">Optional suggestion for fixing the error.</param>
     /// <returns>A new ToonEncodingException instance.</returns>
     public static ToonEncodingException Create(string message, string? propertyPath = null, object? problematicValue = null,
@@ -182,9 +182,10 @@ public sealed class ToonEncodingException : ToonException
             fullMessage += $"\n  📍 Property: {propertyPath}";
         }
 
+        // The value itself stays out of the message (it may be personal data); it is available as ProblematicValue
         if (problematicValue != null)
         {
-            fullMessage += $"\n  ⚠️  Value: {problematicValue} ({problematicValue.GetType().Name})";
+            fullMessage += $"\n  ⚠️  Value type: {problematicValue.GetType().Name}";
         }
 
         var ex = new ToonEncodingException(fullMessage)
@@ -248,7 +249,7 @@ public sealed class ToonSerializationException : ToonException
     /// <param name="message">The error message.</param>
     /// <param name="targetType">The target type being serialized/deserialized.</param>
     /// <param name="propertyName">The property name, if applicable.</param>
-    /// <param name="value">The value that caused the error.</param>
+    /// <param name="value">The value that caused the error; only its type is written to the message.</param>
     /// <param name="suggestion">Optional suggestion for fixing the error.</param>
     /// <returns>A new ToonSerializationException instance.</returns>
     public static ToonSerializationException Create(string message, Type? targetType = null, string? propertyName = null, object? value = null,
@@ -266,9 +267,10 @@ public sealed class ToonSerializationException : ToonException
             fullMessage += $"\n  📍 Property: {propertyName}";
         }
 
+        // The value itself stays out of the message (it may be personal data); it is available as Value
         if (value != null)
         {
-            fullMessage += $"\n  ⚠️  Value: {value} ({value.GetType().Name})";
+            fullMessage += $"\n  ⚠️  Value type: {value.GetType().Name}";
         }
 
         var ex = new ToonSerializationException(fullMessage)

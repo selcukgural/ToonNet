@@ -72,7 +72,9 @@ public class ErrorMessageTests
         Assert.Contains("Cannot deserialize", message);
         Assert.Contains("Target Type: Int32", message);
         Assert.Contains("Property: Age", message);
-        Assert.Contains("Value: not-a-number", message);
+        Assert.Contains("Value type: String", message);
+        Assert.DoesNotContain("not-a-number", message); // values may be personal data; they stay out of messages
+        Assert.Equal("not-a-number", ex.Value);
         Assert.Contains("💡 Suggestion", message);
 
         _output.WriteLine("=== SERIALIZATION EXCEPTION EXAMPLE ===");
@@ -153,5 +155,29 @@ age: 30"; // Unterminated string
         Assert.Equal("Name", ex.PropertyName);
 #pragma warning restore CS0618
         Assert.Equal(123, ex.Value);
+    }
+
+    [Theory]
+    [InlineData("Age: jane.doe@example.com", typeof(AgeHolder))]
+    [InlineData("Age: 98765432109876", typeof(AgeHolder))]
+    [InlineData("Level: jane.doe@example.com", typeof(LevelHolder))]
+    public void DeserializationErrors_DoNotQuoteTheValue(string toon, Type type)
+    {
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonNet.Core.Serialization.ToonSerializer.Deserialize(toon, type));
+        var value = toon[(toon.IndexOf(": ", StringComparison.Ordinal) + 2)..];
+
+        Assert.DoesNotContain(value, ex.Message);
+        Assert.Contains("$.", ex.Message);
+        Assert.Equal(value, ex.Value?.ToString());
+    }
+
+    public sealed class AgeHolder
+    {
+        public int Age { get; set; }
+    }
+
+    public sealed class LevelHolder
+    {
+        public DayOfWeek Level { get; set; }
     }
 }
