@@ -59,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     string-heavy data about 7% faster.
   - A string with an unpaired surrogate throws `ToonEncodingException` (§3); it was written and became U+FFFD in
     UTF-8 output.
+  - Exact decimal values outside 1e-6 ≤ |n| < 1e21 use the exponent form with an explicit sign, like doubles already
+    did (`1e-7`, `7.9228162514264337593543950335e+28`, all digits kept), as §2 recommends; they were written in plain
+    notation.
   - Arrays of objects whose nested objects are uniform use the tabular form with nested field groups
     (`orders[2]{id,customer{name,country}}:`, §9.3), where they were written as list items, and objects (also
     dictionaries and the root) whose values are at least two uniform objects use the keyed tabular form

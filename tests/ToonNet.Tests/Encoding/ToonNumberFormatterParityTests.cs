@@ -70,6 +70,18 @@ public class ToonNumberFormatterParityTests
             return "0";
         }
 
+        var magnitude = Math.Abs(value);
+
+        if (magnitude < 0.000001m || magnitude >= 1e21m)
+        {
+            // Exponent form (spec §2): the "E" format with every digit, trailing zeros and the exponent's padding removed
+            var scientific = value.ToString("E28", CultureInfo.InvariantCulture);
+            var e = scientific.IndexOf('E');
+            var mantissa = scientific[..e].TrimEnd('0').TrimEnd('.');
+            var exponent = int.Parse(scientific[(e + 1)..], CultureInfo.InvariantCulture);
+            return $"{mantissa}e{(exponent < 0 ? '-' : '+')}{Math.Abs(exponent)}";
+        }
+
         var text = value.ToString(CultureInfo.InvariantCulture);
 
         if (text.Contains('.'))

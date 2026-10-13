@@ -8,11 +8,10 @@ namespace ToonNet.Core.Encoding;
 /// </summary>
 /// <remarks>
 ///     Numbers with 1e-6 ≤ |n| &lt; 1e21 (and zero) are written in plain decimal notation without
-///     exponent, leading zeros or trailing fractional zeros; -0 becomes 0. Doubles outside that range
-///     use lowercase exponent notation with an explicit sign (e.g. <c>1e-7</c>, <c>1e+21</c>).
-///     Doubles use the shortest representation that round-trips; exact <see cref="decimal"/> values
-///     are always written in plain decimal notation. Formatting writes into a span, so the encoder appends numbers
-///     without allocating a string for each.
+///     exponent, leading zeros or trailing fractional zeros; -0 becomes 0. Numbers outside that range use lowercase
+///     exponent notation with an explicit sign (e.g. <c>1e-7</c>, <c>1.5e+21</c>), as spec §2 recommends.
+///     Doubles use the shortest representation that round-trips; exact <see cref="decimal"/> values keep all their
+///     digits. Formatting writes into a span, so the encoder appends numbers without allocating a string for each.
 /// </remarks>
 internal static class ToonNumberFormatter
 {
@@ -34,7 +33,7 @@ internal static class ToonNumberFormatter
     }
 
     /// <summary>
-    ///     Formats a <see cref="decimal"/> in plain canonical decimal notation.
+    ///     Formats a <see cref="decimal"/> in canonical form.
     /// </summary>
     public static string Format(decimal value)
     {
@@ -85,7 +84,47 @@ internal static class ToonNumberFormatter
             text = text.TrimEnd('0').TrimEnd('.');
         }
 
-        return text.Length;
+        var magnitude = Math.Abs(value);
+
+        if (magnitude is >= 0.000001m and < 1e21m)
+        {
+            return text.Length;
+        }
+
+        // Outside the plain range: the digits and the position of the point, then the exponent form
+        Span<char> plain = stackalloc char[MaxLength];
+        text.CopyTo(plain);
+        var negative = plain[0] == '-';
+        var body = plain[(negative ? 1 : 0)..text.Length];
+        var dot = body.IndexOf('.');
+        Span<char> digitBuffer = stackalloc char[32];
+        var digitCount = 0;
+
+        foreach (var ch in body)
+        {
+            if (ch != '.')
+            {
+                digitBuffer[digitCount++] = ch;
+            }
+        }
+
+        var pointPosition = dot >= 0 ? dot : body.Length;
+        var leadingZeros = 0;
+
+        while (leadingZeros < digitCount - 1 && digitBuffer[leadingZeros] == '0')
+        {
+            leadingZeros++;
+        }
+
+        var writer = new SpanWriter(destination);
+
+        if (negative)
+        {
+            writer.Append('-');
+        }
+
+        WriteExponent(ref writer, digitBuffer[leadingZeros..digitCount].TrimEnd('0'), pointPosition - leadingZeros - 1);
+        return writer.Position;
     }
 
     public static bool TryFormatDouble(double value, Span<char> destination, out int written)

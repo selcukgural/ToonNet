@@ -777,7 +777,7 @@ monitoring:
     [InlineData("35.00", "35")]
     [InlineData("-0", "0")]
     [InlineData("1e-30", "1e-30")]
-    [InlineData("79228162514264337593543950335", "79228162514264337593543950335")]
+    [InlineData("79228162514264337593543950335", "7.9228162514264337593543950335e+28")]
     public void FromJson_Numbers_KeepExactValueInCanonicalForm(string json, string toon)
     {
         Assert.Equal($"n: {toon}", ToonConvert.FromJson($$"""{"n":{{json}}}"""));
@@ -794,8 +794,8 @@ monitoring:
     {
         const string json = """{"big":12345678901234567890,"price":1299.99,"tiny":1e-7}""";
 
-        // 1e-7 fits in a decimal, so it is written as the exact plain decimal (same value; spec §2 allows both forms)
-        Assert.Equal("""{"big":12345678901234567890,"price":1299.99,"tiny":0.0000001}""", ToonConvert.ToJson(ToonConvert.FromJson(json)));
+        // Below 1e-6 the exponent form is used (spec §2), with the exact value
+        Assert.Equal("""{"big":12345678901234567890,"price":1299.99,"tiny":1e-7}""", ToonConvert.ToJson(ToonConvert.FromJson(json)));
     }
 
     [Fact]

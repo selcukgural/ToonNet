@@ -321,7 +321,9 @@ departments:
 
         Assert.Equal(decimal.Parse(token, System.Globalization.CultureInfo.InvariantCulture), number.DecimalValue);
         Assert.Equal((double)decimal.Parse(token, System.Globalization.CultureInfo.InvariantCulture), number.Value);
-        Assert.Equal(token == "-0" ? "0" : token, number.ToString());
+        // From 1e21 on the canonical form has an exponent (spec §2)
+        Assert.Equal(token switch { "-0" => "0", "79228162514264337593543950335" => "7.9228162514264337593543950335e+28", _ => token },
+                     number.ToString());
     }
 
     [Theory]
