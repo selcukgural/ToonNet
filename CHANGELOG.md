@@ -124,6 +124,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core:** `Int128` and `UInt128` values beyond the `decimal` range (written as quoted text) could not be read
+  back: the parsed value was boxed as a `BigInteger`, and setting the property threw an `InvalidCastException`.
 - **ToonNet.SourceGenerators:** For an undefined `PropertyNamingPolicy` value (for example `(PropertyNamingPolicy)42`),
   generated code used the camelCase names of properties whose camelCase, snake_case and lowercase names are equal;
   like `ToonSerializer`, it now keeps the names as they are.

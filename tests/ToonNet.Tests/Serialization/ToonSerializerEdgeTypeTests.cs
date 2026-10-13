@@ -93,6 +93,16 @@ public class ToonSerializerEdgeTypeTests
     }
 
     [Fact]
+    public void WideIntegers_BeyondTheDecimalRange_RoundTripAsQuotedText()
+    {
+        Assert.Equal(Int128.MaxValue, ToonSerializer.Deserialize<Holder<Int128>>(ToonSerializer.Serialize(new Holder<Int128> { V = Int128.MaxValue }))!.V);
+        Assert.Equal(Int128.MinValue, ToonSerializer.Deserialize<Holder<Int128>>(ToonSerializer.Serialize(new Holder<Int128> { V = Int128.MinValue }))!.V);
+        Assert.Equal(UInt128.MaxValue, ToonSerializer.Deserialize<Holder<UInt128>>(ToonSerializer.Serialize(new Holder<UInt128> { V = UInt128.MaxValue }))!.V);
+        Assert.Equal(BigInteger.Pow(7, 80), ToonSerializer.Deserialize<Holder<BigInteger>>(ToonSerializer.Serialize(new Holder<BigInteger> { V = BigInteger.Pow(7, 80) }))!.V);
+        Assert.Contains("\"", ToonSerializer.Serialize(new Holder<Int128> { V = Int128.MaxValue }));
+    }
+
+    [Fact]
     public void NonPublicToonConstructor_IsUsed()
     {
         var copy = ToonSerializer.Deserialize<PrivateConstructor>("Name: Ada")!;

@@ -229,10 +229,21 @@ public static partial class ToonSerializer
 
             if (value is ToonString bigText && (targetType == typeof(BigInteger) || targetType == typeof(Int128) || targetType == typeof(UInt128)))
             {
-                // Integers beyond the decimal range are written as strings (lossless)
-                result = targetType == typeof(BigInteger) ? BigInteger.Parse(bigText.Value, CultureInfo.InvariantCulture)
-                    : targetType == typeof(Int128) ? Int128.Parse(bigText.Value, CultureInfo.InvariantCulture)
-                    : UInt128.Parse(bigText.Value, CultureInfo.InvariantCulture);
+                // Integers beyond the decimal range are written as strings (lossless). Each branch is boxed on its own: a
+                // conditional expression would convert Int128 and UInt128 to BigInteger.
+                if (targetType == typeof(Int128))
+                {
+                    result = Int128.Parse(bigText.Value, CultureInfo.InvariantCulture);
+                }
+                else if (targetType == typeof(UInt128))
+                {
+                    result = UInt128.Parse(bigText.Value, CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    result = BigInteger.Parse(bigText.Value, CultureInfo.InvariantCulture);
+                }
+
                 return true;
             }
 
