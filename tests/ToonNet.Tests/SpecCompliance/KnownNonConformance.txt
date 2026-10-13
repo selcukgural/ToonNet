@@ -1,16 +1,2 @@
 # Spec fixture cases (see Fixtures/v4.4) that ToonNet does not conform to yet.
 # One "<category>/<file>/<index>  # <test name>" per line. Remove a line once the case passes.
-encode/arrays-objects/9  # encodes a keyed-eligible object in a tabular column as a nested field group
-encode/arrays-tabular/10  # uses the active delimiter inside nested field groups
-encode/arrays-tabular/11  # quotes subfield names inside nested field groups per key encoding
-encode/arrays-tabular/7  # collapses a uniform nested object column into a nested field group
-encode/arrays-tabular/8  # collapses sibling nested field groups with depth-first row layout
-encode/arrays-tabular/9  # collapses nested field groups recursively without a depth cap
-encode/objects-keyed/0  # encodes objects of uniform objects in keyed tabular form
-encode/objects-keyed/1  # encodes an eligible root object with a keyless keyed header
-encode/objects-keyed/11  # emits a keyed header on the hyphen line when it is the first field of a list item
-encode/objects-keyed/2  # collapses uniform nested object columns inside keyed headers
-encode/objects-keyed/3  # orders fields by the first entry value's encounter order
-encode/objects-keyed/4  # uses the active delimiter in keyed headers and entry-row cells
-encode/objects-keyed/5  # quotes entry keys per key encoding
-encode/objects-keyed/6  # quotes entry-row cells containing the active delimiter

@@ -116,6 +116,39 @@ public sealed partial class Collections
     public List<int>? Missing { get; set; }
 }
 
+[ToonSerializable]
+public sealed partial class BoxSize
+{
+    public int Width { get; set; }
+    public int Height { get; set; }
+}
+
+[ToonSerializable]
+public partial class BoxedParcel
+{
+    public string Code { get; set; } = "";
+    public BoxSize Box { get; set; } = new();
+    public BoxSize? Inner { get; set; }
+}
+
+/// <summary>Only object properties: a keyed tabular object when both are set (spec 4.4 §9.5).</summary>
+[ToonSerializable]
+public partial class ShippingPlan
+{
+    public BoxSize? Small { get; set; }
+    public BoxSize? Large { get; set; }
+}
+
+[ToonSerializable]
+public partial class ParcelDepot
+{
+    public List<BoxedParcel> Parcels { get; set; } = [];
+    public Dictionary<string, BoxSize> Sizes { get; set; } = [];
+    public ShippingPlan Plan { get; set; } = new();
+    public Dictionary<string, ShippingPlan> Plans { get; set; } = [];
+    public string? Note { get; set; }
+}
+
 /// <summary>
 /// ToonSerializer writes [ToonSerializable] types with their generated field writers; the text must match the
 /// generated tree and the reflection-based writer for every option combination, without falling back.
@@ -189,6 +222,47 @@ public class GeneratedWriterTests
         AssertSameText(new List<WriterRow> { new(), new() });
         AssertSameText(new List<WriterRow?> { new(), null });
         AssertSameText(Rows(true)[1], WriterRow.Serialize);
+    }
+
+    private static BoxSize Size(int w, int h) => new() { Width = w, Height = h };
+
+    [Fact]
+    public void NestedFieldGroupsAndKeyedObjects_MatchTheTree()
+    {
+        // Nested field groups (§9.3) and keyed tabular objects (§9.5), and the shapes just short of them
+        var full = new ParcelDepot
+        {
+            Parcels = [new() { Code = "a", Box = Size(1, 2), Inner = Size(3, 4) }, new() { Code = "b", Box = Size(5, 6), Inner = Size(7, 8) }],
+            Sizes = new Dictionary<string, BoxSize> { ["s"] = Size(1, 1), ["m"] = Size(2, 2) },
+            Plan = new ShippingPlan { Small = Size(1, 1), Large = Size(9, 9) },
+            Plans = new Dictionary<string, ShippingPlan>
+            {
+                ["eu"] = new() { Small = Size(1, 2), Large = Size(3, 4) },
+                ["us"] = new() { Small = Size(5, 6), Large = Size(7, 8) }
+            }
+        };
+
+        AssertSameText(full, ParcelDepot.Serialize);
+        AssertSameText(full.Parcels);
+        AssertSameText(full.Sizes);
+        AssertSameText(full.Plan, ShippingPlan.Serialize);
+        AssertSameText(full.Plans);
+
+        var partial = new ParcelDepot
+        {
+            Parcels = [new() { Code = "a", Box = Size(1, 2) }, new() { Code = "b", Box = Size(5, 6), Inner = Size(7, 8) }],
+            Sizes = new Dictionary<string, BoxSize> { ["only"] = Size(1, 1) },
+            Plan = new ShippingPlan { Small = Size(1, 1) },
+            Plans = new Dictionary<string, ShippingPlan> { ["eu"] = new() { Small = Size(1, 2) }, ["us"] = new() { Large = Size(7, 8) } },
+            Note = "n"
+        };
+
+        AssertSameText(partial, ParcelDepot.Serialize);
+        AssertSameText(new List<ParcelDepot> { full, partial });
+        AssertSameText(new List<BoxedParcel> { new() { Code = "x" }, new() { Code = "y" } });
+
+        Assert.Contains("Parcels[2]{Code,Box{Width,Height},Inner{Width,Height}}:", ToonSerializer.Serialize(full));
+        Assert.Contains("Plans[2:]{Small{Width,Height},Large{Width,Height}}:", ToonSerializer.Serialize(full));
     }
 
     [Fact]

@@ -248,12 +248,16 @@ public static partial class ToonSerializer
     {
         public abstract Type KeyType { get; }
 
+        public abstract Type ValueType { get; }
+
         public abstract IEnumerable<(object Key, object? Value)> Read(object dictionary);
     }
 
     private sealed class DictionaryEntryReader<TKey, TValue> : DictionaryEntryReader
     {
         public override Type KeyType => typeof(TKey);
+
+        public override Type ValueType => typeof(TValue);
 
         public override IEnumerable<(object Key, object? Value)> Read(object dictionary)
         {

@@ -13,10 +13,13 @@ public enum ToonRowShape
     /// <summary>Every written value is a primitive; the columns tell which properties are written.</summary>
     Row,
 
-    /// <summary>A written value is an object or array, so the object cannot be a row.</summary>
+    /// <summary>A written value is an array, so the object cannot be a row.</summary>
     NotRow,
 
-    /// <summary>Whether a value is a primitive depends on its runtime type or a converter.</summary>
+    /// <summary>
+    ///     A written value is an object (which may form a nested field group, §9.3), or whether it is a primitive depends on
+    ///     its runtime type or a converter.
+    /// </summary>
     Unknown
 }
 
@@ -41,6 +44,8 @@ public abstract class ToonObjectWriter
     internal abstract ToonRowShape GetRowShapeOf(object value, ToonWriter writer, Span<bool> columns);
 
     internal abstract void WriteRowOf(object value, ToonWriter writer, ReadOnlySpan<bool> columns);
+
+    internal abstract bool MayBeKeyedOf(object value, ToonWriter writer);
 }
 
 /// <summary>
@@ -80,6 +85,12 @@ public abstract class ToonObjectWriter<T> : ToonObjectWriter
     /// </summary>
     public abstract void WriteRow(T value, ToonWriter writer, ReadOnlySpan<bool> columns);
 
+    /// <summary>
+    ///     Tells whether the object may qualify for the keyed tabular form (spec §9.5) in a field or root position: false
+    ///     when a written value is a primitive or array; true otherwise, and the serializer then decides from the tree.
+    /// </summary>
+    public abstract bool MayBeKeyed(T value, ToonWriter writer);
+
     internal sealed override int WriteFieldsOf(object value, ToonWriter writer, int lineDepth, int childDepth, bool firstOnCurrentLine,
                                                int depth) =>
         WriteFields((T)value, writer, lineDepth, childDepth, firstOnCurrentLine, depth);
@@ -89,4 +100,6 @@ public abstract class ToonObjectWriter<T> : ToonObjectWriter
 
     internal sealed override void WriteRowOf(object value, ToonWriter writer, ReadOnlySpan<bool> columns) =>
         WriteRow((T)value, writer, columns);
+
+    internal sealed override bool MayBeKeyedOf(object value, ToonWriter writer) => MayBeKeyed((T)value, writer);
 }

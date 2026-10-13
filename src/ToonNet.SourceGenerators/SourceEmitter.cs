@@ -320,6 +320,7 @@ internal sealed class SourceEmitter
             code.EndBlock();
             EmitRowShape(duplicates);
             EmitWriteRow();
+            EmitMayBeKeyed(duplicates);
             EmitGetName();
             EmitObjectWriterClass();
             return;
@@ -351,6 +352,7 @@ internal sealed class SourceEmitter
 
         EmitRowShape(duplicates);
         EmitWriteRow();
+        EmitMayBeKeyed(duplicates);
         EmitGetName();
         EmitObjectWriterClass();
     }
@@ -416,8 +418,11 @@ internal sealed class SourceEmitter
         switch (plan.Kind)
         {
             case ValueKind.Generated:
-                // Objects of exactly the declared type are written by its field writer; derived types need their own
-                code.BeginBlock(plan.CheckRuntimeType ? $"if ({value}.GetType() == typeof({plan.ValueTypeName}))" : "");
+            {
+                // Objects of exactly the declared type are written by its field writer; derived types need their own,
+                // and an object that may be a keyed tabular object (§9.5) needs the serializer to decide
+                var keyedCheck = $"!{plan.ValueTypeName}.__ToonMayBeKeyed({value}, writer)";
+                code.BeginBlock(plan.CheckRuntimeType ? $"if ({value}.GetType() == typeof({plan.ValueTypeName}) && {keyedCheck})" : $"if ({keyedCheck})");
                 code.AppendLine(StartLine);
                 code.AppendLine("writer.EnterValue(depth + 1);");
                 code.AppendLine($"writer.Write({EncodedNameExpression(property, ":")});");
@@ -426,13 +431,9 @@ internal sealed class SourceEmitter
                 code.AppendLine("writer.ExitNesting();");
                 code.AppendLine("__count++;");
                 code.EndBlock();
-
-                if (plan.CheckRuntimeType)
-                {
-                    code.AppendLine($"else if ({delegated}) __count++;");
-                }
-
+                code.AppendLine($"else if ({delegated}) __count++;");
                 break;
+            }
             case ValueKind.Array or ValueKind.List or ValueKind.Set:
                 EmitInlineCollection(property, value, delegated);
                 break;
@@ -497,7 +498,7 @@ internal sealed class SourceEmitter
     /// </summary>
     private static bool WritesDirectly(ValuePlan plan) =>
         plan.Kind is ValueKind.Inline or ValueKind.Primitive ||
-        plan is { Kind: ValueKind.Generated, HasFieldWriter: true } ||
+        plan is { Kind: ValueKind.Generated, HasFieldWriter: true, HasKeyedCheck: true } ||
         plan is { Kind: ValueKind.Array or ValueKind.List or ValueKind.Set, Element.Kind: ValueKind.Inline or ValueKind.Primitive };
 
     private static string WritePrimitiveStatement(ValuePlan plan, string value)
@@ -587,8 +588,9 @@ internal sealed class SourceEmitter
             }
             else
             {
-                // A null value is a primitive; otherwise an object or array (or, for runtime-typed values, unknown)
-                var nonNull = plan.Kind is ValueKind.Raw or ValueKind.Reflection ? "__unknown = true;" : $"return {RowShape}.NotRow;";
+                // A null value is a primitive; an array rules the row out; an object may form a nested field group (§9.3)
+                // and a runtime-typed value may be anything, which the serializer decides from the tree
+                var nonNull = plan.Kind is ValueKind.Array or ValueKind.List or ValueKind.Set ? $"return {RowShape}.NotRow;" : "__unknown = true;";
 
                 if (plan.CanBeNull)
                 {
@@ -652,6 +654,87 @@ internal sealed class SourceEmitter
         code.EndBlock();
     }
 
+    /// <summary>
+    /// Emits <c>__ToonMayBeKeyed</c>: whether the object may qualify for the keyed tabular form (spec §9.5) in a field or
+    /// root position, i.e. it writes at least two fields and each is an object. False as soon as a written value is a
+    /// primitive or array; a type with a property that is always written as a primitive never qualifies.
+    /// </summary>
+    private void EmitMayBeKeyed(string? duplicates)
+    {
+        var code = _code;
+        var model = _model;
+
+        code.AppendLine();
+        code.AppendLine(HiddenAttribute);
+        code.BeginBlock($"public static bool __ToonMayBeKeyed({model.FullyQualifiedName} value, {Writer} writer)");
+
+        if (model.Properties.Items.Any(p => !p.IsReadOnly && p.ConverterTypeName == null && IsWrittenAsPrimitive(p.Plan) && !p.Plan.CanBeNull))
+        {
+            code.AppendLine("return false;");
+            code.EndBlock();
+            return;
+        }
+
+        if (duplicates == "true")
+        {
+            code.AppendLine("return true; // the tree decides");
+            code.EndBlock();
+            return;
+        }
+
+        code.AppendLine("var options = writer.SerializerOptions;");
+
+        if (duplicates != null)
+        {
+            EmitPolicyLocal();
+            code.AppendLine($"if ({duplicates}) return true;");
+        }
+
+        code.AppendLine("var __objects = 0;");
+        code.AppendLine("var __maybe = false;");
+
+        foreach (var property in model.Properties)
+        {
+            var plan = property.Plan;
+            var access = $"value.{property.Name}";
+
+            code.BeginBlock(property.IsReadOnly ? "if (options.IncludeReadOnlyProperties)" : "");
+
+            if (property.ConverterTypeName != null)
+            {
+                code.AppendLine("__maybe = true; // the converter decides the form");
+            }
+            else if (IsWrittenAsPrimitive(plan))
+            {
+                // A primitive or array, or a null that is written
+                code.AppendLine(plan.CanBeNull ? $"if ({access} is not null || !options.IgnoreNullValues) return false;" : "return false;");
+            }
+            else
+            {
+                // An object, or a runtime-typed value only the tree knows
+                var nonNull = plan.Kind is ValueKind.Raw or ValueKind.Reflection ? "__maybe = true;" : "__objects++;";
+
+                if (plan.CanBeNull)
+                {
+                    code.AppendLine($"if ({access} is null) {{ if (!options.IgnoreNullValues) return false; }}");
+                    code.AppendLine($"else {nonNull}");
+                }
+                else
+                {
+                    code.AppendLine(nonNull);
+                }
+            }
+
+            code.EndBlock();
+        }
+
+        code.AppendLine("return __maybe || __objects >= 2;");
+        code.EndBlock();
+
+        static bool IsWrittenAsPrimitive(ValuePlan plan) =>
+            plan.Kind is ValueKind.Inline or ValueKind.Primitive or ValueKind.Array or ValueKind.List or ValueKind.Set;
+    }
+
     /// <summary>Emits <c>__ToonGetName</c>: the serialized name of a property by index.</summary>
     private void EmitGetName()
     {
@@ -686,6 +769,7 @@ internal sealed class SourceEmitter
         code.AppendLine("    __ToonWriteFields(value, writer, lineDepth, childDepth, firstOnCurrentLine, depth);");
         code.AppendLine($"public override {RowShape} GetRowShape({type} value, {Writer} writer, global::System.Span<bool> columns) => __ToonGetRowShape(value, writer, columns);");
         code.AppendLine($"public override void WriteRow({type} value, {Writer} writer, global::System.ReadOnlySpan<bool> columns) => __ToonWriteRow(value, writer, columns);");
+        code.AppendLine($"public override bool MayBeKeyed({type} value, {Writer} writer) => __ToonMayBeKeyed(value, writer);");
         code.EndBlock();
     }
 

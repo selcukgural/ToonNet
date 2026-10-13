@@ -156,7 +156,7 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
             return Reflection(type, reasons, $"'{Display(type)}' has a type-level [ToonConverter]");
         }
 
-        bool canSerialize, canDeserialize, hasFieldWriter, hasTextReader;
+        bool canSerialize, canDeserialize, hasFieldWriter, hasTextReader, hasKeyedCheck;
 
         if (named.DeclaringSyntaxReferences.Length > 0)
         {
@@ -165,6 +165,7 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
             canDeserialize = canSerialize && (named.IsValueType || TypeModelBuilder.SelectConstructor(named) != null);
             hasFieldWriter = canSerialize;
             hasTextReader = canDeserialize;
+            hasKeyedCheck = canSerialize;
         }
         else
         {
@@ -172,6 +173,7 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
             canDeserialize = HasAccessibleMember(named, "__ToonDeserializeValue");
             hasFieldWriter = HasAccessibleMember(named, "__ToonWriteFields"); // absent in code from older generators
             hasTextReader = HasAccessibleMember(named, "__ToonReadObject");
+            hasKeyedCheck = HasAccessibleMember(named, "__ToonMayBeKeyed"); // absent in code from generators before spec 4.4
         }
 
         if (!canSerialize || !canDeserialize)
@@ -184,7 +186,8 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
         return Plan(ValueKind.Generated, type, checkRuntimeType: !type.IsValueType && !type.IsSealed) with
         {
             HasFieldWriter = hasFieldWriter,
-            HasTextReader = hasTextReader
+            HasTextReader = hasTextReader,
+            HasKeyedCheck = hasKeyedCheck
         };
     }
 

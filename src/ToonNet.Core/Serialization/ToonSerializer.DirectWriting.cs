@@ -244,7 +244,9 @@ public static partial class ToonSerializer
         {
             _ = _options.ToonOptions.ValidatedMaxDepth;
 
-            switch (Classify(value, type, null, out var info))
+            var kind = Classify(value, type, null, out var info);
+
+            switch (kind)
             {
                 case DirectKind.Null:
                     _writer.StartLine(0);
@@ -254,6 +256,9 @@ public static partial class ToonSerializer
                     _writer.StartLine(0);
                     _writer.BeginRootPrimitive();
                     WritePrimitive(value!);
+                    break;
+                case DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated when MayBeKeyed(value!, kind, info!):
+                    _tree.WriteRoot(ToTree(value, type, null, 0)!);
                     break;
                 case DirectKind.Object:
                     EnterValue(0);
@@ -438,6 +443,9 @@ public static partial class ToonSerializer
                     writer.Write(": ");
                     WritePrimitive(value!);
                     break;
+                case DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated when MayBeKeyed(value!, kind, info!):
+                    _tree.WriteField(key, ToTree(value, declaredType, propertyConverter, depth)!, childDepth);
+                    break;
                 case DirectKind.Object:
                     EnterValue(depth);
                     writer.WriteKey(key);
@@ -471,6 +479,96 @@ public static partial class ToonSerializer
             }
 
             return true;
+        }
+
+        /// <summary>
+        ///     Whether an object, dictionary or generated object in a field or root position may qualify for the keyed
+        ///     tabular form (spec §9.5): at least two written fields, each an object. When it may, the tree decides and
+        ///     writes it. Most objects have a primitive or array field, which rules the form out at once.
+        /// </summary>
+        private bool MayBeKeyed(object value, DirectKind kind, DirectTypeInfo info)
+        {
+            var objects = 0;
+
+            switch (kind)
+            {
+                case DirectKind.Generated:
+                    return info.Writer!.MayBeKeyedOf(value, _writer);
+                case DirectKind.Dictionary:
+                    if (!_hasConverters && IsPrimitiveType(info.Entries!.ValueType))
+                    {
+                        return false;
+                    }
+
+                    foreach (var (_, entryValue) in info.Entries!.Read(value))
+                    {
+                        switch (ClassifyKeyedField(entryValue, entryValue?.GetType() ?? typeof(object), null))
+                        {
+                            case KeyedField.NotObject:
+                                return false;
+                            case KeyedField.Unknown:
+                                return true;
+                            case KeyedField.Object:
+                                objects++;
+                                break;
+                        }
+                    }
+
+                    return objects >= 2;
+                default:
+                    foreach (var property in info.Metadata!.Properties)
+                    {
+                        if (!_includeReadOnly && !property.HasSetter)
+                        {
+                            continue;
+                        }
+
+                        if (property.Primitive is { } primitive && property.Converter == null && !_hasConverters)
+                        {
+                            if (_ignoreNulls && primitive.IsNull(value))
+                            {
+                                continue;
+                            }
+
+                            return false;
+                        }
+
+                        switch (ClassifyKeyedField(property.Getter(value), property.Property.PropertyType, property.Converter))
+                        {
+                            case KeyedField.NotObject:
+                                return false;
+                            case KeyedField.Unknown:
+                                return true;
+                            case KeyedField.Object:
+                                objects++;
+                                break;
+                        }
+                    }
+
+                    return objects >= 2;
+            }
+        }
+
+        private enum KeyedField
+        {
+            /// <summary>A null value that is not written.</summary>
+            Skipped,
+            NotObject,
+            Object,
+
+            /// <summary>Converted with a converter or written by the tree, so only the tree knows.</summary>
+            Unknown
+        }
+
+        private KeyedField ClassifyKeyedField(object? value, Type declaredType, IToonConverter? converter)
+        {
+            return Classify(value, declaredType, converter, out _) switch
+            {
+                DirectKind.Null => _ignoreNulls ? KeyedField.Skipped : KeyedField.NotObject,
+                DirectKind.Primitive or DirectKind.Collection => KeyedField.NotObject,
+                DirectKind.Tree => KeyedField.Unknown,
+                _ => KeyedField.Object
+            };
         }
 
         /// <summary>Writes the properties of a converted object as fields, like <see cref="WriteObjectFields"/>.</summary>
@@ -674,6 +772,9 @@ public static partial class ToonSerializer
             included = new bool[properties.Length];
             var columns = 0;
 
+            // An object value may form a nested field group (§9.3), which the tree decides; an array value never can
+            var nested = false;
+
             for (var i = 0; i < items.Count; i++)
             {
                 var item = items[i]!;
@@ -711,10 +812,14 @@ public static partial class ToonSerializer
                             case DirectKind.Primitive:
                                 isNull = false;
                                 break;
+                            case DirectKind.Collection:
+                                return TabularShape.NotTabular;
                             case DirectKind.Tree:
                                 return TabularShape.Unknown;
                             default:
-                                return TabularShape.NotTabular; // an object or array value
+                                nested = true; // a later array value still rules the form out
+                                isNull = false;
+                                break;
                         }
                     }
 
@@ -736,6 +841,11 @@ public static partial class ToonSerializer
                 }
 
                 columns = itemColumns;
+            }
+
+            if (nested)
+            {
+                return TabularShape.Unknown;
             }
 
             return columns > 0 ? TabularShape.Tabular : TabularShape.NotTabular;

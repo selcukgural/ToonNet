@@ -4,8 +4,9 @@ namespace ToonNet.Core.Encoding;
 
 /// <summary>
 ///     Writes a <see cref="ToonValue"/> tree with a <see cref="ToonWriter"/> in the canonical encoding of TOON spec
-///     v3.3.2: arrays of uniform primitive-only objects use the tabular form, primitive arrays are written inline, other
-///     arrays as expanded lists and empty arrays as <c>[]</c>.
+///     v4.4: arrays of uniform objects use the tabular form (with nested field groups for nested uniform objects),
+///     objects of uniform objects the keyed tabular form, primitive arrays are written inline, other arrays as expanded
+///     lists and empty arrays as <c>[]</c>.
 /// </summary>
 /// <remarks>
 ///     The serializer also uses it for values it does not write directly (converter output, <see cref="ToonValue"/>
@@ -23,6 +24,11 @@ internal sealed class ToonDomWriter(ToonWriter writer)
     {
         switch (root)
         {
+            case ToonObject obj when TryGetKeyedColumns(obj) is { } columns:
+                _writer.StartLine(0);
+                _writer.Nesting = -1; // the root object is at depth 0
+                WriteKeyed(null, obj, columns, 1);
+                break;
             case ToonObject obj:
                 // An empty root object yields an empty document (§8)
                 WriteFields(obj, 0);
@@ -60,6 +66,9 @@ internal sealed class ToonDomWriter(ToonWriter writer)
     {
         switch (value)
         {
+            case ToonObject obj when TryGetKeyedColumns(obj) is { } columns:
+                WriteKeyed(key, obj, columns, childDepth);
+                break;
             case ToonObject obj:
                 _writer.WriteKey(key);
                 _writer.Write(':');
@@ -108,9 +117,9 @@ internal sealed class ToonDomWriter(ToonWriter writer)
                 writer.WritePrimitive(array[i]);
             }
         }
-        else if (position != ToonArrayPosition.ListItem && TryGetTabularFields(array) is { } fields)
+        else if (position != ToonArrayPosition.ListItem && ToonColumns.TryGetColumns(array.Items) is { } columns)
         {
-            WriteTabularRows(array, fields, childDepth);
+            WriteTabularRows(array, columns, childDepth);
         }
         else
         {
@@ -153,33 +162,119 @@ internal sealed class ToonDomWriter(ToonWriter writer)
     /// <summary>
     ///     Writes the field list of a tabular array followed by one row per object (spec §9.3).
     /// </summary>
-    private void WriteTabularRows(ToonArray array, string[] fields, int rowDepth)
+    private void WriteTabularRows(ToonArray array, ToonColumn[] columns, int rowDepth)
     {
         var writer = _writer;
-        writer.WriteFieldList(fields);
+        writer.WriteFieldList(columns);
 
-        // Rows are objects one level below the array
-        writer.EnterNesting();
+        // Rows are objects one level below the array, nested field groups further below
+        var levels = 1 + ToonColumns.GroupDepth(columns);
+
+        for (var i = 0; i < levels; i++)
+        {
+            writer.EnterNesting();
+        }
 
         foreach (var item in array.Items)
         {
-            var row = (ToonObject)item;
             writer.StartLine(rowDepth);
+            WriteCells((ToonObject)item, columns, 0, columns.Length, true);
+        }
 
-            for (var i = 0; i < fields.Length; i++)
+        writer.Nesting -= levels;
+    }
+
+    /// <summary>
+    ///     Writes an object whose values are uniform objects as a keyed tabular object (spec §9.5): the header, then one
+    ///     <c>entrykey: cells</c> row per entry.
+    /// </summary>
+    private void WriteKeyed(string? key, ToonObject obj, ToonColumn[] columns, int rowDepth)
+    {
+        var writer = _writer;
+        writer.EnterNesting();
+        writer.WriteKeyedHeader(key, obj.Properties.Count);
+        writer.WriteFieldList(columns);
+
+        var levels = 1 + ToonColumns.GroupDepth(columns);
+
+        for (var i = 0; i < levels; i++)
+        {
+            writer.EnterNesting();
+        }
+
+        foreach (var (entryKey, value) in obj.Properties)
+        {
+            writer.StartLine(rowDepth);
+            writer.WriteKey(entryKey);
+            writer.Write(": ");
+            WriteCells((ToonObject)value, columns, 0, columns.Length, true);
+        }
+
+        writer.Nesting -= levels + 1;
+    }
+
+    /// <summary>
+    ///     Writes the cells of the columns from <paramref name="start"/> to <paramref name="end"/>, joined by the
+    ///     delimiter, in depth-first order (nested field groups expanded in place).
+    /// </summary>
+    /// <returns>Whether no cell was written (the next cell needs no delimiter).</returns>
+    private bool WriteCells(ToonObject row, ToonColumn[] columns, int start, int end, bool first)
+    {
+        var writer = _writer;
+        var position = 0;
+
+        for (var i = start; i < end; i = columns[i].End, position++)
+        {
+            var value = ToonColumns.ValueOf(row, columns[i].Name, position);
+
+            if (columns[i].IsGroupAt(i))
             {
-                if (i > 0)
-                {
-                    writer.WriteDelimiter();
-                }
+                first = WriteCells((ToonObject)value!, columns, i + 1, columns[i].End, first);
+                continue;
+            }
 
-                // Rows usually hold the fields in header order, so the entry at the same position is checked first
-                ref readonly var entry = ref row.Properties.EntryAt(i);
-                writer.WritePrimitive(string.Equals(entry.Key, fields[i]) ? entry.Value : row.Properties[fields[i]]);
+            if (!first)
+            {
+                writer.WriteDelimiter();
+            }
+
+            first = false;
+            writer.WritePrimitive(value);
+        }
+
+        return first;
+    }
+
+    /// <summary>
+    ///     Returns the columns when an object qualifies for the keyed tabular form (spec §9.5): at least two entries,
+    ///     whose values are uniform objects.
+    /// </summary>
+    private static ToonColumn[]? TryGetKeyedColumns(ToonObject obj)
+    {
+        var properties = obj.Properties;
+
+        if (properties.Count < 2)
+        {
+            return null;
+        }
+
+        // Most objects have a primitive or array value, which rules the form out before collecting anything
+        foreach (var (_, value) in properties)
+        {
+            if (value is not ToonObject { Properties.Count: > 0 })
+            {
+                return null;
             }
         }
 
-        writer.ExitNesting();
+        var values = new ToonValue[properties.Count];
+
+        for (var i = 0; i < values.Length; i++)
+        {
+            values[i] = properties.EntryAt(i).Value;
+        }
+
+        return ToonColumns.TryGetColumns(values);
     }
 
     /// <summary>
@@ -225,48 +320,6 @@ internal sealed class ToonDomWriter(ToonWriter writer)
                 writer.WritePrimitive(item);
                 break;
         }
-    }
-
-    /// <summary>
-    ///     Returns the tabular field names when the array qualifies for tabular form (spec §9.3), otherwise null.
-    /// </summary>
-    /// <remarks>
-    ///     Every item must be a non-empty object with the same key set and only primitive values.
-    ///     The field order is the first object's key order.
-    /// </remarks>
-    private static string[]? TryGetTabularFields(ToonArray array)
-    {
-        if (array[0] is not ToonObject { Properties.Count: > 0 } first)
-        {
-            return null;
-        }
-
-        var fieldCount = first.Properties.Count;
-
-        foreach (var item in array.Items)
-        {
-            if (item is not ToonObject obj || obj.Properties.Count != fieldCount)
-            {
-                return null;
-            }
-
-            foreach (var (key, value) in obj.Properties)
-            {
-                if (!first.Properties.ContainsKey(key) || value is ToonObject or ToonArray)
-                {
-                    return null;
-                }
-            }
-        }
-
-        var fields = new string[fieldCount];
-
-        for (var i = 0; i < fields.Length; i++)
-        {
-            fields[i] = first.Properties.EntryAt(i).Key;
-        }
-
-        return fields;
     }
 
     private static bool IsPrimitiveArray(ToonArray array)

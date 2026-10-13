@@ -169,6 +169,61 @@ public sealed class ToonWriter
     }
 
     /// <summary>
+    ///     Writes <c>key[N:]</c>, the start of a keyed tabular object's header (spec §9.5); the key is null at the root.
+    /// </summary>
+    internal void WriteKeyedHeader(string? key, int count)
+    {
+        if (key != null)
+        {
+            WriteKey(key);
+        }
+
+        _buffer.Append('[');
+        count.TryFormat(_buffer.GetSpan(11), out var length, default, CultureInfo.InvariantCulture);
+        _buffer.Advance(length);
+        _buffer.Append(':');
+
+        if (Options.Delimiter != ',')
+        {
+            _buffer.Append(Options.Delimiter);
+        }
+
+        _buffer.Append(']');
+    }
+
+    /// <summary>
+    ///     Writes the field list of a tabular or keyed header with its nested field groups, <c>{a,b{c,d}}:</c>
+    ///     (spec §9.3).
+    /// </summary>
+    internal void WriteFieldList(ReadOnlySpan<ToonColumn> columns)
+    {
+        WriteFieldGroup(columns, 0, columns.Length);
+        _buffer.Append(':');
+    }
+
+    private void WriteFieldGroup(ReadOnlySpan<ToonColumn> columns, int start, int end)
+    {
+        _buffer.Append('{');
+
+        for (var i = start; i < end; i = columns[i].End)
+        {
+            if (i > start)
+            {
+                _buffer.Append(Options.Delimiter);
+            }
+
+            WriteKey(columns[i].Name);
+
+            if (columns[i].IsGroupAt(i))
+            {
+                WriteFieldGroup(columns, i + 1, columns[i].End);
+            }
+        }
+
+        _buffer.Append('}');
+    }
+
+    /// <summary>
     ///     Writes the field list of a tabular array header, <c>{a,b}:</c> (spec §9.3).
     /// </summary>
     internal void WriteFieldList(ReadOnlySpan<string> fields)

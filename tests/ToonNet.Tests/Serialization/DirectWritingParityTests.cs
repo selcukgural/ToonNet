@@ -63,6 +63,19 @@ public class DirectWritingParityTests
         public string? Zip { get; set; }
     }
 
+    public class Holder
+    {
+        public int Id { get; set; }
+        public Address? Home { get; set; }
+    }
+
+    /// <summary>Only object properties: a keyed tabular object when both are set (spec 4.4 §9.5).</summary>
+    public class Pair
+    {
+        public Address? A { get; set; }
+        public Address? B { get; set; }
+    }
+
     public class Person
     {
         public string Name { get; set; } = "";
@@ -238,6 +251,36 @@ public class DirectWritingParityTests
                 Assert.StartsWith("[2]{Id,Name,Score,Color,When,Extra,ReadOnly}:", tabular);
             }
         }
+    }
+
+    [Fact]
+    public void NestedFieldGroupsAndKeyedObjects_MatchTheTree()
+    {
+        static Address At(string city, string? zip = null) => new() { City = city, Zip = zip };
+
+        foreach (var options in OptionVariants())
+        {
+            // Nested field groups (§9.3)
+            AssertParity(new List<Holder> { new() { Id = 1, Home = At("a", "1") }, new() { Id = 2, Home = At("b", "2") } }, options);
+            AssertParity(new List<Holder> { new() { Id = 1, Home = At("a") }, new() { Id = 2, Home = At("b", "2") } }, options);
+            AssertParity(new List<Holder> { new() { Id = 1, Home = At("a") }, new() { Id = 2 } }, options);
+            AssertParity(new { Items = new List<Pair> { new() { A = At("a"), B = At("b") } } }, options);
+
+            // Keyed tabular objects (§9.5): dictionaries and objects whose values are uniform objects
+            AssertParity(new Dictionary<string, Address> { ["x"] = At("a", "1"), ["needs quote"] = At("b", "2") }, options);
+            AssertParity(new Dictionary<string, Address> { ["x"] = At("a") }, options);
+            AssertParity(new Dictionary<string, Address> { ["x"] = At("a"), ["y"] = At("b", "2") }, options);
+            AssertParity(new Dictionary<int, Pair> { [1] = new() { A = At("a"), B = At("b") }, [2] = new() { A = At("c"), B = At("d") } }, options);
+            AssertParity(new Pair { A = At("a"), B = At("b") }, options);
+            AssertParity(new Pair { A = At("a") }, options);
+            AssertParity(new { Map = new Dictionary<string, Dictionary<string, int>> { ["a"] = new() { ["x"] = 1 }, ["b"] = new() { ["x"] = 2 } } }, options);
+            AssertParity(new List<object> { new { First = new Pair { A = At("a"), B = At("b") }, N = 1 } }, options);
+            AssertParity(new Dictionary<string, object?> { ["a"] = At("x"), ["b"] = new Dictionary<string, string?> { ["City"] = "y", ["Zip"] = null } },
+                         options);
+        }
+
+        Assert.StartsWith("[2]{Id,Home{City,Zip}}:", AssertParity(new List<Holder> { new() { Id = 1, Home = At("a") }, new() { Id = 2, Home = At("b") } }));
+        Assert.StartsWith("[2:]{City,Zip}:", AssertParity(new Dictionary<string, Address> { ["x"] = At("a"), ["y"] = At("b") }));
     }
 
     [Fact]
