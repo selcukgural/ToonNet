@@ -126,8 +126,8 @@ public static partial class ToonSerializer
             BigInteger n      => FromBigIntegerText(n.ToString(CultureInfo.InvariantCulture)),
             Int128 n          => FromBigIntegerText(n.ToString(CultureInfo.InvariantCulture)),
             UInt128 n         => FromBigIntegerText(n.ToString(CultureInfo.InvariantCulture)),
-            DateTime dt       => new ToonString(dt.ToString("O", CultureInfo.InvariantCulture)),
-            DateTimeOffset dt => new ToonString(dt.ToString("O", CultureInfo.InvariantCulture)),
+            DateTime dt       => new ToonString(ToonDateFormat.ToString(dt)),
+            DateTimeOffset dt => new ToonString(ToonDateFormat.ToString(dt)),
             DateOnly d        => new ToonString(d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
             TimeOnly t        => new ToonString(t.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture).TrimEnd('.')),
             TimeSpan ts       => new ToonString(ts.ToString("c", CultureInfo.InvariantCulture)),
@@ -274,8 +274,8 @@ public static partial class ToonSerializer
         {
             string s          => s,
             Enum e            => e.ToString(),
-            DateTime dt       => dt.ToString("O", CultureInfo.InvariantCulture),
-            DateTimeOffset dt => dt.ToString("O", CultureInfo.InvariantCulture),
+            DateTime dt       => ToonDateFormat.ToString(dt),
+            DateTimeOffset dt => ToonDateFormat.ToString(dt),
             IFormattable f    => f.ToString(null, CultureInfo.InvariantCulture),
             _                 => key.ToString() ?? string.Empty
         };

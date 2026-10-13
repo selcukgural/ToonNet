@@ -229,15 +229,13 @@ public static partial class ToonSerializer
         }
         else if (typeof(T) == typeof(DateTime))
         {
-            Span<char> text = stackalloc char[64];
-            Unsafe.As<T, DateTime>(ref value).TryFormat(text, out var length, "O", CultureInfo.InvariantCulture);
-            writer.WriteString(text[..length]);
+            Span<char> text = stackalloc char[ToonDateFormat.MaxLength];
+            writer.WriteString(text[..ToonDateFormat.Format(Unsafe.As<T, DateTime>(ref value), text)]);
         }
         else if (typeof(T) == typeof(DateTimeOffset))
         {
-            Span<char> text = stackalloc char[64];
-            Unsafe.As<T, DateTimeOffset>(ref value).TryFormat(text, out var length, "O", CultureInfo.InvariantCulture);
-            writer.WriteString(text[..length]);
+            Span<char> text = stackalloc char[ToonDateFormat.MaxLength];
+            writer.WriteString(text[..ToonDateFormat.Format(Unsafe.As<T, DateTimeOffset>(ref value), text)]);
         }
         else if (typeof(T) == typeof(Guid))
         {
@@ -336,12 +334,12 @@ public static partial class ToonSerializer
 
         if (typeof(T) == typeof(DateTime))
         {
-            return new ToonString(Unsafe.As<T, DateTime>(ref value).ToString("O", CultureInfo.InvariantCulture));
+            return new ToonString(ToonDateFormat.ToString(Unsafe.As<T, DateTime>(ref value)));
         }
 
         if (typeof(T) == typeof(DateTimeOffset))
         {
-            return new ToonString(Unsafe.As<T, DateTimeOffset>(ref value).ToString("O", CultureInfo.InvariantCulture));
+            return new ToonString(ToonDateFormat.ToString(Unsafe.As<T, DateTimeOffset>(ref value)));
         }
 
         if (typeof(T) == typeof(Guid))

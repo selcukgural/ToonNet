@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     string-heavy data about 7% faster.
   - A string with an unpaired surrogate throws `ToonEncodingException` (§3); it was written and became U+FFFD in
     UTF-8 output.
+  - `DateTime` and `DateTimeOffset` values are written without trailing zeros in the fraction of a second
+    (`2026-01-02T03:04:05Z`, `2026-01-02T03:04:05.123+03:00`), as System.Text.Json and the official TOON library write
+    them; they were written with seven fraction digits (`2026-01-02T03:04:05.0000000Z`). Reading is unchanged and no
+    precision is lost.
   - Exact decimal values outside 1e-6 ≤ |n| < 1e21 use the exponent form with an explicit sign, like doubles already
     did (`1e-7`, `7.9228162514264337593543950335e+28`, all digits kept), as §2 recommends; they were written in plain
     notation.

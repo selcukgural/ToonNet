@@ -1138,16 +1138,14 @@ public static partial class ToonSerializer
                     break;
                 case DateTime dt:
                 {
-                    Span<char> text = stackalloc char[64];
-                    dt.TryFormat(text, out var length, "O", CultureInfo.InvariantCulture);
-                    writer.WriteString(text[..length]);
+                    Span<char> text = stackalloc char[ToonDateFormat.MaxLength];
+                    writer.WriteString(text[..ToonDateFormat.Format(dt, text)]);
                     break;
                 }
                 case DateTimeOffset dt:
                 {
-                    Span<char> text = stackalloc char[64];
-                    dt.TryFormat(text, out var length, "O", CultureInfo.InvariantCulture);
-                    writer.WriteString(text[..length]);
+                    Span<char> text = stackalloc char[ToonDateFormat.MaxLength];
+                    writer.WriteString(text[..ToonDateFormat.Format(dt, text)]);
                     break;
                 }
                 case Guid guid:

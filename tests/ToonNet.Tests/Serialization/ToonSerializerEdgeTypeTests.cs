@@ -15,6 +15,30 @@ namespace ToonNet.Tests.Serialization;
 /// </summary>
 public class ToonSerializerEdgeTypeTests
 {
+    [Fact]
+    public void Dates_AreWrittenWithoutTrailingFractionZeros_AndRoundTrip()
+    {
+        // ISO 8601 as System.Text.Json (and the official TOON library) writes it: the fraction only as long as needed
+        var values = new
+        {
+            Whole = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+            Millis = new DateTime(2026, 1, 2, 3, 4, 5, 120, DateTimeKind.Utc),
+            Ticks = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Unspecified).AddTicks(1),
+            Offset = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.FromHours(3)),
+            Dates = new[] { new DateTime(2026, 1, 2, 3, 4, 5, 500, DateTimeKind.Utc) }
+        };
+
+        var toon = ToonSerializer.Serialize(values);
+
+        Assert.Equal("Whole: \"2026-01-02T03:04:05Z\"\nMillis: \"2026-01-02T03:04:05.12Z\"\nTicks: \"2026-01-02T03:04:05.0000001\"\n" +
+                     "Offset: \"2026-01-02T03:04:05+03:00\"\nDates[1]: \"2026-01-02T03:04:05.5Z\"", toon);
+        Assert.Equal(toon, new ToonNet.Core.Encoding.ToonEncoder().Encode(new ToonNet.Core.Models.ToonDocument(ToonSerializer.SerializeToValue(values))));
+
+        var ticks = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc).AddTicks(1230);
+        Assert.Equal(ticks, ToonSerializer.Deserialize<DateTime>(ToonSerializer.Serialize(ticks)));
+        Assert.Equal(DateTimeKind.Utc, ToonSerializer.Deserialize<DateTime>(ToonSerializer.Serialize(ticks)).Kind);
+    }
+
     private const string Map = "a: 1\nb: x";
 
     [Fact]
