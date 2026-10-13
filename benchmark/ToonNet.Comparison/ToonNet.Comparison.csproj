@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="0.15.8"/>
+        <!-- The official .NET implementation of TOON, for output parity and performance comparison -->
+        <PackageReference Include="Toon.Format" Version="1.0.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="../../src/ToonNet.Core/ToonNet.Core.csproj"/>
+        <ProjectReference Include="../../src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj"/>
+    </ItemGroup>
+
+</Project>

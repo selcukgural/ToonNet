@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="10.1.0" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+        <PackageReference Include="xunit" Version="2.9.3" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
+        <!-- The official .NET implementation of TOON -->
+        <PackageReference Include="Toon.Format" Version="1.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit" />
+    </ItemGroup>
+
+    <!-- The comparison project's models, data and parity checks -->
+    <ItemGroup>
+        <Compile Include="../../benchmark/ToonNet.Comparison/Models.cs" Link="Comparison/Models.cs" />
+        <Compile Include="../../benchmark/ToonNet.Comparison/Datasets.cs" Link="Comparison/Datasets.cs" />
+        <Compile Include="../../benchmark/ToonNet.Comparison/Parity.cs" Link="Comparison/Parity.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../src/ToonNet.SourceGenerators/ToonNet.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="../../src/ToonNet.Core/ToonNet.Core.csproj" />
+        <ProjectReference Include="../../src/ToonNet.Extensions.Json/ToonNet.Extensions.Json.csproj" />
+    </ItemGroup>
+
+</Project>

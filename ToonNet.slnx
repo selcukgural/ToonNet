@@ -3,6 +3,9 @@
         <Project Path="benchmark/ToonNet.Benchmarks/ToonNet.Benchmarks.csproj">
             <BuildType Project="Release" />
         </Project>
+        <Project Path="benchmark/ToonNet.Comparison/ToonNet.Comparison.csproj">
+            <BuildType Project="Release" />
+        </Project>
     </Folder>
     <Folder Name="/demo/">
         <Project Path="demo/ToonNet.Demo/ToonNet.Demo.csproj">
@@ -34,6 +37,9 @@
             <BuildType Project="Release" />
         </Project>
         <Project Path="tests/ToonNet.SourceGenerators.Tests/ToonNet.SourceGenerators.Tests.csproj">
+            <BuildType Project="Release" />
+        </Project>
+        <Project Path="tests/ToonNet.Compatibility.Tests/ToonNet.Compatibility.Tests.csproj">
             <BuildType Project="Release" />
         </Project>
     </Folder>
