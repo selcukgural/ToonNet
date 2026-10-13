@@ -53,6 +53,9 @@ public static partial class ToonSerializer
         Collection,
         Dictionary,
 
+        /// <summary>An object of a type with generated code, written by its <see cref="ToonObjectWriter"/>.</summary>
+        Generated,
+
         /// <summary>Converted with <see cref="SerializeValue"/> and written by <see cref="ToonDomWriter"/>.</summary>
         Tree
     }
@@ -72,6 +75,9 @@ public static partial class ToonSerializer
         ///     instead of reflection.
         /// </summary>
         public bool HasGeneratedCode { get; init; }
+
+        /// <summary>The generated writer of a type with generated code.</summary>
+        public ToonObjectWriter? Writer { get; init; }
     }
 
     private static readonly ConcurrentDictionary<Type, DirectTypeInfo> DirectTypeInfos = new();
@@ -94,9 +100,15 @@ public static partial class ToonSerializer
                 return new DirectTypeInfo { Kind = DirectKind.Primitive };
             }
 
-            if (FindGeneratedSerializer(t) != null)
+            if (FindGeneratedSerializer(t) is { } generated)
             {
-                return new DirectTypeInfo { Kind = DirectKind.Tree, HasGeneratedCode = true };
+                // Code from a generator without writers builds the tree
+                return new DirectTypeInfo
+                {
+                    Kind = generated.Writer != null ? DirectKind.Generated : DirectKind.Tree,
+                    HasGeneratedCode = true,
+                    Writer = generated.Writer
+                };
             }
 
             var metadata = GetTypeMetadata(t);
@@ -202,7 +214,7 @@ public static partial class ToonSerializer
     /// <summary>
     ///     Writes one document. An instance is used once and is not thread-safe.
     /// </summary>
-    private sealed class DirectWriter
+    private sealed class DirectWriter : IToonSerializationHost
     {
         private readonly ToonSerializerOptions _options;
         private readonly ToonWriter _writer;
@@ -219,7 +231,10 @@ public static partial class ToonSerializer
             _hasConverters = options.Converters.Count != 0;
             _ignoreNulls = options.IgnoreNullValues;
             _includeReadOnly = options.IncludeReadOnlyProperties;
+            _writer.Host = this;
         }
+
+        public ToonSerializerOptions Options => _options;
 
         /// <summary>
         ///     Writes the root value like the encoder writes the root of the tree: an object as top-level fields, a
@@ -246,6 +261,10 @@ public static partial class ToonSerializer
                 case DirectKind.Dictionary:
                     EnterValue(0);
                     WriteDictionaryEntries(value!, info!, 0, 1, firstOnCurrentLine: false, 0);
+                    break;
+                case DirectKind.Generated:
+                    EnterValue(0);
+                    info!.Writer!.WriteFieldsOf(value!, _writer, 0, 1, firstOnCurrentLine: false, 0);
                     break;
                 case DirectKind.Collection:
                     _writer.StartLine(0);
@@ -295,7 +314,7 @@ public static partial class ToonSerializer
         ///     The depth and stack checks <see cref="SerializeValue"/> makes for an object, collection or dictionary;
         ///     cycles end here too (the error is reported by the tree-based path).
         /// </summary>
-        private void EnterValue(int depth)
+        public void EnterValue(int depth)
         {
             if (depth > _options.ValidatedMaxDepth || !RuntimeHelpers.TryEnsureSufficientExecutionStack())
             {
@@ -384,8 +403,8 @@ public static partial class ToonSerializer
         /// </summary>
         /// <returns><c>false</c> when the field is skipped (a null value with <see cref="ToonSerializerOptions.IgnoreNullValues"/>,
         ///     or a converter that returned null).</returns>
-        private bool WriteField(string key, object? value, Type declaredType, IToonConverter? propertyConverter, int lineDepth,
-                                int childDepth, bool startLine, int depth)
+        public bool WriteField(string key, object? value, Type declaredType, IToonConverter? propertyConverter, int lineDepth,
+                               int childDepth, bool startLine, int depth)
         {
             var writer = _writer;
             var kind = Classify(value, declaredType, propertyConverter, out var info);
@@ -434,6 +453,14 @@ public static partial class ToonSerializer
                     WriteDictionaryEntries(value!, info!, childDepth, childDepth + 1, firstOnCurrentLine: false, depth);
                     writer.ExitNesting();
                     break;
+                case DirectKind.Generated:
+                    EnterValue(depth);
+                    writer.WriteKey(key);
+                    writer.Write(':');
+                    writer.EnterNesting();
+                    info!.Writer!.WriteFieldsOf(value!, writer, childDepth, childDepth + 1, firstOnCurrentLine: false, depth);
+                    writer.ExitNesting();
+                    break;
                 case DirectKind.Collection:
                     WriteCollection(key, (IEnumerable)value!, childDepth, ToonArrayPosition.Field, depth);
                     break;
@@ -443,6 +470,25 @@ public static partial class ToonSerializer
             }
 
             return true;
+        }
+
+        /// <summary>Writes the properties of a converted object as fields, like <see cref="WriteObjectFields"/>.</summary>
+        public int WriteTreeFields(ToonObject value, int lineDepth, int childDepth, bool firstOnCurrentLine)
+        {
+            var count = 0;
+
+            foreach (var (key, fieldValue) in value.Properties)
+            {
+                if (count > 0 || !firstOnCurrentLine)
+                {
+                    _writer.StartLine(lineDepth);
+                }
+
+                _tree.WriteField(key, fieldValue, childDepth);
+                count++;
+            }
+
+            return count;
         }
 
         #endregion
@@ -500,8 +546,11 @@ public static partial class ToonSerializer
                     {
                         switch (GetTabularShape(items, kinds, infos, out var metadata, out var included))
                         {
+                            case TabularShape.Tabular when metadata == null:
+                                WriteGeneratedRows(key, items, infos[0]!.Writer!, included!, childDepth, depth);
+                                return;
                             case TabularShape.Tabular:
-                                WriteTabularRows(key, items, metadata!, included!, childDepth, depth);
+                                WriteTabularRows(key, items, metadata, included!, childDepth, depth);
                                 return;
                             case TabularShape.Unknown:
                                 WriteCollectionAsTree(key, items, childDepth, position, depth);
@@ -597,13 +646,18 @@ public static partial class ToonSerializer
 
             for (var i = 0; i < items.Count; i++)
             {
-                if (kinds[i] is not (DirectKind.Object or DirectKind.Dictionary))
+                if (kinds[i] is not (DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated))
                 {
                     return TabularShape.NotTabular; // a primitive, null or array item is never a row
                 }
             }
 
             var type = items[0]!.GetType();
+
+            if (kinds[0] == DirectKind.Generated)
+            {
+                return GetGeneratedTabularShape(items, kinds, infos[0]!.Writer!, type, out included);
+            }
 
             for (var i = 0; i < items.Count; i++)
             {
@@ -686,6 +740,80 @@ public static partial class ToonSerializer
             return columns > 0 ? TabularShape.Tabular : TabularShape.NotTabular;
         }
 
+        /// <summary>The tabular rule for objects of a type with a generated writer, which reports each object's shape.</summary>
+        private TabularShape GetGeneratedTabularShape(PooledItems items, DirectKind[] kinds, ToonObjectWriter objectWriter, Type type,
+                                                      out bool[]? included)
+        {
+            var count = objectWriter.PropertyCount;
+            var columns = new bool[count];
+            var current = count <= 64 ? stackalloc bool[count] : new bool[count];
+            var unknown = false;
+            included = null;
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (kinds[i] != DirectKind.Generated || items[i]!.GetType() != type)
+                {
+                    return TabularShape.Unknown;
+                }
+
+                var target = i == 0 ? columns.AsSpan() : current;
+
+                switch (objectWriter.GetRowShapeOf(items[i]!, _writer, target))
+                {
+                    case ToonRowShape.NotRow:
+                        return TabularShape.NotTabular;
+                    case ToonRowShape.Unknown:
+                        unknown = true; // a later object may still decide it is not tabular
+                        continue;
+                }
+
+                if (i > 0 && !current.SequenceEqual(columns))
+                {
+                    return TabularShape.NotTabular; // the key sets differ
+                }
+            }
+
+            if (unknown)
+            {
+                return TabularShape.Unknown;
+            }
+
+            included = columns;
+            return columns.AsSpan().Contains(true) ? TabularShape.Tabular : TabularShape.NotTabular;
+        }
+
+        private void WriteGeneratedRows(string? key, PooledItems items, ToonObjectWriter objectWriter, bool[] included, int rowDepth, int depth)
+        {
+            var writer = _writer;
+            var fields = new List<string>(included.Length);
+
+            for (var p = 0; p < included.Length; p++)
+            {
+                if (included[p])
+                {
+                    fields.Add(objectWriter.GetName(p, _options));
+                }
+            }
+
+            // The rows are objects one level below the collection
+            EnterValue(depth + 1);
+
+            writer.EnterNesting();
+            writer.WriteArrayHeader(key, items.Count);
+            writer.WriteFieldList(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(fields));
+            writer.EnterNesting();
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                writer.StartLine(rowDepth);
+                objectWriter.WriteRowOf(items[i]!, writer, included);
+            }
+
+            writer.ExitNesting();
+            writer.ExitNesting();
+        }
+
         private void WriteTabularRows(string? key, PooledItems items, TypeMetadata metadata, bool[] included, int rowDepth, int depth)
         {
             var writer = _writer;
@@ -766,7 +894,7 @@ public static partial class ToonSerializer
                     writer.Write("- ");
                     WritePrimitive(item!);
                     break;
-                case DirectKind.Object or DirectKind.Dictionary:
+                case DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated:
                 {
                     EnterValue(valueDepth);
 
@@ -776,9 +904,12 @@ public static partial class ToonSerializer
                     writer.Write("- ");
                     writer.EnterNesting();
 
-                    var fields = kind == DirectKind.Object
-                        ? WriteObjectFields(item!, info!.Metadata!, depth + 1, depth + 2, firstOnCurrentLine: true, valueDepth)
-                        : WriteDictionaryEntries(item!, info!, depth + 1, depth + 2, firstOnCurrentLine: true, valueDepth);
+                    var fields = kind switch
+                    {
+                        DirectKind.Object => WriteObjectFields(item!, info!.Metadata!, depth + 1, depth + 2, firstOnCurrentLine: true, valueDepth),
+                        DirectKind.Generated => info!.Writer!.WriteFieldsOf(item!, writer, depth + 1, depth + 2, firstOnCurrentLine: true, valueDepth),
+                        _ => WriteDictionaryEntries(item!, info!, depth + 1, depth + 2, firstOnCurrentLine: true, valueDepth)
+                    };
 
                     writer.ExitNesting();
 

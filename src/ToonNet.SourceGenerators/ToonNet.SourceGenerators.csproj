@@ -40,6 +40,7 @@
 
     <ItemGroup>
         <Compile Include="../Shared/ToonNaming.cs" Link="Shared/ToonNaming.cs" />
+        <Compile Include="../Shared/ToonKeys.cs" Link="Shared/ToonKeys.cs" />
     </ItemGroup>
 
 </Project>

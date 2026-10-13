@@ -13,8 +13,12 @@ public static partial class ToonSerializer
     ///     The generated methods of a <c>[ToonSerializable]</c> type, registered by its module initializer.
     /// </summary>
     private sealed class GeneratedSerializer(Func<object, ToonSerializerOptions, int, ToonValue> serialize,
-                                             Func<ToonValue, ToonSerializerOptions, int, object?>? deserialize)
+                                             Func<ToonValue, ToonSerializerOptions, int, object?>? deserialize,
+                                             ToonObjectWriter? writer)
     {
+        /// <summary>Writes objects straight to text; null for code from a generator without writers.</summary>
+        public ToonObjectWriter? Writer { get; } = writer;
+
         public Func<object, ToonSerializerOptions, int, ToonValue> Serialize { get; } = serialize;
 
         /// <summary>Null when the type has no constructor generated code can use.</summary>
@@ -29,13 +33,15 @@ public static partial class ToonSerializer
     private static readonly ConcurrentDictionary<Type, GeneratedSerializer?> GeneratedSerializerLookup = new();
 
     internal static void RegisterGenerated<T>(Func<T, ToonSerializerOptions, int, ToonValue> serialize,
-                                              Func<ToonValue, ToonSerializerOptions, int, T>? deserialize)
+                                              Func<ToonValue, ToonSerializerOptions, int, T>? deserialize,
+                                              ToonObjectWriter<T>? writer)
     {
         ArgumentNullException.ThrowIfNull(serialize);
 
         RegisteredGeneratedSerializers[typeof(T)] = new GeneratedSerializer(
             (value, options, depth) => serialize((T)value, options, depth),
-            deserialize == null ? null : (value, options, depth) => deserialize(value, options, depth));
+            deserialize == null ? null : (value, options, depth) => deserialize(value, options, depth),
+            writer);
     }
 
     /// <summary>

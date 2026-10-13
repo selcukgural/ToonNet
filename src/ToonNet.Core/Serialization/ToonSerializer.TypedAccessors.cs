@@ -137,7 +137,7 @@ public static partial class ToonSerializer
     ///     Writes a primitive as TOON text, exactly as <see cref="WriteTyped{T}"/> followed by the encoder would, without
     ///     creating a <see cref="ToonValue"/>.
     /// </summary>
-    private static void WriteTypedText<T>(ToonWriter writer, T value)
+    internal static void WriteTypedText<T>(ToonWriter writer, T value)
     {
         if (value is null)
         {
