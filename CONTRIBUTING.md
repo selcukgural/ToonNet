@@ -28,7 +28,7 @@ This project follows a Code of Conduct. By participating, you are expected to up
 
 ### Prerequisites
 
-- .NET 10 SDK (the solution file is `ToonNet.slnx`, which needs SDK 9.0.200 or later, and
+- .NET 10 SDK (`global.json` selects the newest installed 10.0.x SDK; the solution file is `ToonNet.slnx`, and
   `ToonNet.SourceGenerators.Tests` also targets `net10.0`)
 - .NET 8 runtime (the libraries and most test projects target `net8.0`)
 - Git

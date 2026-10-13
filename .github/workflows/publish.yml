@@ -27,6 +27,8 @@ jobs:
   publish:
     name: Pack and publish
     needs: ci
+    # Publish only from master; a dry run may come from any branch
+    if: ${{ github.ref == 'refs/heads/master' || inputs.dry-run }}
     runs-on: ubuntu-latest
     environment: nuget
     permissions:

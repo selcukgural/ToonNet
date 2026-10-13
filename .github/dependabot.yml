@@ -9,8 +9,39 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # The libraries target net8.0 and reference the 8.x Microsoft.Extensions packages on purpose: a higher major
+      # version would force every consumer onto it. Raise them deliberately together with the target framework.
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      # The source generator references Roslyn 4.8 so it loads in the .NET 8 SDK / Visual Studio 17.8; a newer
+      # Roslyn would make the analyzer fail to load there.
+      - dependency-name: "Microsoft.CodeAnalysis.*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      test-dependencies:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"
 
   - package-ecosystem: "npm"
     directory: "/website"
     schedule:
       interval: "weekly"
+    groups:
+      # Docusaurus packages must stay on the same version
+      docusaurus:
+        patterns:
+          - "@docusaurus/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+      website-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "@docusaurus/*"
+          - "react"
+          - "react-dom"
