@@ -59,9 +59,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <returns>A ToonDocument representing the parsed input.</returns>
     /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
     /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when MaxDepth exceeds 200 without AllowExtendedLimits.</exception>
     public ToonDocument Parse(string input)
     {
         ArgumentNullException.ThrowIfNull(input);
+        _ = _options.ValidatedMaxDepth;
 
         _lines = SplitLines(input);
         _position = 0;
@@ -528,7 +530,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     private void EnterNesting(Line line)
     {
-        if (++_depth > _options.MaxDepth)
+        if (++_depth > _options.ValidatedMaxDepth)
         {
             _depth--;
             throw new ToonParseException($"Maximum nesting depth of {_options.MaxDepth} exceeded", line.Number, line.Indent + 1);

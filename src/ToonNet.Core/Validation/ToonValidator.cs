@@ -105,7 +105,7 @@ public static class ToonValidator
             return new ValidationResult(errors, warnings);
         }
 
-        var depthError = TryValidateDepth(document.Root, options.MaxDepth);
+        var depthError = TryValidateDepth(document.Root, options.ValidatedMaxDepth);
 
         if (depthError == null)
         {

@@ -98,7 +98,7 @@ public static partial class ToonSerializer
     /// <exception cref="ToonSerializationException">Thrown when the maximum depth or the available stack space is exceeded.</exception>
     private static void EnsureDepth(ToonSerializerOptions options, int depth, Type targetType, SerializerState? state)
     {
-        if (depth > options.MaxDepth)
+        if (depth > options.ValidatedMaxDepth)
         {
             throw DepthError($"Maximum depth of {options.MaxDepth} exceeded during deserialization", targetType, state?.Path);
         }

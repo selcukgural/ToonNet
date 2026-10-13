@@ -79,7 +79,7 @@ public static class ToonSourceGenerationHelpers
     /// <exception cref="ToonEncodingException">Thrown when the limit is exceeded.</exception>
     public static void CheckSerializationDepth(ToonSerializerOptions options, int depth)
     {
-        if (depth > options.MaxDepth)
+        if (depth > options.ValidatedMaxDepth)
         {
             throw ToonEncodingException.Create($"Maximum depth of {options.MaxDepth} exceeded during serialization", suggestion:
                                                "The object graph may contain a circular reference; mark the back-reference with [ToonIgnore].");
@@ -98,7 +98,7 @@ public static class ToonSourceGenerationHelpers
     /// <exception cref="ToonSerializationException">Thrown when the limit is exceeded.</exception>
     public static void CheckDeserializationDepth(ToonSerializerOptions options, int depth)
     {
-        if (depth > options.MaxDepth)
+        if (depth > options.ValidatedMaxDepth)
         {
             throw ToonSerializer.DepthError($"Maximum depth of {options.MaxDepth} exceeded during deserialization", typeof(object), null);
         }

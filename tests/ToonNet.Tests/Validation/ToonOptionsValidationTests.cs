@@ -104,7 +104,7 @@ public class ToonOptionsValidationTests
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxDepth = value);
-        Assert.Contains("MaxDepth must be at least 1", ex.Message);
+        Assert.Contains("MaxDepth must be between 1 and 1000", ex.Message);
         Assert.Equal(nameof(value), ex.ParamName);
     }
 
@@ -112,16 +112,28 @@ public class ToonOptionsValidationTests
     [InlineData(201)]
     [InlineData(500)]
     [InlineData(1000)]
-    public void MaxDepth_AboveStandardMaximum_WithoutExtendedLimits_ThrowsArgumentOutOfRangeException(int value)
+    public void MaxDepth_AboveStandardMaximum_WithoutExtendedLimits_ThrowsWhenUsed(int value)
     {
         // Arrange
         var options = new ToonOptions { AllowExtendedLimits = false };
 
-        // Act & Assert
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxDepth = value);
+        // Act & Assert: AllowExtendedLimits may still be set afterwards, so the setter accepts the value
+        options.MaxDepth = value;
+        var ex = Assert.Throws<InvalidOperationException>(() => ToonNet.Core.Models.ToonDocument.Parse("a: 1", options));
         Assert.Contains("cannot exceed 200", ex.Message);
         Assert.Contains("AllowExtendedLimits", ex.Message);
-        Assert.Equal(nameof(value), ex.ParamName);
+        Assert.Contains(((System.ComponentModel.DataAnnotations.IValidatableObject)options)
+                        .Validate(new System.ComponentModel.DataAnnotations.ValidationContext(options)),
+                        r => r.ErrorMessage!.Contains("cannot exceed 200"));
+    }
+
+    [Fact]
+    public void MaxDepth_AndAllowExtendedLimits_CanBeSetInAnyOrder()
+    {
+        var options = new ToonOptions { MaxDepth = 500, AllowExtendedLimits = true };
+
+        Assert.Equal(500, options.MaxDepth);
+        _ = ToonNet.Core.Models.ToonDocument.Parse("a: 1", options);
     }
 
     [Theory]
@@ -135,7 +147,7 @@ public class ToonOptionsValidationTests
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => options.MaxDepth = value);
-        Assert.Contains("cannot exceed 1000", ex.Message);
+        Assert.Contains("MaxDepth must be between 1 and 1000", ex.Message);
         Assert.Equal(nameof(value), ex.ParamName);
     }
 

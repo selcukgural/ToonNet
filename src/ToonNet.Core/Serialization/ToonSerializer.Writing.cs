@@ -59,7 +59,7 @@ public static partial class ToonSerializer
         }
 
         // Only objects, collections and dictionaries count towards the depth (the root is at depth 0)
-        if (depth > options.MaxDepth)
+        if (depth > options.ValidatedMaxDepth)
         {
             throw ToonEncodingException.Create($"Maximum depth of {options.MaxDepth} exceeded during serialization", state.Path);
         }

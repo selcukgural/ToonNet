@@ -69,12 +69,11 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     Must be between 1 and 200 (or 1000 if <see cref="AllowExtendedLimits"/> is true).
     ///     The default value is 100.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">
-    ///     Thrown when the value is less than 1 or exceeds the allowed maximum
-    ///     (200 by default, or 1000 with <see cref="AllowExtendedLimits"/>).
-    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is less than 1 or greater than 1000.</exception>
     /// <remarks>
     ///     This limit prevents infinite recursion from circular references and stack overflow.
+    ///     A value above 200 without <see cref="AllowExtendedLimits"/> (which can be set in any order) makes
+    ///     serialization throw an <see cref="InvalidOperationException"/>.
     ///     Standard limit is 200. Enable <see cref="AllowExtendedLimits"/> to allow up to 1000.
     /// </remarks>
     [Range(1, 1000)]
@@ -83,24 +82,25 @@ public sealed class ToonSerializerOptions : IValidatableObject
         get => _maxDepth;
         set
         {
-            if (value < 1)
+            if (value is < 1 or > ExtendedMaxDepth)
             {
-                throw new ArgumentOutOfRangeException(nameof(value), value, "MaxDepth must be at least 1");
+                throw new ArgumentOutOfRangeException(nameof(value), value, $"{nameof(MaxDepth)} must be between 1 and {ExtendedMaxDepth}");
             }
 
-            var maxAllowed = AllowExtendedLimits ? ExtendedMaxDepth : DefaultMaxDepth;
-
-            if (value > maxAllowed)
-            {
-                throw new ArgumentOutOfRangeException(nameof(value), value,
-                                                      AllowExtendedLimits
-                                                          ? $"{nameof(MaxDepth)} cannot exceed {ExtendedMaxDepth} even with extended limits enabled"
-                                                          : $"{nameof(MaxDepth)} cannot exceed {DefaultMaxDepth}. Set {nameof(AllowExtendedLimits)} = true to allow up to {ExtendedMaxDepth}");
-            }
-
+            // Values above 200 also need AllowExtendedLimits, which may be set before or after this property; the
+            // combination is checked when the options are used (ValidatedMaxDepth) and by Validate.
             _maxDepth = value;
         }
     }
+
+    /// <summary>
+    ///     <see cref="MaxDepth"/>, after checking that a value above 200 comes with <see cref="AllowExtendedLimits"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="MaxDepth"/> exceeds 200 without extended limits.</exception>
+    internal int ValidatedMaxDepth => _maxDepth <= DefaultMaxDepth || AllowExtendedLimits
+        ? _maxDepth
+        : throw new InvalidOperationException(
+            $"{nameof(MaxDepth)} cannot exceed {DefaultMaxDepth}. Set {nameof(AllowExtendedLimits)} = true to allow up to {ExtendedMaxDepth}");
 
     /// <summary>
     ///     Gets the collection of custom converters to use during serialization.

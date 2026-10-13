@@ -59,7 +59,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     ///     The encoded TOON format string.
     /// </returns>
     /// <exception cref="ArgumentNullException">
-    ///     Thrown when a document is null or document.Root is null.
+    ///     Thrown when a document is null.
     /// </exception>
     /// <exception cref="ToonEncodingException">
     ///     Thrown when encoding exceeds the maximum depth specified in the options.
@@ -68,10 +68,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(document);
 
-        if (document.Root == null)
-        {
-            throw new ArgumentNullException(nameof(document), "Document root cannot be null");
-        }
+        _ = _options.ValidatedMaxDepth;
 
         var sb = StringBuilderPool.Get();
 
@@ -397,7 +394,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         /// <exception cref="ToonEncodingException">Thrown when the document is nested too deeply.</exception>
         private void EnterNesting()
         {
-            if (++_depth > _options.MaxDepth)
+            if (++_depth > _options.ValidatedMaxDepth)
             {
                 throw new ToonEncodingException($"Maximum depth of {_options.MaxDepth} exceeded");
             }

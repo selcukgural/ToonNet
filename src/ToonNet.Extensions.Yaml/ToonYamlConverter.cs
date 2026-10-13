@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Runtime.CompilerServices;
 using ToonNet.Core;
 using ToonNet.Core.Models;
@@ -80,7 +81,9 @@ public static class ToonYamlConverter
 
         // YamlStream.Load is recursive and expands aliases, so untrusted input is checked
         // with the iterative event parser first to avoid stack overflows and alias bombs.
-        EnsureWithinLimits(yaml, (options ?? ToonOptions.Default).MaxDepth);
+        options ??= ToonOptions.Default;
+        EnsureValid(options);
+        EnsureWithinLimits(yaml, options.MaxDepth);
 
         using var reader = new StringReader(yaml);
         var yamlStream = new YamlStream();
@@ -277,6 +280,21 @@ public static class ToonYamlConverter
 
                     break;
             }
+        }
+    }
+
+    /// <summary>
+    ///     Rejects options that are invalid as a whole, such as a <see cref="ToonOptions.MaxDepth"/> above 200 without
+    ///     <see cref="ToonOptions.AllowExtendedLimits"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the options are invalid.</exception>
+    private static void EnsureValid(ToonOptions options)
+    {
+        var error = ((IValidatableObject)options).Validate(new ValidationContext(options)).FirstOrDefault();
+
+        if (error != null)
+        {
+            throw new InvalidOperationException(error.ErrorMessage);
         }
     }
 

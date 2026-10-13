@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core:** `MaxDepth` and `AllowExtendedLimits` can be set in any order (`new ToonOptions { MaxDepth = 500,
+  AllowExtendedLimits = true }` threw before). The setter only rejects values outside 1–1000; a value above 200 without
+  `AllowExtendedLimits` throws `InvalidOperationException` when the options are used and is reported by `Validate`.
 - **ToonNet.Core / Extensions.Yaml:** `MaxDepth` means the same everywhere: the root value is at depth 0, each object or
   array inside another is one level deeper, and primitive values do not count. Before, the serializer and
   `ToonValidator.Validate(ToonDocument)` also counted primitive values, the parser and encoder counted a root array as

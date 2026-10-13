@@ -264,12 +264,14 @@ ToonSerializer.Serialize(new Rectangle(), new ToonSerializerOptions { IncludeRea
 `MaxDepth` limits how deeply objects, collections and dictionaries may nest while serializing and deserializing
 (default 100). The root value is at depth 0 and each nested object or collection is one level deeper; primitive values
 do not count. `ToonOptions.MaxDepth` uses the same rule for parsing, encoding and validation. Values above 200
-throw `ArgumentOutOfRangeException` unless `AllowExtendedLimits` is set first, which allows up to 1000:
+also need `AllowExtendedLimits` (up to 1000). The two properties can be set in any order; a value above 200 without
+extended limits throws `InvalidOperationException` when the options are used, and values outside 1–1000 throw
+`ArgumentOutOfRangeException` from the setter:
 
 ```csharp
 var options = new ToonSerializerOptions
 {
-    AllowExtendedLimits = true,  // set before MaxDepth
+    AllowExtendedLimits = true,
     MaxDepth = 500
 };
 ```
@@ -324,8 +326,9 @@ var options = new ToonSerializerOptions
 | `MaxDepth` | `int` | `100` | Maximum nesting depth while parsing and encoding (1–200, or up to 1000 with `AllowExtendedLimits`) |
 | `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
 
-Invalid values throw from the setter: `ArgumentOutOfRangeException` for `IndentSize` and `MaxDepth`,
-`ArgumentException` for `Delimiter`.
+Invalid values throw from the setter: `ArgumentOutOfRangeException` for `IndentSize` and `MaxDepth` (outside 1–1000),
+`ArgumentException` for `Delimiter`. A `MaxDepth` above 200 without `AllowExtendedLimits` throws
+`InvalidOperationException` when parsing or encoding.
 
 ### Indent Configuration
 
