@@ -1,13 +1,13 @@
 PatientId: MRN-2026-987654
 RecordNumber: EMR-HSP-00142857
-AdmissionDate: "2026-01-10T08:15:00.0000000Z"
+AdmissionDate: "2026-01-10T08:15:00Z"
 DischargeDate: null
 Status: Active
 PatientInfo:
   FirstName: Michael
   MiddleName: Robert
   LastName: Chen
-  DateOfBirth: "1985-06-15T00:00:00.0000000"
+  DateOfBirth: "1985-06-15T00:00:00"
   Age: 40
   Gender: Male
   BloodType: A+
@@ -21,60 +21,24 @@ PatientInfo:
     Provider: Blue Cross Blue Shield
     PolicyNumber: BCBS-2026-12345
     GroupNumber: GRP-98765
-    CoverageStartDate: "2025-01-01T00:00:00.0000000"
+    CoverageStartDate: "2025-01-01T00:00:00"
     IsActive: true
-VitalSigns[4]:
-  - Timestamp: "2026-01-10T08:30:00.0000000Z"
-    Temperature: 98.6
-    TemperatureUnit: F
-    BloodPressure:
-      Systolic: 120
-      Diastolic: 80
-      Unit: mmHg
-    HeartRate: 72
-    RespiratoryRate: 16
-    OxygenSaturation: 98
-  - Timestamp: "2026-01-10T14:00:00.0000000Z"
-    Temperature: 99.1
-    TemperatureUnit: F
-    BloodPressure:
-      Systolic: 118
-      Diastolic: 78
-      Unit: mmHg
-    HeartRate: 75
-    RespiratoryRate: 18
-    OxygenSaturation: 97
-  - Timestamp: "2026-01-10T20:00:00.0000000Z"
-    Temperature: 98.8
-    TemperatureUnit: F
-    BloodPressure:
-      Systolic: 122
-      Diastolic: 82
-      Unit: mmHg
-    HeartRate: 70
-    RespiratoryRate: 16
-    OxygenSaturation: 99
-  - Timestamp: "2026-01-11T08:00:00.0000000Z"
-    Temperature: 98.7
-    TemperatureUnit: F
-    BloodPressure:
-      Systolic: 119
-      Diastolic: 79
-      Unit: mmHg
-    HeartRate: 73
-    RespiratoryRate: 17
-    OxygenSaturation: 98
+VitalSigns[4]{Timestamp,Temperature,TemperatureUnit,BloodPressure{Systolic,Diastolic,Unit},HeartRate,RespiratoryRate,OxygenSaturation}:
+  "2026-01-10T08:30:00Z",98.6,F,120,80,mmHg,72,16,98
+  "2026-01-10T14:00:00Z",99.1,F,118,78,mmHg,75,18,97
+  "2026-01-10T20:00:00Z",98.8,F,122,82,mmHg,70,16,99
+  "2026-01-11T08:00:00Z",98.7,F,119,79,mmHg,73,17,98
 Diagnoses[2]{Code,Description,Type,DateDiagnosed,Severity,IsConfirmed}:
-  J18.9,"Pneumonia, unspecified organism",Primary,"2026-01-10T00:00:00.0000000",Moderate,true
-  E11.9,Type 2 diabetes mellitus without complications,Secondary,"2022-03-01T00:00:00.0000000",Mild,true
+  J18.9,"Pneumonia, unspecified organism",Primary,"2026-01-10T00:00:00",Moderate,true
+  E11.9,Type 2 diabetes mellitus without complications,Secondary,"2022-03-01T00:00:00",Mild,true
 Medications[3]:
   - Name: Azithromycin
     GenericName: Azithromycin
     Dosage: 500mg
     Frequency: Once daily
     Route: Oral
-    StartDate: "2026-01-10T00:00:00.0000000"
-    EndDate: "2026-01-15T00:00:00.0000000"
+    StartDate: "2026-01-10T00:00:00"
+    EndDate: "2026-01-15T00:00:00"
     PrescribedBy: Dr. Sarah Williams
     IsActive: true
     SideEffects[2]: Nausea,Mild headache
@@ -83,7 +47,7 @@ Medications[3]:
     Dosage: 1000mg
     Frequency: Twice daily
     Route: Oral
-    StartDate: "2022-03-15T00:00:00.0000000"
+    StartDate: "2022-03-15T00:00:00"
     EndDate: null
     PrescribedBy: Dr. James Rodriguez
     IsActive: true
@@ -93,7 +57,7 @@ Medications[3]:
     Dosage: 10mg
     Frequency: Once daily
     Route: Oral
-    StartDate: "2023-06-01T00:00:00.0000000"
+    StartDate: "2023-06-01T00:00:00"
     EndDate: null
     PrescribedBy: Dr. James Rodriguez
     IsActive: true
@@ -101,8 +65,8 @@ Medications[3]:
 LabResults[3]:
   - TestName: Complete Blood Count
     TestCode: CBC
-    OrderedDate: "2026-01-10T09:00:00.0000000Z"
-    ResultDate: "2026-01-10T14:30:00.0000000Z"
+    OrderedDate: "2026-01-10T09:00:00Z"
+    ResultDate: "2026-01-10T14:30:00Z"
     Status: Final
     Results:
       WBC: "12.5"
@@ -120,8 +84,8 @@ LabResults[3]:
     Notes: Elevated WBC consistent with infection
   - TestName: Chest X-Ray
     TestCode: CXR
-    OrderedDate: "2026-01-10T09:15:00.0000000Z"
-    ResultDate: "2026-01-10T11:00:00.0000000Z"
+    OrderedDate: "2026-01-10T09:15:00Z"
+    ResultDate: "2026-01-10T11:00:00Z"
     Status: Final
     Results:
       Finding: Right lower lobe infiltrate
@@ -131,8 +95,8 @@ LabResults[3]:
     Notes: Findings consistent with pneumonia
   - TestName: HbA1c
     TestCode: A1C
-    OrderedDate: "2026-01-10T09:00:00.0000000Z"
-    ResultDate: "2026-01-10T16:00:00.0000000Z"
+    OrderedDate: "2026-01-10T09:00:00Z"
+    ResultDate: "2026-01-10T16:00:00Z"
     Status: Final
     Results:
       Value: "6.8"
@@ -141,10 +105,10 @@ LabResults[3]:
     IsAbnormal: false
     Notes: Diabetes well controlled
 Procedures[1]{Name,Code,PerformedDate,PerformedBy,Department,Status,Duration,Notes}:
-  Chest X-Ray,CPT-71045,"2026-01-10T10:30:00.0000000Z","Dr. Emily Martinez, MD",Radiology,Completed,15,Patient tolerated procedure well
+  Chest X-Ray,CPT-71045,"2026-01-10T10:30:00Z","Dr. Emily Martinez, MD",Radiology,Completed,15,Patient tolerated procedure well
 AttendingPhysicians[2]{Name,Specialty,LicenseNumber,Phone,Email,IsActive}:
   "Dr. Sarah Williams, MD",Internal Medicine,MD-12345-IL,+1-555-111-2222,s.williams@hospital.example.com,true
   "Dr. Emily Martinez, MD",Radiology,MD-67890-IL,+1-555-333-4444,e.martinez@hospital.example.com,true
 Allergies[2]{Allergen,Reaction,Severity,OnsetDate}:
-  Penicillin,Severe rash,High,"1995-08-20T00:00:00.0000000"
-  Shellfish,Anaphylaxis,Critical,"2010-05-15T00:00:00.0000000"
+  Penicillin,Severe rash,High,"1995-08-20T00:00:00"
+  Shellfish,Anaphylaxis,Critical,"2010-05-15T00:00:00"

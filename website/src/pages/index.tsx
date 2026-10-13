@@ -90,7 +90,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={`${siteConfig.title} - Documentation`}
-      description="TOON (Token-Oriented Object Notation) serialization for .NET, implementing TOON spec v3.3.2.">
+      description="TOON (Token-Oriented Object Notation) serialization for .NET, implementing TOON spec v4.4.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

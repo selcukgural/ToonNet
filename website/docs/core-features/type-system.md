@@ -18,7 +18,7 @@ that TOON spec §3 requires implementations to document.
 | `byte` … `ulong`, `decimal` | number | Exact value kept |
 | `float`, `double`, `Half` | number | Shortest round-trip form; NaN and ±Infinity become `null` |
 | `BigInteger`, `Int128`, `UInt128` | number | Written as a quoted string when outside the `decimal` range (lossless) |
-| `DateTime`, `DateTimeOffset` | string | ISO 8601 round-trip format (`O`); `DateTimeKind` is preserved |
+| `DateTime`, `DateTimeOffset` | string | ISO 8601 round-trip format without trailing zeros in the fraction of a second (`2026-01-02T03:04:05Z`, `…05.123+03:00`), as System.Text.Json writes it; `DateTimeKind` and every tick are preserved |
 | `DateOnly` / `TimeOnly` | string | `yyyy-MM-dd` / `HH:mm:ss[.fffffff]` |
 | `TimeSpan` | string | Constant format `[-][d.]hh:mm:ss[.fffffff]` |
 | `Guid`, `Uri` | string | |
@@ -26,6 +26,8 @@ that TOON spec §3 requires implementations to document.
 | `null` | `null` | Omitted from objects when `IgnoreNullValues` is set; always kept in arrays |
 | arrays, `IEnumerable<T>` | array | Readable into arrays, `List<T>`, `IReadOnlyList<T>`, `HashSet<T>`, `ISet<T>`, immutable collections and other collections with a parameterless constructor |
 | dictionaries | object | Keys formatted with the invariant culture; readable into string, numeric, enum, `Guid` (and other parsable) keys |
+| objects whose values are uniform objects (at least two) | object, keyed tabular form | `servers[2:]{host,port}:` with one `name: cells` row per entry (spec §9.5); applies to dictionaries and classes alike |
+| lists of uniform objects | array, tabular form | Nested objects of the same shape become nested field groups: `orders[2]{id,customer{name,country}}:` (spec §9.3) |
 | other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the runtime type is used |
 | `ToonValue` | as is | Useful for dynamic content |
 
@@ -336,8 +338,9 @@ string name = ((ToonString)firstEmployee["Name"]!).Value;
 ```
 
 The encoder writes arrays of uniform objects like this one in tabular form
-(`[2]{Name,Department,Salary}:`), deciding from the items. Parsed tabular arrays expose the header's field names in
-`FieldNames` (`IsTabular` is `true`); these describe the parsed text only and are not updated when the items change.
+(`[2]{Name,Department,Salary}:`, with nested field groups for uniform nested objects), deciding from the items. Parsed tabular arrays expose the header's field names in
+`FieldNames` (`IsTabular` is `true`; the top-level names, without the fields of nested field groups); these describe
+the parsed text only and are not updated when the items change.
 
 ### Modifying Arrays
 

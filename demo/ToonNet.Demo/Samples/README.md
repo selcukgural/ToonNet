@@ -201,12 +201,12 @@ Console.WriteLine($"String roundtrip: {json2 == json3}");
 ### 1. **TOON Format Özellikleri**
 - Okunabilir (JSON'dan daha az noktalama)
 - Compact (bu örneklerde JSON'dan küçük)
-- TOON spec v3.3.2 formatını izler
+- TOON spec v4.4 formatını izler
 - Human-friendly (kolay düzenlenebilir)
 
 ### 2. **Nested Arrays**
 
-Sample dosyalarındaki list formu (`ToonSerializer`, yalnızca primitive alanlı uniform object dizilerini
+Sample dosyalarındaki list formu (`ToonSerializer`, uniform object dizilerini (iç içe uniform nesneler alan grubu olarak)
 tabular formda yazar: `Reviews[2]{Rating,Comment}:`):
 
 ```toon
@@ -409,7 +409,7 @@ string json2 = ToonConvert.ToJson(toon);    // {"discount": 35}
 
 ### Neden Bu Önemli?
 
-**ToonNet sayıları kanonik formda yazar** (TOON spec v3.3.2): trailing zero'lar ve exponent gösterimi normalize
+**ToonNet sayıları kanonik formda yazar** (TOON spec v4.4): trailing zero'lar ve exponent gösterimi normalize
 edilir. Bu, sayıyı bir değer olarak okuyup yeniden yazan serializer'larda yaygındır; ancak her kütüphane böyle
 davranmaz:
 

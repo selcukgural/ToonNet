@@ -631,7 +631,7 @@ var encoder = new ToonEncoder();
 string toon = encoder.Encode(document);
 
 Console.WriteLine(toon);
-// Output (uniform objects with primitive values use the tabular form):
+// Output (uniform objects use the tabular form; uniform nested objects become nested field groups):
 // [3]{name,age}:
 //   Alice,25
 //   Bob,30

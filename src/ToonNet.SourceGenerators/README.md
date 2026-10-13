@@ -184,10 +184,24 @@ they are also listed under **Dependencies → Analyzers → ToonNet.SourceGenera
 
 ---
 
+## 🪶 NativeAOT and trimming
+
+The generated `Serialize`/`Deserialize` methods need no reflection, so apps that write and read `[ToonSerializable]`
+types with them, `ToonEncoder` and `ToonDocument.Parse` can be trimmed and published with NativeAOT (use
+`AllowReflectionFallback = false` so every property is converted by generated code). `ToonSerializer` itself uses
+reflection and is annotated with `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]`.
+
+```csharp
+string toon = new ToonEncoder().Encode(Catalog.Serialize(catalog));
+Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
+```
+
+---
+
 ## 📋 Requirements
 
 - .NET 8.0 or later (the generated code uses `[UnsafeAccessor]` for `init`-only and private setters)
-- ToonNet.Core of the same major version
+- ToonNet.Core of the same release (generated code uses its hidden writer and reader APIs)
 
 ---
 

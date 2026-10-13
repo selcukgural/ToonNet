@@ -61,7 +61,8 @@ dotnet add package ToonNet.AspNetCore.Mvc
 
 ## Requirements
 
-- **.NET 8.0 or later** (the runtime packages target `net8.0`)
+- **.NET 8.0 or later** (the runtime packages build for `net8.0` and `net10.0`)
+- Trimming and NativeAOT: see [Source Generators – NativeAOT and trimming](../advanced/source-generators#nativeaot-and-trimming)
 - `ToonNet.Extensions.Yaml` depends on [YamlDotNet](https://github.com/aaubry/YamlDotNet) (installed automatically)
 
 ## Quick Package Selection Guide

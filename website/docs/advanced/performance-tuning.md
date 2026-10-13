@@ -107,15 +107,20 @@ the reflection-based path (about 10-30% for lists of 10,000 objects in the repos
 
 ## Performance Comparison
 
-The repository's benchmarks (`benchmark/ToonNet.Benchmarks`) measure generated and reflection-based
-serialization, the encoder, the parser and streaming. `TypedSerializationBenchmarks` serializes and deserializes
-lists of 100 and 10,000 objects with both serializer paths and with System.Text.Json as a reference point. TOON
-text is produced through a document model and indentation-aware parsing, so expect it to be slower than
-System.Text.Json; run the benchmarks on your own hardware and payloads for current numbers:
+`benchmark/ToonNet.Comparison` compares ToonNet with the official .NET TOON library (Toon.Format) and with
+System.Text.Json on four data shapes (flat records, nested records with arrays, nested field groups and keyed
+tables). ToonNet writes the same text as Toon.Format several times faster and with a fraction of the memory, and
+is close to System.Text.Json; the measured numbers are in the
+[README](https://github.com/selcukgural/ToonNet#toonnet-vs-the-official-toonformat-library). Run the comparison and
+the parity check on your own hardware:
 
 ```bash
-dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*TypedSerialization*"
+dotnet run -c Release --project benchmark/ToonNet.Comparison -- parity
+dotnet run -c Release --project benchmark/ToonNet.Comparison -- --filter "*"
 ```
+
+`benchmark/ToonNet.Benchmarks` measures ToonNet's internals (encoder, parser, streaming, generated and
+reflection-based paths).
 
 ## Benchmarking
 

@@ -88,9 +88,33 @@ enum names are written without boxing, and values are read into typed locals. Th
 `Deserialize` methods still work with a `ToonDocument`.
 
 :::note
-ToonNet is not yet annotated for trimming or Native AOT, so the generator makes no AOT guarantee, and it does not make
-serialization allocation-free.
+The generator does not make serialization allocation-free. For trimmed and NativeAOT apps, see
+[NativeAOT and trimming](#nativeaot-and-trimming).
 :::
+
+## NativeAOT and trimming
+
+`ToonNet.Core` is annotated for trimming and NativeAOT. `ToonSerializer` converts types with reflection, so its methods
+carry `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]` and a trimmed or AOT app gets a warning where it calls
+them. The generated methods need no reflection: write and read `[ToonSerializable]` types with them, `ToonEncoder` and
+`ToonDocument.Parse`:
+
+```csharp
+[ToonSerializable(AllowReflectionFallback = false)] // every property must be converted by generated code
+public partial class Catalog
+{
+    public string Name { get; set; } = "";
+    public List<Product> Products { get; set; } = [];
+    public Dictionary<string, Warehouse> Warehouses { get; set; } = [];
+}
+
+string toon = new ToonEncoder().Encode(Catalog.Serialize(catalog));
+Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
+```
+
+This holds as long as the options contain no converters and objects are of their declared types (a derived instance
+is handed to the reflection-based serializer). The repository's CI publishes such an app with NativeAOT and fails on
+any trim or AOT warning.
 
 ## Supported shapes
 
@@ -154,8 +178,8 @@ they are also listed under **Dependencies → Analyzers → ToonNet.SourceGenera
 
 ## Requirements
 
-- .NET 8.0 or later
-- ToonNet.Core of the same major version
+- .NET 8.0 or later (`ToonNet.Core` builds for .NET 8 and .NET 10)
+- ToonNet.Core of the same release
 
 ## See Also
 

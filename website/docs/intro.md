@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Welcome to ToonNet
 
-ToonNet is a .NET library for serializing and deserializing data in **TOON** (Token-Oriented Object Notation) format. It implements [TOON spec v3.3.2](toon-spec).
+ToonNet is a .NET library for serializing and deserializing data in **TOON** (Token-Oriented Object Notation) format. It implements [TOON spec v4.4](toon-spec), passes all 564 official conformance fixtures and writes the same text as the official .NET library.
 
 ## What is TOON?
 
@@ -29,7 +29,10 @@ var restored = ToonSerializer.Deserialize<Person>(toon);
 ## Key Features
 
 - 🚀 **Performance** - Compiled accessors, cached type metadata, span-based parsing and pooled buffers
-- 💰 **Token Efficient** - Tabular arrays declare field names once (lower AI API costs)
+- 💰 **Token Efficient** - Tabular arrays and keyed tables declare field names once, nested field groups flatten
+  uniform nested objects into the same rows (lower AI API costs)
+- 📐 **Spec v4.4** - All 564 official conformance fixtures pass; output is identical to the official .NET library
+- 🎯 **.NET 8 and .NET 10** - Builds for both
 - 💻 **Developer Friendly** - System.Text.Json-style API
 - 🔄 **Streaming Support** - Multi-document streaming from `IAsyncEnumerable<T>` without materialising the whole dataset
 - 🔧 **ASP.NET Core** - Input/output formatters, configuration provider
@@ -73,7 +76,7 @@ Optimization and customization:
 ### 📚 Reference
 Additional resources:
 - **[API Guide](api-guide)** - Complete API reference
-- **[TOON Spec](toon-spec)** - TOON spec v3.3.2 conformance and implementation notes
+- **[TOON Spec](toon-spec)** - TOON spec v4.4 conformance and implementation notes
 
 ## Quick Links
 

@@ -34,7 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has a TOON number form (NaN and infinities are written as `null`).
 
 ### Changed
-- **ToonNet.Core (breaking input change):** The parser is moving to TOON spec v4.4 (in progress):
+- **ToonNet.Core (breaking input change):** The parser follows TOON spec v4.4 (was v3.3.2) and passes all of its
+  404 decode fixtures:
   - Lines are prepared as §12 orders: a byte-order mark at the start of the document is removed (one elsewhere is
     content), comment lines (`#` after optional spaces, §5.1) are dropped without affecting any scope or count, and
     only trailing spaces are trimmed, so a trailing tab is part of a value (`k: "a"<TAB>` is now an error). A line of
@@ -58,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     or keyed object is indented deeper than expected, its depth becomes the scope's depth. Removed: a row with too few
     or too many cells is an error (missing cells were read as `null` and extra cells dropped), list items under `key:`
     without an array header are an error (they were read as an array), and so is an indented first line.
-- **ToonNet.Core (breaking output change):** The encoder is moving to TOON spec v4.4 (in progress):
+- **ToonNet.Core (breaking output change):** The encoder follows TOON spec v4.4 and passes all of its 160 encode
+  fixtures; its output is identical to the official .NET library's (Toon.Format) for the same data:
   - Strings follow the §7.2 quoting rules: a leading `#` and numeric-like text with a leading `+` (`"+1"`) are quoted,
     only SP and HTAB at either end require quotes (an NBSP or other Unicode space no longer does), and a root string
     starting with U+FEFF is quoted. Checking a string scans it with vectorized searches, which makes serializing
@@ -209,10 +211,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `ToonResult` no longer use reflection for them. Generic types and types nested in a `private`/`protected` type
   are still converted with reflection. The generator only emits the registration when the referenced `ToonNet.Core`
   has the new API.
-- **Tests:** The conformance tests run the official TOON spec v4.4 fixtures (were v3.3.2). Cases are identified by file
-  and index (`decode/objects/12`), and cases for a newer spec version than the targeted one are skipped. ToonNet does
-  not conform to 93 of the 564 cases yet; they are listed in `KnownNonConformance.txt` until the move to spec 4.4 is
-  finished.
+- **Tests:** The conformance tests run the official TOON spec v4.4 fixtures (were v3.3.2); all 564 pass. Cases are
+  identified by file and index (`decode/objects/12`), and cases for a newer spec version than the targeted one are
+  skipped. `tests/ToonNet.Compatibility.Tests` checks parity with the official .NET library (Toon.Format) on the
+  fixtures, on random documents and on typed data, and `benchmark/ToonNet.Comparison` compares the performance of
+  both (and System.Text.Json); see the README.
 
 ### Fixed
 - **ToonNet.Core:** Some doubles did not read back exactly: a number that also fits a `decimal` took its `double` value

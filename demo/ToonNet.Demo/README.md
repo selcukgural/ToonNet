@@ -49,7 +49,7 @@ Prices and decimals are formatted with the current culture (shown here with `.` 
   SAMPLE #1: E-Commerce Order System
 ═══════════════════════════════════════════════════════════════════════════════
 
-Loaded TOON file: ecommerce-order.toon (2609 chars)
+Loaded TOON file: ecommerce-order.toon (2568 chars)
 
 ORDER DETAILS:
    Order ID: ORD-2026-00142857
@@ -66,7 +66,7 @@ ORDER DETAILS:
       ... and 1 more items
 
 Testing Format Conversions:
-   TOON -> JSON: 2578 chars
+   TOON -> JSON: 2538 chars
    JSON -> TOON: 2600 chars
    Roundtrip verification: PASSED (JSON -> TOON -> JSON keeps every value)
 
@@ -76,7 +76,7 @@ E-Commerce sample completed successfully!
   SAMPLE #2: Healthcare Patient Record (EMR System)
 ═══════════════════════════════════════════════════════════════════════════════
 
-Loaded TOON file: healthcare-patient.toon (4476 chars)
+Loaded TOON file: healthcare-patient.toon (3728 chars)
 
 PATIENT DETAILS:
    Patient ID: MRN-2026-987654
@@ -106,8 +106,8 @@ PATIENT DETAILS:
       - Shellfish: Anaphylaxis
 
 Testing Format Conversions:
-   TOON -> JSON: 4523 chars
-   JSON -> TOON: 4475 chars
+   TOON -> JSON: 4347 chars
+   JSON -> TOON: 3904 chars
    Roundtrip verification: PASSED (JSON -> TOON -> JSON keeps every value)
 
 Healthcare sample completed successfully!
@@ -159,7 +159,7 @@ public class ECommerceOrder
 **TOON Sample (excerpt; see the `Samples` folder for the full file):**
 ```toon
 OrderId: ORD-2026-00142857
-OrderDate: "2026-01-11T15:30:00.0000000Z"
+OrderDate: "2026-01-11T15:30:00Z"
 Status: Processing
 Customer:
   CustomerId: CUST-98765
@@ -192,7 +192,7 @@ Items[3]:
 **Location:** `Samples/healthcare-patient.*`
 
 **Files:**
-- `healthcare-patient.toon` (4.5 KB) - TOON format
+- `healthcare-patient.toon` (3.7 KB) - TOON format; the vital signs are one table whose blood pressure columns form a nested field group
 - `healthcare-patient.json` (6.2 KB) - JSON format
 - `HealthcareModels.cs` - C# model classes
 
@@ -228,29 +228,23 @@ public class PatientRecord
 ```toon
 PatientId: MRN-2026-987654
 RecordNumber: EMR-HSP-00142857
-AdmissionDate: "2026-01-10T08:15:00.0000000Z"
+AdmissionDate: "2026-01-10T08:15:00Z"
 DischargeDate: null
 Status: Active
 PatientInfo:
   FirstName: Michael
   MiddleName: Robert
   LastName: Chen
-  DateOfBirth: "1985-06-15T00:00:00.0000000"
+  DateOfBirth: "1985-06-15T00:00:00"
   Age: 40
   Gender: Male
   BloodType: A+
   ...
-VitalSigns[4]:
-  - Timestamp: "2026-01-10T08:30:00.0000000Z"
-    Temperature: 98.6
-    TemperatureUnit: F
-    BloodPressure:
-      Systolic: 120
-      Diastolic: 80
-      Unit: mmHg
-    HeartRate: 72
-    RespiratoryRate: 16
-    OxygenSaturation: 98
+VitalSigns[4]{Timestamp,Temperature,TemperatureUnit,BloodPressure{Systolic,Diastolic,Unit},HeartRate,RespiratoryRate,OxygenSaturation}:
+  "2026-01-10T08:30:00Z",98.6,F,120,80,mmHg,72,16,98
+  "2026-01-10T14:00:00Z",99.1,F,118,78,mmHg,75,18,97
+  "2026-01-10T20:00:00Z",98.8,F,122,82,mmHg,70,16,99
+  "2026-01-11T08:00:00Z",98.7,F,119,79,mmHg,73,17,98
 ```
 
 ---

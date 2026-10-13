@@ -11,13 +11,13 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'TOON Spec v3.3.2',
+    title: 'TOON Spec v4.4',
     icon: '📐',
     description: (
       <>
-        Implements <strong>TOON spec v3.3.2</strong> and is tested against the official
-        conformance fixtures. TOON is a compact, human-readable format that suits LLM
-        prompts, configuration files and data exchange.
+        Implements <strong>TOON spec v4.4</strong>, passes all 564 official conformance
+        fixtures and writes the same text as the official .NET library. TOON is a compact,
+        human-readable format that suits LLM prompts, configuration files and data exchange.
       </>
     ),
   },
@@ -28,7 +28,7 @@ const FeatureList: FeatureItem[] = [
       <>
         A <strong>System.Text.Json-style</strong> <code>ToonSerializer</code> with options,
         attributes and custom converters, plus a <code>ToonDocument</code>/<code>ToonValue</code>{' '}
-        model for working with TOON directly. Targets .NET 8 and later.
+        model for working with TOON directly. Builds for .NET 8 and .NET 10.
       </>
     ),
   },

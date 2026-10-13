@@ -6,11 +6,11 @@
 
 *AI-Optimized • Token-Efficient • Developer-Friendly*
 
-[![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-512BD4?style=flat&logo=dotnet)](https://dotnet.microsoft.com/)
 [![NuGet](https://img.shields.io/nuget/v/ToonNet.Core.svg?style=flat&logo=nuget)](https://www.nuget.org/packages/ToonNet.Core/)
 [![Downloads](https://img.shields.io/nuget/dt/ToonNet.Core.svg?style=flat)](https://www.nuget.org/packages/ToonNet.Core/)
 [![CI](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/selcukgural/ToonNet/actions/workflows/ci.yml)
-[![Spec](https://img.shields.io/badge/TOON%20spec%20v3.3.2-378%2F378%20fixtures-brightgreen?style=flat)](https://github.com/selcukgural/ToonNet/blob/master/docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)
+[![Spec](https://img.shields.io/badge/TOON%20spec%20v4.4-564%2F564%20fixtures-brightgreen?style=flat)](https://github.com/selcukgural/ToonNet/blob/master/docs/TOON_SPEC_COMPLIANCE.md#toonnet-implementation-status)
 [![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
 [Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api-guide) • [Samples](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo/Samples)
@@ -33,10 +33,12 @@ ToonNet is a **.NET serialization library** that provides:
 - **Configuration files** - Clean, readable syntax
 - **Data exchange** - Human and machine friendly
 
-> **TOON Specification:** ToonNet implements [TOON spec v3.3.2](https://github.com/toon-format/spec/blob/v3.3.2/SPEC.md)
-> and passes all 378 of its official encode/decode conformance fixtures, which run in CI
-> ([details](https://github.com/selcukgural/ToonNet/blob/master/docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)). The optional key folding and path expansion
-> features (§13.4) are not implemented. TOON spec v4 is not supported yet.
+> **TOON Specification:** ToonNet implements [TOON spec v4.4](https://github.com/toon-format/spec/blob/v4.4.0/SPEC.md)
+> completely, including comments, nested field groups and keyed tables, and passes all 564 of its official
+> encode/decode conformance fixtures, which run in CI
+> ([details](https://github.com/selcukgural/ToonNet/blob/master/docs/TOON_SPEC_COMPLIANCE.md#toonnet-implementation-status)).
+> Its output is identical to the official .NET library's, and it is many times faster
+> ([comparison](#toonnet-vs-the-official-toonformat-library)).
 
 ---
 
@@ -45,7 +47,8 @@ ToonNet is a **.NET serialization library** that provides:
 ToonNet focuses on three things:
 
 1. **🎯 Fewer tokens** - Tabular TOON for uniform data is much smaller than JSON, which lowers LLM input cost
-2. **📐 Spec conformance** - Encoder and decoder follow TOON spec v3.3.2 and are tested against the official fixtures
+2. **📐 Spec conformance** - Encoder and decoder follow TOON spec v4.4, pass every official fixture and write the
+   same text as the official library
 3. **🔧 Familiar API** - `Serialize`/`Deserialize` methods in the style of System.Text.Json
 
 ### 🤖 AI Token Optimization
@@ -78,6 +81,18 @@ string toon = ToonSerializer.Serialize(products);   // TOON: 97 characters (~42%
   3,Keyboard,89.99,false
 ```
 
+Nested objects of the same shape stay in the table as **nested field groups**, and a dictionary (or object) of
+uniform objects becomes a **keyed table** (TOON spec v4):
+
+```toon
+orders[2]{id,customer{name,country},total}:
+  1,Ada,DK,99
+  2,Bob,UK,149
+servers[2:]{host,port}:
+  alpha: a.example.com,8080
+  beta: b.example.com,9090
+```
+
 The saving depends on the shape of the data: it is largest for arrays of uniform objects (tabular form) and
 smaller for deeply nested or irregular data. Measure with your own payloads and tokenizer.
 
@@ -88,13 +103,18 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 ### ⚡ Performance & Architecture
 
 **How it is built:**
-- **Compiled accessors** - Property getters/setters and constructors are compiled once per type; primitive properties
-  are read and written through typed delegates, so their values are not boxed
-- **Metadata Caching** - Thread-safe caches for type metadata, constructors and collection factories
-- **Source Generator** - Optional static `Serialize`/`Deserialize` methods with the same output as `ToonSerializer`
-- **Pooled buffers** - The encoder writes into a buffer rented from `ArrayPool<char>`, stream and file output is
-  written as UTF-8 in pooled chunks, and the parser reads values from spans and rents its line table
-- **No dependencies** - `ToonNet.Core` has no package dependencies
+- **Straight to text** - `ToonSerializer` writes objects to TOON text and reads them from it directly, without an
+  intermediate document; the tabular forms (including nested field groups and keyed tables) are planned from the
+  objects and written in one pass
+- **Source Generator** - `[ToonSerializable]` types get generated writers and readers that `ToonSerializer` uses
+  automatically: keys are encoded and matched at compile time, primitives are written without boxing
+- **Compiled accessors** - For other types, property getters/setters and constructors are compiled once per type;
+  primitive properties are read and written through typed delegates, so their values are not boxed
+- **Cursor parser** - One quote-aware scan per line, values read from spans, the line table and buffers rented from
+  `ArrayPool`, repeated keys and headers shared instead of allocated again
+- **NativeAOT and trimming** - `ToonNet.Core` is annotated; generated `Serialize`/`Deserialize` methods with
+  `ToonEncoder` and `ToonDocument.Parse` run in NativeAOT apps (tested in CI)
+- **.NET 8 and .NET 10** - Builds for both; `ToonNet.Core` has no package dependencies
 
 **Async I/O:**
 - **ConfigureAwait(false)** - Awaited I/O calls do not capture the synchronization context
@@ -109,8 +129,97 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 - **Cache lifetime:** Metadata entries are created on demand and retained for the process lifetime (no eviction).
 - **Options caution:** Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
 
-> **Benchmarks:** The BenchmarkDotNet project lives in [`benchmark/ToonNet.Benchmarks`](https://github.com/selcukgural/ToonNet/tree/master/benchmark/ToonNet.Benchmarks).
-> The committed results predate the v3.3.2 encoder/parser rewrite, so run the benchmarks yourself for current numbers.
+> **Benchmarks:** See [ToonNet vs the official Toon.Format library](#toonnet-vs-the-official-toonformat-library) for
+> measured numbers. The BenchmarkDotNet projects live in
+> [`benchmark/ToonNet.Comparison`](https://github.com/selcukgural/ToonNet/tree/master/benchmark/ToonNet.Comparison)
+> (against Toon.Format and System.Text.Json) and
+> [`benchmark/ToonNet.Benchmarks`](https://github.com/selcukgural/ToonNet/tree/master/benchmark/ToonNet.Benchmarks)
+> (ToonNet internals).
+
+---
+
+## ToonNet vs the official Toon.Format library
+
+[Toon.Format](https://www.nuget.org/packages/Toon.Format) is the official .NET implementation of TOON, from the
+authors of the spec. Both libraries implement spec v4.4 and **write the same text**; ToonNet does it **9–28x faster
+when serializing and 3–8x faster when deserializing, with 6–35x less memory**, and adds a source generator, NativeAOT
+support, exact decimals and ASP.NET Core integration.
+
+### Same output
+
+- Both pass all **564** official conformance fixtures.
+- **20,000 random JSON documents** (tricky strings and keys, numbers, nested and uniform objects, keyed objects, all
+  three delimiters) encode to **byte-identical** text, and each library reads the other's text back to the same JSON.
+- Typed data – flat records, nested objects with arrays, nested field groups and keyed tables – serializes to
+  identical text and reads back to the same values.
+
+`tests/ToonNet.Compatibility.Tests` checks this on every build. To run the full report yourself:
+
+```bash
+dotnet run -c Release --project benchmark/ToonNet.Comparison -- parity
+```
+
+The remaining differences are in how .NET values are mapped to the data model, which spec §3 leaves to
+implementations:
+
+| Value | ToonNet | Toon.Format 1.0.0 |
+|-------|---------|-------------------|
+| enum `DayOfWeek.Friday` | `Day: Friday` | `Day: 5` |
+| `decimal` 12345678901234567.89 | `12345678901234567.89` | `12345678901234568` (rounded through `double`) |
+| `decimal` 123456789012345678901234567 | `1.23456789012345678901234567e+26` | `1.2345678901234568e+26` |
+| `ulong.MaxValue` | `18446744073709551615` | `18446744073709552000` (cannot be read back into a `ulong`) |
+
+Toon.Format converts numbers to `double`, so values beyond its precision do not survive a round trip (spec §2 asks
+that `decode(encode(x))` equals `x`); ToonNet keeps every digit of `decimal`, `long` and `ulong` values.
+
+### Performance
+
+10,000 items, Apple M3 Max, .NET 10.0.5, BenchmarkDotNet 0.15.8. "ToonNet" uses `[ToonSerializable]` models (generated
+code), "reflection" the same models without it; System.Text.Json writes and reads the same data as JSON, for
+reference. Setup checks that both TOON libraries produce identical text first.
+
+**Serialize**
+
+| Data | Toon.Format | ToonNet | ToonNet (reflection) | System.Text.Json |
+|------|------------:|--------:|---------------------:|-----------------:|
+| Employees (tabular) | 47.32 ms · 51.8 MB | **2.00 ms · 1.7 MB** (23.7x faster) | 2.66 ms · 1.7 MB | 2.28 ms · 3.3 MB |
+| Orders (nested objects, arrays) | 79.32 ms · 85.0 MB | **2.79 ms · 4.6 MB** (28.4x faster) | 4.78 ms · 5.0 MB | 2.87 ms · 4.1 MB |
+| Products (nested field groups) | 53.11 ms · 53.1 MB | **2.86 ms · 1.5 MB** (18.6x faster) | 3.22 ms · 1.4 MB | 3.00 ms · 2.7 MB |
+| Servers (keyed table) | 24.08 ms · 27.6 MB | **0.94 ms · 1.5 MB** (25.7x faster) | 1.01 ms · 1.5 MB | 0.94 ms · 1.5 MB |
+
+**Deserialize**
+
+| Data | Toon.Format | ToonNet | ToonNet (reflection) | System.Text.Json |
+|------|------------:|--------:|---------------------:|-----------------:|
+| Employees (tabular) | 32.44 ms · 34.3 MB | **5.33 ms · 2.3 MB** (6.1x faster) | 5.28 ms · 2.3 MB | 4.25 ms · 2.5 MB |
+| Orders (nested objects, arrays) | 75.54 ms · 78.3 MB | **9.06 ms · 5.4 MB** (8.3x faster) | 10.48 ms · 6.0 MB | 8.66 ms · 5.7 MB |
+| Products (nested field groups) | 34.95 ms · 28.8 MB | **4.87 ms · 3.4 MB** (7.2x faster) | 5.67 ms · 3.4 MB | 6.50 ms · 3.5 MB |
+| Servers (keyed table) | 15.74 ms · 21.9 MB | **3.35 ms · 3.1 MB** (4.7x faster) | 3.72 ms · 3.1 MB | 2.85 ms · 2.5 MB |
+
+With 100 items ToonNet serializes 9–13x and deserializes 3–3.4x faster than Toon.Format. ToonNet is on par with
+System.Text.Json when writing (often faster) and takes 1.0–1.6x its time when reading (less for nested field groups),
+while its TOON output is much smaller than the JSON. Full results, including 100 items: [benchmark/ToonNet.Comparison/RESULTS.md](https://github.com/selcukgural/ToonNet/blob/master/benchmark/ToonNet.Comparison/RESULTS.md).
+Run them on your hardware with `dotnet run -c Release --project benchmark/ToonNet.Comparison -- --filter "*"`.
+
+**Why:** Toon.Format serializes a value with System.Text.Json into a `JsonNode` tree and encodes the tree, and decodes
+text into a `JsonNode` tree that System.Text.Json then binds. ToonNet writes objects straight to TOON text and reads
+them straight from it, with code generated for each type.
+
+### Features
+
+| | ToonNet | Toon.Format 1.0.0 |
+|---|---|---|
+| TOON spec | v4.4, 564/564 fixtures | v4.4, 564/564 fixtures |
+| Targets | .NET 8, .NET 10 | .NET 10, .NET Standard 2.0 |
+| Typed API | `ToonSerializer.Serialize`/`Deserialize` (text, streams, files) | `ToonEncoder.Encode<T>`/`ToonDecoder.Decode<T>` via System.Text.Json |
+| Source generator | ✅ `[ToonSerializable]` | – |
+| NativeAOT / trimming | ✅ generated code, tested in CI | – |
+| Document model | `ToonDocument` / `ToonValue` | `JsonNode` |
+| Options | indent, delimiter, strict, naming policies, null handling, read-only properties, converters, max depth | indent, delimiter, strict |
+| Exact `decimal` / `ulong` | ✅ | rounded through `double` |
+| Multi-document streaming | ✅ `SerializeStreamAsync` / `DeserializeStreamAsync` | single document per stream |
+| ASP.NET Core | input/output formatters, `ToonResult`, configuration provider | – |
+| JSON / YAML conversion | ✅ `ToonConvert`, `ToonYamlConvert` | via `JsonNode` |
 
 ---
 
@@ -429,6 +538,14 @@ string context = ToonSerializer.Serialize(chunks);
 // Use in RAG prompt with reduced token count
 var ragPrompt = $"Context:\n{context}\n\nQuestion: How does ToonNet work?";
 ```
+
+**Output** – the metadata dictionaries have the same keys, so they become a nested field group of the table:
+```toon
+[1]{Id,Content,Metadata{source,page}}:
+  doc_123_chunk_1,ToonNet provides efficient serialization...,docs,"1"
+```
+
+(`"1"` is quoted because it is a string that would otherwise read as a number.)
 
 ---
 

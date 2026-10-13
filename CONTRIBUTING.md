@@ -112,6 +112,18 @@ The official TOON spec v4.4 conformance fixtures run as part of `ToonNet.Tests`.
 `tests/ToonNet.Tests/SpecCompliance/KnownNonConformance.txt` pass, remove it from that file (the test fails otherwise).
 To list the failing cases again, run the tests with `TOONNET_WRITE_NONCONFORMANCE=<path>`.
 
+`tests/ToonNet.Compatibility.Tests` checks that ToonNet writes the same text as the official .NET library
+(Toon.Format). If your change alters the output, run the full parity report and, for performance work, the comparison
+benchmarks:
+
+```bash
+dotnet run -c Release --project benchmark/ToonNet.Comparison -- parity
+dotnet run -c Release --project benchmark/ToonNet.Comparison -- --filter "*"
+```
+
+CI also publishes `tests/ToonNet.AotSmokeTest` with NativeAOT and fails on any trimming or AOT warning; to check
+locally: `dotnet publish tests/ToonNet.AotSmokeTest -c Release -r <rid>`, then run the published executable.
+
 ### Writing Tests
 
 - **Unit tests** for all new features

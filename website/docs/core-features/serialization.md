@@ -214,8 +214,30 @@ string toon4 = ToonSerializer.Serialize(employees);
 //   Alice,Engineering,85000
 //   Bob,Marketing,65000
 
+// Uniform nested objects become nested field groups of the table (spec §9.3)
+var orders = new[]
+{
+    new { Id = 1, Customer = new { Name = "Ada", Country = "DK" }, Total = 99 },
+    new { Id = 2, Customer = new { Name = "Bob", Country = "UK" }, Total = 149 }
+};
+string toon5 = ToonSerializer.Serialize(orders);
+// [2]{Id,Customer{Name,Country},Total}:
+//   1,Ada,DK,99
+//   2,Bob,UK,149
+
+// A dictionary (or object) of at least two uniform objects is a keyed table (spec §9.5)
+var servers = new Dictionary<string, Server>
+{
+    ["alpha"] = new() { Host = "a.example.com", Port = 8080 },
+    ["beta"] = new() { Host = "b.example.com", Port = 9090 }
+};
+string toon6 = ToonSerializer.Serialize(new { Servers = servers });
+// Servers[2:]{Host,Port}:
+//   alpha: a.example.com,8080
+//   beta: b.example.com,9090
+
 // Empty collections
-string toon5 = ToonSerializer.Serialize(new { Tags = new string[0] });
+string toon7 = ToonSerializer.Serialize(new { Tags = new string[0] });
 // Tags: []
 ```
 

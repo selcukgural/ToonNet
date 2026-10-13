@@ -208,11 +208,11 @@ string toon1 = ToonSerializer.Serialize(example1);
 // Age: 25
 // BirthDate: null
 
-var example2 = new NullableExample { Age = null, BirthDate = DateTime.UtcNow };
+var example2 = new NullableExample { Age = null, BirthDate = new DateTime(2026, 1, 24, 17, 0, 0, DateTimeKind.Utc) };
 string toon2 = ToonSerializer.Serialize(example2);
 // Output:
 // Age: null
-// BirthDate: "2026-01-24T17:00:00.0000000Z"
+// BirthDate: "2026-01-24T17:00:00Z"
 ```
 
 ### Nullable Reference Types
@@ -303,7 +303,7 @@ var evt = new Event
 {
     Name = "Conference 2026",
     EventDate = new DateTime(2026, 06, 15, 9, 0, 0),
-    RegisteredAt = DateTimeOffset.Now
+    RegisteredAt = new DateTimeOffset(2026, 1, 24, 17, 0, 0, TimeSpan.Zero)
 };
 
 string toon = ToonSerializer.Serialize(evt);
@@ -312,8 +312,8 @@ string toon = ToonSerializer.Serialize(evt);
 **Output:**
 ```toon
 Name: Conference 2026
-EventDate: "2026-06-15T09:00:00.0000000"
-RegisteredAt: "2026-01-24T17:00:00.0000000+00:00"
+EventDate: "2026-06-15T09:00:00"
+RegisteredAt: "2026-01-24T17:00:00+00:00"
 ```
 
 ## Common Patterns

@@ -1,5 +1,5 @@
 OrderId: ORD-2026-00142857
-OrderDate: "2026-01-11T15:30:00.0000000Z"
+OrderDate: "2026-01-11T15:30:00Z"
 Status: Processing
 Customer:
   CustomerId: CUST-98765
@@ -8,7 +8,7 @@ Customer:
   Email: sarah.johnson@example.com
   Phone: +1-555-123-4567
   MembershipLevel: Gold
-  MemberSince: "2022-03-15T00:00:00.0000000"
+  MemberSince: "2022-03-15T00:00:00"
   LoyaltyPoints: 2450
 ShippingAddress:
   Street: 742 Evergreen Terrace
@@ -80,16 +80,16 @@ PaymentInfo:
   Method: CreditCard
   CardType: Visa
   Last4Digits: "4242"
-  ExpiryDate: "2028-12-31T00:00:00.0000000"
+  ExpiryDate: "2028-12-31T00:00:00"
   TransactionId: TXN-2026-ABC123XYZ
   AuthorizationCode: AUTH-789456
-  ProcessedAt: "2026-01-11T15:31:45.0000000Z"
+  ProcessedAt: "2026-01-11T15:31:45Z"
   IsSuccessful: true
 Shipping:
   Method: Express
   Carrier: FedEx
   TrackingNumber: 1Z999AA10123456784
-  EstimatedDelivery: "2026-01-13T18:00:00.0000000Z"
+  EstimatedDelivery: "2026-01-13T18:00:00Z"
   Cost: 15.99
   IsFreeShipping: false
 Pricing:

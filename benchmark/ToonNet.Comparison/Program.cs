@@ -8,7 +8,7 @@ using ToonNet.Comparison;
 // anything else runs the benchmarks, e.g. `--filter "*"`.
 if (args.Length > 0 && args[0] == "parity")
 {
-    return Parity.Report(args.Length > 1 ? int.Parse(args[1]) : 10_000) ? 0 : 1;
+    return Parity.Report(args.Length > 1 ? int.Parse(args[1]) : 20_000) ? 0 : 1;
 }
 
 var config = DefaultConfig.Instance.WithSummaryStyle(SummaryStyle.Default.WithRatioStyle(RatioStyle.Trend));

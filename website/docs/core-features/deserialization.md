@@ -250,8 +250,8 @@ Enums are written as their member names (flags as `"Read, Write"`).
 ```csharp
 string toonInput = """
 Name: Conference 2026
-EventDate: 2026-06-15T09:00:00.0000000
-RegisteredAt: 2026-01-24T17:00:00.0000000+00:00
+EventDate: 2026-06-15T09:00:00
+RegisteredAt: 2026-01-24T17:00:00+00:00
 """;
 
 public class Event
@@ -497,26 +497,32 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 
 ## Parsing Rules and Strict Mode
 
-ToonNet decodes TOON as defined by spec v3.3.2 and passes all of its decode conformance fixtures.
+ToonNet decodes TOON as defined by spec v4.4 and passes all of its decode conformance fixtures.
 
 - **Type inference:** unquoted `true`, `false` and `null` are literals; tokens matching the JSON number grammar are numbers;
   everything else is a string. Leading zeros make a token a string (`zip: 01234` stays `"01234"`), and so does any other text
   such as `(5)` or `1.2.3`. Quoted values are always strings.
 - **Arrays need headers:** `tags[3]: a,b,c`, `users[2]{id,name}:` followed by rows, or `items[2]:` followed by `- ` items.
-  Empty arrays are written `key: []`. A bare `key:` always opens an object.
+  Empty arrays are written `key: []` (or `- []` as a list item). A bare `key:` always opens an object.
+- **Nested field groups and keyed tables:** `orders[2]{id,customer{name,country}}:` reads each row into nested objects,
+  and `servers[2:]{host,port}:` followed by `alpha: a.example.com,8080` rows reads an object keyed by the entry keys
+  (bind it to a `Dictionary<string, T>` or a class with those properties).
+- **Comments:** lines whose first non-space character is `#` are ignored wherever they appear.
 - **Delimiters:** each header declares its own delimiter (`[3]` comma, `[3|]` pipe, `[3<TAB>]` tab).
 - **Precision:** numbers that fit in a `decimal` keep their exact value, so `long` and `decimal` properties round-trip exactly.
 
 `ToonOptions.StrictMode` is `true` by default. Strict mode reports every error of spec §14:
 
+Non-strict mode applies exactly the five recoveries of spec §14.4; everything else is an error in both modes
+(malformed headers, rows with the wrong number of cells, list items under a bare `key:`, invalid escapes, ...).
+
 | Rule | Strict (default) | Non-strict |
 |------|------------------|------------|
-| `[N]` must match the number of items, rows and row values | error | not checked |
-| Malformed header such as `items[03]:` or `x[bar]:` | error | read as a literal key |
-| Duplicate keys in one object | error | last value wins |
-| Indentation must be a multiple of `IndentSize`; no tabs | error | depth = spaces / `IndentSize`, a tab counts as `IndentSize` spaces |
-| Blank lines inside an array | error | ignored |
-| List items under a bare `key:` (no header) | error with a hint | read as an array |
+| `[N]` must match the number of items, rows and entry rows | error | not checked; every row is read |
+| Duplicate keys, or a field name repeated in a header | error | last value wins |
+| Indentation must be a multiple of `IndentSize`; no tabs | error | depth = tabs + spaces / `IndentSize` |
+| Blank lines inside an array or keyed table | error | ignored |
+| The first line of a nested scope indented too deep | error | that depth becomes the scope's depth |
 
 ```csharp
 var lenient = new ToonSerializerOptions
