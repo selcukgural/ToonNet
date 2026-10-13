@@ -547,4 +547,31 @@ public class ToonYamlConverterTests
     }
 
     #endregion
+
+    [Theory]
+    [InlineData("? [a, b]\n: 1")]
+    [InlineData("? {a: 1}\n: 2")]
+    public void FromYaml_NonScalarKey_Throws(string yaml)
+    {
+        var ex = Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml));
+
+        Assert.Contains("scalar mapping keys", ex.Message);
+    }
+
+    [Fact]
+    public void FromYaml_EmptyKey_IsKept()
+    {
+        Assert.Equal("\"\": 1\nb: 2", ToonYamlConvert.FromYaml("\"\": 1\nb: 2"));
+    }
+
+    [Fact]
+    public async Task ToYaml_ConcurrentCalls_ProduceTheSameOutput()
+    {
+        var documents = Enumerable.Range(0, 32).Select(i => new ToonObject { ["n"] = i, ["s"] = new ToonString("yes" + i), ["flag"] = new ToonString("on") }).ToArray();
+        var expected = documents.Select(d => ToonYamlConverter.ToYaml(d)).ToArray();
+
+        var actual = await Task.WhenAll(documents.Select(d => Task.Run(() => ToonYamlConverter.ToYaml(d))));
+
+        Assert.Equal(expected, actual);
+    }
 }

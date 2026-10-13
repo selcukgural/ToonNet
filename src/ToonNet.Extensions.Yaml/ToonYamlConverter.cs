@@ -31,6 +31,16 @@ public static class ToonYamlConverter
     public const int MaxAliasExpansionNodes = 100_000;
 
     /// <summary>
+    ///     The serializer used by <see cref="ToYaml(ToonValue)"/>; it keeps no state between calls. It quotes strings a
+    ///     YAML reader would otherwise resolve to another type ("42", "true", "null", ""), and every string FromYaml would
+    ///     read as something else (for example the YAML 1.1 booleans yes/no/on/off).
+    /// </summary>
+    private static readonly ISerializer Serializer = new SerializerBuilder().WithIndentedSequences()
+                                                                            .WithQuotingNecessaryStrings()
+                                                                            .WithEventEmitter(next => new QuoteRetypedStringsEmitter(next))
+                                                                            .Build();
+
+    /// <summary>
     ///     Converts a YAML string to a TOON document.
     /// </summary>
     /// <param name="yaml">
@@ -149,15 +159,8 @@ public static class ToonYamlConverter
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        // Quote strings a YAML reader would otherwise resolve to another type ("42", "true", "null", ""), and every
-        // string FromYaml would read as something else (for example the YAML 1.1 booleans yes/no/on/off)
-        var serializer = new SerializerBuilder().WithIndentedSequences()
-                                                .WithQuotingNecessaryStrings()
-                                                .WithEventEmitter(next => new QuoteRetypedStringsEmitter(next))
-                                                .Build();
-
         var obj = ConvertToonValueToObject(value);
-        return serializer.Serialize(obj);
+        return Serializer.Serialize(obj);
     }
 
     /// <summary>
@@ -426,20 +429,14 @@ public static class ToonYamlConverter
 
         foreach (var entry in mapping.Children)
         {
+            // TOON keys are strings; dropping a mapping or sequence key would lose data silently
             if (entry.Key is not YamlScalarNode keyNode)
             {
-                continue;
+                throw new YamlException(entry.Key.Start, entry.Key.End, "Only scalar mapping keys can be converted to TOON");
             }
 
-            var key = keyNode.Value;
-
-            if (string.IsNullOrEmpty(key))
-            {
-                continue;
-            }
-
-            var value = ConvertYamlNodeToToonValue(entry.Value);
-            toonObject[key] = value;
+            // An empty key is a valid TOON key ("")
+            toonObject[keyNode.Value ?? string.Empty] = ConvertYamlNodeToToonValue(entry.Value);
         }
 
         return toonObject;

@@ -151,6 +151,9 @@ foreach (var service in services.Properties)
 ## Conversion Notes
 
 - Only the first document of a multi-document YAML stream (`---`) is converted.
+- Mapping keys must be scalars: a sequence or mapping used as a key throws a `YamlException`. An empty key is kept as
+  the TOON key `""`.
+- Merge keys (`<<: *base`) are not expanded; `<<` stays an ordinary key.
 - Quoted and block scalars are always strings (`"42"` stays a string). Plain scalars are typed by their text:
   `true`/`false` (also `yes`/`no`, `on`/`off`, in lowercase, capitalized or uppercase), `null`/`~`/empty, and numbers
   in JSON number grammar (optional leading `+`, exact value when it fits in a `decimal`). Everything else, such as

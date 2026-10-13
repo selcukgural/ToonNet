@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Extensions.Yaml:** A mapping or sequence used as a mapping key throws a `YamlException`, and an empty key is
+  kept as `""`; before, both entries were dropped silently. `ToYaml` reuses one serializer instead of building it per
+  call.
 - **ToonNet.Extensions.Json:** `FromJson` uses `ToonOptions.MaxDepth` instead of `JsonDocument`'s fixed limit of 64,
   accepts comments and trailing commas (`appsettings.json`), and rejects duplicate keys in strict mode instead of
   silently keeping the last value (new overloads `ToonJsonConverter.FromJson(string|JsonElement, ToonOptions?)`;

@@ -359,7 +359,9 @@ var roundtripYaml = ToonYamlConverter.ToYaml(toonDoc);
 ```
 
 **Note:** Comments are not preserved, aliases are expanded into copies, and only the first document of a
-multi-document stream is converted.
+multi-document stream is converted. Mapping keys must be scalars (a sequence or mapping used as a key throws a
+`YamlException`); an empty key is kept as the TOON key `""`. Merge keys (`<<: *base`) are not expanded; `<<` stays an
+ordinary key.
 
 ---
 
