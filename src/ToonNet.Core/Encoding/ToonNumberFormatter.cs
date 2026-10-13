@@ -69,7 +69,7 @@ internal static class ToonNumberFormatter
     }
 
     /// <returns>The number of characters written.</returns>
-    private static int FormatDecimal(decimal value, Span<char> destination)
+    public static int FormatDecimal(decimal value, Span<char> destination)
     {
         if (value == 0)
         {
@@ -88,7 +88,7 @@ internal static class ToonNumberFormatter
         return text.Length;
     }
 
-    private static bool TryFormatDouble(double value, Span<char> destination, out int written)
+    public static bool TryFormatDouble(double value, Span<char> destination, out int written)
     {
         if (!double.IsFinite(value))
         {
