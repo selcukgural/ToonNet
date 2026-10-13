@@ -589,7 +589,7 @@ tags: dev, admin
         Assert.Equal(originalMetrics.GetProperty("satisfactionScore").GetDouble(), resultMetrics.GetProperty("satisfactionScore").GetDouble());
     }
 
-    [Fact(Skip = "Complex configuration test - requires more TOON parser features")]
+    [Fact]
     public void RealWorld_ConfigurationFile_ToonToJsonToToon_PreservesStructure()
     {
         // Real-world configuration in TOON format
@@ -809,4 +809,65 @@ monitoring:
     }
 
     #endregion
+
+    [Fact]
+    public void FromJson_DuplicateKeys_ThrowInStrictMode_LastWinsOtherwise()
+    {
+        const string json = """{"a": 1, "a": 2}""";
+
+        Assert.Throws<JsonException>(() => ToonConvert.FromJson(json));
+        Assert.Equal("a: 2", ToonConvert.FromJson(json, new ToonNet.Core.ToonOptions { StrictMode = false }));
+    }
+
+    [Fact]
+    public void FromJson_UsesMaxDepth_WithTheRootAtDepthZero()
+    {
+        var json = new string('[', 6) + new string(']', 6); // innermost array at depth 5
+
+        Assert.NotNull(ToonJsonConverter.FromJson(json, new ToonNet.Core.ToonOptions { MaxDepth = 5 }));
+        Assert.ThrowsAny<JsonException>(() => ToonJsonConverter.FromJson(json, new ToonNet.Core.ToonOptions { MaxDepth = 4 }));
+
+        var deep = new string('[', 80) + new string(']', 80); // deeper than JsonDocument's default of 64
+        Assert.NotNull(ToonJsonConverter.FromJson(deep));
+    }
+
+    [Fact]
+    public void FromJson_AcceptsCommentsAndTrailingCommas()
+    {
+        const string json = """
+                            {
+                              // appsettings.json style
+                              "Logging": { "Level": "Warning", },
+                            }
+                            """;
+
+        Assert.Equal("Logging:\n  Level: Warning", ToonConvert.FromJson(json));
+    }
+
+    [Fact]
+    public void ToJson_WritesNonAsciiTextAsIs()
+    {
+        Assert.Equal("""{"name":"Çağrı Ünal"}""", ToonConvert.ToJson("name: Çağrı Ünal"));
+        Assert.Equal("""{"html":"\u003Cb\u003E"}""", ToonConvert.ToJson("html: <b>"));
+    }
+
+    [Fact]
+    public void ParseJson_MatchesDeserializingTheConvertedToon()
+    {
+        const string json = """{"Name": "Ada", "Tags": ["x", "y"], "Price": 12345678901234567890.5}""";
+
+        var direct = ToonConvert.ParseJson<JsonParseModel>(json)!;
+        var viaText = ToonNet.Core.Serialization.ToonSerializer.Deserialize<JsonParseModel>(ToonConvert.FromJson(json))!;
+
+        Assert.Equal(viaText.Name, direct.Name);
+        Assert.Equal(viaText.Tags, direct.Tags);
+        Assert.Equal(viaText.Price, direct.Price);
+    }
+
+    public sealed class JsonParseModel
+    {
+        public string Name { get; set; } = "";
+        public List<string> Tags { get; set; } = [];
+        public decimal Price { get; set; }
+    }
 }

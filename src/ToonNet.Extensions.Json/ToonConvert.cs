@@ -15,6 +15,8 @@ namespace ToonNet.Extensions.Json;
 /// </remarks>
 public static class ToonConvert
 {
+    private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
+
     /// <summary>
     /// Deserializes a JSON string to a .NET object with System.Text.Json.
     /// </summary>
@@ -52,8 +54,8 @@ public static class ToonConvert
     /// </remarks>
     public static string SerializeToJson<T>(T value, JsonSerializerOptions? options = null)
     {
-        options ??= new JsonSerializerOptions { WriteIndented = true };
-        return JsonSerializer.Serialize(value, options);
+        // A shared instance, so System.Text.Json caches its metadata across calls
+        return JsonSerializer.Serialize(value, options ?? IndentedOptions);
     }
 
     /// <summary>
@@ -75,7 +77,7 @@ public static class ToonConvert
     {
         ArgumentNullException.ThrowIfNull(jsonString);
 
-        var toonDocument = ToonJsonConverter.FromJson(jsonString);
+        var toonDocument = ToonJsonConverter.FromJson(jsonString, options);
         var encoder = new ToonEncoder(options ?? ToonOptions.Default);
         return encoder.Encode(toonDocument);
     }
@@ -119,13 +121,13 @@ public static class ToonConvert
     /// <code>
     /// var person = ToonConvert.ParseJson&lt;Person&gt;(jsonString);
     /// </code>
-    /// Equivalent to: Deserialize&lt;T&gt;(FromJson(jsonString))
+    /// Equivalent to <c>Deserialize&lt;T&gt;(FromJson(jsonString))</c>, without encoding the intermediate TOON text.
     /// </remarks>
     public static T? ParseJson<T>(string jsonString, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(jsonString);
 
-        var toonString = FromJson(jsonString, options?.ToonOptions);
-        return ToonSerializer.Deserialize<T>(toonString, options);
+        var document = ToonJsonConverter.FromJson(jsonString, options?.ToonOptions);
+        return ToonSerializer.DeserializeFromValue<T>(document.Root, options);
     }
 }

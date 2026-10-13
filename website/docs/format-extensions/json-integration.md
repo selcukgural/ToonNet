@@ -194,7 +194,11 @@ Console.WriteLine(prettyJson);
 - JSON numbers keep their exact value when it fits in a `decimal` (`12345678901234567890` and `1299.99` round-trip
   unchanged); other magnitudes use the nearest `double`, and a number that is not finite as a `double` (`1e400`) is
   kept as a string. Numbers are written in canonical form as TOON spec §2 requires: `35.00` becomes `35`.
-- `ToonJsonConverter.FromJson(string)` uses `JsonDocument.Parse` with its default maximum depth of 64.
+- `FromJson` limits nesting with `ToonOptions.MaxDepth` (default 100; the root is at depth 0, as in TOON), accepts
+  comments and trailing commas (as in `appsettings.json`), and rejects duplicate keys with a `JsonException` in strict
+  mode (the default); with `StrictMode = false` the last value wins.
+- `ToJson` writes non-ASCII text as is (`"Çağrı"`, not `"\u00C7a\u011Fr\u0131"`); HTML-sensitive characters such as
+  `<` stay escaped. Pass your own `JsonWriterOptions` to change the encoder or indentation.
 - `ToonConvert.ToJson` parses TOON with the default `ToonOptions` (strict mode); pass `toonOptions:` to change that.
 
 ## Use Cases

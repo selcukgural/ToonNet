@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Extensions.Json:** `FromJson` uses `ToonOptions.MaxDepth` instead of `JsonDocument`'s fixed limit of 64,
+  accepts comments and trailing commas (`appsettings.json`), and rejects duplicate keys in strict mode instead of
+  silently keeping the last value (new overloads `ToonJsonConverter.FromJson(string|JsonElement, ToonOptions?)`;
+  `ToonConvert.FromJson` passes its options). `ToJson` no longer escapes non-ASCII text. `ParseJson` deserializes the
+  converted document directly instead of encoding and re-parsing TOON text, and `SerializeToJson` reuses one
+  `JsonSerializerOptions` instance.
 - **ToonNet.Core (parser):** In strict mode a blank line anywhere inside an array's items (also between the fields of
   an object in a list item, or before the first item of a nested array) is an error, as spec §12 requires for header
   spans; before, only blank lines directly between items were caught. The check for a fields segment that uses another

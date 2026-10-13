@@ -1,4 +1,7 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
+using ToonNet.Core;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Extensions.Json;
@@ -14,6 +17,16 @@ namespace ToonNet.Extensions.Json;
 /// </remarks>
 public static class ToonJsonConverter
 {
+    /// <summary>
+    ///     Compact output that writes non-ASCII text as is (<c>ü</c>, not <c>\u00FC</c>); HTML-sensitive characters
+    ///     stay escaped.
+    /// </summary>
+    private static readonly JsonWriterOptions DefaultWriterOptions = new()
+    {
+        Indented = false,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
+
     /// <summary>
     ///     Converts a JSON string to a TOON document.
     /// </summary>
@@ -35,10 +48,40 @@ public static class ToonJsonConverter
     /// </remarks>
     public static ToonDocument FromJson(string json)
     {
-        ArgumentNullException.ThrowIfNull(json);
+        return FromJson(json, null);
+    }
 
-        using var doc = JsonDocument.Parse(json);
-        return FromJson(doc.RootElement);
+    /// <summary>
+    ///     Converts a JSON string to a TOON document, using <paramref name="options"/> for the nesting limit and for
+    ///     duplicate keys.
+    /// </summary>
+    /// <param name="json">The JSON string to convert.</param>
+    /// <param name="options">
+    ///     Options whose <see cref="ToonOptions.MaxDepth"/> limits the nesting (the root is at depth 0, as in TOON) and
+    ///     whose <see cref="ToonOptions.StrictMode"/> decides duplicate keys: an error in strict mode (the default),
+    ///     otherwise the last value wins.
+    /// </param>
+    /// <returns>A <see cref="ToonDocument"/> representing the JSON data.</returns>
+    /// <remarks>
+    ///     Comments and trailing commas are accepted, as in <c>appsettings.json</c> files.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="json"/> is null.</exception>
+    /// <exception cref="JsonException">Thrown when the JSON is invalid, too deep, or has duplicate keys in strict mode.</exception>
+    public static ToonDocument FromJson(string json, ToonOptions? options)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        options ??= ToonOptions.Default;
+
+        var documentOptions = new JsonDocumentOptions
+        {
+            // JsonDocument counts the root container as depth 1
+            MaxDepth = options.MaxDepth + 1,
+            CommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        };
+
+        using var doc = JsonDocument.Parse(json, documentOptions);
+        return FromJson(doc.RootElement, options);
     }
 
     /// <summary>
@@ -58,7 +101,17 @@ public static class ToonJsonConverter
     /// </remarks>
     public static ToonDocument FromJson(JsonElement element)
     {
-        var toonValue = ConvertJsonElementToToonValue(element);
+        return FromJson(element, null);
+    }
+
+    /// <summary>
+    ///     Converts a JsonElement to a TOON document; duplicate keys are an error when
+    ///     <see cref="ToonOptions.StrictMode"/> is on (the default), otherwise the last value wins.
+    /// </summary>
+    /// <exception cref="JsonException">Thrown for duplicate keys in strict mode.</exception>
+    public static ToonDocument FromJson(JsonElement element, ToonOptions? options)
+    {
+        var toonValue = ConvertJsonElementToToonValue(element, (options ?? ToonOptions.Default).StrictMode);
         return new ToonDocument(toonValue);
     }
 
@@ -117,10 +170,7 @@ public static class ToonJsonConverter
 
         using var stream = new MemoryStream();
 
-        using var writer = new Utf8JsonWriter(stream, writerOptions ?? new JsonWriterOptions
-        {
-            Indented = false
-        });
+        using var writer = new Utf8JsonWriter(stream, writerOptions ?? DefaultWriterOptions);
 
         WriteToonValueAsJson(writer, value);
         writer.Flush();
@@ -156,12 +206,12 @@ public static class ToonJsonConverter
     ///     <paramref name="element"/> to the corresponding TOON value type. Unsupported kinds will result
     ///     in a <see cref="JsonException"/> being thrown.
     /// </remarks>
-    private static ToonValue ConvertJsonElementToToonValue(JsonElement element)
+    private static ToonValue ConvertJsonElementToToonValue(JsonElement element, bool strict)
     {
         return element.ValueKind switch
         {
-            JsonValueKind.Object                          => ConvertJsonObject(element),
-            JsonValueKind.Array                           => ConvertJsonArray(element),
+            JsonValueKind.Object                          => ConvertJsonObject(element, strict),
+            JsonValueKind.Array                           => ConvertJsonArray(element, strict),
             JsonValueKind.String                          => new ToonString(element.GetString()!),
             JsonValueKind.Number                          => ConvertJsonNumber(element),
             JsonValueKind.True                            => new ToonBoolean(true),
@@ -201,14 +251,24 @@ public static class ToonJsonConverter
     ///     to a corresponding TOON value using <see cref="ConvertJsonElementToToonValue"/>, and adds it
     ///     to the resulting <see cref="ToonObject"/>.
     /// </remarks>
-    private static ToonObject ConvertJsonObject(JsonElement element)
+    private static ToonObject ConvertJsonObject(JsonElement element, bool strict)
     {
         var toonObject = new ToonObject();
 
         foreach (var property in element.EnumerateObject())
         {
-            var value = ConvertJsonElementToToonValue(property.Value);
-            toonObject[property.Name] = value;
+            var value = ConvertJsonElementToToonValue(property.Value, strict);
+
+            // Duplicate keys are an error in strict mode, as in TOON and YAML, instead of silently dropping a value
+            if (!toonObject.Properties.TryAdd(property.Name, value))
+            {
+                if (strict)
+                {
+                    throw new JsonException($"Duplicate key '{property.Name}' in a JSON object");
+                }
+
+                toonObject.Properties[property.Name] = value;
+            }
         }
 
         return toonObject;
@@ -232,13 +292,13 @@ public static class ToonJsonConverter
     ///     to a corresponding TOON value using <see cref="ConvertJsonElementToToonValue"/>, and
     ///     adds it to the resulting <see cref="ToonArray"/>.
     /// </remarks>
-    private static ToonArray ConvertJsonArray(JsonElement element)
+    private static ToonArray ConvertJsonArray(JsonElement element, bool strict)
     {
         var items = new List<ToonValue>();
 
         foreach (var item in element.EnumerateArray())
         {
-            items.Add(ConvertJsonElementToToonValue(item));
+            items.Add(ConvertJsonElementToToonValue(item, strict));
         }
 
         return new ToonArray(items);

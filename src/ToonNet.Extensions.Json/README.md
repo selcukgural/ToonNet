@@ -115,8 +115,9 @@ string json = ToonConvert.ToJson(toonString, writerOptions);  // JsonWriterOptio
 ```csharp
 using ToonNet.Extensions.Json;
 
-// JSON string → ToonDocument
+// JSON string → ToonDocument (options: MaxDepth, and StrictMode for duplicate keys)
 ToonDocument doc = ToonJsonConverter.FromJson(jsonString);
+ToonDocument doc = ToonJsonConverter.FromJson(jsonString, new ToonOptions { StrictMode = false });
 
 // JsonElement → ToonDocument
 ToonDocument doc = ToonJsonConverter.FromJson(jsonElement);
@@ -226,6 +227,12 @@ var roundtrip = JsonSerializer.Deserialize<object>(roundtripJson);
 | `number` | `ToonNumber` | Exact `decimal` when it fits, otherwise `double` |
 | `true/false` | `ToonBoolean` | Boolean values |
 | `null` | `ToonNull` | Null/undefined |
+
+- `FromJson` limits nesting with `ToonOptions.MaxDepth` (default 100; the root is at depth 0, as in TOON), accepts
+  comments and trailing commas (as in `appsettings.json`), and rejects duplicate keys with a `JsonException` in strict
+  mode (the default); with `StrictMode = false` the last value wins.
+- `ToJson` writes non-ASCII text as is (`"Çağrı"`, not `"\u00C7a\u011Fr\u0131"`); HTML-sensitive characters such as
+  `<` stay escaped. Pass your own `JsonWriterOptions` to change the encoder or indentation.
 
 ### Semantic Equivalence
 
