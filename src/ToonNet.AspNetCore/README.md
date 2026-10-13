@@ -60,7 +60,8 @@ app.Run();
 This registers:
 - `ToonEncoder` (singleton)
 - `ToonOptions` (IOptions<ToonOptions>)
-- `ToonSerializerOptions` (IOptions<ToonSerializerOptions>)
+- `ToonSerializerOptions` (IOptions<ToonSerializerOptions>), whose `ToonOptions` is the registered `ToonOptions`
+  unless a serializer options delegate sets another instance
 
 ---
 

@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.AspNetCore:** `ToonSerializerOptions.ToonOptions` set in the `AddToonNet` serializer delegate,
+  `AddToonFormatters` or `Configure<ToonSerializerOptions>` is no longer overwritten with the registered `ToonOptions`.
+  The link to the registered `ToonOptions` is now applied before any other configuration, whatever the call order.
 - **ToonNet.Core:** `MaxDepth` and `AllowExtendedLimits` can be set in any order (`new ToonOptions { MaxDepth = 500,
   AllowExtendedLimits = true }` threw before). The setter only rejects values outside 1–1000; a value above 200 without
   `AllowExtendedLimits` throws `InvalidOperationException` when the options are used and is reported by `Validate`.

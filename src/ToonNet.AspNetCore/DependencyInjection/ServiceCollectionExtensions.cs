@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ToonNet.Core;
 using ToonNet.Core.Encoding;
-using ToonNet.Core.Parsing;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.AspNetCore.DependencyInjection;
@@ -40,9 +39,10 @@ public static class ServiceCollectionExtensions
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
+        LinkToonOptions(services);
+
         services.AddOptions<ToonSerializerOptions>()
                 .Configure(options => ApplyToonSerializerOptionsFromConfiguration(options, serializerOptionsSection))
-                .Configure<IOptions<ToonOptions>>((options, toonOptions) => options.ToonOptions = toonOptions.Value)
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
@@ -66,9 +66,10 @@ public static class ServiceCollectionExtensions
         services.AddOptions<ToonOptions>().Configure(options => configureToonOptions?.Invoke(options)).ValidateDataAnnotations()
                 .ValidateOnStart();
 
+        LinkToonOptions(services);
+
         services.AddOptions<ToonSerializerOptions>()
                 .Configure(options => configureSerializerOptions?.Invoke(options))
-                .Configure<IOptions<ToonOptions>>((options, toonOptions) => options.ToonOptions = toonOptions.Value)
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
@@ -85,6 +86,28 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddToonNet(this IServiceCollection services)
     {
         return services.AddToonNet(configureToonOptions: null, configureSerializerOptions: null);
+    }
+
+    /// <summary>
+    /// Sets <see cref="ToonSerializerOptions.ToonOptions"/> to the registered <see cref="ToonOptions"/> before any other
+    /// configuration of the serializer options runs, so a delegate that sets or changes
+    /// <see cref="ToonSerializerOptions.ToonOptions"/> (in <c>AddToonNet</c>, <c>AddToonFormatters</c> or
+    /// <c>Configure&lt;ToonSerializerOptions&gt;</c>, registered before or after) is not overwritten.
+    /// </summary>
+    private static void LinkToonOptions(IServiceCollection services)
+    {
+        if (services.Any(d => d.ImplementationType == typeof(ToonOptionsLink)))
+        {
+            return;
+        }
+
+        // Options configurations run in registration order
+        services.Insert(0, ServiceDescriptor.Singleton<IConfigureOptions<ToonSerializerOptions>, ToonOptionsLink>());
+    }
+
+    private sealed class ToonOptionsLink(IOptions<ToonOptions> toonOptions) : IConfigureOptions<ToonSerializerOptions>
+    {
+        public void Configure(ToonSerializerOptions options) => options.ToonOptions = toonOptions.Value;
     }
 
     /// <summary>

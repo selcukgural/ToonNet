@@ -97,4 +97,64 @@ public sealed class ToonNetServiceCollectionExtensionsTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => provider.GetRequiredService<IOptions<ToonOptions>>().Value);
     }
+
+    [Fact]
+    public void AddToonNet_SerializerDelegateReplacingToonOptions_IsKept()
+    {
+        var services = new ServiceCollection();
+        services.AddToonNet(toon => toon.IndentSize = 4, serializer => serializer.ToonOptions = new ToonOptions { Delimiter = '|' });
+
+        using var provider = services.BuildServiceProvider();
+
+        var serializerOptions = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+        Assert.Equal('|', serializerOptions.ToonOptions.Delimiter);
+        Assert.Equal(4, provider.GetRequiredService<IOptions<ToonOptions>>().Value.IndentSize);
+    }
+
+    [Fact]
+    public void AddToonNet_SerializerDelegateChangingToonOptions_ChangesTheSharedOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddToonNet(configureToonOptions: null, serializer => serializer.ToonOptions.IndentSize = 4);
+
+        using var provider = services.BuildServiceProvider();
+
+        var serializerOptions = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+        Assert.Equal(4, serializerOptions.ToonOptions.IndentSize);
+        Assert.Same(provider.GetRequiredService<IOptions<ToonOptions>>().Value, serializerOptions.ToonOptions);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ConfigureSerializerOptions_BeforeOrAfterAddToonNet_KeepsToonOptions(bool configureFirst)
+    {
+        var services = new ServiceCollection();
+
+        if (configureFirst)
+        {
+            services.Configure<ToonSerializerOptions>(o => o.ToonOptions = new ToonOptions { StrictMode = false });
+            services.AddToonNet();
+        }
+        else
+        {
+            services.AddToonNet();
+            services.Configure<ToonSerializerOptions>(o => o.ToonOptions = new ToonOptions { StrictMode = false });
+        }
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.False(provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value.ToonOptions.StrictMode);
+    }
+
+    [Fact]
+    public void AddToonNet_CalledTwice_RegistersTheLinkOnce()
+    {
+        var services = new ServiceCollection();
+        services.AddToonNet();
+        services.AddToonNet();
+
+        Assert.Single(services, d => d.ServiceType == typeof(IConfigureOptions<ToonSerializerOptions>) &&
+                                     d.ImplementationType?.Name == "ToonOptionsLink");
+    }
 }

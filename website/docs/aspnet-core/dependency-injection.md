@@ -44,7 +44,8 @@ TOON in controllers, add the formatters from `ToonNet.AspNetCore.Mvc` (see [Inpu
 `AddToonNet` registers:
 
 - `IOptions<ToonOptions>` and `IOptions<ToonSerializerOptions>` (validated at startup; `ToonSerializerOptions.ToonOptions`
-  is set to the registered `ToonOptions`)
+  is the registered `ToonOptions` unless your serializer options delegate, `AddToonFormatters` or
+  `Configure<ToonSerializerOptions>` sets it to another instance, in any registration order)
 - `ToonEncoder` as a singleton, created with the registered `ToonOptions` (the encoder keeps no per-call state, so
   sharing it across requests is safe)
 
