@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Keys follow §7.4: a quoted key may be followed by spaces before its colon, `: 1` has the empty key, and an
     unquoted key may contain quotes (`a"b:c"d: 1` has the key `a"b:c"d`).
   - `- []` is an empty inner array.
+  - Byte input must be well-formed UTF-8 (§4): `ParseFromStreamAsync`, `ParseFromFileAsync`,
+    `DeserializeFromStreamAsync`, `DeserializeFromFileAsync` and the file-based `DeserializeStreamAsync` throw
+    `ToonParseException` (or, while enumerating, `DecoderFallbackException`) instead of reading U+FFFD; the ASP.NET
+    Core input formatter reports a model error for a UTF-8 body and the configuration provider a `FormatException`.
   - Non-strict mode applies exactly the five recoveries of §14.4. New: when the first line of a nested object, array
     or keyed object is indented deeper than expected, its depth becomes the scope's depth. Removed: a row with too few
     or too many cells is an error (missing cells were read as `null` and extra cells dropped), list items under `key:`

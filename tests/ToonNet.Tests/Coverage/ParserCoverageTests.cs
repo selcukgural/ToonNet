@@ -150,6 +150,34 @@ public class ParserCoverageTests
     }
 
     [Fact]
+    public async Task ByteInput_IllFormedUtf8_Throws_AndAByteOrderMarkIsRemoved()
+    {
+        // Spec 4.4 §4: decoders of bytes reject ill-formed UTF-8 instead of substituting U+FFFD
+        byte[] invalid = [(byte)'a', (byte)':', (byte)' ', 0xED, 0xA0, 0x80]; // an encoded surrogate
+        var parser = new ToonParser();
+
+        await Assert.ThrowsAsync<ToonParseException>(() => parser.ParseFromStreamAsync(new MemoryStream(invalid)));
+        await Assert.ThrowsAsync<ToonParseException>(async () =>
+            await ToonNet.Core.Serialization.ToonSerializer.DeserializeFromStreamAsync<Dictionary<string, string>>(new MemoryStream(invalid)));
+
+        var path = Path.GetTempFileName();
+
+        try
+        {
+            await File.WriteAllBytesAsync(path, invalid);
+            await Assert.ThrowsAsync<ToonParseException>(() => parser.ParseFromFileAsync(path));
+
+            await File.WriteAllBytesAsync(path, [0xEF, 0xBB, 0xBF, (byte)'a', (byte)':', (byte)' ', (byte)'1']);
+            Assert.True((await parser.ParseFromFileAsync(path)).AsObject().Properties.ContainsKey("a"));
+            Assert.True((await parser.ParseFromStreamAsync(new MemoryStream(await File.ReadAllBytesAsync(path)))).AsObject().Properties.ContainsKey("a"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void CrLfLineEndings_AreAccepted()
     {
         var obj = new ToonParser().Parse("a: 1\r\nb[2]: x,y\r\n").AsObject();

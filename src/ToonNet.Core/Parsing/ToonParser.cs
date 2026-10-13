@@ -243,7 +243,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(filePath);
         
-        var input = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        var input = await Encoding.ToonTextEncoding.ReadFileAsync(filePath, cancellationToken).ConfigureAwait(false);
         return await ParseAsync(input, cancellationToken).ConfigureAwait(false);
     }
 
@@ -260,8 +260,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
         
-        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
-        var input = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        var input = await Encoding.ToonTextEncoding.ReadToEndAsync(stream, leaveOpen: true, cancellationToken).ConfigureAwait(false);
         return await ParseAsync(input, cancellationToken).ConfigureAwait(false);
     }
 

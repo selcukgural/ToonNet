@@ -67,7 +67,18 @@ public sealed class ToonInputFormatter : TextInputFormatter
         ArgumentNullException.ThrowIfNull(encoding);
 
         var httpContext = context.HttpContext;
-        var content = await ReadBodyAsync(httpContext.Request, encoding, httpContext.RequestAborted).ConfigureAwait(false);
+        string content;
+
+        try
+        {
+            content = await ReadBodyAsync(httpContext.Request, encoding, httpContext.RequestAborted).ConfigureAwait(false);
+        }
+        catch (DecoderFallbackException)
+        {
+            // Ill-formed UTF-8 is an error, not text with U+FFFD in it (TOON spec §4)
+            context.ModelState.TryAddModelError(context.ModelName, "The request body is not valid UTF-8.");
+            return await InputFormatterResult.FailureAsync().ConfigureAwait(false);
+        }
 
         try
         {
@@ -84,6 +95,8 @@ public sealed class ToonInputFormatter : TextInputFormatter
     /// <summary>
     /// Reads the request body as text, rejecting bodies larger than the configured limit.
     /// </summary>
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     private async Task<string> ReadBodyAsync(HttpRequest request, Encoding encoding, CancellationToken cancellationToken)
     {
         if (request.ContentLength > _maxRequestBodySize)
@@ -93,7 +106,9 @@ public sealed class ToonInputFormatter : TextInputFormatter
 
         // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
         var body = new LimitedReadStream(request.Body, _maxRequestBodySize, CreatePayloadTooLargeException);
-        using var reader = new StreamReader(body, encoding, detectEncodingFromByteOrderMarks: true, ReadBufferSize, leaveOpen: true);
+        // UTF-8 bodies are decoded strictly, so ill-formed bytes throw instead of becoming U+FFFD
+        var decoder = encoding.CodePage == Encoding.UTF8.CodePage ? StrictUtf8 : encoding;
+        using var reader = new StreamReader(body, decoder, detectEncodingFromByteOrderMarks: true, ReadBufferSize, leaveOpen: true);
         return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
     }
 

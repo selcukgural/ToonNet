@@ -622,7 +622,7 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
-        var toonString = await File.ReadAllTextAsync(filePath, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+        var toonString = await ToonTextEncoding.ReadFileAsync(filePath, cancellationToken).ConfigureAwait(false);
 
         return await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
     }
@@ -644,8 +644,7 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
-        var toonString = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        var toonString = await ToonTextEncoding.ReadToEndAsync(stream, leaveOpen: true, cancellationToken).ConfigureAwait(false);
 
         return await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
     }
@@ -675,7 +674,7 @@ public static partial class ToonSerializer
         var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
 
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
+        using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8Strict);
 
         await foreach (var item in DeserializeStreamAsync<T>(reader, options, cancellationToken).ConfigureAwait(false))
         {
@@ -710,7 +709,7 @@ public static partial class ToonSerializer
         var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
 
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        using var reader = new StreamReader(fileStream, System.Text.Encoding.UTF8);
+        using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8Strict);
 
         await foreach (var item in DeserializeStreamAsync<T>(reader, options, multiDocumentOptions, cancellationToken).ConfigureAwait(false))
         {

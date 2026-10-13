@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.Extensions.Configuration;
 using ToonNet.Core;
 using ToonNet.Core.Models;
@@ -32,7 +33,8 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
         try
         {
             // Configuration loading is synchronous; read the stream content first
-            using var reader = new StreamReader(stream);
+            // Strict UTF-8: ill-formed bytes are an error, not U+FFFD (TOON spec §4)
+            using var reader = new StreamReader(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true));
             var content = reader.ReadToEnd();
 
             var doc = ToonDocument.Parse(content, _options);
@@ -41,6 +43,10 @@ public sealed class ToonConfigurationProvider : FileConfigurationProvider
         catch (ToonParseException ex)
         {
             throw new FormatException($"Failed to parse TOON configuration file: {ex.Message}", ex);
+        }
+        catch (DecoderFallbackException ex)
+        {
+            throw new FormatException("Failed to parse TOON configuration file: it is not valid UTF-8", ex);
         }
     }
 

@@ -188,6 +188,20 @@ public class MvcTests
     }
 
     [Fact]
+    public async Task ToonInputFormatter_IllFormedUtf8_ReturnsModelError()
+    {
+        // 0xC3 starts a two-byte sequence that 0x28 does not continue (TOON spec §4: an error, not U+FFFD)
+        var formatter = new ToonInputFormatter(new ToonSerializerOptions());
+        var body = new byte[] { (byte)'N', (byte)'a', (byte)'m', (byte)'e', (byte)':', (byte)' ', 0xC3, 0x28 };
+        var context = CreateInputContext(body, ToonFormatterDefaults.MediaType);
+
+        var result = await formatter.ReadAsync(context);
+
+        Assert.True(result.HasError);
+        Assert.Contains("not valid UTF-8", context.ModelState[nameof(TestModel)]!.Errors[0].ErrorMessage);
+    }
+
+    [Fact]
     public async Task ToonInputFormatter_Utf16Body_UsesRequestEncoding()
     {
         var formatter = new ToonInputFormatter(new ToonSerializerOptions());

@@ -146,6 +146,16 @@ public class ToonConfigurationProviderTests
         return provider;
     }
 
+    [Fact]
+    public void Load_IllFormedUtf8_Throws()
+    {
+        var provider = new ToonConfigurationProvider(new ToonConfigurationSource());
+
+        var ex = Assert.Throws<FormatException>(() => provider.Load(new MemoryStream([(byte)'a', (byte)':', (byte)' ', 0xFF])));
+
+        Assert.Contains("not valid UTF-8", ex.Message);
+    }
+
     [Theory]
     [InlineData("Port: 1\nport: 2")]
     [InlineData("A:\n  b: 1\na:\n  B: 2")]
