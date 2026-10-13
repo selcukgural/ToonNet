@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** The parser rents its line table from `ArrayPool` (cleared on return; for large documents it was a
   multi-megabyte allocation on the large object heap per parse), reads list-item and header lines as spans instead of
   substrings, and unescapes quoted strings in a stack or pooled buffer instead of a `StringBuilder`.
+- **ToonNet.Core:** The parser reads documents through value references and cursors over the input, and builds the
+  `ToonValue` tree on top of them; lines are offsets into the input, so no string is allocated per line. Parsing
+  10,000 nested objects takes 30 ms instead of 42 ms with 27% less memory. Errors, positions and strict-mode checks
+  are unchanged.
 - **ToonNet.Core:** Stream and file output (`SerializeToStreamAsync`, `SerializeToFileAsync`,
   `SerializeCollectionTo*Async`, `SerializeStreamAsync`, `ToonEncoder.EncodeToStreamAsync`/`EncodeToFileAsync`) encodes
   into the pooled text buffer and writes UTF-8 in 16 KB pooled chunks, instead of creating the whole string and then a
