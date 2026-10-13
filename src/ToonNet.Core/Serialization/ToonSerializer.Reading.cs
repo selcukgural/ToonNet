@@ -155,10 +155,34 @@ public static partial class ToonSerializer
                 => (long)exact,
             ToonNumber { DecimalValue: { } exact } => exact,
             ToonNumber n  => n.Value,
-            ToonArray a   => a.Items.Select(item => ToUntyped(item, options, depth + 1)).ToList(),
-            ToonObject o  => o.Properties.ToDictionary(p => p.Key, p => ToUntyped(p.Value, options, depth + 1)),
+            ToonArray a   => ToUntypedList(a, options, depth),
+            ToonObject o  => ToUntypedDictionary(o, options, depth),
             _             => value
         };
+    }
+
+    private static List<object?> ToUntypedList(ToonArray array, ToonSerializerOptions options, int depth)
+    {
+        var list = new List<object?>(array.Count);
+
+        foreach (var item in array.Items)
+        {
+            list.Add(ToUntyped(item, options, depth + 1));
+        }
+
+        return list;
+    }
+
+    private static Dictionary<string, object?> ToUntypedDictionary(ToonObject obj, ToonSerializerOptions options, int depth)
+    {
+        var dictionary = new Dictionary<string, object?>(obj.Properties.Count);
+
+        foreach (var (key, value) in obj.Properties)
+        {
+            dictionary.Add(key, ToUntyped(value, options, depth + 1));
+        }
+
+        return dictionary;
     }
 
     #region Primitives
@@ -433,7 +457,7 @@ public static partial class ToonSerializer
 
         for (var i = 0; i < array.Count; i++)
         {
-            state.Push($"[{i}]");
+            state.Push(i);
             items.Add(DeserializeValue(array[i], elementType, options, depth + 1, state));
             state.Pop();
         }

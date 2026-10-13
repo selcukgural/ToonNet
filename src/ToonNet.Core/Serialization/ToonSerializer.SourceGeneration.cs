@@ -91,7 +91,7 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(value);
 
         var targetType = typeof(T);
-        var state = new SerializerState();
+        var state = SerializerState.Root;
         var underlyingType = Nullable.GetUnderlyingType(targetType);
 
         if (value is ToonNull)

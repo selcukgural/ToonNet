@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returned) instead of a pooled `StringBuilder`, and formats numbers, keys and escaped strings straight into it
   instead of building a string for each value. Encoding allocates little more than the resulting string: about half
   the memory and a third less time for large documents.
+- **ToonNet.Core:** The serializer no longer formats a path segment string for every collection item (the path is
+  only built for an error message), creates its cycle-detection set only when it writes an object, reads cached
+  property names from an array instead of a `ConcurrentDictionary`, and the primitive reads of generated code no
+  longer allocate any state.
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common

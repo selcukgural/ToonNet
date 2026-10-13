@@ -157,7 +157,7 @@ public static partial class ToonSerializer
 
         foreach (var item in enumerable)
         {
-            state.Push($"[{index++}]");
+            state.Push(index++);
             array.Items.Add(SerializeValue(item, item?.GetType() ?? typeof(object), options, depth + 1, state) ?? ToonNull.Instance);
             state.Pop();
         }

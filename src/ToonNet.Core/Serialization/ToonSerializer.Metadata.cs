@@ -20,8 +20,8 @@ public static partial class ToonSerializer
         public IToonConverter? Converter { get; init; }
         public bool HasSetter => Setter != null;
 
-        // Serialized names per naming policy (thread-safe)
-        public ConcurrentDictionary<PropertyNamingPolicy, string> Names { get; } = new();
+        /// <summary>Serialized names per <see cref="PropertyNamingPolicy"/> value, computed on first use.</summary>
+        public string?[] Names { get; } = new string?[NamingPolicyCount];
     }
 
     /// <summary>
@@ -333,23 +333,41 @@ public static partial class ToonSerializer
             return property.AttributeName;
         }
 
-        return property.Names.GetOrAdd(type.FixedNamingPolicy ?? options.PropertyNamingPolicy, static (policy, name) => policy switch
+        var policy = type.FixedNamingPolicy ?? options.PropertyNamingPolicy;
+
+        // Racing threads compute the same name, so a plain array is enough; undefined policy values are not cached
+        return (uint)policy < NamingPolicyCount
+            ? property.Names[(int)policy] ??= ApplyNamingPolicy(policy, property.Property.Name)
+            : ApplyNamingPolicy(policy, property.Property.Name);
+
+        static string ApplyNamingPolicy(PropertyNamingPolicy policy, string name) => policy switch
         {
             PropertyNamingPolicy.CamelCase => Shared.ToonNaming.ToCamelCase(name),
             PropertyNamingPolicy.SnakeCase => Shared.ToonNaming.ToSnakeCase(name),
             PropertyNamingPolicy.LowerCase => name.ToLowerInvariant(),
             _                              => name
-        }, property.Property.Name);
+        };
     }
+
+    /// <summary>The number of <see cref="PropertyNamingPolicy"/> values.</summary>
+    private const int NamingPolicyCount = (int)PropertyNamingPolicy.LowerCase + 1;
 
     /// <summary>
     /// Tracks the property path for error messages and the objects being serialized for cycle detection.
     /// </summary>
+    /// <remarks>
+    /// The path is kept as segments (a name, or an array index) and only turned into text for an error, so walking
+    /// a collection does not format a string per item. The lists are created on first use.
+    /// </remarks>
     private sealed class SerializerState
     {
-        private readonly List<string> _path = [];
+        /// <summary>A state for reads that never push a segment or track objects (primitive reads from generated code).</summary>
+        public static readonly SerializerState Root = new();
 
-        public HashSet<object> Visiting { get; } = new(ReferenceEqualityComparer.Instance);
+        private List<(string? Name, int Index)>? _path;
+        private HashSet<object>? _visiting;
+
+        public HashSet<object> Visiting => _visiting ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
 
         /// <summary>
         ///     Set when generated code hands a value to this serializer; the first value is then not given back to
@@ -357,9 +375,11 @@ public static partial class ToonSerializer
         /// </summary>
         public bool FromGeneratedCode { get; set; }
 
-        public void Push(string segment) => _path.Add(segment);
+        public void Push(string name) => (_path ??= []).Add((name, 0));
 
-        public void Pop() => _path.RemoveAt(_path.Count - 1);
+        public void Push(int index) => (_path ??= []).Add((null, index));
+
+        public void Pop() => _path!.RemoveAt(_path.Count - 1);
 
         public string Path
         {
@@ -367,14 +387,21 @@ public static partial class ToonSerializer
             {
                 var sb = new StringBuilder("$");
 
-                foreach (var segment in _path)
+                foreach (var (name, index) in _path ?? [])
                 {
-                    if (!segment.StartsWith('['))
+                    if (name == null)
                     {
-                        sb.Append('.');
+                        sb.Append('[').Append(index.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(']');
                     }
+                    else
+                    {
+                        if (!name.StartsWith('['))
+                        {
+                            sb.Append('.');
+                        }
 
-                    sb.Append(segment);
+                        sb.Append(name);
+                    }
                 }
 
                 return sb.ToString();
