@@ -128,7 +128,6 @@ Healthcare sample completed successfully!
 **Files:**
 - `ecommerce-order.toon` (2.6 KB) - TOON format
 - `ecommerce-order.json` (3.6 KB) - JSON format
-- `ecommerce-order.yaml` (2.7 KB) - YAML format
 - `ECommerceModels.cs` - C# model classes
 
 **Models:**
@@ -195,7 +194,6 @@ Items[3]:
 **Files:**
 - `healthcare-patient.toon` (4.5 KB) - TOON format
 - `healthcare-patient.json` (6.2 KB) - JSON format
-- `healthcare-patient.yaml` (4.8 KB) - YAML format
 - `HealthcareModels.cs` - C# model classes
 
 **Models:**
@@ -336,10 +334,10 @@ var diagnoses = patient.Diagnoses
 
 ## 📊 Sample Statistics
 
-| Sample | TOON Size | JSON Size | YAML Size | Models | Properties |
-|--------|-----------|-----------|-----------|--------|------------|
-| **E-Commerce** | 2.6 KB | 3.6 KB | 2.7 KB | 10 | 70+ |
-| **Healthcare** | 4.5 KB | 6.2 KB | 4.8 KB | 12 | 80+ |
+| Sample | TOON Size | JSON Size | Models | Properties |
+|--------|-----------|-----------|--------|------------|
+| **E-Commerce** | 2.6 KB | 3.6 KB | 10 | 70+ |
+| **Healthcare** | 4.5 KB | 6.2 KB | 12 | 80+ |
 
 Sizes are of the indented files in `Samples/` (the JSON uses camelCase keys, the TOON files PascalCase). The demo does
 not count tokens; token savings depend on the tokenizer and on the shape of the data.
@@ -358,17 +356,16 @@ See [`Samples/README.md`](Samples/README.md) for:
 
 ### Sample Files
 
-Each sample includes three formats for comparison:
+Each sample includes two formats for comparison:
 - **TOON** - Human-readable, token-efficient
 - **JSON** - Industry standard
-- **YAML** - Configuration-friendly
 
 ---
 
 ## 🧪 Running Tests
 
-The demo prints its checks ("Roundtrip verification: ...") but does not set an exit code: errors are caught and
-printed, and the process always exits with `0`. The real test suite lives in [`tests/`](../../tests):
+The demo prints its checks ("Roundtrip verification: ...") and exits with code 1 if any of them fails. The real test
+suite lives in [`tests/`](../../tests):
 
 ```bash
 # From the repository root
@@ -404,8 +401,6 @@ dotnet test ToonNet.slnx
 - .NET 8.0 or later
 - ToonNet.Core
 - ToonNet.Extensions.Json (for JSON conversion)
-- System.Text.Json (package reference 10.0.1)
-- YamlDotNet 16.3.0 (used by `Converters/FormatConverter.cs`; the demo's `Main` does not load the `.yaml` files)
 
 ---
 
@@ -415,7 +410,7 @@ Want to add more samples? Please read [CONTRIBUTING.md](../../CONTRIBUTING.md) f
 
 **Sample Guidelines:**
 - Use real-world scenarios (not toy examples)
-- Include all three formats (TOON, JSON, YAML)
+- Include both formats (TOON and JSON)
 - Provide complete C# models with XML docs
 - Add validation and roundtrip tests
 

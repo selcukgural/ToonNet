@@ -8,7 +8,6 @@ Bu klasör, **TOON specification'ın desteklediği TÜM veri tiplerini** içeren
 **Dosyalar:**
 - `ecommerce-order.toon` - TOON format
 - `ecommerce-order.json` - JSON format  
-- `ecommerce-order.yaml` - YAML format
 - `ECommerceModels.cs` - C# models
 
 **İçerik:**
@@ -28,7 +27,6 @@ Bu klasör, **TOON specification'ın desteklediği TÜM veri tiplerini** içeren
 **Dosyalar:**
 - `healthcare-patient.toon` - TOON format
 - `healthcare-patient.json` - JSON format  
-- `healthcare-patient.yaml` - YAML format
 - `HealthcareModels.cs` - C# models
 
 **İçerik:**
@@ -52,13 +50,12 @@ Bu klasör, **TOON specification'ın desteklediği TÜM veri tiplerini** içeren
 ### ✅ Her format için dönüşüm desteği:
 
 ```
-TOON ←→ JSON ←→ YAML
-  ↓       ↓       ↓
-C# Object (her üç format için)
+TOON ←→ JSON
+  ↓       ↓
+C# Object (her iki format için)
 ```
 
-> Demo uygulaması (`Program.cs`) yalnızca `.toon` ve `.json` dosyalarını kullanır. YAML dönüşümü için
-> `ToonNet.Extensions.Yaml` paketi gerekir; demo projesi bu pakete referans vermez (`.yaml` dosyaları karşılaştırma içindir).
+> YAML dönüşümü için `ToonNet.Extensions.Yaml` paketi gerekir; demo projesi bu pakete referans vermez.
 
 ### ✅ İki farklı yaklaşım:
 
@@ -203,7 +200,7 @@ Console.WriteLine($"String roundtrip: {json2 == json3}");
 
 ### 1. **TOON Format Özellikleri**
 - Okunabilir (JSON'dan daha az noktalama)
-- Compact (bu örneklerde JSON'dan küçük, YAML ile benzer boyutta)
+- Compact (bu örneklerde JSON'dan küçük)
 - TOON spec v3.3.2 formatını izler
 - Human-friendly (kolay düzenlenebilir)
 
@@ -242,7 +239,7 @@ Attributes:
 ## ✅ Doğrulama
 
 Her sample için:
-1. ✅ **Parse Edilebilir**: TOON/JSON/YAML dosyaları okunabiliyor (demo `.toon` ve `.json` dosyalarını okur)
+1. ✅ **Parse Edilebilir**: TOON ve JSON dosyaları okunabiliyor
 2. ✅ **Roundtrip**: JSON → TOON → JSON değerleri korur (sayı formatı değişebilir, aşağıya bakın)
 3. ✅ **Çeşitli Tipler**: string, sayı, bool, null, tarih, liste, dictionary, nested object
 4. ✅ **Real-World**: Gerçek kullanım senaryoları
@@ -272,18 +269,15 @@ Demo otomatik olarak:
 |--------|--------------|
 | TOON   | 2.6 KB       |
 | JSON   | 3.6 KB       |
-| YAML   | 2.7 KB       |
 
 ### Healthcare Patient Record Sample
 | Format | Dosya Boyutu |
 |--------|--------------|
 | TOON   | 4.5 KB       |
 | JSON   | 6.2 KB       |
-| YAML   | 4.8 KB       |
 
 **TOON avantajları:**
 - Bu örneklerde indent'li JSON'dan yaklaşık %27-28 daha küçük
-- YAML'dan biraz daha küçük (%3-7)
 - Human-readable ve kolay düzenlenebilir
 
 Parse hızı ölçülmedi; performans için [benchmark projesine](../../../benchmark/ToonNet.Benchmarks/README.md) bakın.
