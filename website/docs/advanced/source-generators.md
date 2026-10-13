@@ -76,6 +76,12 @@ reason. Use `[ToonSerializable(AllowReflectionFallback = false)]` to turn these 
 At runtime the generated methods defer to `ToonSerializer` when the options contain converters, or when a property
 holds an instance of a class derived from its declared `[ToonSerializable]` type. The output is the same either way.
 
+`ToonSerializer` uses the generated methods as well: each generated type registers them from a module initializer, so
+`ToonSerializer.Serialize`/`Deserialize<T>` and everything built on them (the ASP.NET Core formatters, `ToonResult`,
+the JSON/YAML helpers) convert the type without reflection. This applies to non-generic types that are reachable from
+their assembly; generic types and `private` or `protected` nested types are still converted with reflection. It needs
+`ToonNet.Core` and `ToonNet.SourceGenerators` of the same release.
+
 :::note
 ToonNet is not yet annotated for trimming or Native AOT, so the generator makes no AOT guarantee, and it does not make
 serialization allocation-free.

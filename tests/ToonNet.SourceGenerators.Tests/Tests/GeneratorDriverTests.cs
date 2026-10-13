@@ -29,9 +29,12 @@ public class GeneratorDriverTests
 
         var generated = driver.GetRunResult().GeneratedTrees.Select(t => Path.GetFileName(t.FilePath)).ToArray();
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        LastGeneratedSources = driver.GetRunResult().GeneratedTrees.Select(t => t.ToString()).ToArray();
 
         return (diagnostics, errors, generated);
     }
+
+    private static string[] LastGeneratedSources = [];
 
     [Fact]
     public void NonPartialType_ReportsToon002()
@@ -200,5 +203,29 @@ public class GeneratorDriverTests
 
         Assert.Empty(diagnostics);
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void ReachableNonGenericTypes_RegisterWithToonSerializer()
+    {
+        var (_, errors, generated) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Visible { public int A { get; set; } }
+            public partial class Outer
+            {
+                [ToonSerializable] private partial class Hidden { public int B { get; set; } }
+                [ToonSerializable] internal partial class Nested { public int C { get; set; } }
+            }
+            [ToonSerializable] public partial class Generic<T> { public T? Value { get; set; } }
+            """);
+
+        Assert.Empty(errors);
+        Assert.Equal(4, generated.Length);
+
+        var registered = LastGeneratedSources.Where(s => s.Contains("[global::System.Runtime.CompilerServices.ModuleInitializer]")).ToList();
+        Assert.Equal(2, registered.Count);
+        Assert.Contains(registered, s => s.Contains("Register<global::App.Visible>(__ToonSerializeValue, __ToonDeserializeValue)"));
+        Assert.Contains(registered, s => s.Contains("Register<global::App.Outer.Nested>("));
     }
 }

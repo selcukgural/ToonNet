@@ -262,6 +262,12 @@ public static partial class ToonSerializer
 
         public HashSet<object> Visiting { get; } = new(ReferenceEqualityComparer.Instance);
 
+        /// <summary>
+        ///     Set when generated code hands a value to this serializer; the first value is then not given back to
+        ///     generated code, which would hand it over again.
+        /// </summary>
+        public bool FromGeneratedCode { get; set; }
+
         public void Push(string segment) => _path.Add(segment);
 
         public void Pop() => _path.RemoveAt(_path.Count - 1);

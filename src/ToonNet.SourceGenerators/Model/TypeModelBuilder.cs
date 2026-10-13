@@ -96,6 +96,7 @@ internal static class TypeModelBuilder
             return CreatePropertyModel(property, plan, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers);
         }).ToImmutableArray();
 
+        var hasTypeConverter = type.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute");
         var namingPolicy = attribute.NamedArguments.FirstOrDefault(a => a.Key == "NamingPolicy").Value.Value as int?;
 
         // A struct without a usable public constructor is still created with `new T()`, like Activator.CreateInstance.
@@ -117,7 +118,8 @@ internal static class TypeModelBuilder
             Documentation: GetBool(attribute, "IncludeDocumentation", true),
             CanUseUnsafeAccessor: canUseUnsafeAccessor,
             CheckRuntimeType: !type.IsValueType && !type.IsSealed,
-            HasTypeConverter: type.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute"),
+            HasTypeConverter: hasTypeConverter,
+            RegisterWithSerializer: !hasTypeConverter && CanRegister(type, compilation),
             FixedNamingPolicy: namingPolicy,
             Properties: new EquatableArray<PropertyModel>(propertyModels),
             Constructor: type.IsAbstract ? null : constructorModel,
@@ -127,7 +129,7 @@ internal static class TypeModelBuilder
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
     {
         return new TypeModel(false, null, default, Declaration(type), type.ToDisplayString(TypeNameFormat), type.ToDisplayString(TypeOfFormat),
-                             HintName(type), type.IsValueType, true, true, true, false, false, false, null, default, null,
+                             HintName(type), type.IsValueType, true, true, true, false, false, false, false, null, default, null,
                              new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()));
     }
 
@@ -135,6 +137,29 @@ internal static class TypeModelBuilder
     {
         return type.DeclaringSyntaxReferences.Any(r => r.GetSyntax() is TypeDeclarationSyntax declaration &&
                                                        declaration.Modifiers.Any(SyntaxKind.PartialKeyword));
+    }
+
+    /// <summary>
+    /// Whether a module initializer can register the generated methods with <c>ToonSerializer</c>: the type must not
+    /// be generic, must be reachable from the module (no private or protected type in the chain), and the referenced
+    /// ToonNet.Core must have the registration API.
+    /// </summary>
+    private static bool CanRegister(INamedTypeSymbol type, Compilation compilation)
+    {
+        if (IsGeneric(type) || compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.ModuleInitializerAttribute") == null)
+        {
+            return false;
+        }
+
+        for (var current = type; current != null; current = current.ContainingType)
+        {
+            if (current.IsFileLocal || current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal))
+            {
+                return false;
+            }
+        }
+
+        return compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSourceGenerationHelpers")?.GetMembers("Register").Length > 0;
     }
 
     private static bool IsGeneric(INamedTypeSymbol type)

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **ToonNet.SourceGenerators / ToonNet.Core:** `ToonSerializer` now uses the code generated for `[ToonSerializable]`
+  types. Each generated type registers its methods from a module initializer (new hidden
+  `ToonSourceGenerationHelpers.Register`), so `ToonSerializer.Serialize`/`Deserialize<T>`, the ASP.NET Core formatters
+  and `ToonResult` no longer use reflection for them. Generic types and types nested in a `private`/`protected` type
+  are still converted with reflection. The generator only emits the registration when the referenced `ToonNet.Core`
+  has the new API.
+
 ### Fixed
 - **ToonNet.Core:** `ToonEncoder` keeps its per-call state local to each `Encode` call, so one instance can be shared
   across threads. Before, concurrent calls on the singleton registered by `AddToonNet` could mix their output.

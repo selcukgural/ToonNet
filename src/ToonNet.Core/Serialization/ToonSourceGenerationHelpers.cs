@@ -9,12 +9,25 @@ namespace ToonNet.Core.Serialization;
 /// </summary>
 /// <remarks>
 ///     The methods share the conversion rules of <see cref="ToonSerializer"/>, so generated code produces the same
-///     output. Generated code calls the primitive methods only when the options contain no converters (otherwise it
+///     output. Generated types register themselves with <see cref="Register{T}"/>, and <see cref="ToonSerializer"/>
+///     then uses the generated methods instead of reflection. Generated code calls the primitive methods only when the options contain no converters (otherwise it
 ///     defers to <see cref="ToonSerializer"/> entirely), which is why they do not consult converters.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class ToonSourceGenerationHelpers
 {
+    /// <summary>
+    ///     Registers the generated methods of <typeparamref name="T"/>, so <see cref="ToonSerializer"/> (and everything
+    ///     built on it) uses them for values of exactly that type. Generated module initializers call this.
+    /// </summary>
+    /// <param name="serialize">The generated <c>__ToonSerializeValue</c> method.</param>
+    /// <param name="deserialize">The generated <c>__ToonDeserializeValue</c> method, or null when there is none.</param>
+    public static void Register<T>(Func<T, ToonSerializerOptions, int, ToonValue> serialize,
+                                   Func<ToonValue, ToonSerializerOptions, int, T>? deserialize)
+    {
+        ToonSerializer.RegisterGenerated(serialize, deserialize);
+    }
+
     /// <summary>
     ///     Converts a string, boolean, number, date/time, <see cref="Guid"/>, <see cref="Uri"/> or enum value.
     /// </summary>

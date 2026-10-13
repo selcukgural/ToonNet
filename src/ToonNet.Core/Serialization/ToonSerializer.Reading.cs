@@ -19,6 +19,9 @@ public static partial class ToonSerializer
     {
         EnsureDepth(options, depth);
 
+        var generatedAllowed = !state.FromGeneratedCode;
+        state.FromGeneratedCode = false;
+
         var converter = propertyConverter ?? options.GetConverter(targetType);
 
         if (converter != null)
@@ -54,6 +57,12 @@ public static partial class ToonSerializer
         if (targetType == typeof(object))
         {
             return ToUntyped(value, options, depth);
+        }
+
+        // Generated code reads objects; other values are reported by the checks below
+        if (generatedAllowed && value is ToonObject && GetGeneratedSerializer(targetType, options) is { Deserialize: { } generated })
+        {
+            return generated(value, options, depth);
         }
 
         if (TryDeserializePrimitive(value, targetType, state, out var primitiveResult))

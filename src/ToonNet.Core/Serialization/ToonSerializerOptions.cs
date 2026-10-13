@@ -28,6 +28,12 @@ public sealed class ToonSerializerOptions : IValidatableObject
     }
 
     /// <summary>
+    ///     Whether types with generated code (<c>[ToonSerializable]</c>) are converted by it. Tests turn this off to
+    ///     compare generated code with the reflection-based serializer.
+    /// </summary>
+    internal bool UseGeneratedCode { get; set; } = true;
+
+    /// <summary>
     ///     Gets or sets whether to ignore null values during serialization.
     ///     The default value is false.
     /// </summary>

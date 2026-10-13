@@ -24,6 +24,7 @@ internal sealed record TypeModel(
     bool CanUseUnsafeAccessor,
     bool CheckRuntimeType,
     bool HasTypeConverter,
+    bool RegisterWithSerializer,
     int? FixedNamingPolicy,
     EquatableArray<PropertyModel> Properties,
     ConstructorModel? Constructor,

@@ -16,13 +16,13 @@ public class ReflectionParityTests
                                           Func<ToonDocument, ToonSerializerOptions?, T> deserialize, ToonSerializerOptions? options = null)
     {
         var encoder = new ToonEncoder(options?.ToonOptions);
-        var reflection = ToonSerializer.Serialize(value, options);
+        var reflection = ToonSerializer.Serialize(value, ReflectionOnly.Options(options));
         var generated = encoder.Encode(serialize(value, options));
 
         Assert.Equal(reflection, generated);
 
         var readBack = deserialize(ToonDocument.Parse(reflection, options?.ToonOptions), options);
-        Assert.Equal(reflection, ToonSerializer.Serialize(readBack, options));
+        Assert.Equal(reflection, ToonSerializer.Serialize(readBack, ReflectionOnly.Options(options)));
 
         return generated;
     }
@@ -242,7 +242,7 @@ public class ReflectionParityTests
     {
         const string toon = "Name: Ada\nAge: not-a-number";
 
-        var reflection = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Person>(toon));
+        var reflection = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Person>(toon, ReflectionOnly.Options()));
         var generated = Assert.Throws<ToonSerializationException>(() => Person.Deserialize(ToonDocument.Parse(toon)));
 
         Assert.Equal(reflection.TargetType, generated.TargetType);

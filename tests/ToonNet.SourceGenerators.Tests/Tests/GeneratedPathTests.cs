@@ -63,6 +63,51 @@ public class GeneratedPathTests
     }
 
     [Fact]
+    public void ToonSerializer_UsesRegisteredGeneratedCode()
+    {
+        var depot = new Depot
+        {
+            Crates = [new Crate("a", 1.5m, new DateOnly(2026, 1, 2))],
+            ByOwner = [],
+            Slots = new Dictionary<Status, HashSet<Slot>> { [Status.Active] = [new Slot(1, 2)] },
+            Entrance = new Slot(0, 0)
+        };
+
+        var toon = ToonSerializer.Serialize(depot);
+        var copy = ToonSerializer.Deserialize<Depot>(toon)!;
+
+        var cached = CachedTypes().Cast<Type>().ToList();
+        Assert.DoesNotContain(typeof(Depot), cached);
+        Assert.DoesNotContain(typeof(Crate), cached);
+        Assert.DoesNotContain(typeof(Slot), cached);
+
+        Assert.Equal(new ToonNet.Core.Encoding.ToonEncoder().Encode(Depot.Serialize(depot)), toon);
+        Assert.Equal(depot.Crates, copy.Crates);
+        Assert.Equal(depot.Entrance, copy.Entrance);
+    }
+
+    [Fact]
+    public void ToonSerializer_WithConverters_MatchesGeneratedCodeFallback()
+    {
+        var options = new ToonSerializerOptions();
+        options.AddConverter(new UpperCaseConverter());
+        var warehouse = CreateWarehouse();
+
+        var generated = new ToonNet.Core.Encoding.ToonEncoder().Encode(Warehouse.Serialize(warehouse, options));
+
+        Assert.Equal(ToonSerializer.Serialize(warehouse, ReflectionOnly.Options(options)), generated);
+        Assert.Equal(generated, ToonSerializer.Serialize(warehouse, options));
+        Assert.Contains("Name: NORTH", generated);
+    }
+
+    private sealed class UpperCaseConverter : ToonConverter<string>
+    {
+        public override ToonValue? Write(string? value, ToonSerializerOptions options) => value == null ? ToonNull.Instance : new ToonString(value.ToUpperInvariant());
+
+        public override string? Read(ToonValue value, ToonSerializerOptions options) => (value as ToonString)?.Value;
+    }
+
+    [Fact]
     public void SupportedGraph_RoundTrips()
     {
         var warehouse = CreateWarehouse();
@@ -90,9 +135,9 @@ public class GeneratedPathTests
         var warehouse = CreateWarehouse();
         var generated = new ToonNet.Core.Encoding.ToonEncoder().Encode(Warehouse.Serialize(warehouse));
 
-        Assert.Equal(ToonSerializer.Serialize(warehouse), generated);
+        Assert.Equal(ToonSerializer.Serialize(warehouse, ReflectionOnly.Options()), generated);
 
-        var fromReflection = ToonSerializer.Deserialize<Warehouse>(generated)!;
+        var fromReflection = ToonSerializer.Deserialize<Warehouse>(generated, ReflectionOnly.Options())!;
         Assert.Equal(generated, new ToonNet.Core.Encoding.ToonEncoder().Encode(Warehouse.Serialize(fromReflection)));
     }
 
@@ -104,7 +149,7 @@ public class GeneratedPathTests
 
         var generated = new ToonNet.Core.Encoding.ToonEncoder().Encode(Warehouse.Serialize(warehouse, options));
 
-        Assert.Equal(ToonSerializer.Serialize(warehouse, options), generated);
+        Assert.Equal(ToonSerializer.Serialize(warehouse, ReflectionOnly.Options(options)), generated);
         Assert.Contains("Readings[3]: 1,null,3", generated);
         Assert.DoesNotContain("Spare", generated);
     }
@@ -130,9 +175,9 @@ public class GeneratedPathTests
             current = current.Next;
         }
 
-        Assert.Equal(ToonSerializer.Serialize(head), new ToonNet.Core.Encoding.ToonEncoder().Encode(Node.Serialize(head)));
+        Assert.Equal(ToonSerializer.Serialize(head, ReflectionOnly.Options()), new ToonNet.Core.Encoding.ToonEncoder().Encode(Node.Serialize(head)));
         Assert.Throws<ToonEncodingException>(() => Node.Serialize(head, new ToonSerializerOptions { MaxDepth = 3 }));
-        Assert.Throws<ToonEncodingException>(() => ToonSerializer.Serialize(head, new ToonSerializerOptions { MaxDepth = 3 }));
+        Assert.Throws<ToonEncodingException>(() => ToonSerializer.Serialize(head, ReflectionOnly.Options(new ToonSerializerOptions { MaxDepth = 3 })));
     }
 
     [Fact]
@@ -142,7 +187,7 @@ public class GeneratedPathTests
 
         var generated = new ToonNet.Core.Encoding.ToonEncoder().Encode(Person.Serialize(person));
 
-        Assert.Equal(ToonSerializer.Serialize(person), generated);
+        Assert.Equal(ToonSerializer.Serialize(person, ReflectionOnly.Options()), generated);
         Assert.Contains("Floor: \"3\"", generated);
     }
 
@@ -151,7 +196,7 @@ public class GeneratedPathTests
     {
         const string toon = "Name: x\nShelves: 5";
 
-        Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Warehouse>(toon));
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Warehouse>(toon, ReflectionOnly.Options()));
         Assert.Throws<ToonSerializationException>(() => Warehouse.Deserialize(ToonDocument.Parse(toon)));
     }
 }

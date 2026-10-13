@@ -40,6 +40,10 @@ namespace ToonNet.Core.Serialization.Attributes;
 ///         <c>TOON006</c>. When the options contain converters, the generated methods defer to
 ///         <see cref="ToonSerializer"/> entirely.
 ///     </para>
+///     <para>
+///         The generated methods are also registered with <see cref="ToonSerializer"/>, which then uses them for values
+///         of the type (non-generic types that are not nested in a <c>private</c> or <c>protected</c> type).
+///     </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public sealed class ToonSerializableAttribute : Attribute

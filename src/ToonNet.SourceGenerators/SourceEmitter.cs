@@ -12,6 +12,7 @@ namespace ToonNet.SourceGenerators;
 /// <remarks>
 /// Generated code runs only when the options contain no converters; otherwise (and for derived runtime types) it
 /// defers to <c>ToonSerializer</c>, so the output is always the same as the reflection-based serializer's.
+/// A module initializer registers the methods, so <c>ToonSerializer</c> calls them for values of the type.
 /// </remarks>
 internal sealed class SourceEmitter
 {
@@ -65,6 +66,7 @@ internal sealed class SourceEmitter
         code.BeginBlock(_model.Declaration);
 
         EmitConverterFields();
+        EmitRegistration();
         EmitSerialize();
 
         if (_model.Constructor != null)
@@ -105,6 +107,27 @@ internal sealed class SourceEmitter
         {
             _code.AppendLine();
         }
+    }
+
+    /// <summary>
+    /// A module initializer that registers the generated methods, so <c>ToonSerializer</c> uses them for this type.
+    /// </summary>
+    private void EmitRegistration()
+    {
+        if (!_model.RegisterWithSerializer)
+        {
+            return;
+        }
+
+        var deserialize = _model.Constructor != null ? "__ToonDeserializeValue" : "null";
+
+        _code.AppendLine("/// <summary>Registers the generated methods with ToonSerializer.</summary>");
+        _code.AppendLine("#pragma warning disable CA2255 // Registration has to run before ToonSerializer sees the type");
+        _code.AppendLine("[global::System.Runtime.CompilerServices.ModuleInitializer]");
+        _code.AppendLine(HiddenAttribute);
+        _code.AppendLine($"internal static void __ToonRegister() => {Helpers}.Register<{_model.FullyQualifiedName}>(__ToonSerializeValue, {deserialize});");
+        _code.AppendLine("#pragma warning restore CA2255");
+        _code.AppendLine();
     }
 
     #region Serialize

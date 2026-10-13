@@ -32,6 +32,9 @@ public static partial class ToonSerializer
             throw ToonEncodingException.Create("Object graph is nested too deeply to serialize with the available stack space", state.Path);
         }
 
+        var generatedAllowed = !state.FromGeneratedCode;
+        state.FromGeneratedCode = false;
+
         if (value == null)
         {
             return options.IgnoreNullValues ? null : ToonNull.Instance;
@@ -53,6 +56,11 @@ public static partial class ToonSerializer
         if (TrySerializePrimitive(value, out var primitiveValue))
         {
             return primitiveValue;
+        }
+
+        if (generatedAllowed && GetGeneratedSerializer(runtimeType, options) is { } generated)
+        {
+            return generated.Serialize(value, options, depth);
         }
 
         if (GetTypeMetadata(runtimeType).TypeConverter is { } typeConverter)
