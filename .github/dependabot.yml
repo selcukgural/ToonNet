@@ -33,6 +33,10 @@ updates:
     directory: "/website"
     schedule:
       interval: "weekly"
+    ignore:
+      # @docusaurus/tsconfig sets baseUrl, which TypeScript 7 removed (error TS5102); wait for Docusaurus to support it
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       # Docusaurus packages must stay on the same version
       docusaurus:
