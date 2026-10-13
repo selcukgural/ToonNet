@@ -62,6 +62,10 @@ public enum PropertyNamingPolicy
 }
 ```
 
+`CamelCase` and `SnakeCase` follow System.Text.Json's `JsonNamingPolicy.CamelCase` and `JsonNamingPolicy.SnakeCaseLower`,
+so acronyms stay together: `URLValue` becomes `urlValue` and `url_value`, `HTTPServer` becomes `httpServer` and
+`http_server`.
+
 ### Examples
 
 ```csharp

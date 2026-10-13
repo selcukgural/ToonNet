@@ -291,7 +291,7 @@ internal static class TypeModelBuilder
 
         var names = attributeName != null
             ? ImmutableArray.Create(attributeName, attributeName, attributeName, attributeName)
-            : ImmutableArray.Create(property.Name, ToCamelCase(property.Name), ToSnakeCase(property.Name), property.Name.ToLowerInvariant());
+            : ImmutableArray.Create(property.Name, Shared.ToonNaming.ToCamelCase(property.Name), Shared.ToonNaming.ToSnakeCase(property.Name), property.Name.ToLowerInvariant());
 
         var converter = FindAttribute(property, "ToonConverterAttribute") is { ConstructorArguments.Length: > 0 } converterAttribute &&
                         converterAttribute.ConstructorArguments[0].Value is ITypeSymbol converterType
@@ -361,43 +361,6 @@ internal static class TypeModelBuilder
 
         // Generic types cannot use [UnsafeAccessor] on .NET 8; an init-only property is then always initialized.
         return accessible ? WriteKind.Initializer : WriteKind.None;
-    }
-
-    // Same algorithms as ToonSerializer.ToCamelCase / ToSnakeCase, so both produce identical keys.
-    private static string ToCamelCase(string name)
-    {
-        if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
-        {
-            return name;
-        }
-
-        return char.ToLowerInvariant(name[0]) + name.Substring(1);
-    }
-
-    private static string ToSnakeCase(string name)
-    {
-        if (string.IsNullOrEmpty(name))
-        {
-            return name;
-        }
-
-        var result = new StringBuilder();
-        result.Append(char.ToLowerInvariant(name[0]));
-
-        for (var i = 1; i < name.Length; i++)
-        {
-            if (char.IsUpper(name[i]))
-            {
-                result.Append('_');
-                result.Append(char.ToLowerInvariant(name[i]));
-            }
-            else
-            {
-                result.Append(name[i]);
-            }
-        }
-
-        return result.ToString();
     }
 
     /// <summary>The C# expression for a parameter's default value, used when the document has no value for it.</summary>

@@ -38,4 +38,8 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Include="../Shared/ToonNaming.cs" Link="Shared/ToonNaming.cs" />
+    </ItemGroup>
+
 </Project>

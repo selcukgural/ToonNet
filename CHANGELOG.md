@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has a TOON number form (NaN and infinities are written as `null`).
 
 ### Changed
+- **ToonNet.Core / SourceGenerators (breaking output change):** `CamelCase` and `SnakeCase` naming follow
+  System.Text.Json, so acronyms stay together: `HTTPServer` is written as `httpServer` / `http_server` (before:
+  `hTTPServer` / `h_t_t_p_server`), `URL` as `url`. Names without consecutive capitals are unchanged. The serializer and
+  the generator now compile the same naming code.
 - **ToonNet.Extensions.Json / Yaml, ToonNet.AspNetCore(.Mvc):** The packages use only the public API of
   `ToonNet.Core`; Core no longer grants them `InternalsVisibleTo`. Before, they called Core internals, so a later
   `ToonNet.Core` 2.x that changed those internals could break them at runtime (`MissingMethodException`) although

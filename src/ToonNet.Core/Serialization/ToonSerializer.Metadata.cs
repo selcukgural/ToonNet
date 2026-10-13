@@ -244,53 +244,11 @@ public static partial class ToonSerializer
 
         return property.Names.GetOrAdd(type.FixedNamingPolicy ?? options.PropertyNamingPolicy, static (policy, name) => policy switch
         {
-            PropertyNamingPolicy.CamelCase => ToCamelCase(name),
-            PropertyNamingPolicy.SnakeCase => ToSnakeCase(name),
+            PropertyNamingPolicy.CamelCase => Shared.ToonNaming.ToCamelCase(name),
+            PropertyNamingPolicy.SnakeCase => Shared.ToonNaming.ToSnakeCase(name),
             PropertyNamingPolicy.LowerCase => name.ToLowerInvariant(),
             _                              => name
         }, property.Property.Name);
-    }
-
-    /// <summary>
-    ///     Converts a property name to camelCase format.
-    /// </summary>
-    private static string ToCamelCase(string name)
-    {
-        if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
-        {
-            return name;
-        }
-
-        return char.ToLowerInvariant(name[0]) + name[1..];
-    }
-
-    /// <summary>
-    /// Converts a string to snake_case format.
-    /// </summary>
-    private static string ToSnakeCase(string name)
-    {
-        if (string.IsNullOrEmpty(name))
-        {
-            return name;
-        }
-
-        var result = new StringBuilder();
-        result.Append(char.ToLowerInvariant(name[0]));
-
-        for (var i = 1; i < name.Length; i++)
-        {
-            if (char.IsUpper(name[i]))
-            {
-                result.Append('_');
-                result.Append(char.ToLowerInvariant(name[i]));
-            }
-            else
-            {
-                result.Append(name[i]);
-            }
-        }
-
-        return result.ToString();
     }
 
     /// <summary>
