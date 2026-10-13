@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -44,6 +45,8 @@ public static partial class ToonSerializer
         /// <summary>
         ///     Creates an accessor for a property of a class with a primitive type; null for other properties.
         /// </summary>
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2076", Justification = ToonSerializer.ReflectionJustification)]
         public static PrimitiveAccessor? Create(PropertyInfo property)
         {
             var declaringType = property.DeclaringType!;

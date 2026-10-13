@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -224,6 +225,8 @@ public static partial class ToonSerializer
     ///     The entry reader for a type implementing <see cref="IDictionary{TKey,TValue}"/> or
     ///     <see cref="IReadOnlyDictionary{TKey,TValue}"/>, or null.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
     private static DictionaryEntryReader? GetDictionaryEntryReader(Type type)
     {
         return WrittenDictionaryEntryReaders.GetOrAdd(type, static t =>

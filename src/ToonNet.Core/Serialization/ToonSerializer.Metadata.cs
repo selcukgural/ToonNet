@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -93,6 +94,7 @@ public static partial class ToonSerializer
         /// <summary>Per entry of <see cref="TypeMetadata.Properties"/>, whether it is set through the constructor.</summary>
         public required bool[] BoundToConstructor { get; init; }
 
+        [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = ToonSerializer.ReflectionJustification)]
         public static ObjectActivator For(TypeMetadata metadata)
         {
             var arguments = metadata.ConstructorParameters
@@ -121,6 +123,7 @@ public static partial class ToonSerializer
         ///     A null argument for a non-nullable value type parameter is passed as its default value, as
         ///     <see cref="ConstructorInfo.Invoke(object[])"/> does.
         /// </remarks>
+        [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = ToonSerializer.ReflectionJustification)]
         private static Func<object?[], object> CompileFactory(Type type, ConstructorInfo? constructor)
         {
             if (type.IsAbstract || type.IsInterface || (constructor == null && !type.IsValueType))
@@ -173,6 +176,7 @@ public static partial class ToonSerializer
     /// with <see cref="ToonIgnoreAttribute"/>, ordered by <see cref="ToonPropertyOrderAttribute"/> (default 0), then base-class
     /// properties before derived ones, then declaration order.
     /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static TypeMetadata GetTypeMetadata(Type type)
     {
         return TypeMetadataCache.GetOrAdd(type, static t =>
@@ -266,6 +270,7 @@ public static partial class ToonSerializer
     /// otherwise the public parameterless constructor, otherwise the public constructor with the most parameters
     /// (e.g. the primary constructor of a positional record).
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static (ConstructorInfo? Constructor, ParameterInfo[] Parameters) SelectConstructor(Type type)
     {
         if (type.IsAbstract || type.IsInterface)
@@ -283,6 +288,7 @@ public static partial class ToonSerializer
         return (constructor, constructor?.GetParameters() ?? []);
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = ToonSerializer.ReflectionJustification)]
     private static IToonConverter? CreateAttributeConverter(ToonConverterAttribute? attribute)
     {
         if (attribute == null)

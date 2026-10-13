@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -517,6 +518,7 @@ public static partial class ToonSerializer
         ///     implements, System.Collections.Immutable types (through <c>CreateRange</c>) and concrete
         ///     <see cref="ICollection{T}"/> types with a parameterless constructor.
         /// </summary>
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
         public static CollectionFactory Create(Type targetType, Type elementType)
         {
             var helpers = (CollectionHelpers)Activator.CreateInstance(typeof(CollectionHelpers<>).MakeGenericType(elementType))!;
@@ -529,6 +531,12 @@ public static partial class ToonSerializer
             };
         }
 
+        [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
         private static Func<IList, object?> SelectCompletion(Type targetType, Type elementType, CollectionHelpers helpers)
         {
             if (targetType.IsArray)
@@ -630,6 +638,7 @@ public static partial class ToonSerializer
         }
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static Type? GetElementType(Type type)
     {
         if (type == typeof(string) || typeof(ToonValue).IsAssignableFrom(type))
@@ -715,6 +724,8 @@ public static partial class ToonSerializer
         ///     Returns null when <paramref name="targetType"/> is not <see cref="IDictionary{TKey,TValue}"/>,
         ///     <see cref="IReadOnlyDictionary{TKey,TValue}"/> or a type implementing <see cref="IDictionary{TKey,TValue}"/>.
         /// </summary>
+        [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
         public static DictionaryFactory? Create(Type targetType)
         {
             var dictionaryInterface = targetType.IsGenericType && targetType.GetGenericTypeDefinition() is var definition &&
@@ -746,6 +757,12 @@ public static partial class ToonSerializer
         ///     (for example <see cref="System.Collections.ObjectModel.ReadOnlyDictionary{TKey,TValue}"/>), or a new
         ///     instance the entries are added to.
         /// </summary>
+        [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
         private static Func<IDictionary, object?> SelectCompletion(Type targetType, Type keyType, Type valueType, DictionaryHelpers helpers)
         {
             if (targetType.IsAssignableFrom(typeof(Dictionary<,>).MakeGenericType(keyType, valueType)))
@@ -836,6 +853,8 @@ public static partial class ToonSerializer
     ///     Reads a TOON object into a non-generic dictionary (<see cref="Hashtable"/>, <see cref="IDictionary"/>, ...):
     ///     keys stay strings and values are read as for <see cref="object"/> targets.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static bool TryDeserializeNonGenericDictionary(ToonValue value, Type targetType, ToonSerializerOptions options, int depth,
                                                            SerializerState state, out object? result)
     {
@@ -870,6 +889,8 @@ public static partial class ToonSerializer
     ///     Reads a TOON array into a non-generic list (<see cref="ArrayList"/>, <see cref="IList"/>,
     ///     <see cref="IEnumerable"/>, ...); items are read as for <see cref="object"/> targets.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static bool TryDeserializeNonGenericList(ToonValue value, Type targetType, ToonSerializerOptions options, int depth,
                                                      SerializerState state, out object? result)
     {

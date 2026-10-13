@@ -14,6 +14,9 @@
         <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
         
         <!-- Performance: Enable Profile-Guided Optimization -->
+        <!-- Trimming and NativeAOT: reflection-based APIs are annotated; generated code and the document model are safe -->
+        <IsAotCompatible>true</IsAotCompatible>
+
         <TieredCompilation>true</TieredCompilation>
         <TieredPGO>true</TieredPGO>
         <DynamicPGO>true</DynamicPGO>

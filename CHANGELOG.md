@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports it.
 
 ### Added
+- **ToonNet.Core:** Trimming and NativeAOT support. The package is marked `IsAotCompatible`; `ToonSerializer`'s
+  methods, which convert types with reflection, are annotated `[RequiresUnreferencedCode]` and
+  `[RequiresDynamicCode]`, so trimmed and AOT apps get a warning where they call them. `[ToonSerializable]` types
+  converted with their generated `Serialize`/`Deserialize` methods, `ToonEncoder` and `ToonDocument.Parse` need no
+  reflection (with `AllowReflectionFallback = false`, no converters in the options and objects of their declared
+  types); a NativeAOT smoke test publishes and runs such an app in CI.
 - **All packages:** A `net10.0` build next to `net8.0` (the source generator stays `netstandard2.0`); the tests run
   on both.
 - **ToonNet.AspNetCore.Mvc:** `ToonResult` takes an optional status code (`new ToonResult(value, options, 201)`,

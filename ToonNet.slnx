@@ -42,5 +42,8 @@
         <Project Path="tests/ToonNet.Compatibility.Tests/ToonNet.Compatibility.Tests.csproj">
             <BuildType Project="Release" />
         </Project>
+        <Project Path="tests/ToonNet.AotSmokeTest/ToonNet.AotSmokeTest.csproj">
+            <BuildType Project="Release" />
+        </Project>
     </Folder>
 </Solution>

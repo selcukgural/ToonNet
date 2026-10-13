@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.ComponentModel.DataAnnotations;
 using ToonNet.Core.Models;
 using ToonNet.Core.Parsing;
@@ -127,6 +128,8 @@ public static class ToonValidator
     /// Validation checks include required properties and range constraints defined in the <see cref="ToonOptions"/> type.
     /// If validation fails, only the first error encountered is returned.
     /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Validates ToonOptions, whose properties the DynamicDependency keeps.")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(ToonOptions))]
     private static ValidationError? TryValidateOptions(ToonOptions options)
     {
         var validationContext = new ValidationContext(options);

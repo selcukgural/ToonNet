@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ToonNet.Core.Encoding;
@@ -21,6 +22,19 @@ namespace ToonNet.Core.Serialization;
 /// </remarks>
 public static partial class ToonSerializer
 {
+    /// <summary>Why the serializer's methods are not compatible with trimming and NativeAOT.</summary>
+    internal const string ReflectionMessage =
+        "ToonSerializer converts .NET types with reflection, which trimming and NativeAOT cannot analyze. For " +
+        "[ToonSerializable] types, use the generated Serialize and Deserialize methods with ToonEncoder and ToonDocument.Parse.";
+
+    /// <summary>
+    ///     Why the reflection-based code may be trimmed and compiled ahead of time: it runs only under the methods above
+    ///     (annotated as such), or from generated code for converters and derived types, which need reflection.
+    /// </summary>
+    internal const string ReflectionJustification =
+        "Reached only from ToonSerializer methods annotated with RequiresUnreferencedCode and RequiresDynamicCode, or from " +
+        "generated code when options contain converters or an object is of a derived type, which need the reflection-based serializer.";
+
     /// <summary>Ends the previous document's last line and inserts one blank line.</summary>
     private const string BlankLineDocumentSeparator = "\n\n";
 
@@ -34,6 +48,8 @@ public static partial class ToonSerializer
     /// <param name="options">Optional serialization options.</param>
     /// <returns>The TOON format string representation of the object.</returns>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static string Serialize<T>(T? value, ToonSerializerOptions? options = null)
     {
         return Serialize(value, typeof(T), options);
@@ -48,6 +64,8 @@ public static partial class ToonSerializer
     /// <returns>The TOON format string representation of the object.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the type is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static string Serialize(object? value, Type type, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -79,6 +97,8 @@ public static partial class ToonSerializer
     /// <param name="options">Optional serialization options.</param>
     /// <returns>The TOON value; <see cref="ToonNull.Instance"/> when <paramref name="value"/> is null.</returns>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static ToonValue SerializeToValue<T>(T? value, ToonSerializerOptions? options = null)
     {
         return SerializeToValue(value, typeof(T), options);
@@ -93,6 +113,8 @@ public static partial class ToonSerializer
     /// <returns>The TOON value; <see cref="ToonNull.Instance"/> when <paramref name="value"/> is null.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the type is null.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static ToonValue SerializeToValue(object? value, Type type, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -116,6 +138,8 @@ public static partial class ToonSerializer
     ///     and cancellation support. The ValueTask optimization ensures zero allocation in the common case.
     ///     For I/O-bound operations, use <see cref="SerializeToFileAsync{T}"/> or <see cref="SerializeToStreamAsync{T}"/>.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static ValueTask<string> SerializeAsync<T>(T? value, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -141,6 +165,8 @@ public static partial class ToonSerializer
     /// The text is encoded to UTF-8 in chunks through pooled buffers, without an intermediate string or a
     /// full-size byte array.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeToStreamAsync<T>(T? value, Stream stream, ToonSerializerOptions? options = null,
                                                             CancellationToken cancellationToken = default)
     {
@@ -162,6 +188,8 @@ public static partial class ToonSerializer
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when file I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeToFileAsync<T>(T? value, string filePath, ToonSerializerOptions? options = null,
                                                           CancellationToken cancellationToken = default)
     {
@@ -198,6 +226,8 @@ public static partial class ToonSerializer
     /// The text is encoded to UTF-8 in chunks through pooled buffers, without an intermediate string or a
     /// full-size byte array.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeToStreamAsync(Type type, object? value, Stream stream, ToonSerializerOptions? options = null,
                                                          CancellationToken cancellationToken = default)
     {
@@ -226,6 +256,8 @@ public static partial class ToonSerializer
     ///     An object that encodes to an empty document would be lost on reading, so it throws a
     ///     <see cref="ToonSerializationException"/>.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeCollectionToFileAsync<T>(IEnumerable<T> values, string filePath, ToonSerializerOptions? options = null,
                                                                     CancellationToken cancellationToken = default)
     {
@@ -282,6 +314,8 @@ public static partial class ToonSerializer
     ///     An object that encodes to an empty document would be lost on reading, so it throws a
     ///     <see cref="ToonSerializationException"/>.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeCollectionToStreamAsync<T>(IEnumerable<T> values, Stream stream, ToonSerializerOptions? options = null,
                                                                       CancellationToken cancellationToken = default)
     {
@@ -344,6 +378,8 @@ public static partial class ToonSerializer
     ///     );
     ///     </code>
     /// </example>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options = null,
                                                           CancellationToken cancellationToken = default)
     {
@@ -374,6 +410,8 @@ public static partial class ToonSerializer
     ///     This overload allows configuring the separator mode (blank-line vs explicit separator) and batch size for optimized throughput.
     ///     Higher batch sizes reduce I/O overhead but increase memory usage. The default batch size is 50.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options,
                                                           ToonMultiDocumentWriteOptions writeOptions,
                                                           CancellationToken cancellationToken = default)
@@ -406,6 +444,8 @@ public static partial class ToonSerializer
     ///     Items are serialized incrementally as they are enumerated, with minimal memory overhead.
     ///     Uses blank-line separation by default. Compatible with <see cref="DeserializeStreamAsync{T}(StreamReader,ToonSerializerOptions,CancellationToken)"/>.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options = null,
                                                           CancellationToken cancellationToken = default)
     {
@@ -433,6 +473,8 @@ public static partial class ToonSerializer
     ///     An item that encodes to an empty document throws a <see cref="ToonSerializationException"/> in blank-line mode,
     ///     where it could not be read back; <see cref="ToonMultiDocumentSeparatorMode.ExplicitSeparator"/> keeps it.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options,
                                                           ToonMultiDocumentWriteOptions writeOptions,
                                                           CancellationToken cancellationToken = default)
@@ -525,6 +567,8 @@ public static partial class ToonSerializer
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="toonString"/> is null.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static T? Deserialize<T>(string toonString, ToonSerializerOptions? options = null)
     {
         return (T?)Deserialize(toonString, typeof(T), options);
@@ -540,6 +584,8 @@ public static partial class ToonSerializer
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="toonString"/> or <paramref name="type"/> is null.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static object? Deserialize(string toonString, Type type, ToonSerializerOptions? options = null)
     {
         options ??= ToonSerializerOptions.Default;
@@ -556,6 +602,8 @@ public static partial class ToonSerializer
     /// <returns>The converted object, or null for <see cref="ToonNull"/> and nullable targets.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the value is null.</exception>
     /// <exception cref="ToonSerializationException">Thrown when the value cannot be converted to the target type.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static T? DeserializeFromValue<T>(ToonValue value, ToonSerializerOptions? options = null)
     {
         return (T?)DeserializeFromValue(value, typeof(T), options);
@@ -570,6 +618,8 @@ public static partial class ToonSerializer
     /// <returns>The converted object, or null for <see cref="ToonNull"/> and nullable targets.</returns>
     /// <exception cref="ArgumentNullException">Thrown when the value or type is null.</exception>
     /// <exception cref="ToonSerializationException">Thrown when the value cannot be converted to the target type.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static object? DeserializeFromValue(ToonValue value, Type type, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -596,6 +646,8 @@ public static partial class ToonSerializer
     ///     and cancellation support. The ValueTask optimization ensures zero allocation in the common case.
     ///     For I/O-bound operations, use <see cref="DeserializeFromFileAsync{T}"/> or <see cref="DeserializeFromStreamAsync{T}"/>.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static ValueTask<T?> DeserializeAsync<T>(string toonString, ToonSerializerOptions? options = null,
                                                      CancellationToken cancellationToken = default)
     {
@@ -617,6 +669,8 @@ public static partial class ToonSerializer
     /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask<T?> DeserializeFromFileAsync<T>(string filePath, ToonSerializerOptions? options = null,
                                                                    CancellationToken cancellationToken = default)
     {
@@ -639,6 +693,8 @@ public static partial class ToonSerializer
     /// <exception cref="ArgumentNullException">Thrown when the stream is null.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask<T?> DeserializeFromStreamAsync<T>(Stream stream, ToonSerializerOptions? options = null,
                                                                      CancellationToken cancellationToken = default)
     {
@@ -665,6 +721,8 @@ public static partial class ToonSerializer
     ///     This method assumes the file contains multiple TOON objects separated by blank lines.
     ///     Each object is parsed and yielded individually, making it memory-efficient for large files.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options = null,
                                                                        [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
@@ -698,6 +756,8 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     This overload supports both legacy blank-line separation and deterministic explicit separator lines (for example: <c>---</c>).
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options,
                                                                        ToonMultiDocumentReadOptions multiDocumentOptions,
                                                                        [EnumeratorCancellation]
@@ -732,6 +792,8 @@ public static partial class ToonSerializer
     ///     This method assumes the stream contains multiple TOON objects separated by blank lines.
     ///     Each object is parsed and yielded individually, making it memory-efficient for large streams.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options = null,
                                                                        [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
@@ -759,6 +821,8 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     When using <see cref="ToonMultiDocumentSeparatorMode.ExplicitSeparator"/>, a separator line is recognized only when the line matches exactly.
     /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
     public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options,
                                                                        ToonMultiDocumentReadOptions multiDocumentOptions,
                                                                        [EnumeratorCancellation]
