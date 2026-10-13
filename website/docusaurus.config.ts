@@ -11,7 +11,15 @@ const config: Config = {
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
-    v4: true, // Improve compatibility with the upcoming Docusaurus v4
+    // Docusaurus v4 compatibility flags. Since 3.10 the `v4: true` shortcut also turns on the "faster" toolchain
+    // (Rspack, SWC), which needs the @docusaurus/faster package; the site keeps the default webpack build.
+    v4: {
+      removeLegacyPostBuildHeadAttribute: true,
+      useCssCascadeLayers: true,
+      siteStorageNamespacing: true,
+      fasterByDefault: false,
+      mdx1CompatDisabledByDefault: true,
+    },
   },
 
   // Set the production url of your site here
