@@ -3,6 +3,7 @@
 ## NuGet Packages
 
 ToonNet is distributed as a set of NuGet packages. Install the packages you need based on your requirements.
+`dotnet add package` adds the latest stable version; keep all ToonNet packages on the same version.
 
 ### Core Package (Required)
 
@@ -10,10 +11,6 @@ The core package provides TOON serialization and deserialization functionality.
 
 ```bash
 dotnet add package ToonNet.Core
-```
-
-```xml
-<PackageReference Include="ToonNet.Core" Version="1.4.0" />
 ```
 
 ### Format Extensions (Optional)
@@ -26,20 +23,12 @@ Convert between JSON and TOON formats.
 dotnet add package ToonNet.Extensions.Json
 ```
 
-```xml
-<PackageReference Include="ToonNet.Extensions.Json" Version="1.4.0" />
-```
-
 #### YAML Integration
 
 Convert between YAML and TOON formats.
 
 ```bash
 dotnet add package ToonNet.Extensions.Yaml
-```
-
-```xml
-<PackageReference Include="ToonNet.Extensions.Yaml" Version="1.4.0" />
 ```
 
 ### Source Generator (Optional)
@@ -52,10 +41,6 @@ See [Source Generators](../advanced/source-generators).
 dotnet add package ToonNet.SourceGenerators
 ```
 
-```xml
-<PackageReference Include="ToonNet.SourceGenerators" Version="1.4.0" />
-```
-
 ### ASP.NET Core Integration (Optional)
 
 #### Configuration Provider
@@ -66,20 +51,12 @@ Use TOON files as configuration sources in ASP.NET Core.
 dotnet add package ToonNet.AspNetCore
 ```
 
-```xml
-<PackageReference Include="ToonNet.AspNetCore" Version="1.4.0" />
-```
-
 #### MVC Formatters
 
 Enable TOON format for HTTP requests and responses.
 
 ```bash
 dotnet add package ToonNet.AspNetCore.Mvc
-```
-
-```xml
-<PackageReference Include="ToonNet.AspNetCore.Mvc" Version="1.4.0" />
 ```
 
 ## Requirements
