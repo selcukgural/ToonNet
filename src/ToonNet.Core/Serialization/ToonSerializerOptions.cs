@@ -150,7 +150,16 @@ public sealed class ToonSerializerOptions : IValidatableObject
     /// </returns>
     public IToonConverter? GetConverter(Type type)
     {
-        return Converters.FirstOrDefault(c => c.CanConvert(type));
+        // Called for every value; a plain loop avoids allocating a closure when there are no converters
+        foreach (var converter in Converters)
+        {
+            if (converter.CanConvert(type))
+            {
+                return converter;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

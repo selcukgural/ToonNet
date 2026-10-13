@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
@@ -445,10 +446,16 @@ public static partial class ToonSerializer
             return type.GetGenericArguments()[0];
         }
 
-        return type.GetInterfaces()
-                   .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-                   ?.GetGenericArguments()[0];
+        return ElementTypeCache.GetOrAdd(type, static t => t.GetInterfaces()
+                                                         .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                                                         ?.GetGenericArguments()[0]);
     }
+
+    /// <summary>The <see cref="IEnumerable{T}"/> element type per collection type, or null.</summary>
+    private static readonly ConcurrentDictionary<Type, Type?> ElementTypeCache = new();
+
+    /// <summary>The <see cref="IDictionary{TKey,TValue}"/> interface per target type, or null.</summary>
+    private static readonly ConcurrentDictionary<Type, Type?> DictionaryInterfaceCache = new();
 
     private static object? CreateCollection(Type targetType, Type elementType, IList items)
     {
@@ -509,7 +516,8 @@ public static partial class ToonSerializer
         var dictionaryInterface = targetType.IsGenericType && targetType.GetGenericTypeDefinition() is var definition &&
                                   (definition == typeof(IDictionary<,>) || definition == typeof(IReadOnlyDictionary<,>))
             ? targetType
-            : targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+            : DictionaryInterfaceCache.GetOrAdd(targetType, static t => t.GetInterfaces()
+                                                                          .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)));
 
         if (dictionaryInterface == null)
         {

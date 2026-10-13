@@ -35,7 +35,9 @@ namespace ToonNet.Core.Encoding;
 public sealed class ToonEncoder(ToonOptions? options = null)
 {
     // StringBuilder pool for reducing allocations
-    private static readonly ObjectPool<StringBuilder> StringBuilderPool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
+    // The default policy drops builders above 4K characters, so larger documents never reused one; keep up to 64K
+    private static readonly ObjectPool<StringBuilder> StringBuilderPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool(initialCapacity: 256, maximumRetainedCapacity: 64 * 1024);
 
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
 

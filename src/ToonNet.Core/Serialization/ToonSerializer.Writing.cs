@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -216,8 +217,8 @@ public static partial class ToonSerializer
     /// </summary>
     private static IEnumerable<(object Key, object? Value)>? GetGenericDictionaryEntries(object value)
     {
-        var dictionaryInterface = value.GetType().GetInterfaces().FirstOrDefault(i => i.IsGenericType &&
-            (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
+        var dictionaryInterface = WrittenDictionaryInterfaceCache.GetOrAdd(value.GetType(), static t => t.GetInterfaces().FirstOrDefault(i => i.IsGenericType &&
+            (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))));
 
         if (dictionaryInterface == null)
         {
@@ -230,6 +231,9 @@ public static partial class ToonSerializer
 
         return ((IEnumerable)value).Cast<object>().Select(pair => (keyProperty.GetValue(pair)!, valueProperty.GetValue(pair)));
     }
+
+    /// <summary>The generic dictionary interface per written type, or null; looked up for every object written.</summary>
+    private static readonly ConcurrentDictionary<Type, Type?> WrittenDictionaryInterfaceCache = new();
 
     private static string FormatDictionaryKey(object key)
     {
