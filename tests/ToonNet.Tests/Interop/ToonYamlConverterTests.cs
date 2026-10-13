@@ -23,7 +23,10 @@ public class ToonYamlConverterTests
     [Fact]
     public void FromYaml_NestingAtMaxDepth_Succeeds()
     {
-        var yaml = new string('[', 100) + new string(']', 100);
+        // The root sequence is at depth 0, so 101 nested sequences reach depth 100
+        var yaml = new string('[', 101) + new string(']', 101);
+
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml("[" + yaml + "]"));
 
         var doc = ToonYamlConverter.FromYaml(yaml);
 
@@ -35,7 +38,8 @@ public class ToonYamlConverterTests
     {
         var yaml = "a:\n  b:\n    c: 1\n";
 
-        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 2 }));
+        Assert.NotNull(ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 2 }));
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 1 }));
     }
 
     [Fact]
@@ -78,10 +82,11 @@ public class ToonYamlConverterTests
     {
         const string yaml = "a: &a [[[1]]]\nb: [[*a]]";
 
-        var root = ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 6 }).AsObject();
+        // b (1) > [ (2) > *a: [ (3) > [ (4) > [ (5)
+        var root = ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 5 }).AsObject();
 
         Assert.IsType<ToonArray>(root["b"]);
-        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 5 }));
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 4 }));
     }
 
     [Theory]

@@ -1,5 +1,6 @@
 using System.Text;
 using ToonNet.Core;
+using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.Tests.Parsing;
@@ -112,5 +113,45 @@ public class ToonParserDepthLimitTests
         thread.Join();
 
         Assert.True(caught is null or ToonParseException, $"Unexpected exception: {caught}");
+    }
+
+    [Theory]
+    [InlineData("a: 1", 0)]
+    [InlineData("[2]: 1,2", 0)]
+    [InlineData("a:\n  b: 1", 1)]
+    [InlineData("a: []", 1)]
+    [InlineData("[1]:\n  -", 1)]
+    [InlineData("[1]:\n  - x: 1", 1)]
+    [InlineData("items[2]{a,b}:\n  1,2\n  3,4", 2)]
+    [InlineData("a:\n  b[1]:\n    - [2]: 1,2", 3)]
+    public void DepthLimit_IsTheSameForParserEncoderValidatorAndSerializer(string toon, int depth)
+    {
+        // The root is at depth 0 and every object or array inside another is one level deeper
+        var document = ToonDocument.Parse(toon);
+
+        for (var maxDepth = 1; maxDepth <= 4; maxDepth++)
+        {
+            var allowed = depth <= maxDepth;
+            var options = new ToonOptions { MaxDepth = maxDepth };
+            var serializerOptions = new ToonSerializerOptions { MaxDepth = maxDepth };
+
+            Assert.Equal(allowed, Succeeds(() => ToonDocument.Parse(toon, options)));
+            Assert.Equal(allowed, Succeeds(() => new ToonNet.Core.Encoding.ToonEncoder(options).Encode(document)));
+            Assert.Equal(allowed, ToonNet.Core.Validation.ToonValidator.Validate(document, options).IsValid);
+            Assert.Equal(allowed, Succeeds(() => ToonSerializer.DeserializeFromValue<object>(document.Root, serializerOptions)));
+        }
+
+        static bool Succeeds(Action action)
+        {
+            try
+            {
+                action();
+                return true;
+            }
+            catch (ToonException)
+            {
+                return false;
+            }
+        }
     }
 }

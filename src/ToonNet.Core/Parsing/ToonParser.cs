@@ -255,6 +255,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         if (TryParseHeader(firstLine, firstLine.Content, requireKey: false) is { Key: null } rootHeader)
         {
             NextLine();
+            _depth = -1; // the root array is at depth 0, like the root object
             var array = ParseArrayBody(rootHeader, firstLine, firstLine.Depth + 1);
             EnsureFullyConsumed();
             return array;
@@ -352,6 +353,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
             else if (rest == "[]")
             {
+                CheckEmptyContainerNesting(line);
                 value = new ToonArray();
             }
             else
@@ -426,6 +428,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 throw new ToonParseException($"Row has {values.Count} values but expected {fields.Length}", line.Number, line.Indent + 1);
             }
 
+            // Rows are objects one level below the array
+            if (array.Count == 0)
+            {
+                EnterNesting(line);
+            }
+
             var row = new ToonObject();
 
             for (var i = 0; i < fields.Length; i++)
@@ -434,6 +442,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
 
             array.Items.Add(row);
+        }
+
+        if (array.Count > 0)
+        {
+            _depth--;
         }
 
         if (PeekLine() is { } next && next.Depth > rowDepth)
@@ -474,6 +487,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         if (line.Content == "-")
         {
+            CheckEmptyContainerNesting(line);
             return new ToonObject(); // empty object list item
         }
 
@@ -499,6 +513,19 @@ internal sealed class ToonParser(ToonOptions? options = null)
         return item;
     }
 
+    /// <summary>
+    ///     Checks the depth of an empty object or array, which has no content that would enter its level.
+    /// </summary>
+    private void CheckEmptyContainerNesting(Line line)
+    {
+        EnterNesting(line);
+        _depth--;
+    }
+
+    /// <summary>
+    ///     Enters the level of a nested object or array. The root value is at depth 0, each object or array inside
+    ///     another one level deeper; primitive values are not counted (<see cref="ToonOptions.MaxDepth"/>).
+    /// </summary>
     private void EnterNesting(Line line)
     {
         if (++_depth > _options.MaxDepth)

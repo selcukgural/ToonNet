@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core / Extensions.Yaml:** `MaxDepth` means the same everywhere: the root value is at depth 0, each object or
+  array inside another is one level deeper, and primitive values do not count. Before, the serializer and
+  `ToonValidator.Validate(ToonDocument)` also counted primitive values, the parser and encoder counted a root array as
+  depth 1 and skipped empty arrays and tabular rows, and YAML counted the root collection as depth 1, so a document
+  that parsed with a limit could fail validation or binding with the same limit.
+- **ToonNet.Core:** Exceeding `ToonSerializerOptions.MaxDepth` while deserializing throws `ToonSerializationException`
+  (with the path) instead of a `ToonParseException` with line 0 and column 0.
 - **ToonNet.Core:** Multi-document streams no longer drop items that encode to an empty document (no properties, or
   only null properties with `IgnoreNullValues`). With `ExplicitSeparator` they are written and read back; blank-line
   output, where they cannot be represented, throws a `ToonSerializationException` instead of losing them on reading.

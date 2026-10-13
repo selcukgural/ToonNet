@@ -63,7 +63,9 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public bool AllowExtendedLimits { get; set; }
 
     /// <summary>
-    ///     Gets or sets the maximum depth for serialization (prevents circular references).
+    ///     Gets or sets the maximum nesting depth of objects, collections and dictionaries when serializing and
+    ///     deserializing (it also stops circular references). The root value is at depth 0 and each nested object,
+    ///     collection or dictionary is one level deeper, as in <see cref="Core.ToonOptions.MaxDepth"/>.
     ///     Must be between 1 and 200 (or 1000 if <see cref="AllowExtendedLimits"/> is true).
     ///     The default value is 100.
     /// </summary>
@@ -73,7 +75,6 @@ public sealed class ToonSerializerOptions : IValidatableObject
     /// </exception>
     /// <remarks>
     ///     This limit prevents infinite recursion from circular references and stack overflow.
-    ///     TOON specification §15 recommends 100 for security considerations.
     ///     Standard limit is 200. Enable <see cref="AllowExtendedLimits"/> to allow up to 1000.
     /// </remarks>
     [Range(1, 1000)]

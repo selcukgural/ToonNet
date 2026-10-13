@@ -261,7 +261,9 @@ ToonSerializer.Serialize(new Rectangle(), new ToonSerializerOptions { IncludeRea
 
 ## MaxDepth
 
-`MaxDepth` limits how deeply objects may nest while serializing and deserializing (default 100). Values above 200
+`MaxDepth` limits how deeply objects, collections and dictionaries may nest while serializing and deserializing
+(default 100). The root value is at depth 0 and each nested object or collection is one level deeper; primitive values
+do not count. `ToonOptions.MaxDepth` uses the same rule for parsing, encoding and validation. Values above 200
 throw `ArgumentOutOfRangeException` unless `AllowExtendedLimits` is set first, which allows up to 1000:
 
 ```csharp
@@ -272,7 +274,8 @@ var options = new ToonSerializerOptions
 };
 ```
 
-Exceeding the limit throws `ToonEncodingException` when serializing and `ToonParseException` when deserializing.
+Exceeding the limit throws `ToonEncodingException` when serializing and `ToonSerializationException` when
+deserializing (parsing the text throws `ToonParseException` for `ToonOptions.MaxDepth`).
 Circular references are detected separately and throw `ToonEncodingException` right away.
 
 ## Custom Converters

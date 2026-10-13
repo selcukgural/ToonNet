@@ -214,7 +214,8 @@ public static class ToonYamlConverter
 
                     break;
                 case NodeEvent nodeEvent and (SequenceStart or MappingStart):
-                    var depth = openNodes.Count + 1;
+                    // The root collection is at depth 0, as in TOON (ToonOptions.MaxDepth)
+                    var depth = openNodes.Count;
 
                     if (depth > maxDepth)
                     {
@@ -261,7 +262,7 @@ public static class ToonYamlConverter
                                                 $"YAML aliases expand to more than {MaxAliasExpansionNodes} nodes");
                     }
 
-                    var expandedDepth = openNodes.Count + target.Height;
+                    var expandedDepth = openNodes.Count - 1 + target.Height;
 
                     if (expandedDepth > maxDepth)
                     {
@@ -284,7 +285,7 @@ public static class ToonYamlConverter
     /// </summary>
     /// <param name="Anchor">The anchor on the node, if any.</param>
     /// <param name="StartCount">The node count before the node.</param>
-    /// <param name="Depth">The nesting depth of the node (1 for a top-level collection).</param>
+    /// <param name="Depth">The nesting depth of the node (0 for the root collection).</param>
     private sealed record OpenNode(string? Anchor, long StartCount, int Depth)
     {
         /// <summary>The deepest nesting reached inside the node, including expanded aliases.</summary>

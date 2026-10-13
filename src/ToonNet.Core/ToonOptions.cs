@@ -104,8 +104,9 @@ public sealed class ToonOptions : IValidatableObject
     public bool AllowExtendedLimits { get; set; }
 
     /// <summary>
-    ///     Gets or sets the maximum nesting depth allowed during parsing.
-    ///     Must be between 1 and 200 (or 1000 if <see cref="AllowExtendedLimits"/> is true).
+    ///     Gets or sets the maximum nesting depth of objects and arrays when parsing, encoding and validating.
+    ///     The root value is at depth 0 and each object or array inside another is one level deeper; primitive values
+    ///     do not count. Must be between 1 and 200 (or 1000 if <see cref="AllowExtendedLimits"/> is true).
     ///     The default value is 100.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
@@ -113,8 +114,8 @@ public sealed class ToonOptions : IValidatableObject
     ///     (200 by default, or 1000 with <see cref="AllowExtendedLimits"/>).
     /// </exception>
     /// <remarks>
-    ///     TOON specification §15 recommends 100 as default for security.
-    ///     Standard limit is 200. Enable <see cref="AllowExtendedLimits"/> to allow up to 1000.
+    ///     The TOON specification leaves the depth limit to implementations; it protects against stack exhaustion on
+    ///     untrusted input. Standard limit is 200. Enable <see cref="AllowExtendedLimits"/> to allow up to 1000.
     ///     Very high values may cause stack overflow issues.
     /// </remarks>
     [Range(1, 1000)]

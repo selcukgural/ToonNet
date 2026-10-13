@@ -115,7 +115,7 @@ public class ToonSerializerValueApiTests
         var options = new ToonSerializerOptions { MaxDepth = 10 };
 
         Assert.NotNull(ToonSerializer.DeserializeFromValue<object>(Nest(8), options));
-        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeFromValue<object>(Nest(20), options));
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.DeserializeFromValue<object>(Nest(20), options));
     }
 
     [Fact]
@@ -124,13 +124,13 @@ public class ToonSerializerValueApiTests
         var options = new ToonSerializerOptions { MaxDepth = 10 };
         var root = new ToonObject { ["x"] = Nest(20) };
 
-        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeFromValue<Dictionary<string, object>>(root, options));
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.DeserializeFromValue<Dictionary<string, object>>(root, options));
     }
 
     [Fact]
     public void DeserializeFromValue_ObjectTarget_EnforcesDefaultMaxDepth()
     {
-        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeFromValue<object>(Nest(10_000)));
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.DeserializeFromValue<object>(Nest(10_000)));
     }
 
     [Theory]

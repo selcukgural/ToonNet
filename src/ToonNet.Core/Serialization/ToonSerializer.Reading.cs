@@ -12,13 +12,12 @@ public static partial class ToonSerializer
     /// <summary>
     ///     Converts a TOON value to an instance of <paramref name="targetType"/>.
     /// </summary>
-    /// <exception cref="ToonParseException">Thrown when the maximum depth is exceeded.</exception>
-    /// <exception cref="ToonSerializationException">Thrown when the value cannot be converted to the target type.</exception>
+    /// <exception cref="ToonSerializationException">
+    ///     Thrown when the value cannot be converted to the target type or the maximum depth is exceeded.
+    /// </exception>
     private static object? DeserializeValue(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, SerializerState state,
                                             IToonConverter? propertyConverter = null)
     {
-        EnsureDepth(options, depth);
-
         var generatedAllowed = !state.FromGeneratedCode;
         state.FromGeneratedCode = false;
 
@@ -80,6 +79,9 @@ public static partial class ToonSerializer
             throw Error($"Cannot convert {value.ValueType} to {targetType.Name}", targetType, value, state);
         }
 
+        // Only objects, collections and dictionaries count towards the depth (the root is at depth 0)
+        EnsureDepth(options, depth, targetType, state);
+
         if (TryDeserializeDictionary(value, targetType, options, depth, state, out var dictionaryResult))
         {
             return dictionaryResult;
@@ -93,18 +95,27 @@ public static partial class ToonSerializer
         return DeserializeObject(value, targetType, options, depth, state);
     }
 
-    /// <exception cref="ToonParseException">Thrown when the maximum depth or the available stack space is exceeded.</exception>
-    private static void EnsureDepth(ToonSerializerOptions options, int depth)
+    /// <exception cref="ToonSerializationException">Thrown when the maximum depth or the available stack space is exceeded.</exception>
+    private static void EnsureDepth(ToonSerializerOptions options, int depth, Type targetType, SerializerState? state)
     {
         if (depth > options.MaxDepth)
         {
-            throw new ToonParseException($"Maximum depth of {options.MaxDepth} exceeded during deserialization", 0, 0);
+            throw DepthError($"Maximum depth of {options.MaxDepth} exceeded during deserialization", targetType, state?.Path);
         }
 
         if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
-            throw new ToonParseException("Document is nested too deeply to deserialize with the available stack space", 0, 0);
+            throw DepthError("Document is nested too deeply to deserialize with the available stack space", targetType, state?.Path);
         }
+    }
+
+    internal static ToonSerializationException DepthError(string message, Type targetType, string? path)
+    {
+        return new ToonSerializationException(path == null ? message : $"{message}\n  📍 Path: {path}")
+        {
+            TargetType = targetType,
+            Path = path
+        };
     }
 
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
@@ -129,7 +140,10 @@ public static partial class ToonSerializer
     /// </summary>
     private static object? ToUntyped(ToonValue value, ToonSerializerOptions options, int depth)
     {
-        EnsureDepth(options, depth);
+        if (value is ToonArray or ToonObject)
+        {
+            EnsureDepth(options, depth, typeof(object), null);
+        }
 
         return value switch
         {

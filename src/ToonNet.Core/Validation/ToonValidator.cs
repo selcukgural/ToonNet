@@ -158,7 +158,8 @@ public static class ToonValidator
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is null.</exception>
     /// <remarks>
     /// This method traverses the TOON document to ensure its depth does not exceed the specified limit.
-    /// Depth is tracked recursively for nested objects and arrays.
+    /// The root value is at depth 0 and each object or array inside another is one level deeper; primitive values
+    /// do not count, so a document that parses with a given <see cref="ToonOptions.MaxDepth"/> also validates with it.
     /// </remarks>
     private static ValidationError? TryValidateDepth(ToonValue root, int maxDepth)
     {
@@ -171,7 +172,8 @@ public static class ToonValidator
         {
             var (value, depth, path) = stack.Pop();
 
-            if (depth > maxDepth)
+            // Only objects and arrays count towards the depth (the root is at depth 0), as in the parser
+            if (value is ToonObject or ToonArray && depth > maxDepth)
             {
                 return new ValidationError(
                     ToonValidationErrorCodes.MaxDepthExceeded,

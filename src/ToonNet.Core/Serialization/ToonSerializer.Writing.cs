@@ -22,16 +22,6 @@ public static partial class ToonSerializer
     private static ToonValue? SerializeValue(object? value, Type declaredType, ToonSerializerOptions options, int depth, SerializerState state,
                                              IToonConverter? propertyConverter = null)
     {
-        if (depth > options.MaxDepth)
-        {
-            throw ToonEncodingException.Create($"Maximum depth of {options.MaxDepth} exceeded during serialization", state.Path);
-        }
-
-        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
-        {
-            throw ToonEncodingException.Create("Object graph is nested too deeply to serialize with the available stack space", state.Path);
-        }
-
         var generatedAllowed = !state.FromGeneratedCode;
         state.FromGeneratedCode = false;
 
@@ -66,6 +56,17 @@ public static partial class ToonSerializer
         if (GetTypeMetadata(runtimeType).TypeConverter is { } typeConverter)
         {
             return typeConverter.Write(value, options);
+        }
+
+        // Only objects, collections and dictionaries count towards the depth (the root is at depth 0)
+        if (depth > options.MaxDepth)
+        {
+            throw ToonEncodingException.Create($"Maximum depth of {options.MaxDepth} exceeded during serialization", state.Path);
+        }
+
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            throw ToonEncodingException.Create("Object graph is nested too deeply to serialize with the available stack space", state.Path);
         }
 
         if (!state.Visiting.Add(value))

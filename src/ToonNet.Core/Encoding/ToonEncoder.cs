@@ -111,6 +111,7 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                     break;
                 case ToonArray array:
                     StartLine(0);
+                    _depth = -1; // the root array is at depth 0, like the root object
                     EncodeArray(string.Empty, array, 1, ArrayPosition.Root);
                     break;
                 default:
@@ -165,6 +166,9 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
             if (array.Count == 0)
             {
+                EnterNesting();
+                _depth--;
+
                 switch (position)
                 {
                     case ArrayPosition.Field:
@@ -239,6 +243,9 @@ public sealed class ToonEncoder(ToonOptions? options = null)
 
             sb.Append("}:");
 
+            // Rows are objects one level below the array
+            EnterNesting();
+
             foreach (var item in array.Items)
             {
                 var row = (ToonObject)item;
@@ -254,6 +261,8 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                     sb.Append(FormatPrimitive(row.Properties[fields[i]]));
                 }
             }
+
+            _depth--;
         }
 
         /// <summary>
@@ -267,6 +276,8 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             {
                 case ToonObject { Properties.Count: 0 }:
                     // Empty object list item is a bare hyphen (§10)
+                    EnterNesting();
+                    _depth--;
                     sb.Append('-');
                     break;
                 case ToonObject obj:
@@ -380,7 +391,8 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         }
 
         /// <summary>
-        ///     Tracks structural nesting, enforcing <see cref="ToonOptions.MaxDepth"/> and the available stack space.
+        ///     Enters the level of a nested object or array, enforcing <see cref="ToonOptions.MaxDepth"/> (the root value
+        ///     is at depth 0, each object or array inside another one level deeper) and the available stack space.
         /// </summary>
         /// <exception cref="ToonEncodingException">Thrown when the document is nested too deeply.</exception>
         private void EnterNesting()

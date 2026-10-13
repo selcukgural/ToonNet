@@ -95,17 +95,17 @@ public static class ToonSourceGenerationHelpers
     ///     Throws when <paramref name="depth"/> exceeds <see cref="ToonSerializerOptions.MaxDepth"/> or the stack is
     ///     nearly exhausted.
     /// </summary>
-    /// <exception cref="ToonParseException">Thrown when the limit is exceeded.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when the limit is exceeded.</exception>
     public static void CheckDeserializationDepth(ToonSerializerOptions options, int depth)
     {
         if (depth > options.MaxDepth)
         {
-            throw new ToonParseException($"Maximum depth of {options.MaxDepth} exceeded during deserialization", 0, 0);
+            throw ToonSerializer.DepthError($"Maximum depth of {options.MaxDepth} exceeded during deserialization", typeof(object), null);
         }
 
         if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
-            throw new ToonParseException("Document is nested too deeply to deserialize with the available stack space", 0, 0);
+            throw ToonSerializer.DepthError("Document is nested too deeply to deserialize with the available stack space", typeof(object), null);
         }
     }
 }
