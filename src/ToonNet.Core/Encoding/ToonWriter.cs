@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -39,6 +40,9 @@ public sealed class ToonWriter
 
     private readonly ToonTextBuffer _buffer;
     private bool _hasLine;
+
+    /// <summary>Whether the value being written is the document's root primitive.</summary>
+    private bool _rootPrimitive;
 
     internal ToonWriter(ToonTextBuffer buffer, ToonOptions options)
     {
@@ -277,11 +281,17 @@ public sealed class ToonWriter
     }
 
     /// <summary>
+    ///     Marks the value written next as the document's root primitive, which is quoted when it starts with U+FEFF so
+    ///     that it is not read as a byte-order mark (spec §7.2).
+    /// </summary>
+    internal void BeginRootPrimitive() => _rootPrimitive = true;
+
+    /// <summary>
     ///     Writes a string value, quoted and escaped when spec §7.2 requires it.
     /// </summary>
     public void WriteString(ReadOnlySpan<char> value)
     {
-        if (NeedsQuoting(value, Options.Delimiter))
+        if (NeedsQuoting(value, Options.Delimiter) || (_rootPrimitive && value[0] == '\uFEFF'))
         {
             WriteQuoted(value);
         }
@@ -296,6 +306,7 @@ public sealed class ToonWriter
     ///     other control characters U+0000–U+001F use lowercase <c>\uXXXX</c>. Runs of characters that need no escape
     ///     are written in one piece.
     /// </summary>
+    /// <exception cref="ToonEncodingException">Thrown for an unpaired surrogate, which TOON cannot represent (§3).</exception>
     private void WriteQuoted(ReadOnlySpan<char> text)
     {
         var sb = _buffer;
@@ -308,6 +319,11 @@ public sealed class ToonWriter
 
             if (ch is not ('\\' or '"') && ch >= ' ')
             {
+                if (char.IsSurrogate(ch))
+                {
+                    i = SkipSurrogatePair(text, i);
+                }
+
                 continue;
             }
 
@@ -340,44 +356,88 @@ public sealed class ToonWriter
         sb.Append(text[start..]).Append('"');
     }
 
-    /// <summary>
-    ///     Checks the quoting rules of spec §7.2 for a string value.
-    /// </summary>
-    /// <param name="value">The string to check.</param>
-    /// <param name="delimiter">The delimiter in effect for the value.</param>
-    /// <returns><c>true</c> if the string must be quoted.</returns>
-    internal static bool NeedsQuoting(ReadOnlySpan<char> value, char delimiter)
+    // Characters that need quotes anywhere in a string value (§7.2): colon, quote, backslash, brackets, braces, the
+    // controls U+0000-U+001F (tab included) and the delimiter
+    private const string QuotedCharacters = ":\"\\[]{}\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f" +
+                                            "\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f";
+
+    // ASCII-only sets, which SearchValues scans fastest
+    private static readonly SearchValues<char> QuotedWithComma = SearchValues.Create(QuotedCharacters + ",");
+    private static readonly SearchValues<char> QuotedWithPipe = SearchValues.Create(QuotedCharacters + "|");
+    private static readonly SearchValues<char> QuotedWithTab = SearchValues.Create(QuotedCharacters);
+
+    /// <summary>Returns the index of the low surrogate of the pair starting at <paramref name="index"/>.</summary>
+    /// <exception cref="ToonEncodingException">Thrown when the surrogate is unpaired.</exception>
+    private static int SkipSurrogatePair(ReadOnlySpan<char> text, int index)
     {
-        if (value.Length == 0 || char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]))
+        if (char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]))
         {
-            return true;
+            return index + 1;
         }
 
-        if (value.SequenceEqual("true") || value.SequenceEqual("false") || value.SequenceEqual("null") || value[0] == '-' ||
-            IsNumericLike(value))
-        {
-            return true;
-        }
-
-        foreach (var ch in value)
-        {
-            if (ch is ':' or '"' or '\\' or '[' or ']' or '{' or '}' || ch < ' ' || ch == delimiter)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        throw new ToonEncodingException($"A string contains an unpaired surrogate (U+{(int)text[index]:X4}), which TOON cannot represent");
     }
 
     /// <summary>
-    ///     Matches <c>/^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i</c> (spec §7.2).
+    ///     Checks the quoting rules of spec §7.2 for a string value (the root-primitive rule aside).
+    /// </summary>
+    /// <param name="value">The string to check.</param>
+    /// <param name="delimiter">The document delimiter: comma, tab or pipe.</param>
+    /// <returns><c>true</c> if the string must be quoted.</returns>
+    /// <exception cref="ToonEncodingException">Thrown for an unpaired surrogate in a string that needs no quotes.</exception>
+    internal static bool NeedsQuoting(ReadOnlySpan<char> value, char delimiter)
+    {
+        if (value.IsEmpty)
+        {
+            return true;
+        }
+
+        // Only SP and HTAB are whitespace (§1.2); a leading '-' or '#' would read as a list item or a comment
+        var first = value[0];
+
+        if (first is ' ' or '\t' or '-' or '#' || value[^1] is ' ' or '\t')
+        {
+            return true;
+        }
+
+        var quoted = delimiter switch
+        {
+            ',' => QuotedWithComma,
+            '|' => QuotedWithPipe,
+            _ => QuotedWithTab
+        };
+
+        if (value.IndexOfAny(quoted) >= 0)
+        {
+            return true; // writing the quoted string checks its surrogates
+        }
+
+        // Written as is, so surrogates must form pairs (§3)
+        for (var i = value.IndexOfAnyInRange('\uD800', '\uDFFF'); i >= 0;)
+        {
+            i = SkipSurrogatePair(value, i) + 1;
+            var next = value[i..].IndexOfAnyInRange('\uD800', '\uDFFF');
+            i = next < 0 ? -1 : i + next;
+        }
+
+        return first switch
+        {
+            't' => value.SequenceEqual("true"),
+            'f' => value.SequenceEqual("false"),
+            'n' => value.SequenceEqual("null"),
+            '+' or (>= '0' and <= '9') => IsNumericLike(value),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    ///     Matches <c>/^[+-]?[0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?$/i</c> (spec §7.2).
     /// </summary>
     private static bool IsNumericLike(ReadOnlySpan<char> value)
     {
         var i = 0;
 
-        if (value[i] == '-')
+        if (value[i] is '+' or '-')
         {
             i++;
         }

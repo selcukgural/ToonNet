@@ -1,11 +1,8 @@
 # Spec fixture cases (see Fixtures/v4.4) that ToonNet does not conform to yet.
 # One "<category>/<file>/<index>  # <test name>" per line. Remove a line once the case passes.
-encode/arrays-nested/10  # quotes hash-leading string as list item
 encode/arrays-objects/9  # encodes a keyed-eligible object in a tabular column as a nested field group
-encode/arrays-primitive/10  # quotes hash-leading string in inline array
 encode/arrays-tabular/10  # uses the active delimiter inside nested field groups
 encode/arrays-tabular/11  # quotes subfield names inside nested field groups per key encoding
-encode/arrays-tabular/6  # quotes hash-leading string in tabular cell
 encode/arrays-tabular/7  # collapses a uniform nested object column into a nested field group
 encode/arrays-tabular/8  # collapses sibling nested field groups with depth-first row layout
 encode/arrays-tabular/9  # collapses nested field groups recursively without a depth cap
@@ -17,9 +14,3 @@ encode/objects-keyed/3  # orders fields by the first entry value's encounter ord
 encode/objects-keyed/4  # uses the active delimiter in keyed headers and entry-row cells
 encode/objects-keyed/5  # quotes entry keys per key encoding
 encode/objects-keyed/6  # quotes entry-row cells containing the active delimiter
-encode/objects/28  # quotes hash-leading string in object field value
-encode/primitives/35  # quotes leading-plus numeric-like string
-encode/primitives/36  # quotes string starting with hash
-encode/primitives/37  # quotes a root string starting with U+FEFF
-encode/primitives/39  # quotes a delimiter, colon, hyphen, or number sign that a combining mark follows
-encode/whitespace/2  # leaves non-ASCII whitespace unquoted

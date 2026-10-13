@@ -271,7 +271,7 @@ public class ReflectionParityTests
 
         var toon = AssertParity(new Outer.Inner { A = 5 }, Outer.Inner.Serialize, Outer.Inner.Deserialize, options);
 
-        Assert.Equal("A: #5", toon);
+        Assert.Equal("A: \"#5\"", toon); // a leading '#' is quoted (spec 4.4 §7.2)
         Assert.Equal(5, Outer.Inner.Deserialize(ToonDocument.Parse(toon), options).A);
     }
 

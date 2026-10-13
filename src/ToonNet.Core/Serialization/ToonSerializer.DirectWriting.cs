@@ -252,6 +252,7 @@ public static partial class ToonSerializer
                     break;
                 case DirectKind.Primitive:
                     _writer.StartLine(0);
+                    _writer.BeginRootPrimitive();
                     WritePrimitive(value!);
                     break;
                 case DirectKind.Object:

@@ -34,6 +34,7 @@ internal sealed class ToonDomWriter(ToonWriter writer)
                 break;
             default:
                 _writer.StartLine(0);
+                _writer.BeginRootPrimitive();
                 _writer.WritePrimitive(root);
                 break;
         }

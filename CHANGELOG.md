@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     or keyed object is indented deeper than expected, its depth becomes the scope's depth. Removed: a row with too few
     or too many cells is an error (missing cells were read as `null` and extra cells dropped), list items under `key:`
     without an array header are an error (they were read as an array), and so is an indented first line.
+- **ToonNet.Core (breaking output change):** The encoder is moving to TOON spec v4.4 (in progress):
+  - Strings follow the §7.2 quoting rules: a leading `#` and numeric-like text with a leading `+` (`"+1"`) are quoted,
+    only SP and HTAB at either end require quotes (an NBSP or other Unicode space no longer does), and a root string
+    starting with U+FEFF is quoted. Checking a string scans it with vectorized searches, which makes serializing
+    string-heavy data about 7% faster.
+  - A string with an unpaired surrogate throws `ToonEncodingException` (§3); it was written and became U+FFFD in
+    UTF-8 output.
 - **Dependencies:** ToonNet.Extensions.Yaml requires YamlDotNet 18.1.0 (was 16.2.0); ToonNet.AspNetCore references the
   latest 8.0.x patches of its Microsoft.Extensions dependencies (still 8.x, so .NET 8 stays supported).
   ToonNet.Core no longer depends on Microsoft.Extensions.ObjectPool (it has no package dependencies now).

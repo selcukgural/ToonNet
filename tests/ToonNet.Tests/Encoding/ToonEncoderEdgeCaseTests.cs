@@ -7,6 +7,43 @@ namespace ToonNet.Tests.Encoding;
 
 public class ToonEncoderEdgeCaseTests
 {
+    [Theory]
+    [InlineData("a", 0xD800, "b")]
+    [InlineData("a", 0xDC00, "")]
+    [InlineData("x:", 0xD800, "")]
+    [InlineData("", 0xD83D, "")]
+    public void Encode_UnpairedSurrogate_Throws(string before, int surrogate, string after)
+    {
+        // Built here: attribute arguments cannot hold a lone surrogate
+        var text = before + (char)surrogate + after;
+        // A lone surrogate is not a Unicode scalar value, so TOON cannot represent it (spec 4.4 §3)
+        var document = new ToonDocument(new ToonObject { ["k"] = new ToonString(text) });
+
+        Assert.Throws<ToonEncodingException>(() => new ToonEncoder().Encode(document));
+        Assert.Throws<ToonEncodingException>(() => ToonNet.Core.Serialization.ToonSerializer.Serialize(new Dictionary<string, string> { ["k"] = text }));
+    }
+
+    [Theory]
+    [InlineData("rocket \ud83d\ude80", "k: rocket \ud83d\ude80")]
+    [InlineData("a,\ud83d\ude80", "k: \"a,\ud83d\ude80\"")]
+    [InlineData("#tag", "k: \"#tag\"")]
+    [InlineData("+1", "k: \"+1\"")]
+    [InlineData("\u00a0x\u00a0", "k: \u00a0x\u00a0")]
+    [InlineData("\ufeffx", "k: \ufeffx")]
+    public void Encode_QuotesStringsPerSpec44(string text, string expected)
+    {
+        var document = new ToonDocument(new ToonObject { ["k"] = new ToonString(text) });
+
+        Assert.Equal(expected, new ToonEncoder().Encode(document));
+    }
+
+    [Fact]
+    public void Encode_RootStringStartingWithByteOrderMark_IsQuoted()
+    {
+        Assert.Equal("\"\ufeffx\"", new ToonEncoder().Encode(new ToonDocument(new ToonString("\ufeffx"))));
+        Assert.Equal("\"\ufeffx\"", ToonNet.Core.Serialization.ToonSerializer.Serialize("\ufeffx"));
+    }
+
     [Fact]
     public void Encode_EmptyObject_ReturnsEmptyString()
     {
