@@ -129,13 +129,9 @@ and async calls with `ConfigureAwait(false)` (`ConfigureAwaitBenchmarks`).
 
 ## 📊 Sample Results
 
-No current results are published. The encoder and parser were rewritten for TOON spec v3.3.2 after the last recorded
-run, so earlier numbers no longer describe the library. Run the benchmarks on your own hardware (see
-[Quick Start](#-quick-start)) and compare results from the same machine only.
-
-The files in `BenchmarkDotNet.Artifacts/results/` are **historical**: they were produced in February 2026 with
-BenchmarkDotNet v0.15.0 on .NET 8.0.11 (Apple M3 Max, macOS 26.2), before the encoder/parser rewrite. Do not quote
-them as the performance of the current version.
+This project measures ToonNet's internals. For measured numbers against the official TOON library (Toon.Format)
+and System.Text.Json, see the [comparison in the main README](../../README.md#toonnet-vs-the-official-toonformat-library)
+and [`benchmark/ToonNet.Comparison`](../ToonNet.Comparison). Compare results from the same machine only.
 
 ---
 

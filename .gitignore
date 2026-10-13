@@ -364,3 +364,6 @@ website/yarn-error.log
 
 # macOS
 .DS_Store
+
+# BenchmarkDotNet output
+**/BenchmarkDotNet.Artifacts/
