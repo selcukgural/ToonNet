@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core:** Reading dictionaries and collections: non-generic `IDictionary` targets (`Hashtable`, `IDictionary`)
+  and non-generic lists (`ArrayList`, `IList`, `IEnumerable`) are filled with untyped values instead of coming back
+  empty; `ReadOnlyDictionary`, `ImmutableDictionary`/`ImmutableSortedDictionary` and `IDictionary<K,V>` implementations
+  without the non-generic interface are created instead of failing with `MissingMethodException` or an error.
+- **ToonNet.Core:** Numbers outside the range of `float` or `Half` throw `ToonSerializationException` instead of
+  becoming infinity, and integers beyond the `decimal` range (`123456789012345678901234567890123`, `1e40`) bind exactly
+  to `BigInteger`, `Int128` and `UInt128`.
+- **ToonNet.Core / SourceGenerators:** `[ToonConstructor]` on a non-public constructor is used instead of being
+  ignored.
 - **ToonNet.AspNetCore.Mvc:** `ToonResult` and the output formatter write a null value as the TOON document `null`.
   Before, they sent an empty body, which a TOON reader takes as an empty object.
 - **ToonNet.AspNetCore.Mvc:** The output formatter also serves `Accept: text/toon`, the second media type the input

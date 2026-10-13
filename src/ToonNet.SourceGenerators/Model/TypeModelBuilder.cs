@@ -256,12 +256,11 @@ internal static class TypeModelBuilder
         }
 
         // Reflection does not see the implicit parameterless constructor of a struct.
-        var constructors = type.InstanceConstructors
-                               .Where(c => c.DeclaredAccessibility == Accessibility.Public &&
-                                           !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0))
-                               .ToList();
+        var all = type.InstanceConstructors.Where(c => !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0)).ToList();
+        var constructors = all.Where(c => c.DeclaredAccessibility == Accessibility.Public).ToList();
 
-        return constructors.FirstOrDefault(c => c.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConstructorAttribute"))
+        // [ToonConstructor] may mark a constructor of any accessibility (generated code is a member of the type)
+        return all.FirstOrDefault(c => c.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConstructorAttribute"))
                ?? constructors.FirstOrDefault(c => c.Parameters.Length == 0)
                ?? constructors.OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
     }

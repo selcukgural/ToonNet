@@ -283,12 +283,21 @@ public static partial class ToonSerializer
 
         if (targetType == typeof(float))
         {
-            return (float)number.Value;
+            var single = (float)number.Value;
+            return float.IsFinite(single) ? single : throw Error($"{number} is outside the range of Single", targetType, number, state);
         }
 
         if (targetType == typeof(Half))
         {
-            return (Half)number.Value;
+            var half = (Half)number.Value;
+            return Half.IsFinite(half) ? half : throw Error($"{number} is outside the range of Half", targetType, number, state);
+        }
+
+        // Integers beyond the decimal range keep their parsed text, which the wide integer types read exactly
+        if (number.DecimalValue == null && number.ParsedText is { } text &&
+            (targetType == typeof(BigInteger) || targetType == typeof(Int128) || targetType == typeof(UInt128)))
+        {
+            return ParseWideInteger(text, number, targetType, state);
         }
 
         if (targetType == typeof(decimal))
@@ -323,6 +332,37 @@ public static partial class ToonSerializer
         catch (OverflowException ex)
         {
             throw Error($"{number} is outside the range of {targetType.Name}", targetType, number, state, ex);
+        }
+    }
+
+    /// <summary>
+    ///     Reads an integer token such as <c>123456789012345678901234567890123</c> or <c>1e40</c> exactly.
+    /// </summary>
+    private static object ParseWideInteger(string text, ToonNumber number, Type targetType, SerializerState state)
+    {
+        if (!BigInteger.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var integer))
+        {
+            throw Error($"{text} is not an integer", targetType, number, state);
+        }
+
+        try
+        {
+            // Box each branch separately; a conditional expression would convert them all back to BigInteger
+            if (targetType == typeof(Int128))
+            {
+                return (Int128)integer;
+            }
+
+            if (targetType == typeof(UInt128))
+            {
+                return (UInt128)integer;
+            }
+
+            return integer;
+        }
+        catch (OverflowException ex)
+        {
+            throw Error($"{text} is outside the range of {targetType.Name}", targetType, number, state, ex);
         }
     }
 
@@ -366,7 +406,7 @@ public static partial class ToonSerializer
 
         if (elementType == null)
         {
-            return false;
+            return TryDeserializeNonGenericList(value, targetType, options, depth, state, out result);
         }
 
         if (value is not ToonArray array)
@@ -473,7 +513,7 @@ public static partial class ToonSerializer
 
         if (dictionaryInterface == null)
         {
-            return false;
+            return TryDeserializeNonGenericDictionary(value, targetType, options, depth, state, out result);
         }
 
         if (value is not ToonObject obj)
@@ -484,11 +524,7 @@ public static partial class ToonSerializer
         var keyType = dictionaryInterface.GetGenericArguments()[0];
         var valueType = dictionaryInterface.GetGenericArguments()[1];
         var dictionaryType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
-
-        var dictionary = targetType.IsInterface || targetType.IsAssignableFrom(dictionaryType)
-            ? (IDictionary)Activator.CreateInstance(dictionaryType)!
-            : Activator.CreateInstance(targetType) as IDictionary
-              ?? throw Error($"Cannot create a dictionary of type {targetType.Name}", targetType, value, state);
+        var dictionary = (IDictionary)Activator.CreateInstance(dictionaryType)!;
 
         foreach (var (key, toonValue) in obj.Properties)
         {
@@ -502,7 +538,151 @@ public static partial class ToonSerializer
             state.Pop();
         }
 
+        result = CreateDictionary(targetType, dictionaryType, keyType, valueType, dictionary)
+                 ?? throw Error($"Cannot create a dictionary of type {targetType.Name}", targetType, value, state);
+        return true;
+    }
+
+    /// <summary>
+    ///     Creates the target dictionary from the entries read into <paramref name="entries"/> (a
+    ///     <see cref="Dictionary{TKey,TValue}"/>): directly when the target accepts it, through <c>CreateRange</c> for
+    ///     System.Collections.Immutable types, through a constructor taking the entries (for example
+    ///     <see cref="System.Collections.ObjectModel.ReadOnlyDictionary{TKey,TValue}"/>), or by adding them to a new
+    ///     instance. Returns null when none applies.
+    /// </summary>
+    private static object? CreateDictionary(Type targetType, Type dictionaryType, Type keyType, Type valueType, IDictionary entries)
+    {
+        if (targetType.IsAssignableFrom(dictionaryType))
+        {
+            return entries;
+        }
+
+        if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
+        {
+            var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
+            var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                                         .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1 &&
+                                                              m.GetGenericArguments().Length == 2);
+            return createRange?.MakeGenericMethod(keyType, valueType).Invoke(null, [entries]);
+        }
+
+        if (targetType.IsInterface || targetType.IsAbstract)
+        {
+            return null;
+        }
+
+        var genericDictionary = typeof(IDictionary<,>).MakeGenericType(keyType, valueType);
+        var pairs = typeof(IEnumerable<>).MakeGenericType(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
+
+        if (targetType.GetConstructor([genericDictionary]) is { } fromDictionary)
+        {
+            return fromDictionary.Invoke([entries]);
+        }
+
+        if (targetType.GetConstructor([pairs]) is { } fromPairs)
+        {
+            return fromPairs.Invoke([entries]);
+        }
+
+        if (targetType.GetConstructor(Type.EmptyTypes) == null)
+        {
+            return null;
+        }
+
+        var instance = Activator.CreateInstance(targetType)!;
+
+        if (instance is IDictionary nonGeneric)
+        {
+            foreach (DictionaryEntry entry in entries)
+            {
+                nonGeneric[entry.Key] = entry.Value;
+            }
+
+            return instance;
+        }
+
+        var add = genericDictionary.GetMethod("Add")!;
+
+        if (!genericDictionary.IsInstanceOfType(instance))
+        {
+            return null;
+        }
+
+        foreach (DictionaryEntry entry in entries)
+        {
+            add.Invoke(instance, [entry.Key, entry.Value]);
+        }
+
+        return instance;
+    }
+
+    /// <summary>
+    ///     Reads a TOON object into a non-generic dictionary (<see cref="Hashtable"/>, <see cref="IDictionary"/>, ...):
+    ///     keys stay strings and values are read as for <see cref="object"/> targets.
+    /// </summary>
+    private static bool TryDeserializeNonGenericDictionary(ToonValue value, Type targetType, ToonSerializerOptions options, int depth,
+                                                           SerializerState state, out object? result)
+    {
+        result = null;
+
+        if (!typeof(IDictionary).IsAssignableFrom(targetType))
+        {
+            return false;
+        }
+
+        if (value is not ToonObject obj)
+        {
+            throw Error($"Expected an object but got {value.ValueType}", targetType, value, state);
+        }
+
+        var dictionary = targetType.IsInterface
+            ? new Dictionary<string, object?>()
+            : targetType.GetConstructor(Type.EmptyTypes) != null
+                ? (IDictionary)Activator.CreateInstance(targetType)!
+                : throw Error($"Cannot create a dictionary of type {targetType.Name}", targetType, value, state);
+
+        foreach (var (key, toonValue) in obj.Properties)
+        {
+            dictionary[key] = ToUntyped(toonValue, options, depth + 1);
+        }
+
         result = dictionary;
+        return true;
+    }
+
+    /// <summary>
+    ///     Reads a TOON array into a non-generic list (<see cref="ArrayList"/>, <see cref="IList"/>,
+    ///     <see cref="IEnumerable"/>, ...); items are read as for <see cref="object"/> targets.
+    /// </summary>
+    private static bool TryDeserializeNonGenericList(ToonValue value, Type targetType, ToonSerializerOptions options, int depth,
+                                                     SerializerState state, out object? result)
+    {
+        result = null;
+
+        var isInterface = targetType == typeof(IEnumerable) || targetType == typeof(ICollection) || targetType == typeof(IList);
+
+        if (!isInterface && !typeof(IList).IsAssignableFrom(targetType))
+        {
+            return false;
+        }
+
+        if (value is not ToonArray array)
+        {
+            throw Error($"Expected an array but got {value.ValueType}", targetType, value, state);
+        }
+
+        var list = isInterface
+            ? new List<object?>()
+            : targetType.GetConstructor(Type.EmptyTypes) != null && !targetType.IsArray
+                ? (IList)Activator.CreateInstance(targetType)!
+                : throw Error($"Cannot create a collection of type {targetType.Name}", targetType, value, state);
+
+        foreach (var item in array.Items)
+        {
+            list.Add(ToUntyped(item, options, depth + 1));
+        }
+
+        result = list;
         return true;
     }
 

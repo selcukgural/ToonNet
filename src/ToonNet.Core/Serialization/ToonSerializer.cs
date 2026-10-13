@@ -524,8 +524,10 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="toonString">The TOON format string to deserialize.</param>
     /// <param name="options">Optional deserialization options.</param>
-    /// <returns>The deserialized object, or null if the input is null.</returns>
+    /// <returns>The deserialized object, or null when the document is <c>null</c>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="toonString"/> is null.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
     public static T? Deserialize<T>(string toonString, ToonSerializerOptions? options = null)
     {
         return (T?)Deserialize(toonString, typeof(T), options);
@@ -537,7 +539,8 @@ public static partial class ToonSerializer
     /// <param name="toonString">The TOON format string to deserialize.</param>
     /// <param name="type">The target type to deserialize to.</param>
     /// <param name="options">Optional deserialization options.</param>
-    /// <returns>The deserialized object, or null if the input is null.</returns>
+    /// <returns>The deserialized object, or null when the document is <c>null</c>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="toonString"/> or <paramref name="type"/> is null.</exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
     public static object? Deserialize(string toonString, Type type, ToonSerializerOptions? options = null)

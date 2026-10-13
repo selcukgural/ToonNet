@@ -169,8 +169,10 @@ public static partial class ToonSerializer
             return (null, []);
         }
 
+        // [ToonConstructor] may mark a constructor of any accessibility; otherwise only public constructors are used
         var constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
-        var constructor = constructors.FirstOrDefault(c => c.GetCustomAttribute<ToonConstructorAttribute>() != null)
+        var constructor = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                              .FirstOrDefault(c => c.GetCustomAttribute<ToonConstructorAttribute>() != null)
                           ?? constructors.FirstOrDefault(c => c.GetParameters().Length == 0)
                           ?? constructors.OrderByDescending(c => c.GetParameters().Length).FirstOrDefault();
 

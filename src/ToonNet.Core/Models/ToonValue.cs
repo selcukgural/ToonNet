@@ -242,6 +242,12 @@ public sealed class ToonNumber : ToonValue
     public decimal? DecimalValue { get; }
 
     /// <summary>
+    ///     The number token as parsed, kept when the value does not fit in a <see cref="decimal"/>, so integers beyond
+    ///     that range can still be read exactly (for example into <see cref="System.Numerics.BigInteger"/>).
+    /// </summary>
+    internal string? ParsedText { get; init; }
+
+    /// <summary>
     ///     Gets the type of this value.
     /// </summary>
     public override ToonValueType ValueType => ToonValueType.Number;

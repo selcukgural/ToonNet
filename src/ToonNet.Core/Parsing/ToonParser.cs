@@ -926,7 +926,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return new ToonNumber(exact);
         }
 
-        return new ToonNumber(value);
+        return new ToonNumber(value) { ParsedText = token };
     }
 
     /// <summary>

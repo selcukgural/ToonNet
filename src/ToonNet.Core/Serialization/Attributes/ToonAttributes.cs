@@ -79,6 +79,8 @@ public sealed class ToonConverterAttribute(Type converterType) : Attribute
 /// </summary>
 /// <remarks>
 /// This attribute can be applied to a constructor to indicate that it should be used during the deserialization process.
+/// The constructor may be non-public. Without the attribute, the public parameterless constructor is used, otherwise the
+/// public constructor with the most parameters.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Constructor)]
 public sealed class ToonConstructorAttribute : Attribute;

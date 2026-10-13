@@ -228,4 +228,23 @@ public class GeneratorDriverTests
         Assert.Contains(registered, s => s.Contains("Register<global::App.Visible>(__ToonSerializeValue, __ToonDeserializeValue)"));
         Assert.Contains(registered, s => s.Contains("Register<global::App.Outer.Nested>("));
     }
+
+    [Fact]
+    public void NonPublicToonConstructor_IsUsedByGeneratedCode()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Token
+            {
+                public Token(int unused) { Value = ""; }
+                [ToonConstructor] private Token(string value) { Value = value; }
+                public string Value { get; }
+            }
+            """);
+
+        Assert.Empty(diagnostics);
+        Assert.Empty(errors);
+        Assert.Contains(LastGeneratedSources, s => s.Contains("new global::App.Token(__a0)"));
+    }
 }
