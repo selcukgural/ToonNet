@@ -244,4 +244,53 @@ nul: null";
         var items = (ToonArray)obj["items"];
         Assert.Equal(2, items.Count);
     }
+
+    [Theory]
+    [InlineData("items[1]:\n  - a: 1\n\n    b: 2")]
+    [InlineData("items[1]:\n  - a:\n\n      b: 1")]
+    [InlineData("outer[1]:\n  - inner[1]:\n\n      - x")]
+    [InlineData("outer[1]:\n  - inner[1]{a}:\n\n      1")]
+    [InlineData("outer[1]:\n  - inner[1]:\n      - x\n\n    y: 1")]
+    public void StrictMode_BlankLineInsideArrayItemContent_Throws(string toon)
+    {
+        var ex = Assert.Throws<ToonParseException>(() => new ToonParser().Parse(toon));
+
+        Assert.Contains("Blank lines", ex.Message);
+        Assert.NotNull(new ToonParser(new ToonOptions { StrictMode = false }).Parse(toon));
+    }
+
+    [Theory]
+    [InlineData("a: 1\n\nb: 2")]
+    [InlineData("obj:\n  a: 1\n\n  b: 2")]
+    [InlineData("items[1]:\n  - x\n\nb: 1")]
+    [InlineData("items[1]:\n\n  - x")]
+    public void StrictMode_BlankLineOutsideArraySpans_IsIgnored(string toon)
+    {
+        Assert.NotNull(new ToonParser().Parse(toon));
+    }
+
+    [Fact]
+    public void StrictMode_FieldsWithAnotherDelimiter_ThrowEvenWhenTheKeyQuotesTheSameText()
+    {
+        // The bracket declares '|', the fields use ','; the quoted key contains the same text as the unquoted fields
+        var ex = Assert.Throws<ToonParseException>(() => new ToonParser().Parse("\"a,b\"[1|]{a,b}:\n  1"));
+
+        Assert.Contains("delimiter mismatch", ex.Message);
+        Assert.NotNull(new ToonParser().Parse("x[1|]{\"a,b\"|c}:\n  1|2"));
+    }
+
+    [Theory]
+    [InlineData("a: \"x\\qy\"", 1, 6)]
+    [InlineData("a:\n  b: \"\\ud800\"", 2, 7)]
+    [InlineData("items[2]: ok,\"bad\\q\"", 1, 18)]
+    [InlineData("t[1]{\"f\\q\"}:\n  1", 1, 8)]
+    [InlineData("rows[1]{a,b}:\n  1,\"x\\q\"", 2, 7)]
+    [InlineData("\"k\\q\": 1", 1, 3)]
+    [InlineData("a: \"x\" y", 1, 7)]
+    public void InvalidEscapes_ReportTheirLineAndColumn(string toon, int line, int column)
+    {
+        var ex = Assert.Throws<ToonParseException>(() => new ToonParser().Parse(toon));
+
+        Assert.Equal((line, column), (ex.Line, ex.Column));
+    }
 }

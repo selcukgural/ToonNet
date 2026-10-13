@@ -36,6 +36,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
     private int _depth;
 
     /// <summary>
+    ///     The number of array header spans (spec §12) being read: from an array's first item or row to the end of its
+    ///     content. A blank line inside a span is an error in strict mode.
+    /// </summary>
+    private int _headerSpans;
+
+    /// <summary>
     ///     A physical line of input.
     /// </summary>
     /// <param name="Number">The 1-based line number.</param>
@@ -44,6 +50,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <param name="Content">The text after the indentation, without trailing spaces.</param>
     /// <param name="IsBlank">Whether the line contains only spaces and tabs.</param>
     private readonly record struct Line(int Number, int Depth, int Indent, string Content, bool IsBlank);
+
+    /// <summary>
+    ///     A delimited token and the index in the split text where it starts (after leading spaces).
+    /// </summary>
+    private readonly record struct Token(string Text, int Offset);
 
     /// <summary>
     ///     A parsed array header: <c>key?[N&lt;delim?&gt;]{fields?}:</c> (spec §6).
@@ -68,6 +79,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _lines = SplitLines(input);
         _position = 0;
         _depth = 0;
+        _headerSpans = 0;
 
         return new ToonDocument(ParseRoot());
     }
@@ -273,7 +285,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             if (!IsKeyValueLine(firstLine.Content))
             {
                 NextLine();
-                return ParsePrimitive(firstLine.Content, firstLine);
+                return ParsePrimitive(firstLine.Content, firstLine, ColumnOf(firstLine, firstLine.Content));
             }
         }
 
@@ -296,11 +308,17 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     private void ParseFields(ToonObject target, int depth)
     {
-        while (PeekLine() is { } line)
+        while (PeekLine(out var skippedBlank) is { } line)
         {
             if (line.Depth < depth)
             {
                 return;
+            }
+
+            // The object continues after the blank line, so the blank is inside the enclosing array's header span
+            if (skippedBlank && _headerSpans > 0 && _options.StrictMode)
+            {
+                throw new ToonParseException("Blank lines are not allowed inside an array", line.Number - 1, 1);
             }
 
             if (line.Depth > depth)
@@ -360,7 +378,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
             else
             {
-                value = ParsePrimitive(rest, line);
+                value = ParsePrimitive(rest, line, ColumnOf(line, rest));
             }
         }
 
@@ -392,7 +410,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
         }
         else if (header.InlineValues.Length > 0)
         {
-            var items = SplitDelimited(header.InlineValues, header.Delimiter, headerLine).Select(token => ParsePrimitive(token, headerLine));
+            var valuesColumn = ColumnOf(headerLine, header.InlineValues);
+            var items = SplitDelimited(header.InlineValues, header.Delimiter)
+                .Select(token => ParsePrimitive(token.Text, headerLine, valuesColumn + token.Offset));
             array = new ToonArray([.. items]);
         }
         else
@@ -417,13 +437,13 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         while (PeekLine(out var skippedBlank) is { } line && line.Depth == rowDepth && IsTabularRow(line.Content, header.Delimiter))
         {
-            if (skippedBlank && array.Count > 0 && _options.StrictMode)
+            if (skippedBlank && (array.Count > 0 || _headerSpans > 0) && _options.StrictMode)
             {
                 throw new ToonParseException("Blank lines are not allowed inside a tabular array", line.Number - 1, 1);
             }
 
             NextLine();
-            var values = SplitDelimited(line.Content, header.Delimiter, line);
+            var values = SplitDelimited(line.Content, header.Delimiter);
 
             if (values.Count != fields.Length && _options.StrictMode)
             {
@@ -440,7 +460,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
             for (var i = 0; i < fields.Length; i++)
             {
-                row.Properties[fields[i]] = i < values.Count ? ParsePrimitive(values[i], line) : ToonNull.Instance;
+                row.Properties[fields[i]] = i < values.Count ? ParsePrimitive(values[i].Text, line, line.Indent + 1 + values[i].Offset) : ToonNull.Instance;
             }
 
             array.Items.Add(row);
@@ -465,13 +485,16 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         while (PeekLine(out var skippedBlank) is { } line && line.Depth == itemDepth && IsListItem(line.Content))
         {
-            if (skippedBlank && array.Count > 0 && _options.StrictMode)
+            // Inside this array's span after the first item, or inside an enclosing array's span
+            if (skippedBlank && (array.Count > 0 || _headerSpans > 0) && _options.StrictMode)
             {
                 throw new ToonParseException("Blank lines are not allowed inside an array", line.Number - 1, 1);
             }
 
             NextLine();
+            _headerSpans++;
             array.Items.Add(ParseListItem(line, itemDepth));
+            _headerSpans--;
         }
 
         if (PeekLine() is { } next && next.Depth > itemDepth)
@@ -503,7 +526,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         if (!IsKeyValueLine(rest))
         {
-            return ParsePrimitive(rest, line);
+            return ParsePrimitive(rest, line, ColumnOf(line, rest));
         }
 
         // Object with its first field on the hyphen line; that field's nested content is two levels deeper
@@ -653,7 +676,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 throw new ToonParseException("Missing colon after key", line.Number, line.Indent + end + 2);
             }
 
-            key = Unescape(content[1..end], line);
+            key = Unescape(content[1..end], line.Number, ColumnOf(line, content) + 1);
             return end + 1;
         }
 
@@ -690,7 +713,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 return null;
             }
 
-            key = Unescape(content[1..end], line);
+            key = Unescape(content[1..end], line.Number, ColumnOf(line, content) + 1);
             bracketStart = end + 1;
         }
         else
@@ -714,42 +737,37 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return null;
         }
 
-        var header = TryParseHeaderSegments(content, bracketStart, key, out var malformed);
+        var header = TryParseHeaderSegments(line, content, bracketStart, key, out var malformed, out var mixedDelimiters);
 
         if (header == null && malformed && _options.StrictMode && (requireKey || content.IndexOf(':') > 0))
         {
             throw new ToonParseException("Malformed array header", line.Number, line.Indent + bracketStart + 1);
         }
 
-        if (header?.Fields != null && _options.StrictMode)
+        if (header != null && mixedDelimiters && _options.StrictMode)
         {
-            foreach (var field in header.Fields)
-            {
-                if (field.IndexOfAny([',', '|', '\t']) >= 0 && !field.Contains(header.Delimiter) && IsUnquotedFieldInHeader(content, field))
-                {
-                    throw new ToonParseException("Header delimiter mismatch between bracket and fields segments", line.Number, line.Indent + 1);
-                }
-            }
+            throw new ToonParseException("Header delimiter mismatch between bracket and fields segments", line.Number, line.Indent + 1);
         }
 
         return header;
     }
 
-    private static bool IsUnquotedFieldInHeader(string content, string field)
-    {
-        return content.Contains(field, StringComparison.Ordinal) && !content.Contains("\"" + field + "\"", StringComparison.Ordinal);
-    }
-
     /// <summary>
     ///     Parses <c>[N&lt;delim?&gt;]{fields?}:</c> starting at <paramref name="bracketStart"/>.
     /// </summary>
-    /// <param name="content">The header text.</param>
+    /// <param name="line">The header line, for error positions.</param>
+    /// <param name="content">The header text, a suffix of the line's content.</param>
     /// <param name="bracketStart">The index of the opening bracket.</param>
     /// <param name="key">The already parsed key, or null for key-less headers.</param>
     /// <param name="malformed">Set when the text looks like a header but is not a valid one.</param>
-    private Header? TryParseHeaderSegments(string content, int bracketStart, string? key, out bool malformed)
+    /// <param name="mixedDelimiters">
+    ///     Set when an unquoted field name contains another delimiter character, i.e. the fields segment uses a different
+    ///     delimiter than the bracket declares.
+    /// </param>
+    private Header? TryParseHeaderSegments(Line line, string content, int bracketStart, string? key, out bool malformed, out bool mixedDelimiters)
     {
         malformed = true;
+        mixedDelimiters = false;
         var bracketEnd = content.IndexOf(']', bracketStart);
 
         if (bracketEnd < 0)
@@ -784,7 +802,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
 
             var fieldsText = content.Substring(position + 1, fieldsEnd - 1);
-            fields = [.. SplitDelimited(fieldsText, delimiter, null).Select(field => ParseKeyToken(field))];
+            var rawFields = SplitDelimited(fieldsText, delimiter);
+            var fieldsColumn = ColumnOf(line, content) + position + 1;
+
+            // The bracket's delimiter was split on, so any delimiter character left in an unquoted token is another one
+            mixedDelimiters = rawFields.Any(field => !field.Text.StartsWith('"') && field.Text.IndexOfAny([',', '|', '\t']) >= 0);
+            fields = [.. rawFields.Select(field => ParseKeyToken(field.Text, line.Number, fieldsColumn + field.Offset))];
             position += fieldsEnd + 1;
         }
 
@@ -823,9 +846,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>
     ///     Splits delimited values outside quotes, trimming surrounding spaces; empty tokens are kept (spec §11.2, B.3).
     /// </summary>
-    private static List<string> SplitDelimited(string text, char delimiter, Line? line)
+    private static List<Token> SplitDelimited(string text, char delimiter)
     {
-        var tokens = new List<string>();
+        var tokens = new List<Token>();
         var start = 0;
         var inQuotes = false;
 
@@ -850,20 +873,32 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
             else if (ch == delimiter)
             {
-                tokens.Add(text[start..i].Trim(' '));
+                tokens.Add(CreateToken(text, start, i));
                 start = i + 1;
             }
         }
 
-        tokens.Add(text[start..].Trim(' '));
+        tokens.Add(CreateToken(text, start, text.Length));
         return tokens;
+
+        static Token CreateToken(string text, int start, int end)
+        {
+            var raw = text[start..end];
+            var trimmed = raw.TrimStart(' ');
+            return new Token(trimmed.TrimEnd(' '), start + raw.Length - trimmed.Length);
+        }
     }
 
-    private static string ParseKeyToken(string token)
+    /// <summary>
+    ///     The 1-based column of the first character of <paramref name="suffix"/>, a suffix of the line's content.
+    /// </summary>
+    private static int ColumnOf(Line line, string suffix) => line.Indent + line.Content.Length - suffix.Length + 1;
+
+    private static string ParseKeyToken(string token, int lineNumber, int column)
     {
         if (token.Length >= 2 && token[0] == '"' && FindClosingQuote(token, 0) == token.Length - 1)
         {
-            return Unescape(token[1..^1], null);
+            return Unescape(token[1..^1], lineNumber, column + 1);
         }
 
         return token;
@@ -872,7 +907,10 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>
     ///     Parses a primitive token: quoted string, true/false/null, number, or unquoted string (spec §4, B.4).
     /// </summary>
-    private static ToonValue ParsePrimitive(string token, Line line)
+    /// <param name="token">The token text.</param>
+    /// <param name="line">The line the token is on.</param>
+    /// <param name="column">The 1-based column of the token's first character, for error positions.</param>
+    private static ToonValue ParsePrimitive(string token, Line line, int column)
     {
         if (token.Length == 0)
         {
@@ -885,15 +923,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
             if (end < 0)
             {
-                throw new ToonParseException("Unterminated string", line.Number, line.Indent + 1);
+                throw new ToonParseException("Unterminated string", line.Number, column);
             }
 
             if (end != token.Length - 1)
             {
-                throw new ToonParseException("Unexpected characters after closing quote", line.Number, line.Indent + 1);
+                throw new ToonParseException("Unexpected characters after closing quote", line.Number, column + end + 1);
             }
 
-            return new ToonString(Unescape(token[1..end], line));
+            return new ToonString(Unescape(token[1..end], line.Number, column + 1));
         }
 
         return token switch
@@ -1008,7 +1046,10 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Unescapes the content of a quoted string per spec §7.1.
     /// </summary>
     /// <exception cref="ToonParseException">Thrown for unknown escapes, truncated or surrogate <c>\uXXXX</c> escapes.</exception>
-    private static string Unescape(string text, Line? line)
+    /// <param name="text">The content between the quotes.</param>
+    /// <param name="lineNumber">The line of the string, for error positions.</param>
+    /// <param name="column">The 1-based column of the first character of <paramref name="text"/>.</param>
+    private static string Unescape(string text, int lineNumber, int column)
     {
         if (text.IndexOf('\\') < 0)
         {
@@ -1016,7 +1057,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
         }
 
         var sb = new StringBuilder(text.Length);
-        var lineNumber = line?.Number ?? 0;
 
         for (var i = 0; i < text.Length; i++)
         {
@@ -1028,9 +1068,10 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 continue;
             }
 
+            // Error columns point at the backslash
             if (++i >= text.Length)
             {
-                throw new ToonParseException("Unterminated escape sequence", lineNumber, 0);
+                throw new ToonParseException("Unterminated escape sequence", lineNumber, column + i - 1);
             }
 
             switch (text[i])
@@ -1054,19 +1095,19 @@ internal sealed class ToonParser(ToonOptions? options = null)
                     if (text.Length - (i + 1) < 4 ||
                         !int.TryParse(text.AsSpan(i + 1, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var codePoint))
                     {
-                        throw new ToonParseException("Invalid \\u escape: expected four hex digits", lineNumber, 0);
+                        throw new ToonParseException("Invalid \\u escape: expected four hex digits", lineNumber, column + i - 1);
                     }
 
                     if (codePoint is >= 0xD800 and <= 0xDFFF)
                     {
-                        throw new ToonParseException("Invalid \\u escape: surrogate code points are not allowed", lineNumber, 0);
+                        throw new ToonParseException("Invalid \\u escape: surrogate code points are not allowed", lineNumber, column + i - 1);
                     }
 
                     sb.Append((char)codePoint);
                     i += 4;
                     break;
                 default:
-                    throw new ToonParseException($"Invalid escape sequence '\\{text[i]}'", lineNumber, 0);
+                    throw new ToonParseException($"Invalid escape sequence '\\{text[i]}'", lineNumber, column + i - 1);
             }
         }
 

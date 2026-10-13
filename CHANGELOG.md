@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core (parser):** In strict mode a blank line anywhere inside an array's items (also between the fields of
+  an object in a list item, or before the first item of a nested array) is an error, as spec §12 requires for header
+  spans; before, only blank lines directly between items were caught. The check for a fields segment that uses another
+  delimiter than the bracket now looks at the raw field tokens instead of searching the whole line, which missed
+  `"a,b"[1|]{a,b}:`. Escape and quote errors report the real line and column (before: column 0, and line 0 inside
+  tabular field names).
 - **ToonNet.Core:** Reading dictionaries and collections: non-generic `IDictionary` targets (`Hashtable`, `IDictionary`)
   and non-generic lists (`ArrayList`, `IList`, `IEnumerable`) are filled with untyped values instead of coming back
   empty; `ReadOnlyDictionary`, `ImmutableDictionary`/`ImmutableSortedDictionary` and `IDictionary<K,V>` implementations
