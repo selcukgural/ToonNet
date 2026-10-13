@@ -256,7 +256,7 @@ public static partial class ToonSerializer
             buffer.Clear();
             SerializeTo(buffer, value, typeof(T), options);
             EnsureSeparableByBlankLines(buffer.Length, typeof(T));
-            await writer.WriteAsync(buffer.WrittenMemory, cancellationToken).ConfigureAwait(false);
+            await buffer.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -310,7 +310,7 @@ public static partial class ToonSerializer
             buffer.Clear();
             SerializeTo(buffer, value, typeof(T), options);
             EnsureSeparableByBlankLines(buffer.Length, typeof(T));
-            await writer.WriteAsync(buffer.WrittenMemory, cancellationToken).ConfigureAwait(false);
+            await buffer.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -492,7 +492,7 @@ public static partial class ToonSerializer
                 continue;
             }
 
-            await writer.WriteAsync(batch.WrittenMemory, cancellationToken).ConfigureAwait(false);
+            await batch.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
             batch.Clear();
             itemCount = 0;
         }
@@ -506,7 +506,7 @@ public static partial class ToonSerializer
         // Flush remaining items
         if (batch.Length > 0)
         {
-            await writer.WriteAsync(batch.WrittenMemory, cancellationToken).ConfigureAwait(false);
+            await batch.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
         }
 
         await writer.FlushAsync(cancellationToken).ConfigureAwait(false);

@@ -4,56 +4,62 @@ using System.Runtime.CompilerServices;
 namespace ToonNet.Core.Encoding;
 
 /// <summary>
-///     A growable character buffer rented from <see cref="ArrayPool{T}.Shared"/>, used by the encoder instead of a
-///     <see cref="System.Text.StringBuilder"/> so that encoding allocates only the resulting string (or nothing, when
+///     A character buffer made of chunks rented from <see cref="ArrayPool{T}.Shared"/>, used by the encoder instead of
+///     a <see cref="System.Text.StringBuilder"/> so that encoding allocates only the resulting string (or nothing, when
 ///     the text is written to a stream).
 /// </summary>
 /// <remarks>
-///     The written part is cleared before an array goes back to the pool, so encoded data does not linger in arrays
-///     that other code rents later. An instance is not thread-safe and must be disposed.
+///     A full chunk is kept and a larger one is rented after it, so growing never copies what was written. The written
+///     part of every chunk is cleared before it goes back to the pool, so encoded data does not linger in arrays that
+///     other code rents later. An instance is not thread-safe and must be disposed.
 /// </remarks>
 internal sealed class ToonTextBuffer : IDisposable
 {
-    private const int InitialCapacity = 16 * 1024;
+    private const int InitialChunkSize = 16 * 1024;
+    private const int MaxChunkSize = 1024 * 1024;
 
-    private char[] _buffer = ArrayPool<char>.Shared.Rent(InitialCapacity);
-    private int _length;
+    /// <summary>The size of the byte chunks <see cref="WriteUtf8Async"/> writes.</summary>
+    private const int ByteChunkSize = 16 * 1024;
+
+    /// <summary>The chunks before the current one, each with the number of characters written to it.</summary>
+    private List<(char[] Chunk, int Length)>? _previous;
+
+    private char[] _current = ArrayPool<char>.Shared.Rent(InitialChunkSize);
+    private int _currentLength;
+
+    /// <summary>The number of characters written to the chunks before the current one.</summary>
+    private int _previousLength;
 
     /// <summary>The number of characters written.</summary>
-    public int Length => _length;
-
-    /// <summary>The characters written so far; valid until the next append or <see cref="Dispose"/>.</summary>
-    public ReadOnlySpan<char> WrittenSpan => _buffer.AsSpan(0, _length);
-
-    /// <summary>The characters written so far; valid until the next append or <see cref="Dispose"/>.</summary>
-    public ReadOnlyMemory<char> WrittenMemory => _buffer.AsMemory(0, _length);
+    public int Length => _previousLength + _currentLength;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ToonTextBuffer Append(char value)
     {
-        if (_length == _buffer.Length)
+        if (_currentLength == _current.Length)
         {
-            Grow(1);
+            NextChunk(1);
         }
 
-        _buffer[_length++] = value;
+        _current[_currentLength++] = value;
         return this;
     }
 
     public ToonTextBuffer Append(char value, int count)
     {
-        if (count <= 0)
+        while (count > 0)
         {
-            return this;
+            if (_currentLength == _current.Length)
+            {
+                NextChunk(count);
+            }
+
+            var part = Math.Min(count, _current.Length - _currentLength);
+            _current.AsSpan(_currentLength, part).Fill(value);
+            _currentLength += part;
+            count -= part;
         }
 
-        if (_length + count > _buffer.Length)
-        {
-            Grow(count);
-        }
-
-        _buffer.AsSpan(_length, count).Fill(value);
-        _length += count;
         return this;
     }
 
@@ -62,13 +68,31 @@ internal sealed class ToonTextBuffer : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ToonTextBuffer Append(scoped ReadOnlySpan<char> value)
     {
-        if (_length + value.Length > _buffer.Length)
+        if (value.Length <= _current.Length - _currentLength)
         {
-            Grow(value.Length);
+            value.CopyTo(_current.AsSpan(_currentLength));
+            _currentLength += value.Length;
+            return this;
         }
 
-        value.CopyTo(_buffer.AsSpan(_length));
-        _length += value.Length;
+        return AppendAcrossChunks(value);
+    }
+
+    private ToonTextBuffer AppendAcrossChunks(scoped ReadOnlySpan<char> value)
+    {
+        while (!value.IsEmpty)
+        {
+            if (_currentLength == _current.Length)
+            {
+                NextChunk(value.Length);
+            }
+
+            var part = Math.Min(value.Length, _current.Length - _currentLength);
+            value[..part].CopyTo(_current.AsSpan(_currentLength));
+            _currentLength += part;
+            value = value[part..];
+        }
+
         return this;
     }
 
@@ -78,30 +102,38 @@ internal sealed class ToonTextBuffer : IDisposable
     /// </summary>
     public Span<char> GetSpan(int sizeHint)
     {
-        if (_length + sizeHint > _buffer.Length)
+        if (_current.Length - _currentLength < sizeHint)
         {
-            Grow(sizeHint);
+            NextChunk(sizeHint);
         }
 
-        return _buffer.AsSpan(_length);
+        return _current.AsSpan(_currentLength);
     }
 
     /// <summary>Marks <paramref name="count"/> characters of the span from <see cref="GetSpan"/> as written.</summary>
-    public void Advance(int count) => _length += count;
+    public void Advance(int count) => _currentLength += count;
 
     /// <summary>Discards the characters written after the first <paramref name="length"/>.</summary>
     public void Truncate(int length)
     {
-        _buffer.AsSpan(length, _length - length).Clear();
-        _length = length;
+        while (length < _previousLength)
+        {
+            // The cut is in an earlier chunk: drop the current one and continue in the previous one
+            ReturnChunk(_current, _currentLength);
+            var (chunk, chunkLength) = _previous![^1];
+            _previous.RemoveAt(_previous.Count - 1);
+            _current = chunk;
+            _currentLength = chunkLength;
+            _previousLength -= chunkLength;
+        }
+
+        var keep = length - _previousLength;
+        _current.AsSpan(keep, _currentLength - keep).Clear();
+        _currentLength = keep;
     }
 
-    /// <summary>Clears the written characters so the buffer can be reused.</summary>
-    public void Clear()
-    {
-        _buffer.AsSpan(0, _length).Clear();
-        _length = 0;
-    }
+    /// <summary>Clears the written characters so the buffer can be reused (the first chunk is kept).</summary>
+    public void Clear() => Truncate(0);
 
     /// <summary>
     ///     Writes the characters to <paramref name="stream"/> as UTF-8 (without a byte order mark), in chunks through a
@@ -109,65 +141,114 @@ internal sealed class ToonTextBuffer : IDisposable
     /// </summary>
     public async ValueTask WriteUtf8Async(Stream stream, CancellationToken cancellationToken)
     {
-        var bytes = ArrayPool<byte>.Shared.Rent(ChunkBytes);
+        var bytes = ArrayPool<byte>.Shared.Rent(ByteChunkSize);
         var encoder = ToonTextEncoding.Utf8NoBom.GetEncoder();
-        var position = 0;
 
         try
         {
-            bool completed;
+            var chunkCount = (_previous?.Count ?? 0) + 1;
 
-            do
+            for (var c = 0; c < chunkCount; c++)
             {
-                var (charsUsed, bytesUsed, done) = Encode(encoder, WrittenMemory.Span[position..], bytes);
-                position += charsUsed;
-                completed = done;
-                await stream.WriteAsync(bytes.AsMemory(0, bytesUsed), cancellationToken).ConfigureAwait(false);
+                var (chunk, length) = c < chunkCount - 1 ? _previous![c] : (_current, _currentLength);
+                var last = c == chunkCount - 1;
+                var position = 0;
+                bool completed;
+
+                // The encoder keeps a high surrogate at the end of a chunk until the next one
+                do
+                {
+                    var (charsUsed, bytesUsed, done) = Encode(encoder, chunk.AsSpan(position, length - position), bytes, last);
+                    position += charsUsed;
+                    completed = done;
+                    await stream.WriteAsync(bytes.AsMemory(0, bytesUsed), cancellationToken).ConfigureAwait(false);
+                }
+                while (!completed);
             }
-            while (!completed);
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
         }
 
-        static (int CharsUsed, int BytesUsed, bool Completed) Encode(System.Text.Encoder encoder, ReadOnlySpan<char> chars, byte[] bytes)
+        static (int CharsUsed, int BytesUsed, bool Completed) Encode(System.Text.Encoder encoder, ReadOnlySpan<char> chars, byte[] bytes,
+                                                                    bool flush)
         {
-            encoder.Convert(chars, bytes, flush: true, out var charsUsed, out var bytesUsed, out var completed);
+            encoder.Convert(chars, bytes, flush, out var charsUsed, out var bytesUsed, out var completed);
             return (charsUsed, bytesUsed, completed);
         }
     }
 
-    /// <summary>The size of the byte chunks <see cref="WriteUtf8Async"/> writes.</summary>
-    private const int ChunkBytes = 16 * 1024;
+    /// <summary>Writes the characters to <paramref name="writer"/>, chunk by chunk.</summary>
+    public async ValueTask WriteToAsync(TextWriter writer, CancellationToken cancellationToken)
+    {
+        if (_previous != null)
+        {
+            foreach (var (chunk, length) in _previous)
+            {
+                await writer.WriteAsync(chunk.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        await writer.WriteAsync(_current.AsMemory(0, _currentLength), cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>Creates a string from the written characters.</summary>
-    public override string ToString() => new(WrittenSpan);
+    public override string ToString()
+    {
+        if (_previous == null)
+        {
+            return new string(_current, 0, _currentLength);
+        }
+
+        return string.Create(Length, this, static (destination, buffer) =>
+        {
+            foreach (var (chunk, length) in buffer._previous!)
+            {
+                chunk.AsSpan(0, length).CopyTo(destination);
+                destination = destination[length..];
+            }
+
+            buffer._current.AsSpan(0, buffer._currentLength).CopyTo(destination);
+        });
+    }
 
     public void Dispose()
     {
-        var buffer = _buffer;
-
-        if (buffer.Length == 0)
+        if (_current.Length == 0)
         {
             return;
         }
 
-        _buffer = [];
-        buffer.AsSpan(0, _length).Clear();
-        _length = 0;
-        ArrayPool<char>.Shared.Return(buffer);
+        if (_previous != null)
+        {
+            foreach (var (chunk, length) in _previous)
+            {
+                ReturnChunk(chunk, length);
+            }
+
+            _previous = null;
+        }
+
+        ReturnChunk(_current, _currentLength);
+        _current = [];
+        _currentLength = 0;
+        _previousLength = 0;
     }
 
-    private void Grow(int additional)
+    /// <summary>Keeps the current chunk and continues in a new one with room for at least <paramref name="sizeHint"/>.</summary>
+    private void NextChunk(int sizeHint)
     {
-        var required = _length + additional;
-        var capacity = Math.Max(required, _buffer.Length <= Array.MaxLength / 2 ? _buffer.Length * 2 : Array.MaxLength);
-        var larger = ArrayPool<char>.Shared.Rent(capacity);
+        var size = Math.Max(sizeHint, Math.Min(_current.Length * 2, MaxChunkSize));
+        (_previous ??= []).Add((_current, _currentLength));
+        _previousLength += _currentLength;
+        _current = ArrayPool<char>.Shared.Rent(size);
+        _currentLength = 0;
+    }
 
-        _buffer.AsSpan(0, _length).CopyTo(larger);
-        _buffer.AsSpan(0, _length).Clear();
-        ArrayPool<char>.Shared.Return(_buffer);
-        _buffer = larger;
+    private static void ReturnChunk(char[] chunk, int length)
+    {
+        chunk.AsSpan(0, length).Clear();
+        ArrayPool<char>.Shared.Return(chunk);
     }
 }
