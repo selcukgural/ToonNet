@@ -12,19 +12,7 @@ decode/arrays-tabular/8  # parses sibling nested field groups by depth-first cel
 decode/arrays-tabular/9  # parses nested field groups recursively without a depth cap
 decode/blank-lines/13  # ignores blank lines between tabular rows and entry rows in non-strict mode
 decode/blank-lines/18  # accepts blank line between header and first entry row
-decode/blank-lines/22  # throws on a tab-only line, which is not blank
 decode/blank-lines/9  # accepts blank lines after list, tabular, and keyed scopes end, at root and in a nested object
-decode/comments/0  # strips comment lines after the header and between tabular rows
-decode/comments/1  # strips comment line whose indentation is not a multiple of indentSize
-decode/comments/2  # strips outdented comment inside nested object scope without closing it
-decode/comments/3  # strips comment inside list array without counting as item
-decode/comments/4  # strips comment before root array header
-decode/comments/5  # strips comment containing an unterminated quote without unescaping
-decode/comments/6  # decodes comments and blank lines only to empty object
-decode/comments/7  # decodes a hash-leading root line as a comment, yielding an empty object
-decode/comments/8  # throws when a stripped hash-leading row breaks the declared count
-decode/comments/9  # strips a hash-leading row as a comment in non-strict mode
-decode/delimiters/24  # matches a delimiter, colon, space, or comment marker followed by a combining mark as syntax
 decode/indentation-errors/24  # adopts the depth of a jumped first line in non-strict mode
 decode/objects-keyed/0  # parses keyed tabular objects
 decode/objects-keyed/1  # parses a keyless keyed header as a root object
@@ -61,15 +49,10 @@ decode/validation-errors/59  # throws on keyless fields-bearing header as list i
 decode/validation-errors/65  # throws on whitespace between a key and its bracket segment
 decode/validation-errors/66  # throws on a space before the bracket segment in non-strict mode
 decode/validation-errors/67  # throws on a tab between a key and its bracket segment
-decode/validation-errors/77  # throws on a tab after a quoted value's closing quote
 decode/validation-errors/83  # throws on a tab field list after a pipe delimiter symbol in non-strict mode
 decode/validation-errors/84  # throws on a pipe field list after a bracket segment without a delimiter symbol in non-strict mode
 decode/validation-errors/90  # throws on an empty field entry
 decode/validation-errors/93  # throws on content after a nested field group in non-strict mode
-decode/whitespace/11  # strips a leading byte-order mark
-decode/whitespace/16  # keeps a byte-order mark after the document start as content
-decode/whitespace/17  # removes a byte-order mark before a comment line
-decode/whitespace/4  # keeps a leading NBSP and a trailing tab in unquoted values
 encode/arrays-nested/10  # quotes hash-leading string as list item
 encode/arrays-objects/9  # encodes a keyed-eligible object in a tabular column as a nested field group
 encode/arrays-primitive/10  # quotes hash-leading string in inline array

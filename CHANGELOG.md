@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has a TOON number form (NaN and infinities are written as `null`).
 
 ### Changed
+- **ToonNet.Core (breaking input change):** The parser is moving to TOON spec v4.4 (in progress):
+  - Lines are prepared as §12 orders: a byte-order mark at the start of the document is removed (one elsewhere is
+    content), comment lines (`#` after optional spaces, §5.1) are dropped without affecting any scope or count, and
+    only trailing spaces are trimmed, so a trailing tab is part of a value (`k: "a"<TAB>` is now an error). A line of
+    only tabs is not blank: strict mode reports the tab in its indentation.
 - **Dependencies:** ToonNet.Extensions.Yaml requires YamlDotNet 18.1.0 (was 16.2.0); ToonNet.AspNetCore references the
   latest 8.0.x patches of its Microsoft.Extensions dependencies (still 8.x, so .NET 8 stays supported).
   ToonNet.Core no longer depends on Microsoft.Extensions.ObjectPool (it has no package dependencies now).

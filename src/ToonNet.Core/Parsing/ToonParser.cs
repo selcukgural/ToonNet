@@ -161,8 +161,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _ = _options.ValidatedMaxDepth;
 
         _input = input;
-        _lineCount = input.AsSpan().Count('\n') + 1;
-        _lines = ArrayPool<Line>.Shared.Rent(_lineCount);
+        _lines = ArrayPool<Line>.Shared.Rent(input.AsSpan().Count('\n') + 1);
         _position = 0;
         _depth = 0;
         _headerSpans = 0;
@@ -255,58 +254,67 @@ internal sealed class ToonParser(ToonOptions? options = null)
     #region Lines
 
     /// <summary>
-    ///     Splits the input into <see cref="_lines"/> (offsets into the input, no strings).
+    ///     Splits the input into <see cref="_lines"/> (offsets into the input, no strings), preparing the lines as spec
+    ///     §12 orders: a byte-order mark at the start is removed, a CR before each LF and trailing spaces are excluded,
+    ///     and comment lines (§5.1) are dropped.
     /// </summary>
     private void SplitLines(string input)
     {
         var lines = _lines;
-        var start = 0;
+        var count = 0;
+        var start = input.StartsWith('\uFEFF') ? 1 : 0;
 
-        for (var i = 0; i < _lineCount; i++)
+        for (var number = 1; start <= input.Length; number++)
         {
-            var newline = input.IndexOf('\n', start);
-            var end = newline < 0 ? input.Length : newline;
+            var newline = input.AsSpan(start).IndexOf('\n');
+            var end = newline < 0 ? input.Length : start + newline;
             var length = end > start && input[end - 1] == '\r' ? end - start - 1 : end - start;
+            var text = input.AsSpan(start, length).TrimEnd(' ');
 
-            lines[i] = CreateLine(input, start, length, i + 1);
+            // A comment line: only spaces before '#'
+            var first = text.IndexOfAnyExcept(' ');
+
+            if (first < 0 || text[first] != '#')
+            {
+                lines[count++] = CreateLine(input, start, text.Length, number);
+            }
+
             start = end + 1;
         }
+
+        _lineCount = count;
     }
 
     /// <summary>
-    ///     Creates the line that starts at <paramref name="start"/> in <paramref name="input"/> (without its line break).
+    ///     Creates the line that starts at <paramref name="start"/> in <paramref name="input"/> (without its line break
+    ///     and trailing spaces).
     /// </summary>
     private Line CreateLine(string input, int start, int length, int number)
     {
         var raw = input.AsSpan(start, length);
-        var columns = 0;
-        var index = 0;
+        var index = raw.IndexOfAnyExcept(' ', '\t');
 
-        while (index < raw.Length && raw[index] is ' ' or '\t')
+        if (index < 0)
         {
-            if (raw[index] == '\t')
-            {
-                if (index == raw.Length - 1 || raw[index..].Trim(" \t").IsEmpty)
-                {
-                    break; // whitespace-only line, handled as blank below
-                }
-
-                if (_options.StrictMode)
-                {
-                    throw new ToonParseException("Tabs are not allowed in indentation", number, index + 1);
-                }
-
-                columns += _options.IndentSize;
-            }
-            else
-            {
-                columns++;
-            }
-
-            index++;
+            index = raw.Length;
         }
 
-        var content = raw[index..].TrimEnd(" \t");
+        var indentation = raw[..index];
+        var tabs = indentation.Count('\t');
+        var columns = index;
+
+        if (tabs > 0)
+        {
+            // A tab is not whitespace that leaves a line blank (§12); non-strict mode counts it as one level (§14.4)
+            if (_options.StrictMode)
+            {
+                throw new ToonParseException("Tabs are not allowed in indentation", number, indentation.IndexOf('\t') + 1);
+            }
+
+            columns = (index - tabs) + tabs * _options.IndentSize;
+        }
+
+        var content = raw[index..];
 
         if (content.IsEmpty)
         {
