@@ -58,6 +58,52 @@ public class ToonYamlConverterTests
     }
 
     [Fact]
+    public void FromYaml_AliasExpansionBeyondMaxDepth_ThrowsYamlException()
+    {
+        // Each level nests the previous anchor two levels deeper: the text stays shallow, the expanded tree does not
+        var sb = new System.Text.StringBuilder("l0: &l0 [[x]]\n");
+
+        for (var i = 1; i < 60; i++)
+        {
+            sb.Append('l').Append(i).Append(": &l").Append(i).Append(" [[*l").Append(i - 1).Append("]]\n");
+        }
+
+        var ex = Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(sb.ToString()));
+
+        Assert.Contains("Maximum nesting depth of 100 exceeded by the expansion of alias", ex.Message);
+    }
+
+    [Fact]
+    public void FromYaml_AliasExpansionWithinMaxDepth_Succeeds()
+    {
+        const string yaml = "a: &a [[[1]]]\nb: [[*a]]";
+
+        var root = ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 6 }).AsObject();
+
+        Assert.IsType<ToonArray>(root["b"]);
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml, new ToonNet.Core.ToonOptions { MaxDepth = 5 }));
+    }
+
+    [Theory]
+    [InlineData("&a [*a]")]
+    [InlineData("a: &a\n  b: *a")]
+    [InlineData("x: &a\n  - y: [1, *a]")]
+    public void FromYaml_RecursiveAlias_ThrowsYamlException(string yaml)
+    {
+        var ex = Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml));
+
+        Assert.Contains("recursive", ex.Message);
+    }
+
+    [Fact]
+    public void FromYaml_RedefinedAnchor_IsNotRecursive()
+    {
+        var root = ToonYamlConverter.FromYaml("a: &a [&a [1], *a]").AsObject();
+
+        Assert.Equal(2, Assert.IsType<ToonArray>(root["a"]).Count);
+    }
+
+    [Fact]
     public void FromYaml_OrdinaryAliases_AreExpanded()
     {
         var yaml = """

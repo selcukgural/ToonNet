@@ -179,14 +179,21 @@ public static class ToonYamlConverter
     /// <summary>
     ///     Scans the YAML event stream and rejects input that is nested too deeply or whose aliases expand too much.
     /// </summary>
+    /// <remarks>
+    ///     Aliases are expanded into copies during conversion, so an alias counts with the nodes and the nesting depth of
+    ///     the node it refers to. An alias inside the node its anchor marks (a recursive structure) is rejected.
+    /// </remarks>
     /// <param name="yaml">The YAML string to scan.</param>
     /// <param name="maxDepth">The maximum allowed nesting depth of mappings and sequences.</param>
     /// <exception cref="YamlException">Thrown when a limit is exceeded or the YAML is malformed.</exception>
     private static void EnsureWithinLimits(string yaml, int maxDepth)
     {
         var parser = new Parser(new StringReader(yaml));
-        var anchorSizes = new Dictionary<string, long>(StringComparer.Ordinal);
-        var openNodes = new Stack<(string? Anchor, long StartCount)>();
+
+        // Per completed anchor: the number of nodes it expands to and the nesting depth it adds
+        var anchors = new Dictionary<string, (long Size, int Height)>(StringComparer.Ordinal);
+        var openAnchors = new HashSet<string>(StringComparer.Ordinal);
+        var openNodes = new Stack<OpenNode>();
         long nodeCount = 0;
         long aliasNodeCount = 0;
 
@@ -201,31 +208,52 @@ public static class ToonYamlConverter
 
                     if (!scalar.Anchor.IsEmpty)
                     {
-                        anchorSizes[scalar.Anchor.Value] = 1;
+                        openAnchors.Remove(scalar.Anchor.Value);
+                        anchors[scalar.Anchor.Value] = (1, 0);
                     }
 
                     break;
                 case NodeEvent nodeEvent and (SequenceStart or MappingStart):
-                    if (openNodes.Count >= maxDepth)
+                    var depth = openNodes.Count + 1;
+
+                    if (depth > maxDepth)
                     {
                         throw new YamlException(current.Start, current.End, $"Maximum nesting depth of {maxDepth} exceeded");
                     }
 
-                    openNodes.Push((nodeEvent.Anchor.IsEmpty ? null : nodeEvent.Anchor.Value, nodeCount));
-                    nodeCount++;
-                    break;
-                case SequenceEnd or MappingEnd:
-                    var (anchor, startCount) = openNodes.Pop();
+                    var anchor = nodeEvent.Anchor.IsEmpty ? null : nodeEvent.Anchor.Value;
 
                     if (anchor != null)
                     {
-                        anchorSizes[anchor] = nodeCount - startCount;
+                        // A redefined anchor refers to the new node from here on
+                        anchors.Remove(anchor);
+                        openAnchors.Add(anchor);
+                    }
+
+                    openNodes.Push(new OpenNode(anchor, nodeCount, depth) { DeepestDepth = depth });
+                    nodeCount++;
+                    break;
+                case SequenceEnd or MappingEnd:
+                    var node = openNodes.Pop();
+
+                    if (node.Anchor != null)
+                    {
+                        openAnchors.Remove(node.Anchor);
+                        anchors[node.Anchor] = (nodeCount - node.StartCount, node.DeepestDepth - node.Depth + 1);
+                    }
+
+                    if (openNodes.TryPeek(out var parent))
+                    {
+                        parent.DeepestDepth = Math.Max(parent.DeepestDepth, node.DeepestDepth);
                     }
 
                     break;
-                case AnchorAlias alias when anchorSizes.TryGetValue(alias.Value.Value, out var size):
-                    nodeCount += size;
-                    aliasNodeCount += size;
+                case AnchorAlias alias when openAnchors.Contains(alias.Value.Value):
+                    throw new YamlException(current.Start, current.End,
+                                            $"The alias *{alias.Value.Value} refers to a node that contains it (a recursive structure)");
+                case AnchorAlias alias when anchors.TryGetValue(alias.Value.Value, out var target):
+                    nodeCount += target.Size;
+                    aliasNodeCount += target.Size;
 
                     if (aliasNodeCount > MaxAliasExpansionNodes)
                     {
@@ -233,9 +261,34 @@ public static class ToonYamlConverter
                                                 $"YAML aliases expand to more than {MaxAliasExpansionNodes} nodes");
                     }
 
+                    var expandedDepth = openNodes.Count + target.Height;
+
+                    if (expandedDepth > maxDepth)
+                    {
+                        throw new YamlException(current.Start, current.End,
+                                                $"Maximum nesting depth of {maxDepth} exceeded by the expansion of alias *{alias.Value.Value}");
+                    }
+
+                    if (openNodes.TryPeek(out var container))
+                    {
+                        container.DeepestDepth = Math.Max(container.DeepestDepth, expandedDepth);
+                    }
+
                     break;
             }
         }
+    }
+
+    /// <summary>
+    ///     A mapping or sequence whose end has not been read yet.
+    /// </summary>
+    /// <param name="Anchor">The anchor on the node, if any.</param>
+    /// <param name="StartCount">The node count before the node.</param>
+    /// <param name="Depth">The nesting depth of the node (1 for a top-level collection).</param>
+    private sealed record OpenNode(string? Anchor, long StartCount, int Depth)
+    {
+        /// <summary>The deepest nesting reached inside the node, including expanded aliases.</summary>
+        public int DeepestDepth { get; set; }
     }
 
     /// <summary>

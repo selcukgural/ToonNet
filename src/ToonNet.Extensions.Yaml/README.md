@@ -138,6 +138,8 @@ YAML input is checked before it is loaded:
 - Nesting deeper than `ToonOptions.MaxDepth` (default 100) throws a `YamlException`.
 - Aliases (`*anchor`) are expanded into copies; input whose aliases expand to more than
   `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes throws a `YamlException`.
+- The nesting limit counts the expanded aliases too, and an alias inside the node its anchor marks (a recursive
+  structure such as `&a [*a]`) throws a `YamlException`.
 
 ### Type Support
 
