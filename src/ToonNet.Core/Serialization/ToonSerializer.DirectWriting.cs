@@ -22,6 +22,13 @@ public static partial class ToonSerializer
     internal static int DirectWriteFallbacks;
 
     /// <summary>
+    ///     The number of times direct writing left a possible nested field group or keyed tabular object to the tree on
+    ///     this thread (tests read it).
+    /// </summary>
+    [ThreadStatic]
+    internal static int DirectWriteTreeShapes;
+
+    /// <summary>
     ///     Serializes a value and appends its TOON text to <paramref name="buffer"/>.
     /// </summary>
     private static void SerializeTo(ToonTextBuffer buffer, object? value, Type type, ToonSerializerOptions options)
@@ -214,7 +221,7 @@ public static partial class ToonSerializer
     /// <summary>
     ///     Writes one document. An instance is used once and is not thread-safe.
     /// </summary>
-    private sealed class DirectWriter : IToonSerializationHost
+    private sealed partial class DirectWriter : IToonSerializationHost
     {
         private readonly ToonSerializerOptions _options;
         private readonly ToonWriter _writer;
@@ -257,8 +264,8 @@ public static partial class ToonSerializer
                     _writer.BeginRootPrimitive();
                     WritePrimitive(value!);
                     break;
-                case DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated when MayBeKeyed(value!, kind, info!):
-                    _tree.WriteRoot(ToTree(value, type, null, 0)!);
+                case DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated when MayBeKeyed(value!, kind, info!) &&
+                                                                                           TryWriteKeyedRoot(value!, kind, info!, type):
                     break;
                 case DirectKind.Object:
                     EnterValue(0);
@@ -443,8 +450,9 @@ public static partial class ToonSerializer
                     writer.Write(": ");
                     WritePrimitive(value!);
                     break;
-                case DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated when MayBeKeyed(value!, kind, info!):
-                    _tree.WriteField(key, ToTree(value, declaredType, propertyConverter, depth)!, childDepth);
+                case DirectKind.Object or DirectKind.Dictionary or DirectKind.Generated when MayBeKeyed(value!, kind, info!) &&
+                                                                                           TryWriteKeyedField(key, value!, kind, info!, declaredType,
+                                                                                               propertyConverter, childDepth, depth):
                     break;
                 case DirectKind.Object:
                     EnterValue(depth);
@@ -546,6 +554,48 @@ public static partial class ToonSerializer
                     }
 
                     return objects >= 2;
+            }
+        }
+
+        /// <summary>
+        ///     Writes a root value that may be a keyed tabular object: planned, or through the tree when only the tree
+        ///     knows. Returns false when it is not one (and nothing was written).
+        /// </summary>
+        private bool TryWriteKeyedRoot(object value, DirectKind kind, DirectTypeInfo info, Type type)
+        {
+            switch (PlanKeyed(value, kind, info, out var entries, out var plan))
+            {
+                case PlanResult.Tabular:
+                    EnterValue(0);
+                    _writer.StartLine(0);
+                    _writer.Nesting = -1; // the root object is at depth 0
+                    WriteKeyed(null, entries, plan, 1, 0);
+                    return true;
+                case PlanResult.Unknown:
+                    DirectWriteTreeShapes++;
+                    _tree.WriteRoot(ToTree(value, type, null, 0)!);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>Writes a field that may be a keyed tabular object, like <see cref="TryWriteKeyedRoot"/>.</summary>
+        private bool TryWriteKeyedField(string key, object value, DirectKind kind, DirectTypeInfo info, Type declaredType,
+                                        IToonConverter? propertyConverter, int childDepth, int depth)
+        {
+            switch (PlanKeyed(value, kind, info, out var entries, out var plan))
+            {
+                case PlanResult.Tabular:
+                    EnterValue(depth);
+                    WriteKeyed(key, entries, plan, childDepth, depth);
+                    return true;
+                case PlanResult.Unknown:
+                    DirectWriteTreeShapes++;
+                    _tree.WriteField(key, ToTree(value, declaredType, propertyConverter, depth)!, childDepth);
+                    return true;
+                default:
+                    return false;
             }
         }
 
@@ -652,8 +702,19 @@ public static partial class ToonSerializer
                                 WriteTabularRows(key, items, metadata, included!, childDepth, depth);
                                 return;
                             case TabularShape.Unknown:
-                                WriteCollectionAsTree(key, items, childDepth, position, depth);
-                                return;
+                                // Nested objects may form nested field groups; the plan decides, or leaves it to the tree
+                                switch (PlanRows(items, kinds, infos, out var plan))
+                                {
+                                    case PlanResult.Tabular:
+                                        WritePlannedRows(key, items, plan, childDepth, depth);
+                                        return;
+                                    case PlanResult.Unknown:
+                                        DirectWriteTreeShapes++;
+                                        WriteCollectionAsTree(key, items, childDepth, position, depth);
+                                        return;
+                                }
+
+                                break;
                         }
                     }
 

@@ -279,8 +279,16 @@ public class DirectWritingParityTests
                          options);
         }
 
+        // Objects of one type are planned and written straight to text, not through the tree
+        var treeShapes = ToonSerializer.DirectWriteTreeShapes;
         Assert.StartsWith("[2]{Id,Home{City,Zip}}:", AssertParity(new List<Holder> { new() { Id = 1, Home = At("a") }, new() { Id = 2, Home = At("b") } }));
         Assert.StartsWith("[2:]{City,Zip}:", AssertParity(new Dictionary<string, Address> { ["x"] = At("a"), ["y"] = At("b") }));
+        Assert.StartsWith("[2:]{City,Zip}:", AssertParity(new Pair { A = At("a"), B = At("b") }));
+        Assert.Contains("Pairs[2:]{A{City,Zip},B{City,Zip}}:", AssertParity(new
+        {
+            Pairs = new Dictionary<int, Pair> { [1] = new() { A = At("a"), B = At("b") }, [2] = new() { A = At("c"), B = At("d") } }
+        }));
+        Assert.Equal(treeShapes, ToonSerializer.DirectWriteTreeShapes);
     }
 
     [Fact]

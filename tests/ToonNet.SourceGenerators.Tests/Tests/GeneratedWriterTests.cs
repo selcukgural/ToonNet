@@ -261,7 +261,9 @@ public class GeneratedWriterTests
         AssertSameText(new List<ParcelDepot> { full, partial });
         AssertSameText(new List<BoxedParcel> { new() { Code = "x" }, new() { Code = "y" } });
 
+        var treeShapes = ToonSerializer.DirectWriteTreeShapes;
         Assert.Contains("Parcels[2]{Code,Box{Width,Height},Inner{Width,Height}}:", ToonSerializer.Serialize(full));
+        Assert.Equal(treeShapes, ToonSerializer.DirectWriteTreeShapes); // planned, not through the tree
         Assert.Contains("Plans[2:]{Small{Width,Height},Large{Width,Height}}:", ToonSerializer.Serialize(full));
     }
 

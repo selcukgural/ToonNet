@@ -735,6 +735,92 @@ internal sealed class SourceEmitter
             plan.Kind is ValueKind.Inline or ValueKind.Primitive or ValueKind.Array or ValueKind.List or ValueKind.Set;
     }
 
+    /// <summary>
+    /// Emits <c>GetPropertyKind</c>, <c>GetValue</c> and <c>WriteValue</c> of the object writer: per property index, how
+    /// it is written, its value, and (for primitives) the value written as a row cell.
+    /// </summary>
+    private void EmitPropertyAccess(string type)
+    {
+        var code = _code;
+        var properties = _model.Properties;
+        var kind = Serialization + "ToonPropertyKind";
+
+        code.BeginBlock($"public override {kind} GetPropertyKind(int index) => index switch");
+
+        for (var i = 0; i < properties.Length; i++)
+        {
+            var property = properties[i];
+            var name = property.ConverterTypeName != null ? "Dynamic" : property.Plan.Kind switch
+            {
+                ValueKind.Inline or ValueKind.Primitive => "Primitive",
+                ValueKind.Array or ValueKind.List or ValueKind.Set => "Array",
+                ValueKind.Generated or ValueKind.Dictionary => "Object",
+                _ => "Dynamic"
+            };
+
+            code.AppendLine($"{i} => {kind}.{name},");
+        }
+
+        code.AppendLine("_ => throw new global::System.ArgumentOutOfRangeException(nameof(index))");
+        code.EndBlock(";");
+
+        var readOnly = properties.Items.Select((p, i) => (p, i)).Where(t => t.p.IsReadOnly).Select(t => t.i.ToString()).ToList();
+        code.AppendLine(readOnly.Count == 0
+                            ? "public override bool IsReadOnlyProperty(int index) => false;"
+                            : $"public override bool IsReadOnlyProperty(int index) => index is {string.Join(" or ", readOnly)};");
+
+        code.BeginBlock($"public override object? GetValue({type} value, int index) => index switch");
+
+        for (var i = 0; i < properties.Length; i++)
+        {
+            code.AppendLine($"{i} => value.{properties[i].Name},");
+        }
+
+        code.AppendLine("_ => throw new global::System.ArgumentOutOfRangeException(nameof(index))");
+        code.EndBlock(";");
+
+        code.BeginBlock($"public override void WriteValue({type} value, int index, {Writer} writer)");
+
+        // Only primitive properties are written as cells (an empty switch would be a warning)
+        var cells = Enumerable.Range(0, properties.Length)
+                              .Where(i => properties[i].ConverterTypeName == null && properties[i].Plan.Kind is ValueKind.Inline or ValueKind.Primitive)
+                              .ToList();
+
+        if (cells.Count > 0)
+        {
+            code.BeginBlock("switch (index)");
+        }
+
+        foreach (var i in cells)
+        {
+            var property = properties[i];
+            var plan = property.Plan;
+
+            code.BeginBlock($"case {i}:");
+
+            if (plan.CanBeNull)
+            {
+                code.AppendLine($"var __v{i} = value.{property.Name};");
+                code.AppendLine($"if (__v{i} is null) writer.WriteNull(); else {WritePrimitiveStatement(plan, NonNull(plan, $"__v{i}"))}");
+            }
+            else
+            {
+                code.AppendLine(WritePrimitiveStatement(plan, $"value.{property.Name}"));
+            }
+
+            code.AppendLine("return;");
+            code.EndBlock();
+        }
+
+        if (cells.Count > 0)
+        {
+            code.EndBlock();
+        }
+
+        code.AppendLine("throw new global::System.ArgumentOutOfRangeException(nameof(index));");
+        code.EndBlock();
+    }
+
     /// <summary>Emits <c>__ToonGetName</c>: the serialized name of a property by index.</summary>
     private void EmitGetName()
     {
@@ -770,6 +856,7 @@ internal sealed class SourceEmitter
         code.AppendLine($"public override {RowShape} GetRowShape({type} value, {Writer} writer, global::System.Span<bool> columns) => __ToonGetRowShape(value, writer, columns);");
         code.AppendLine($"public override void WriteRow({type} value, {Writer} writer, global::System.ReadOnlySpan<bool> columns) => __ToonWriteRow(value, writer, columns);");
         code.AppendLine($"public override bool MayBeKeyed({type} value, {Writer} writer) => __ToonMayBeKeyed(value, writer);");
+        EmitPropertyAccess(type);
         code.EndBlock();
     }
 
