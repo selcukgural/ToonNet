@@ -261,4 +261,80 @@ departments:
         Assert.Equal("Alice", ((ToonString)eng["manager"]!).Value);
         Assert.Equal(10.0, ((ToonNumber)eng["count"]!).Value);
     }
+
+    [Fact]
+    public void Parse_CrLfLineEndings_MatchLf()
+    {
+        const string toon = "name: Ada\nitems[2]{id,tag}:\n  1,a\n  2,\"b:c\"\nnested:\n  flag: true\n";
+        var encoder = new ToonNet.Core.Encoding.ToonEncoder();
+
+        var lf = encoder.Encode(new ToonParser().Parse(toon));
+        var crlf = encoder.Encode(new ToonParser().Parse(toon.Replace("\n", "\r\n")));
+
+        Assert.Equal(lf, crlf);
+        Assert.Equal(toon.TrimEnd('\n'), lf);
+    }
+
+    [Fact]
+    public void Parse_ManyDistinctKeys_KeepsEveryKey()
+    {
+        // More distinct keys than the parser's key cache has slots, repeated in a list, so slots are replaced
+        var keys = Enumerable.Range(0, 600).Select(i => $"key{i}").ToList();
+        var item = string.Join("\n    ", keys.Select((key, i) => $"{key}: {i}"));
+        var toon = $"items[2]:\n  - {item}\n  - {item}";
+
+        var items = (ToonArray)new ToonParser().Parse(toon).AsObject()["items"]!;
+
+        Assert.All(items.Items, value =>
+        {
+            var obj = (ToonObject)value;
+            Assert.Equal(keys, obj.Properties.Keys);
+            Assert.Equal(599m, ((ToonNumber)obj["key599"]!).DecimalValue);
+        });
+    }
+
+    [Fact]
+    public void Parse_HugeDeclaredLength_DoesNotReserveMemoryForMissingItems()
+    {
+        var parser = new ToonParser(new ToonOptions { StrictMode = false });
+
+        var list = (ToonArray)parser.Parse("items[2000000000]:\n  - 1").AsObject()["items"]!;
+        var rows = (ToonArray)parser.Parse("rows[2000000000]{a}:\n  1").AsObject()["rows"]!;
+
+        Assert.Single(list.Items);
+        Assert.Single(rows.Items);
+        Assert.Throws<ToonParseException>(() => new ToonParser().Parse("items[2000000000]:\n  - 1"));
+    }
+
+    [Theory]
+    [InlineData("999999999999999999")]
+    [InlineData("-999999999999999999")]
+    [InlineData("1000000000000000000")]
+    [InlineData("-9223372036854775808")]
+    [InlineData("79228162514264337593543950335")]
+    [InlineData("0")]
+    [InlineData("-0")]
+    [InlineData("12")]
+    public void Parse_Integers_KeepTheirExactValue(string token)
+    {
+        var number = (ToonNumber)new ToonParser().Parse($"v: {token}").AsObject()["v"]!;
+
+        Assert.Equal(decimal.Parse(token, System.Globalization.CultureInfo.InvariantCulture), number.DecimalValue);
+        Assert.Equal((double)decimal.Parse(token, System.Globalization.CultureInfo.InvariantCulture), number.Value);
+        Assert.Equal(token == "-0" ? "0" : token, number.ToString());
+    }
+
+    [Theory]
+    [InlineData("05")]
+    [InlineData("-")]
+    [InlineData("1.")]
+    [InlineData("1e")]
+    [InlineData("+1")]
+    [InlineData("1_000")]
+    public void Parse_NonNumbers_StayStrings(string token)
+    {
+        var value = new ToonParser().Parse($"v: {token}").AsObject()["v"];
+
+        Assert.Equal(token, Assert.IsType<ToonString>(value).Value);
+    }
 }

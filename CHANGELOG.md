@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   objects and arrays with the right capacity. Serializing lists of flat objects takes about 60% less time and half the
   memory; lists of nested objects serialize about 40% faster and deserialize about 25% faster (10,000 items).
   `ToonPropertyCollection.GetEnumerator()` returns a `ToonPropertyCollection.Enumerator` struct.
+- **ToonNet.Core:** The parser allocates about 60% less and runs twice as fast on large documents: each line allocates
+  only its content string, values are parsed from spans (only string values allocate text), tabular rows no longer
+  build a token list and substrings per cell, keys repeated in list items share one string, integers of up to 18
+  digits skip the double/decimal double parse, and arrays are created with their declared length (bounded by the
+  remaining lines, so a header such as `[2000000000]:` does not reserve memory).
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common
