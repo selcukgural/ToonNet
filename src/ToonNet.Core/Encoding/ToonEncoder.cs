@@ -38,9 +38,6 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     private static readonly ObjectPool<StringBuilder> StringBuilderPool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
 
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
-    private StringBuilder? _sb;
-    private bool _hasLine;
-    private int _depth;
 
     /// <summary>
     ///     Identifies where an array is written, which decides how an empty array is represented (spec §9.1, §9.2).
@@ -76,169 +73,159 @@ public sealed class ToonEncoder(ToonOptions? options = null)
             throw new ArgumentNullException(nameof(document), "Document root cannot be null");
         }
 
-        _sb = StringBuilderPool.Get();
+        var sb = StringBuilderPool.Get();
 
         try
         {
-            _hasLine = false;
-            _depth = 0;
-            EncodeRoot(document.Root);
-            return _sb.ToString();
+            new Writer(_options, sb).WriteRoot(document.Root);
+            return sb.ToString();
         }
         finally
         {
-            StringBuilderPool.Return(_sb);
-            _sb = null;
+            StringBuilderPool.Return(sb);
         }
     }
 
     #region Structure
 
     /// <summary>
-    ///     Encodes the root value: an object as top-level fields, an array with a key-less header, or a single primitive (spec §5).
+    ///     Holds the state of a single <see cref="Encode"/> call, so one encoder instance can be shared across threads.
     /// </summary>
-    private void EncodeRoot(ToonValue root)
+    private sealed class Writer(ToonOptions options, StringBuilder sb)
     {
-        switch (root)
+        private readonly ToonOptions _options = options;
+        private readonly StringBuilder _sb = sb;
+        private bool _hasLine;
+        private int _depth;
+
+        /// <summary>
+        ///     Encodes the root value: an object as top-level fields, an array with a key-less header, or a single primitive (spec §5).
+        /// </summary>
+        public void WriteRoot(ToonValue root)
         {
-            case ToonObject obj:
-                // An empty root object yields an empty document (§8)
-                EncodeFields(obj, 0);
-                break;
-            case ToonArray array:
-                StartLine(0);
-                EncodeArray(string.Empty, array, 1, ArrayPosition.Root);
-                break;
-            default:
-                StartLine(0);
-                _sb!.Append(FormatPrimitive(root));
-                break;
-        }
-    }
-
-    /// <summary>
-    ///     Encodes the fields of an object, one line per field at the given depth.
-    /// </summary>
-    private void EncodeFields(ToonObject obj, int depth)
-    {
-        foreach (var (key, value) in obj.Properties)
-        {
-            StartLine(depth);
-            EncodeField(key, value, depth + 1);
-        }
-    }
-
-    /// <summary>
-    ///     Writes a field on the current line (after indentation or a list marker) and its nested content at <paramref name="childDepth"/>.
-    /// </summary>
-    private void EncodeField(string key, ToonValue value, int childDepth)
-    {
-        var encodedKey = EncodeKey(key);
-
-        switch (value)
-        {
-            case ToonObject obj:
-                _sb!.Append(encodedKey).Append(':');
-                EnterNesting();
-                EncodeFields(obj, childDepth);
-                _depth--;
-                break;
-            case ToonArray array:
-                EncodeArray(encodedKey, array, childDepth, ArrayPosition.Field);
-                break;
-            default:
-                _sb!.Append(encodedKey).Append(": ").Append(FormatPrimitive(value));
-                break;
-        }
-    }
-
-    /// <summary>
-    ///     Writes an array header (prefixed by an already encoded key, possibly empty) and its items (spec §9).
-    /// </summary>
-    private void EncodeArray(string encodedKey, ToonArray array, int childDepth, ArrayPosition position)
-    {
-        var sb = _sb!;
-
-        if (array.Count == 0)
-        {
-            switch (position)
+            switch (root)
             {
-                case ArrayPosition.Field:
-                    sb.Append(encodedKey).Append(": []");
+                case ToonObject obj:
+                    // An empty root object yields an empty document (§8)
+                    EncodeFields(obj, 0);
                     break;
-                case ArrayPosition.Root:
-                    sb.Append("[]");
+                case ToonArray array:
+                    StartLine(0);
+                    EncodeArray(string.Empty, array, 1, ArrayPosition.Root);
                     break;
                 default:
-                    // Inner arrays of list items keep the header form (§9.2)
-                    AppendBracket(encodedKey, 0);
-                    sb.Append(':');
+                    StartLine(0);
+                    _sb.Append(FormatPrimitive(root));
                     break;
             }
-
-            return;
         }
 
-        EnterNesting();
-
-        AppendBracket(encodedKey, array.Count);
-
-        if (IsPrimitiveArray(array))
+        /// <summary>
+        ///     Encodes the fields of an object, one line per field at the given depth.
+        /// </summary>
+        private void EncodeFields(ToonObject obj, int depth)
         {
-            sb.Append(": ");
-
-            for (var i = 0; i < array.Count; i++)
+            foreach (var (key, value) in obj.Properties)
             {
-                if (i > 0)
+                StartLine(depth);
+                EncodeField(key, value, depth + 1);
+            }
+        }
+
+        /// <summary>
+        ///     Writes a field on the current line (after indentation or a list marker) and its nested content at <paramref name="childDepth"/>.
+        /// </summary>
+        private void EncodeField(string key, ToonValue value, int childDepth)
+        {
+            var encodedKey = EncodeKey(key);
+
+            switch (value)
+            {
+                case ToonObject obj:
+                    _sb.Append(encodedKey).Append(':');
+                    EnterNesting();
+                    EncodeFields(obj, childDepth);
+                    _depth--;
+                    break;
+                case ToonArray array:
+                    EncodeArray(encodedKey, array, childDepth, ArrayPosition.Field);
+                    break;
+                default:
+                    _sb.Append(encodedKey).Append(": ").Append(FormatPrimitive(value));
+                    break;
+            }
+        }
+
+        /// <summary>
+        ///     Writes an array header (prefixed by an already encoded key, possibly empty) and its items (spec §9).
+        /// </summary>
+        private void EncodeArray(string encodedKey, ToonArray array, int childDepth, ArrayPosition position)
+        {
+            var sb = _sb;
+
+            if (array.Count == 0)
+            {
+                switch (position)
                 {
-                    sb.Append(_options.Delimiter);
+                    case ArrayPosition.Field:
+                        sb.Append(encodedKey).Append(": []");
+                        break;
+                    case ArrayPosition.Root:
+                        sb.Append("[]");
+                        break;
+                    default:
+                        // Inner arrays of list items keep the header form (§9.2)
+                        AppendBracket(encodedKey, 0);
+                        sb.Append(':');
+                        break;
                 }
 
-                sb.Append(FormatPrimitive(array[i]));
+                return;
             }
-        }
-        else if (position != ArrayPosition.ListItem && TryGetTabularFields(array) is { } fields)
-        {
-            EncodeTabularArray(array, fields, childDepth);
-        }
-        else
-        {
-            sb.Append(':');
 
-            foreach (var item in array.Items)
+            EnterNesting();
+
+            AppendBracket(encodedKey, array.Count);
+
+            if (IsPrimitiveArray(array))
             {
-                StartLine(childDepth);
-                EncodeListItem(item, childDepth);
+                sb.Append(": ");
+
+                for (var i = 0; i < array.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        sb.Append(_options.Delimiter);
+                    }
+
+                    sb.Append(FormatPrimitive(array[i]));
+                }
             }
-        }
-
-        _depth--;
-    }
-
-    /// <summary>
-    ///     Writes the field list of a tabular array followed by one row per object (spec §9.3).
-    /// </summary>
-    private void EncodeTabularArray(ToonArray array, string[] fields, int rowDepth)
-    {
-        var sb = _sb!;
-        sb.Append('{');
-
-        for (var i = 0; i < fields.Length; i++)
-        {
-            if (i > 0)
+            else if (position != ArrayPosition.ListItem && TryGetTabularFields(array) is { } fields)
             {
-                sb.Append(_options.Delimiter);
+                EncodeTabularArray(array, fields, childDepth);
+            }
+            else
+            {
+                sb.Append(':');
+
+                foreach (var item in array.Items)
+                {
+                    StartLine(childDepth);
+                    EncodeListItem(item, childDepth);
+                }
             }
 
-            sb.Append(EncodeKey(fields[i]));
+            _depth--;
         }
 
-        sb.Append("}:");
-
-        foreach (var item in array.Items)
+        /// <summary>
+        ///     Writes the field list of a tabular array followed by one row per object (spec §9.3).
+        /// </summary>
+        private void EncodeTabularArray(ToonArray array, string[] fields, int rowDepth)
         {
-            var row = (ToonObject)item;
-            StartLine(rowDepth);
+            var sb = _sb;
+            sb.Append('{');
 
             for (var i = 0; i < fields.Length; i++)
             {
@@ -247,170 +234,188 @@ public sealed class ToonEncoder(ToonOptions? options = null)
                     sb.Append(_options.Delimiter);
                 }
 
-                sb.Append(FormatPrimitive(row.Properties[fields[i]]));
+                sb.Append(EncodeKey(fields[i]));
             }
-        }
-    }
 
-    /// <summary>
-    ///     Writes a list item whose line has been started at <paramref name="depth"/> (spec §9.4, §10).
-    /// </summary>
-    private void EncodeListItem(ToonValue item, int depth)
-    {
-        var sb = _sb!;
+            sb.Append("}:");
 
-        switch (item)
-        {
-            case ToonObject { Properties.Count: 0 }:
-                // Empty object list item is a bare hyphen (§10)
-                sb.Append('-');
-                break;
-            case ToonObject obj:
-                sb.Append("- ");
-                EnterNesting();
+            foreach (var item in array.Items)
+            {
+                var row = (ToonObject)item;
+                StartLine(rowDepth);
 
-                var isFirst = true;
-
-                foreach (var (key, value) in obj.Properties)
+                for (var i = 0; i < fields.Length; i++)
                 {
-                    if (!isFirst)
+                    if (i > 0)
                     {
-                        StartLine(depth + 1);
+                        sb.Append(_options.Delimiter);
                     }
 
-                    // The first field sits on the hyphen line; its nested content goes two levels deeper (§10)
-                    EncodeField(key, value, depth + 2);
-                    isFirst = false;
+                    sb.Append(FormatPrimitive(row.Properties[fields[i]]));
                 }
-
-                _depth--;
-                break;
-            case ToonArray array:
-                sb.Append("- ");
-                EncodeArray(string.Empty, array, depth + 1, ArrayPosition.ListItem);
-                break;
-            default:
-                sb.Append("- ").Append(FormatPrimitive(item));
-                break;
-        }
-    }
-
-    /// <summary>
-    ///     Returns the tabular field names when the array qualifies for tabular form (spec §9.3), otherwise null.
-    /// </summary>
-    /// <remarks>
-    ///     Every item must be a non-empty object with the same key set and only primitive values.
-    ///     The field order is the first object's key order.
-    /// </remarks>
-    private static string[]? TryGetTabularFields(ToonArray array)
-    {
-        if (array[0] is not ToonObject { Properties.Count: > 0 } first)
-        {
-            return null;
+            }
         }
 
-        var fieldCount = first.Properties.Count;
-
-        foreach (var item in array.Items)
+        /// <summary>
+        ///     Writes a list item whose line has been started at <paramref name="depth"/> (spec §9.4, §10).
+        /// </summary>
+        private void EncodeListItem(ToonValue item, int depth)
         {
-            if (item is not ToonObject obj || obj.Properties.Count != fieldCount)
+            var sb = _sb;
+
+            switch (item)
+            {
+                case ToonObject { Properties.Count: 0 }:
+                    // Empty object list item is a bare hyphen (§10)
+                    sb.Append('-');
+                    break;
+                case ToonObject obj:
+                    sb.Append("- ");
+                    EnterNesting();
+
+                    var isFirst = true;
+
+                    foreach (var (key, value) in obj.Properties)
+                    {
+                        if (!isFirst)
+                        {
+                            StartLine(depth + 1);
+                        }
+
+                        // The first field sits on the hyphen line; its nested content goes two levels deeper (§10)
+                        EncodeField(key, value, depth + 2);
+                        isFirst = false;
+                    }
+
+                    _depth--;
+                    break;
+                case ToonArray array:
+                    sb.Append("- ");
+                    EncodeArray(string.Empty, array, depth + 1, ArrayPosition.ListItem);
+                    break;
+                default:
+                    sb.Append("- ").Append(FormatPrimitive(item));
+                    break;
+            }
+        }
+
+        /// <summary>
+        ///     Returns the tabular field names when the array qualifies for tabular form (spec §9.3), otherwise null.
+        /// </summary>
+        /// <remarks>
+        ///     Every item must be a non-empty object with the same key set and only primitive values.
+        ///     The field order is the first object's key order.
+        /// </remarks>
+        private static string[]? TryGetTabularFields(ToonArray array)
+        {
+            if (array[0] is not ToonObject { Properties.Count: > 0 } first)
             {
                 return null;
             }
 
-            foreach (var (key, value) in obj.Properties)
+            var fieldCount = first.Properties.Count;
+
+            foreach (var item in array.Items)
             {
-                if (!first.Properties.ContainsKey(key) || value is ToonObject or ToonArray)
+                if (item is not ToonObject obj || obj.Properties.Count != fieldCount)
                 {
                     return null;
                 }
+
+                foreach (var (key, value) in obj.Properties)
+                {
+                    if (!first.Properties.ContainsKey(key) || value is ToonObject or ToonArray)
+                    {
+                        return null;
+                    }
+                }
             }
+
+            return [.. first.Properties.Keys];
         }
 
-        return [.. first.Properties.Keys];
-    }
-
-    private static bool IsPrimitiveArray(ToonArray array)
-    {
-        foreach (var item in array.Items)
+        private static bool IsPrimitiveArray(ToonArray array)
         {
-            if (item is ToonObject or ToonArray)
+            foreach (var item in array.Items)
             {
-                return false;
+                if (item is ToonObject or ToonArray)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        ///     Appends <c>key[N]</c> including the delimiter symbol for tab and pipe (spec §6).
+        /// </summary>
+        private void AppendBracket(string encodedKey, int count)
+        {
+            var sb = _sb;
+            sb.Append(encodedKey).Append('[').Append(count.ToString(CultureInfo.InvariantCulture));
+
+            if (_options.Delimiter != ',')
+            {
+                sb.Append(_options.Delimiter);
+            }
+
+            sb.Append(']');
+        }
+
+        /// <summary>
+        ///     Starts a new line at the given depth. Lines are separated by LF and the document has no trailing newline (spec §12).
+        /// </summary>
+        private void StartLine(int depth)
+        {
+            var sb = _sb;
+
+            if (_hasLine)
+            {
+                sb.Append('\n');
+            }
+
+            _hasLine = true;
+            sb.Append(' ', depth * _options.IndentSize);
+        }
+
+        /// <summary>
+        ///     Tracks structural nesting, enforcing <see cref="ToonOptions.MaxDepth"/> and the available stack space.
+        /// </summary>
+        /// <exception cref="ToonEncodingException">Thrown when the document is nested too deeply.</exception>
+        private void EnterNesting()
+        {
+            if (++_depth > _options.MaxDepth)
+            {
+                throw new ToonEncodingException($"Maximum depth of {_options.MaxDepth} exceeded");
+            }
+
+            if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+            {
+                throw new ToonEncodingException("Document is nested too deeply to encode with the available stack space");
             }
         }
 
-        return true;
-    }
-
-    /// <summary>
-    ///     Appends <c>key[N]</c> including the delimiter symbol for tab and pipe (spec §6).
-    /// </summary>
-    private void AppendBracket(string encodedKey, int count)
-    {
-        var sb = _sb!;
-        sb.Append(encodedKey).Append('[').Append(count.ToString(CultureInfo.InvariantCulture));
-
-        if (_options.Delimiter != ',')
+        /// <summary>
+        ///     Formats a primitive value. NaN and infinities are written as null (spec §3).
+        /// </summary>
+        /// <exception cref="ToonEncodingException">Thrown for unknown <see cref="ToonValue"/> subclasses.</exception>
+        private string FormatPrimitive(ToonValue? value)
         {
-            sb.Append(_options.Delimiter);
-        }
-
-        sb.Append(']');
-    }
-
-    /// <summary>
-    ///     Starts a new line at the given depth. Lines are separated by LF and the document has no trailing newline (spec §12).
-    /// </summary>
-    private void StartLine(int depth)
-    {
-        var sb = _sb!;
-
-        if (_hasLine)
-        {
-            sb.Append('\n');
-        }
-
-        _hasLine = true;
-        sb.Append(' ', depth * _options.IndentSize);
-    }
-
-    /// <summary>
-    ///     Tracks structural nesting, enforcing <see cref="ToonOptions.MaxDepth"/> and the available stack space.
-    /// </summary>
-    /// <exception cref="ToonEncodingException">Thrown when the document is nested too deeply.</exception>
-    private void EnterNesting()
-    {
-        if (++_depth > _options.MaxDepth)
-        {
-            throw new ToonEncodingException($"Maximum depth of {_options.MaxDepth} exceeded");
-        }
-
-        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
-        {
-            throw new ToonEncodingException("Document is nested too deeply to encode with the available stack space");
+            return value switch
+            {
+                null or ToonNull => "null",
+                ToonBoolean b    => b.Value ? "true" : "false",
+                ToonNumber n     => ToonNumberFormatter.Format(n) ?? "null",
+                ToonString s     => QuoteIfNeeded(s.Value, _options.Delimiter),
+                _                => throw new ToonEncodingException($"Unsupported TOON value type: {value.GetType().Name}")
+            };
         }
     }
 
     #endregion
 
     #region Primitives, keys and quoting
-
-    /// <summary>
-    ///     Formats a primitive value. NaN and infinities are written as null (spec §3).
-    /// </summary>
-    /// <exception cref="ToonEncodingException">Thrown for unknown <see cref="ToonValue"/> subclasses.</exception>
-    private string FormatPrimitive(ToonValue? value)
-    {
-        return value switch
-        {
-            null or ToonNull => "null",
-            ToonBoolean b    => b.Value ? "true" : "false",
-            ToonNumber n     => ToonNumberFormatter.Format(n) ?? "null",
-            ToonString s     => QuoteIfNeeded(s.Value, _options.Delimiter),
-            _                => throw new ToonEncodingException($"Unsupported TOON value type: {value.GetType().Name}")
-        };
-    }
 
     /// <summary>
     ///     Quotes a string value when spec §7.2 requires it.

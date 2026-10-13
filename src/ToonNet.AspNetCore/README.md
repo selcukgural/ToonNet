@@ -173,7 +173,7 @@ Controls C# object serialization behavior:
 
 ### Pattern 1: Inject ToonEncoder
 
-`ToonEncoder` is registered as a singleton with the configured `ToonOptions`. There is no injectable parser; parse
+`ToonEncoder` is registered as a singleton with the configured `ToonOptions` and is safe to use from concurrent requests. There is no injectable parser; parse
 with `ToonDocument.Parse` and the injected options:
 
 ```csharp
@@ -393,6 +393,7 @@ builder.Services.AddOptions<ToonOptions>()
 ## 🔒 Thread-Safety
 
 - `ToonSerializer` methods are safe to call concurrently across threads.
+- A `ToonEncoder` instance keeps no per-call state and can be shared across threads (it is registered as a singleton by `AddToonNet`).
 - Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
 - Cache entries are created on demand and retained for the process lifetime (no eviction).
 - Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.

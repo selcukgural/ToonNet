@@ -665,6 +665,7 @@ Console.WriteLine(toon);
 ## 🔒 Thread-Safety Notes
 
 - `ToonSerializer` methods are safe to call concurrently across threads.
+- A `ToonEncoder` instance keeps no per-call state and can be shared across threads (it is registered as a singleton by `AddToonNet`).
 - Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
 - Cache entries are created on demand and retained for the process lifetime (no eviction).
 - Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.

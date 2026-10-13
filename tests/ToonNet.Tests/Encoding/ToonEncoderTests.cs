@@ -173,4 +173,32 @@ public class ToonEncoderTests
         // Assert - internal spaces are safe unquoted (spec §7.2)
         Assert.Equal("name: Alice Smith", result);
     }
+
+    [Fact]
+    public async Task Encode_SharedInstanceAcrossThreads_ProducesSameOutputAsSequential()
+    {
+        // A singleton encoder (as registered by AddToonNet) must not mix the output of concurrent calls
+        var encoder = new ToonEncoder();
+        var documents = Enumerable.Range(0, 64).Select(i => new ToonDocument(new ToonObject
+        {
+            ["id"] = new ToonNumber(i),
+            ["tags"] = Tags(i),
+            ["nested"] = new ToonObject { ["name"] = new ToonString(new string('x', i)) }
+        })).ToArray();
+        var expected = documents.Select(encoder.Encode).ToArray();
+
+        for (var round = 0; round < 20; round++)
+        {
+            var actual = await Task.WhenAll(documents.Select(doc => Task.Run(() => encoder.Encode(doc))));
+            Assert.Equal(expected, actual);
+        }
+
+        static ToonArray Tags(int i)
+        {
+            var array = new ToonArray();
+            array.Add(new ToonString("t" + i));
+            array.Add(new ToonString("u" + i));
+            return array;
+        }
+    }
 }

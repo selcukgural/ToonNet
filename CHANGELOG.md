@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **ToonNet.Core:** `ToonEncoder` keeps its per-call state local to each `Encode` call, so one instance can be shared
+  across threads. Before, concurrent calls on the singleton registered by `AddToonNet` could mix their output.
+- **ToonNet.AspNetCore:** `AddToonNet` no longer registers the internal `ToonParser`, which was stateful and could not
+  be resolved by applications anyway.
+
 ## [2.0.0] - 2026-10-09
 
 > All packages move to 2.0.0: the encoder, parser, serializer and source generator follow TOON spec v3.3.2 and

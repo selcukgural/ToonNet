@@ -46,7 +46,6 @@ public static class ServiceCollectionExtensions
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
-        services.AddSingleton(sp => new ToonParser(sp.GetRequiredService<IOptions<ToonOptions>>().Value));
         services.AddSingleton(sp => new ToonEncoder(sp.GetRequiredService<IOptions<ToonOptions>>().Value));
 
         return services;
@@ -73,7 +72,6 @@ public static class ServiceCollectionExtensions
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
-        services.AddSingleton(sp => new ToonParser(sp.GetRequiredService<IOptions<ToonOptions>>().Value));
         services.AddSingleton(sp => new ToonEncoder(sp.GetRequiredService<IOptions<ToonOptions>>().Value));
 
         return services;

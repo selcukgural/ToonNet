@@ -74,7 +74,6 @@ public sealed class ToonNetServiceCollectionExtensionsTests
         Assert.Equal(PropertyNamingPolicy.CamelCase, serializerOptions.PropertyNamingPolicy);
         Assert.True(ReferenceEquals(serializerOptions.ToonOptions, toonOptions));
 
-        Assert.NotNull(provider.GetRequiredService<ToonParser>());
         Assert.NotNull(provider.GetRequiredService<ToonEncoder>());
     }
 
