@@ -21,6 +21,8 @@ internal sealed class SourceEmitter
     private const string Serializer = Serialization + "ToonSerializer";
     private const string Helpers = Serialization + "ToonSourceGenerationHelpers";
     private const string Options = Serialization + "ToonSerializerOptions";
+    private const string Writer = "global::ToonNet.Core.Encoding.ToonWriter";
+    private const string RowShape = Serialization + "ToonRowShape";
     private const string HiddenAttribute = "[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]";
 
     private readonly TypeModel _model;
@@ -68,6 +70,11 @@ internal sealed class SourceEmitter
         EmitConverterFields();
         EmitRegistration();
         EmitSerialize();
+
+        if (EmitsFieldWriter)
+        {
+            EmitFieldWriter();
+        }
 
         if (_model.Constructor != null)
         {
@@ -120,12 +127,13 @@ internal sealed class SourceEmitter
         }
 
         var deserialize = _model.Constructor != null ? "__ToonDeserializeValue" : "null";
+        var writer = EmitsFieldWriter ? ", new __ToonObjectWriter()" : "";
 
         _code.AppendLine("/// <summary>Registers the generated methods with ToonSerializer.</summary>");
         _code.AppendLine("#pragma warning disable CA2255 // Registration has to run before ToonSerializer sees the type");
         _code.AppendLine("[global::System.Runtime.CompilerServices.ModuleInitializer]");
         _code.AppendLine(HiddenAttribute);
-        _code.AppendLine($"internal static void __ToonRegister() => {Helpers}.Register<{_model.FullyQualifiedName}>(__ToonSerializeValue, {deserialize});");
+        _code.AppendLine($"internal static void __ToonRegister() => {Helpers}.Register<{_model.FullyQualifiedName}>(__ToonSerializeValue, {deserialize}{writer});");
         _code.AppendLine("#pragma warning restore CA2255");
         _code.AppendLine();
     }
@@ -263,6 +271,352 @@ internal sealed class SourceEmitter
     }
 
     private static string NonNull(ValuePlan plan, string local) => plan.IsNullableValueType ? $"{local}.GetValueOrDefault()" : local;
+
+    #endregion
+
+    #region Direct writing
+
+    /// <summary>
+    /// Types with a type-level converter are always written through it, so they get no field writer.
+    /// </summary>
+    private bool EmitsFieldWriter => !_model.HasTypeConverter;
+
+    /// <summary>
+    /// Emits the methods that write the type straight to TOON text (<c>__ToonWriteFields</c>, the tabular row methods)
+    /// and the <c>ToonObjectWriter</c> that registers them. They mirror <c>__ToonSerializeValue</c> followed by the
+    /// encoder; values they do not write themselves go to <c>ToonWriter.WriteField</c>, which applies ToonSerializer's
+    /// rules.
+    /// </summary>
+    private void EmitFieldWriter()
+    {
+        var code = _code;
+        var model = _model;
+        var type = model.FullyQualifiedName;
+        var duplicates = DuplicateNameCondition();
+
+        code.AppendLine();
+        code.AppendLine("/// <summary>Used by generated code and ToonSerializer; call <c>Serialize</c> instead.</summary>");
+        code.AppendLine(HiddenAttribute);
+        code.BeginBlock($"public static int __ToonWriteFields({type} value, {Writer} writer, int lineDepth, int childDepth, bool firstOnCurrentLine, int depth)");
+        code.AppendLine("var options = writer.SerializerOptions;");
+        EmitPolicyLocal();
+
+        if (duplicates != null)
+        {
+            // Properties sharing a name: the tree keeps the last value, so write what it builds
+            code.BeginBlock($"if ({duplicates})");
+            code.AppendLine($"return writer.WriteTreeFields(({Models}ToonObject)__ToonSerializeValue(value, options, depth), lineDepth, childDepth, firstOnCurrentLine);");
+            code.EndBlock();
+        }
+
+        code.AppendLine("var __count = 0;");
+
+        for (var i = 0; i < model.Properties.Length; i++)
+        {
+            var property = model.Properties[i];
+            code.AppendLine();
+            code.AppendLine($"// {property.Name}");
+            code.BeginBlock(property.IsReadOnly ? "if (options.IncludeReadOnlyProperties)" : "");
+            code.AppendLine($"var __v{i} = value.{property.Name};");
+            EmitWriteField(property, $"__v{i}");
+            code.EndBlock();
+        }
+
+        code.AppendLine();
+        code.AppendLine("return __count;");
+        code.EndBlock();
+
+        EmitRowShape(duplicates);
+        EmitWriteRow();
+        EmitGetName();
+        EmitObjectWriterClass();
+    }
+
+    /// <summary>A condition that is true for the naming policies under which two properties share a name, or null.</summary>
+    private string? DuplicateNameCondition()
+    {
+        var policyType = Serialization + "PropertyNamingPolicy";
+        var duplicate = new bool[4];
+
+        for (var policy = 0; policy < 4; policy++)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            duplicate[policy] = _model.Properties.Items.Any(p => !seen.Add(p.Names[policy]));
+        }
+
+        if (_model.FixedNamingPolicy is { } fixedPolicy)
+        {
+            return duplicate[fixedPolicy is >= 0 and <= 3 ? fixedPolicy : 0] ? "true" : null;
+        }
+
+        if (!duplicate.Any(d => d))
+        {
+            return null;
+        }
+
+        // Undefined policy values use the property names as they are, like the default policy
+        return $"__policy switch {{ {policyType}.CamelCase => {Bool(duplicate[1])}, {policyType}.SnakeCase => {Bool(duplicate[2])}, " +
+               $"{policyType}.LowerCase => {Bool(duplicate[3])}, _ => {Bool(duplicate[0])} }}";
+
+        static string Bool(bool value) => value ? "true" : "false";
+    }
+
+    /// <summary>Writes one property in <c>__ToonWriteFields</c>, counting it in <c>__count</c> when it is written.</summary>
+    private void EmitWriteField(PropertyModel property, string local)
+    {
+        var code = _code;
+        var plan = property.Plan;
+        const string startLine = "if (__count != 0 || !firstOnCurrentLine) writer.StartLine(lineDepth);";
+
+        if (property.ConverterTypeName != null || !WritesDirectly(plan))
+        {
+            var converter = property.ConverterTypeName != null ? ConverterField(property) : "null";
+            code.AppendLine($"if (writer.WriteField({NameExpression(property)}, {local}, typeof({property.TypeOfName}), {converter}, lineDepth, childDepth, " +
+                            "__count != 0 || !firstOnCurrentLine, depth + 1)) __count++;");
+            return;
+        }
+
+        if (plan.CanBeNull)
+        {
+            code.BeginBlock($"if ({local} is null)");
+            code.BeginBlock("if (!options.IgnoreNullValues)");
+            code.AppendLine(startLine);
+            code.AppendLine($"writer.Write({EncodedNameExpression(property, ": null")});");
+            code.AppendLine("__count++;");
+            code.EndBlock();
+            code.EndBlock();
+            code.BeginBlock("else");
+        }
+
+        var value = NonNull(plan, local);
+        code.AppendLine(startLine);
+
+        if (plan.Kind == ValueKind.Generated)
+        {
+            // The same depth check and nesting as a nested object in the tree
+            code.AppendLine("writer.EnterValue(depth + 1);");
+            code.AppendLine($"writer.Write({EncodedNameExpression(property, ":")});");
+            code.AppendLine("writer.EnterNesting();");
+            code.AppendLine($"{plan.ValueTypeName}.__ToonWriteFields({value}, writer, childDepth, childDepth + 1, false, depth + 1);");
+            code.AppendLine("writer.ExitNesting();");
+        }
+        else
+        {
+            code.AppendLine($"writer.Write({EncodedNameExpression(property, ": ")});");
+            code.AppendLine(WritePrimitiveStatement(plan, value));
+        }
+
+        code.AppendLine("__count++;");
+
+        if (plan.CanBeNull)
+        {
+            code.EndBlock();
+        }
+    }
+
+    /// <summary>
+    /// Whether <c>__ToonWriteFields</c> writes the value itself: primitives, and objects of sealed types (or structs)
+    /// with generated field writers. Others need their runtime type or ToonSerializer's collection rules.
+    /// </summary>
+    private static bool WritesDirectly(ValuePlan plan) =>
+        plan.Kind is ValueKind.Inline or ValueKind.Primitive ||
+        plan is { Kind: ValueKind.Generated, CheckRuntimeType: false, HasFieldWriter: true };
+
+    private static string WritePrimitiveStatement(ValuePlan plan, string value)
+    {
+        return plan.Kind == ValueKind.Primitive
+            ? $"writer.WritePrimitiveValue<{plan.ValueTypeName}>({value});"
+            : plan.Inline switch
+            {
+                PrimitiveKind.String => $"writer.WriteString({value});",
+                PrimitiveKind.Boolean => $"writer.WriteBoolean({value});",
+                PrimitiveKind.Integer => $"writer.WriteInteger((long){value});",
+                PrimitiveKind.UInt64 => $"writer.WriteDecimal({value});",
+                PrimitiveKind.Single => $"writer.WriteSingle({value});",
+                PrimitiveKind.Decimal => $"writer.WriteDecimal({value});",
+                _ => $"writer.WriteDouble({value});"
+            };
+    }
+
+    /// <summary>
+    /// Emits <c>__ToonGetRowShape</c>: whether an object can be a tabular row and which properties are columns.
+    /// </summary>
+    private void EmitRowShape(string? duplicates)
+    {
+        var code = _code;
+        var model = _model;
+
+        code.AppendLine();
+        code.AppendLine(HiddenAttribute);
+        code.BeginBlock($"public static {RowShape} __ToonGetRowShape({model.FullyQualifiedName} value, {Writer} writer, global::System.Span<bool> columns)");
+        code.AppendLine("var options = writer.SerializerOptions;");
+
+        if (duplicates != null)
+        {
+            EmitPolicyLocal();
+            code.AppendLine($"if ({duplicates}) return {RowShape}.Unknown;");
+        }
+
+        code.AppendLine("var __unknown = false;");
+
+        for (var i = 0; i < model.Properties.Length; i++)
+        {
+            var property = model.Properties[i];
+            var plan = property.Plan;
+            var access = $"value.{property.Name}";
+
+            code.AppendLine();
+            code.AppendLine($"// {property.Name}");
+
+            if (property.IsReadOnly)
+            {
+                code.AppendLine("if (!options.IncludeReadOnlyProperties) columns[" + i + "] = false;");
+                code.BeginBlock("else");
+            }
+            else
+            {
+                code.BeginBlock("");
+            }
+
+            if (property.ConverterTypeName != null)
+            {
+                code.AppendLine("__unknown = true; // the converter decides the form");
+            }
+            else if (plan.Kind is ValueKind.Inline or ValueKind.Primitive)
+            {
+                code.AppendLine(plan.CanBeNull
+                                    ? $"columns[{i}] = !({access} is null && options.IgnoreNullValues);"
+                                    : $"columns[{i}] = true;");
+            }
+            else
+            {
+                // A null value is a primitive; otherwise an object or array (or, for runtime-typed values, unknown)
+                var nonNull = plan.Kind is ValueKind.Raw or ValueKind.Reflection ? "__unknown = true;" : $"return {RowShape}.NotRow;";
+
+                if (plan.CanBeNull)
+                {
+                    code.AppendLine($"if ({access} is null) columns[{i}] = !options.IgnoreNullValues;");
+                    code.AppendLine($"else {nonNull}");
+                }
+                else
+                {
+                    code.AppendLine(nonNull);
+                }
+            }
+
+            code.EndBlock();
+        }
+
+        code.AppendLine();
+        code.AppendLine($"return __unknown ? {RowShape}.Unknown : {RowShape}.Row;");
+        code.EndBlock();
+    }
+
+    /// <summary>Emits <c>__ToonWriteRow</c>: the column values of a row, separated by the delimiter.</summary>
+    private void EmitWriteRow()
+    {
+        var code = _code;
+        var model = _model;
+
+        code.AppendLine();
+        code.AppendLine(HiddenAttribute);
+        code.BeginBlock($"public static void __ToonWriteRow({model.FullyQualifiedName} value, {Writer} writer, global::System.ReadOnlySpan<bool> columns)");
+        code.AppendLine("var __first = true;");
+
+        for (var i = 0; i < model.Properties.Length; i++)
+        {
+            var property = model.Properties[i];
+            var plan = property.Plan;
+
+            code.BeginBlock($"if (columns[{i}])");
+            code.AppendLine("if (!__first) writer.WriteDelimiter();");
+            code.AppendLine("__first = false;");
+
+            if (property.ConverterTypeName == null && plan.Kind is ValueKind.Inline or ValueKind.Primitive)
+            {
+                if (plan.CanBeNull)
+                {
+                    code.AppendLine($"var __v{i} = value.{property.Name};");
+                    code.AppendLine($"if (__v{i} is null) writer.WriteNull(); else {WritePrimitiveStatement(plan, NonNull(plan, $"__v{i}"))}");
+                }
+                else
+                {
+                    code.AppendLine(WritePrimitiveStatement(plan, $"value.{property.Name}"));
+                }
+            }
+            else
+            {
+                code.AppendLine("writer.WriteNull(); // only null values of other properties are rows");
+            }
+
+            code.EndBlock();
+        }
+
+        code.EndBlock();
+    }
+
+    /// <summary>Emits <c>__ToonGetName</c>: the serialized name of a property by index.</summary>
+    private void EmitGetName()
+    {
+        var code = _code;
+
+        code.AppendLine();
+        code.AppendLine(HiddenAttribute);
+        code.BeginBlock($"public static string __ToonGetName(int index, {Options} options)");
+        EmitPolicyLocal();
+        code.BeginBlock("return index switch");
+
+        for (var i = 0; i < _model.Properties.Length; i++)
+        {
+            code.AppendLine($"{i} => {NameExpression(_model.Properties[i])},");
+        }
+
+        code.AppendLine("_ => throw new global::System.ArgumentOutOfRangeException(nameof(index))");
+        code.EndBlock(";");
+        code.EndBlock();
+    }
+
+    private void EmitObjectWriterClass()
+    {
+        var code = _code;
+        var type = _model.FullyQualifiedName;
+
+        code.AppendLine();
+        code.BeginBlock($"private sealed class __ToonObjectWriter : {Serialization}ToonObjectWriter<{type}>");
+        code.AppendLine($"public override int PropertyCount => {_model.Properties.Length};");
+        code.AppendLine($"public override string GetName(int index, {Options} options) => __ToonGetName(index, options);");
+        code.AppendLine($"public override int WriteFields({type} value, {Writer} writer, int lineDepth, int childDepth, bool firstOnCurrentLine, int depth) =>");
+        code.AppendLine("    __ToonWriteFields(value, writer, lineDepth, childDepth, firstOnCurrentLine, depth);");
+        code.AppendLine($"public override {RowShape} GetRowShape({type} value, {Writer} writer, global::System.Span<bool> columns) => __ToonGetRowShape(value, writer, columns);");
+        code.AppendLine($"public override void WriteRow({type} value, {Writer} writer, global::System.ReadOnlySpan<bool> columns) => __ToonWriteRow(value, writer, columns);");
+        code.EndBlock();
+    }
+
+    /// <summary>
+    /// The key as written in TOON text (quoted when needed, encoded at compile time like the encoder does) followed
+    /// by <paramref name="suffix"/>, per naming policy like <see cref="NameExpression"/>.
+    /// </summary>
+    private string EncodedNameExpression(PropertyModel property, string suffix)
+    {
+        var names = property.Names;
+
+        string Encoded(int policy) => Literal(Shared.ToonKeys.Encode(names[policy]) + suffix);
+
+        if (_model.FixedNamingPolicy is { } policy)
+        {
+            return Encoded(policy is >= 0 and <= 3 ? policy : 0);
+        }
+
+        if (names.Items.All(n => n == names[0]))
+        {
+            return Encoded(0);
+        }
+
+        const string policyType = Serialization + "PropertyNamingPolicy";
+
+        return $"(__policy switch {{ {policyType}.CamelCase => {Encoded(1)}, {policyType}.SnakeCase => {Encoded(2)}, " +
+               $"{policyType}.LowerCase => {Encoded(3)}, _ => {Encoded(0)} }})";
+    }
 
     #endregion
 
@@ -618,7 +972,8 @@ internal sealed class SourceEmitter
 
         if (names[1] == names[2] && names[2] == names[3])
         {
-            return $"(__policy == {policyType}.Default ? {Literal(names[0])} : {Literal(names[1])})";
+            // Undefined policy values use the names as they are, like the default policy (and ToonSerializer)
+            return $"(__policy is {policyType}.CamelCase or {policyType}.SnakeCase or {policyType}.LowerCase ? {Literal(names[1])} : {Literal(names[0])})";
         }
 
         return $"(__policy switch {{ {policyType}.CamelCase => {Literal(names[1])}, {policyType}.SnakeCase => {Literal(names[2])}, " +

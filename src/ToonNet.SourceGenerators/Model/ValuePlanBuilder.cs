@@ -150,18 +150,20 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
             return Reflection(type, reasons, $"'{Display(type)}' has a type-level [ToonConverter]");
         }
 
-        bool canSerialize, canDeserialize;
+        bool canSerialize, canDeserialize, hasFieldWriter;
 
         if (named.DeclaringSyntaxReferences.Length > 0)
         {
             // Declared in this compilation: its methods are generated in this run.
             canSerialize = AllPartial(named);
             canDeserialize = canSerialize && (named.IsValueType || TypeModelBuilder.SelectConstructor(named) != null);
+            hasFieldWriter = canSerialize;
         }
         else
         {
             canSerialize = HasAccessibleMember(named, "__ToonSerializeValue");
             canDeserialize = HasAccessibleMember(named, "__ToonDeserializeValue");
+            hasFieldWriter = HasAccessibleMember(named, "__ToonWriteFields"); // absent in code from older generators
         }
 
         if (!canSerialize || !canDeserialize)
@@ -171,7 +173,7 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
                                   : $"'{Display(type)}' has no generated methods (not partial, or built with an older generator)");
         }
 
-        return Plan(ValueKind.Generated, type, checkRuntimeType: !type.IsValueType && !type.IsSealed);
+        return Plan(ValueKind.Generated, type, checkRuntimeType: !type.IsValueType && !type.IsSealed) with { HasFieldWriter = hasFieldWriter };
     }
 
     private ValuePlan Reflection(ITypeSymbol type, List<string> reasons, string reason)

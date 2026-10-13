@@ -101,10 +101,9 @@ await ToonSerializer.SerializeToStreamAsync(data, stream);
 without the reflection-based metadata path (other types, and options with converters, fall back to
 `ToonSerializer`). The generated code produces the same TOON as `ToonSerializer`.
 
-`ToonSerializer.Serialize` writes types without generated code straight to text, while types with generated code are
-still converted through the `ToonValue` model, so serializing them is currently slower than the reflection-based
-path; reading performs about the same. Use the generator to avoid reflection over your types, and measure before
-choosing it for speed.
+`ToonSerializer.Serialize` writes objects straight to text either way; with generated code the property access, key
+encoding and primitive formatting are compiled in, which makes serializing faster than the reflection-based path
+(about 15-30% for lists of 10,000 objects in the repository's benchmarks). Reading performs about the same.
 
 ## Performance Comparison
 

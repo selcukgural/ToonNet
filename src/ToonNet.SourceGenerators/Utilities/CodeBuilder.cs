@@ -103,6 +103,16 @@ internal sealed class CodeBuilder
     }
 
     /// <summary>
+    /// Closes the current code block with <c>}</c> followed by <paramref name="suffix"/> (for example <c>;</c> after a
+    /// switch expression) and decreases the indentation level.
+    /// </summary>
+    public void EndBlock(string suffix)
+    {
+        DecrementIndent();
+        AppendLine("}" + suffix);
+    }
+
+    /// <summary>
     /// Returns the string representation of the current state of the code builder.
     /// </summary>
     /// <returns>

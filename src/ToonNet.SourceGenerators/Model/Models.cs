@@ -78,7 +78,8 @@ internal sealed record ValuePlan(
     PrimitiveKind Inline,
     bool CheckRuntimeType,
     ValuePlan? Element,
-    ValuePlan? Key);
+    ValuePlan? Key,
+    bool HasFieldWriter = false);
 
 internal enum ValueKind
 {

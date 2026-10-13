@@ -21,6 +21,11 @@ public class ReflectionParityTests
 
         Assert.Equal(reflection, generated);
 
+        // ToonSerializer writes the type with its generated field writer, straight to text
+        var fallbacks = ToonSerializer.DirectWriteFallbacks;
+        Assert.Equal(generated, ToonSerializer.Serialize(value, options));
+        Assert.Equal(fallbacks, ToonSerializer.DirectWriteFallbacks);
+
         var readBack = deserialize(ToonDocument.Parse(reflection, options?.ToonOptions), options);
         Assert.Equal(reflection, ToonSerializer.Serialize(readBack, ReflectionOnly.Options(options)));
 

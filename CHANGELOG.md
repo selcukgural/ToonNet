@@ -73,7 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still go through the tree. The output is unchanged, and on an error the tree-based path runs, so exceptions and
   messages are unchanged too. Serializing 10,000 objects with the reflection-based path takes 7 ms instead of 20 ms
   (nested) and 2.4 ms instead of 6.5 ms (flat rows), allocating little more than the result string.
-  `SerializeToValue` and generated code still build the tree.
+  `SerializeToValue` still builds the tree.
+- **ToonNet.SourceGenerators:** Generated code writes `[ToonSerializable]` objects straight to TOON text as well: each
+  type gets a field writer (keys encoded at compile time, primitives written typed, nested sealed types and structs
+  called directly) and tabular-row methods, registered with `ToonSerializer` through a hidden `ToonObjectWriter<T>`.
+  Values that need their runtime type or a converter go through the serializer's rules. Serializing 10,000 objects
+  with generated code takes 6 ms instead of 14 ms (nested) and 1.6 ms instead of 5.9 ms (flat rows), faster than the
+  reflection-based path again. Hidden public types for generated code: `ToonWriter`, `ToonObjectWriter<T>`,
+  `ToonRowShape`, and a `ToonSourceGenerationHelpers.Register` overload.
 - **ToonNet.SourceGenerators:** Generated code creates objects, arrays and dictionaries with their final size (the
   property count, or the collection count when it is known without enumerating), and `WritePrimitive` converts
   dates, `Guid` and other common primitives without boxing. Serializing 10,000 nested objects with generated code
@@ -111,6 +118,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.SourceGenerators:** For an undefined `PropertyNamingPolicy` value (for example `(PropertyNamingPolicy)42`),
+  generated code used the camelCase names of properties whose camelCase, snake_case and lowercase names are equal;
+  like `ToonSerializer`, it now keeps the names as they are.
 - **ToonNet.Core:** Nullable annotations: the implicit conversion from `string` to `ToonValue` is non-nullable (it
   already returned `ToonNull` for null), and the one to `ToonString` is non-null for a non-null string, so
   `ToonString s = "text";` no longer warns.
