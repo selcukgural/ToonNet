@@ -138,6 +138,12 @@ public sealed class ToonNull : ToonValue
 /// <param name="value">The boolean value to be represented.</param>
 public sealed class ToonBoolean(bool value) : ToonValue
 {
+    /// <summary>Shared <c>true</c> value used by the parser and serializer (the type is immutable).</summary>
+    internal static readonly ToonBoolean True = new(true);
+
+    /// <summary>Shared <c>false</c> value used by the parser and serializer (the type is immutable).</summary>
+    internal static readonly ToonBoolean False = new(false);
+
     /// <summary>
     ///     Gets the boolean value.
     /// </summary>
@@ -147,6 +153,9 @@ public sealed class ToonBoolean(bool value) : ToonValue
     ///     Gets the type of this value.
     /// </summary>
     public override ToonValueType ValueType => ToonValueType.Boolean;
+
+    /// <summary>The shared instance for <paramref name="value"/>.</summary>
+    internal static ToonBoolean From(bool value) => value ? True : False;
 
     /// <summary>
     ///     Returns a string representation of this boolean value.

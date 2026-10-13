@@ -58,8 +58,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>Documents with at least this many lines use <see cref="_keys"/>.</summary>
     private const int KeyCacheMinLines = 64;
 
-    private static readonly ToonBoolean True = new(true);
-    private static readonly ToonBoolean False = new(false);
 
     /// <summary>
     ///     A physical line of input.
@@ -1081,12 +1079,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         if (token.SequenceEqual("true"))
         {
-            return True;
+            return ToonBoolean.True;
         }
 
         if (token.SequenceEqual("false"))
         {
-            return False;
+            return ToonBoolean.False;
         }
 
         if (token.SequenceEqual("null"))

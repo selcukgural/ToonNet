@@ -20,6 +20,9 @@ public static partial class ToonSerializer
         public IToonConverter? Converter { get; init; }
         public bool HasSetter => Setter != null;
 
+        /// <summary>Typed access for primitive properties of classes, used when no converter applies; else null.</summary>
+        public PrimitiveAccessor? Primitive { get; init; }
+
         /// <summary>Serialized names per <see cref="PropertyNamingPolicy"/> value, computed on first use.</summary>
         public string?[] Names { get; } = new string?[NamingPolicyCount];
     }
@@ -182,7 +185,8 @@ public static partial class ToonSerializer
                     Getter = CompileGetter(prop),
                     Setter = prop.CanWrite ? CompileSetter(prop) : null,
                     AttributeName = prop.GetCustomAttribute<ToonPropertyAttribute>()?.Name,
-                    Converter = CreateAttributeConverter(prop.GetCustomAttribute<ToonConverterAttribute>())
+                    Converter = CreateAttributeConverter(prop.GetCustomAttribute<ToonConverterAttribute>()),
+                    Primitive = PrimitiveAccessor.Create(prop)
                 };
 
                 var order = prop.GetCustomAttribute<ToonPropertyOrderAttribute>()?.Order ?? 0;

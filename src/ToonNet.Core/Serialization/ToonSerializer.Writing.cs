@@ -110,7 +110,7 @@ public static partial class ToonSerializer
         {
             string s          => new ToonString(s),
             char c            => new ToonString(c.ToString()),
-            bool b            => new ToonBoolean(b),
+            bool b            => ToonBoolean.From(b),
             byte n            => new ToonNumber((long)n),
             sbyte n           => new ToonNumber((long)n),
             short n           => new ToonNumber((long)n),
@@ -217,23 +217,41 @@ public static partial class ToonSerializer
     /// </summary>
     private static IEnumerable<(object Key, object? Value)>? GetGenericDictionaryEntries(object value)
     {
-        var dictionaryInterface = WrittenDictionaryInterfaceCache.GetOrAdd(value.GetType(), static t => t.GetInterfaces().FirstOrDefault(i => i.IsGenericType &&
-            (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))));
-
-        if (dictionaryInterface == null)
+        var reader = WrittenDictionaryEntryReaders.GetOrAdd(value.GetType(), static t =>
         {
-            return null;
-        }
+            var dictionaryInterface = t.GetInterfaces().FirstOrDefault(i => i.IsGenericType &&
+                (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
 
-        var pairType = typeof(KeyValuePair<,>).MakeGenericType(dictionaryInterface.GetGenericArguments());
-        var keyProperty = pairType.GetProperty("Key")!;
-        var valueProperty = pairType.GetProperty("Value")!;
+            return dictionaryInterface == null
+                ? null
+                : (DictionaryEntryReader)Activator.CreateInstance(typeof(DictionaryEntryReader<,>).MakeGenericType(dictionaryInterface.GetGenericArguments()))!;
+        });
 
-        return ((IEnumerable)value).Cast<object>().Select(pair => (keyProperty.GetValue(pair)!, valueProperty.GetValue(pair)));
+        return reader?.Read(value);
     }
 
-    /// <summary>The generic dictionary interface per written type, or null; looked up for every object written.</summary>
-    private static readonly ConcurrentDictionary<Type, Type?> WrittenDictionaryInterfaceCache = new();
+    /// <summary>
+    ///     The entry reader per written type that only implements the generic dictionary interfaces, or null; looked
+    ///     up for every object written.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, DictionaryEntryReader?> WrittenDictionaryEntryReaders = new();
+
+    /// <summary>Enumerates the entries of a generic dictionary without reflection per entry.</summary>
+    private abstract class DictionaryEntryReader
+    {
+        public abstract IEnumerable<(object Key, object? Value)> Read(object dictionary);
+    }
+
+    private sealed class DictionaryEntryReader<TKey, TValue> : DictionaryEntryReader
+    {
+        public override IEnumerable<(object Key, object? Value)> Read(object dictionary)
+        {
+            foreach (var (key, value) in (IEnumerable<KeyValuePair<TKey, TValue>>)dictionary)
+            {
+                yield return (key!, value);
+            }
+        }
+    }
 
     private static string FormatDictionaryKey(object key)
     {
@@ -264,9 +282,19 @@ public static partial class ToonSerializer
             }
 
             var name = GetPropertyName(property, metadata, options);
-            state.Push(name);
-            var toonValue = SerializeValue(property.Getter(value), property.Property.PropertyType, options, depth + 1, state, property.Converter);
-            state.Pop();
+            ToonValue? toonValue;
+
+            if (property.Primitive is { } primitive && property.Converter == null && options.Converters.Count == 0)
+            {
+                // Same result as SerializeValue for a primitive, without boxing the value
+                toonValue = primitive.Write(value) ?? (options.IgnoreNullValues ? null : ToonNull.Instance);
+            }
+            else
+            {
+                state.Push(name);
+                toonValue = SerializeValue(property.Getter(value), property.Property.PropertyType, options, depth + 1, state, property.Converter);
+                state.Pop();
+            }
 
             if (toonValue != null)
             {

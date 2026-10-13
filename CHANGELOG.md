@@ -50,6 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only built for an error message), creates its cycle-detection set only when it writes an object, reads cached
   property names from an array instead of a `ConcurrentDictionary`, and the primitive reads of generated code no
   longer allocate any state.
+- **ToonNet.Core:** The reflection-based serializer reads and writes primitive properties of classes (strings,
+  booleans, numbers, `DateTime`, `DateTimeOffset`, `Guid` and their nullable forms) and primitive collection items
+  through typed delegates when no converter applies, so the values are no longer boxed; anything that is not an exact
+  match (and every error) still takes the general path. The remaining per-call reflection is gone: immutable
+  collections and dictionaries are created through compiled `CreateRange` and constructor delegates, and dictionaries
+  that only implement the generic interfaces are enumerated without `PropertyInfo.GetValue` per entry. `true` and
+  `false` values share one instance each. Serializing 10,000 objects takes 20-30% less time and memory.
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common

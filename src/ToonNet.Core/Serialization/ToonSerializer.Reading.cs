@@ -453,10 +453,16 @@ public static partial class ToonSerializer
         }
 
         var factory = CollectionFactories.GetOrAdd(targetType, static (t, e) => CollectionFactory.Create(t, e), elementType);
-        var items = factory.CreateList(array.Count);
+        var items = factory.Helpers.CreateList(array.Count);
+        var typedItems = factory.HasPrimitiveItems && options.Converters.Count == 0;
 
         for (var i = 0; i < array.Count; i++)
         {
+            if (typedItems && factory.Helpers.TryAddTyped(items, array[i]))
+            {
+                continue;
+            }
+
             state.Push(i);
             items.Add(DeserializeValue(array[i], elementType, options, depth + 1, state));
             state.Pop();
@@ -464,6 +470,17 @@ public static partial class ToonSerializer
 
         result = factory.Complete(items) ?? throw Error($"Cannot create a collection of type {targetType.Name}", targetType, value, state);
         return true;
+    }
+
+    /// <summary>
+    ///     Compiles <c>items =&gt; (object)method((TParameter)items)</c> for a static factory method such as
+    ///     <c>ImmutableList.CreateRange</c>, instead of calling it through <see cref="MethodBase.Invoke(object, object[])"/>.
+    /// </summary>
+    private static Func<TItems, object?> CompileCall<TItems>(MethodInfo method)
+    {
+        var items = Expression.Parameter(typeof(TItems), "items");
+        var call = Expression.Call(method, Expression.Convert(items, method.GetParameters()[0].ParameterType));
+        return Expression.Lambda<Func<TItems, object?>>(Expression.Convert(call, typeof(object)), items).Compile();
     }
 
     /// <summary>How to build each collection type read so far.</summary>
@@ -474,8 +491,11 @@ public static partial class ToonSerializer
     /// </summary>
     private sealed class CollectionFactory
     {
-        /// <summary>Creates the <see cref="List{T}"/> the items are read into, with the given capacity.</summary>
-        public required Func<int, IList> CreateList { get; init; }
+        /// <summary>Creates the <see cref="List{T}"/> the items are read into and adds typed items to it.</summary>
+        public required CollectionHelpers Helpers { get; init; }
+
+        /// <summary>Whether items are primitives that <see cref="CollectionHelpers.TryAddTyped"/> can read without boxing.</summary>
+        public required bool HasPrimitiveItems { get; init; }
 
         /// <summary>Creates the target from the list, or returns null when the target type cannot be created.</summary>
         public required Func<IList, object?> Complete { get; init; }
@@ -489,7 +509,12 @@ public static partial class ToonSerializer
         {
             var helpers = (CollectionHelpers)Activator.CreateInstance(typeof(CollectionHelpers<>).MakeGenericType(elementType))!;
 
-            return new CollectionFactory { CreateList = helpers.CreateList, Complete = SelectCompletion(targetType, elementType, helpers) };
+            return new CollectionFactory
+            {
+                Helpers = helpers,
+                HasPrimitiveItems = PrimitiveAccessor.IsTypedPrimitive(Nullable.GetUnderlyingType(elementType) ?? elementType),
+                Complete = SelectCompletion(targetType, elementType, helpers)
+            };
         }
 
         private static Func<IList, object?> SelectCompletion(Type targetType, Type elementType, CollectionHelpers helpers)
@@ -515,7 +540,7 @@ public static partial class ToonSerializer
                 var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
                                              .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1)
                                              ?.MakeGenericMethod(elementType);
-                return createRange == null ? static _ => null : items => createRange.Invoke(null, [items]);
+                return createRange == null ? static _ => null : CompileCall<IList>(createRange);
             }
 
             if (targetType.GetConstructor(Type.EmptyTypes) == null ||
@@ -536,6 +561,9 @@ public static partial class ToonSerializer
     {
         public abstract IList CreateList(int capacity);
 
+        /// <summary>Adds an exact primitive match for the item type without boxing; false for anything else.</summary>
+        public abstract bool TryAddTyped(IList items, ToonValue value);
+
         public abstract object ToArray(IList items);
 
         public abstract object ToHashSet(IList items);
@@ -547,6 +575,17 @@ public static partial class ToonSerializer
     private sealed class CollectionHelpers<T> : CollectionHelpers
     {
         public override IList CreateList(int capacity) => new List<T>(capacity);
+
+        public override bool TryAddTyped(IList items, ToonValue value)
+        {
+            if (!TryReadTyped(value, out T item))
+            {
+                return false;
+            }
+
+            ((List<T>)items).Add(item);
+            return true;
+        }
 
         public override object ToArray(IList items) => ((List<T>)items).ToArray();
 
@@ -695,7 +734,7 @@ public static partial class ToonSerializer
                                              .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1 &&
                                                                   m.GetGenericArguments().Length == 2)
                                              ?.MakeGenericMethod(keyType, valueType);
-                return createRange == null ? static _ => null : entries => createRange.Invoke(null, [entries]);
+                return createRange == null ? static _ => null : CompileCall<IDictionary>(createRange);
             }
 
             if (targetType.IsInterface || targetType.IsAbstract)
@@ -708,7 +747,9 @@ public static partial class ToonSerializer
 
             if ((targetType.GetConstructor([genericDictionary]) ?? targetType.GetConstructor([pairs])) is { } fromEntries)
             {
-                return entries => fromEntries.Invoke([entries]);
+                var entries = Expression.Parameter(typeof(IDictionary), "entries");
+                var creation = Expression.New(fromEntries, Expression.Convert(entries, fromEntries.GetParameters()[0].ParameterType));
+                return Expression.Lambda<Func<IDictionary, object?>>(Expression.Convert(creation, typeof(object)), entries).Compile();
             }
 
             if (targetType.GetConstructor(Type.EmptyTypes) == null)
@@ -907,6 +948,13 @@ public static partial class ToonSerializer
             var name = GetPropertyName(property, metadata, options);
 
             if (!obj.Properties.TryGetValue(name, out var toonValue))
+            {
+                continue;
+            }
+
+            // Exact primitive matches are set without boxing; anything else (and every error) takes the general path
+            if (property.Primitive is { } primitive && property.Converter == null && options.Converters.Count == 0 &&
+                primitive.TryRead(instance, toonValue))
             {
                 continue;
             }
