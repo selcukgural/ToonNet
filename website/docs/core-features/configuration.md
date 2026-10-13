@@ -324,7 +324,7 @@ var options = new ToonSerializerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `IndentSize` | `int` | `2` | Spaces per indentation level; an even number from 2 to 100 |
+| `IndentSize` | `int` | `2` | Spaces per indentation level, from 1 to 100 |
 | `Delimiter` | `char` | `','` | Delimiter for inline arrays and tabular rows: `','`, `'\t'` or `'\|'` |
 | `StrictMode` | `bool` | `true` | Enforce the spec §14 errors while parsing (see [Deserialization](deserialization#parsing-rules-and-strict-mode)) |
 | `MaxDepth` | `int` | `100` | Maximum nesting depth while parsing and encoding (1–200, or up to 1000 with `AllowExtendedLimits`) |

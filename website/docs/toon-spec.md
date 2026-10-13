@@ -36,7 +36,7 @@ ToonNet writes enum names and keeps every digit of `decimal` and `ulong` values.
 
 | Spec option | ToonNet | Default |
 |-------------|---------|---------|
-| `indentSize` | `ToonOptions.IndentSize` (even, 2–100) | 2 |
+| `indentSize` | `ToonOptions.IndentSize` (1–100) | 2 |
 | `delimiter` | `ToonOptions.Delimiter` (`,`, `\t`, `\|`) | `,` |
 | `strict` | `ToonOptions.StrictMode` | `true` |
 

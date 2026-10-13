@@ -64,7 +64,7 @@ var options = new ToonSerializerOptions
 {
     ToonOptions = new ToonOptions
     {
-        IndentSize = 4,     // even number, 2..100 (default 2)
+        IndentSize = 4,     // 1..100 (default 2)
         Delimiter = '|'     // ',' (default), '\t' or '|'
     }
 };

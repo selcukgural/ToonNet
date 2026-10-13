@@ -148,7 +148,7 @@ Controls TOON format encoding behavior:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `IndentSize` | `int` | `2` | Number of spaces per indentation level (even, 2-100) |
+| `IndentSize` | `int` | `2` | Number of spaces per indentation level (1-100) |
 | `MaxDepth` | `int` | `100` | Maximum nesting depth when encoding **and parsing**; deeper input is rejected with `ToonParseException` |
 | `Delimiter` | `char` | `,` | Document delimiter: `,`, tab or `\|` (configuration also accepts `comma`, `tab`, `pipe`) |
 | `StrictMode` | `bool` | `true` | Enable strict parsing rules (e.g. array length checks) |
@@ -386,7 +386,7 @@ builder.Services.AddOptions<ToonOptions>()
 
 ### Validation Rules (Built-in)
 
-- `IndentSize`: Must be an even number between 2 and 100
+- `IndentSize`: Must be between 1 and 100
 - `MaxDepth`: Must be 1-200 (or 1-1000 if `AllowExtendedLimits = true`)
 - `Delimiter`: Must be comma, tab or pipe
 
