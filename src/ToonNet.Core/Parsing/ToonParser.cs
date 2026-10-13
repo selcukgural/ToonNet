@@ -1,6 +1,6 @@
+using System.Buffers;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Text;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 
@@ -31,7 +31,11 @@ namespace ToonNet.Core.Parsing;
 internal sealed class ToonParser(ToonOptions? options = null)
 {
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
+    /// <summary>The lines of the document being parsed, in an array rented from <see cref="ArrayPool{T}.Shared"/>.</summary>
     private Line[] _lines = [];
+
+    /// <summary>The number of lines in <see cref="_lines"/> (the rented array may be longer).</summary>
+    private int _lineCount;
     private int _position;
     private int _depth;
 
@@ -78,7 +82,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>
     ///     A parsed array header: <c>key?[N&lt;delim?&gt;]{fields?}:</c> (spec §6).
     /// </summary>
-    private sealed record Header(string? Key, int Length, char Delimiter, string[]? Fields, string InlineValues);
+    private readonly record struct Header(string? Key, int Length, char Delimiter, string[]? Fields, string InlineValues);
 
     #region Public API
 
@@ -95,21 +99,34 @@ internal sealed class ToonParser(ToonOptions? options = null)
         ArgumentNullException.ThrowIfNull(input);
         _ = _options.ValidatedMaxDepth;
 
-        _lines = SplitLines(input);
+        _lineCount = input.AsSpan().Count('\n') + 1;
+        _lines = ArrayPool<Line>.Shared.Rent(_lineCount);
 
-        _useKeyCache = _lines.Length >= KeyCacheMinLines;
-
-        if (_useKeyCache)
+        try
         {
-            _keys ??= new string?[KeyCacheSize];
-            Array.Clear(_keys);
+            SplitLines(input);
+
+            _useKeyCache = _lineCount >= KeyCacheMinLines;
+
+            if (_useKeyCache)
+            {
+                _keys ??= new string?[KeyCacheSize];
+                Array.Clear(_keys);
+            }
+
+            _position = 0;
+            _depth = 0;
+            _headerSpans = 0;
+
+            return new ToonDocument(ParseRoot());
         }
-
-        _position = 0;
-        _depth = 0;
-        _headerSpans = 0;
-
-        return new ToonDocument(ParseRoot());
+        finally
+        {
+            // Lines reference the content strings, so the array is cleared before it goes back to the pool
+            ArrayPool<Line>.Shared.Return(_lines, clearArray: true);
+            _lines = [];
+            _lineCount = 0;
+        }
     }
 
     /// <summary>
@@ -171,14 +188,14 @@ internal sealed class ToonParser(ToonOptions? options = null)
     #region Lines
 
     /// <summary>
-    ///     Splits the input into lines; each non-blank line allocates only its content string.
+    ///     Splits the input into <see cref="_lines"/>; each non-blank line allocates only its content string.
     /// </summary>
-    private Line[] SplitLines(string input)
+    private void SplitLines(string input)
     {
-        var lines = new Line[input.AsSpan().Count('\n') + 1];
+        var lines = _lines;
         var start = 0;
 
-        for (var i = 0; i < lines.Length; i++)
+        for (var i = 0; i < _lineCount; i++)
         {
             var newline = input.IndexOf('\n', start);
             var end = newline < 0 ? input.Length : newline;
@@ -187,8 +204,6 @@ internal sealed class ToonParser(ToonOptions? options = null)
             lines[i] = CreateLine(input, start, length, i + 1);
             start = end + 1;
         }
-
-        return lines;
     }
 
     /// <summary>
@@ -250,13 +265,13 @@ internal sealed class ToonParser(ToonOptions? options = null)
         var position = _position;
         skippedBlank = false;
 
-        while (position < _lines.Length && _lines[position].IsBlank)
+        while (position < _lineCount && _lines[position].IsBlank)
         {
             position++;
             skippedBlank = true;
         }
 
-        return position < _lines.Length ? _lines[position] : null;
+        return position < _lineCount ? _lines[position] : null;
     }
 
     private Line? PeekLine()
@@ -332,7 +347,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         var found = false;
 
-        foreach (var line in _lines)
+        foreach (var line in _lines.AsSpan(0, _lineCount))
         {
             if (!line.IsBlank)
             {
@@ -388,7 +403,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Parses a key-value or array-header line (<paramref name="content"/> without indentation or list marker)
     ///     and adds the field to <paramref name="target"/>; nested content is read at <paramref name="childDepth"/>.
     /// </summary>
-    private void ParseField(ToonObject target, Line line, string content, int childDepth)
+    private void ParseField(ToonObject target, Line line, ReadOnlySpan<char> content, int childDepth)
     {
         string key;
         ToonValue value;
@@ -409,7 +424,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             }
 
             // Line content has no trailing spaces, so the value runs to the end
-            var rest = content.AsSpan(restStart);
+            var rest = content[restStart..];
 
             if (rest.Length == 0 && PeekLine() is { } next && next.Depth == childDepth && IsListItem(next.Content))
             {
@@ -501,7 +516,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     The declared length of an array, bounded by the lines left, which is the most a list or tabular body can hold;
     ///     a header such as <c>[2000000000]:</c> does not reserve memory for items that are not there.
     /// </summary>
-    private int ExpectedItemCapacity(Header header) => Math.Min(header.Length, _lines.Length - _position);
+    private int ExpectedItemCapacity(Header header) => Math.Min(header.Length, _lineCount - _position);
 
     private ToonArray ParseTabularRows(Header header, int rowDepth, int capacity)
     {
@@ -592,7 +607,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return new ToonObject(); // empty object list item
         }
 
-        var rest = line.Content[2..].TrimStart(' ');
+        var rest = line.Content.AsSpan(2).TrimStart(' ');
 
         // Inner array: - [M]: ...
         if (TryParseHeader(line, rest, requireKey: false) is { Key: null } innerHeader)
@@ -694,9 +709,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>
     ///     Checks whether content is a key-value line (a key followed by a colon) or an array header with a key.
     /// </summary>
-    private static bool IsKeyValueLine(string content)
+    private static bool IsKeyValueLine(ReadOnlySpan<char> content)
     {
-        if (content.StartsWith('"'))
+        if (content.Length > 0 && content[0] == '"')
         {
             var end = FindClosingQuote(content, 0);
             return end > 0 && end + 1 < content.Length && content[end + 1] is ':' or '[';
@@ -765,9 +780,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     /// <returns>The index of the colon in <paramref name="content"/>.</returns>
     /// <exception cref="ToonParseException">Thrown when the key is not followed by a colon.</exception>
-    private int FindKeyValueColon(string content, Line line, out string key)
+    private int FindKeyValueColon(ReadOnlySpan<char> content, Line line, out string key)
     {
-        if (content.StartsWith('"'))
+        if (content.Length > 0 && content[0] == '"')
         {
             var end = FindClosingQuote(content, 0);
 
@@ -781,7 +796,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 throw new ToonParseException("Missing colon after key", line.Number, line.Indent + end + 2);
             }
 
-            key = Unescape(content.AsSpan(1, end - 1), line.Number, ColumnOf(line, content) + 1);
+            key = Unescape(content.Slice(1, end - 1), line.Number, ColumnOf(line, content) + 1);
             return end + 1;
         }
 
@@ -792,7 +807,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             throw new ToonParseException(colon == 0 ? "Missing key before colon" : "Missing colon after key", line.Number, line.Indent + 1);
         }
 
-        key = GetKey(content.AsSpan(0, colon).TrimEnd(' '));
+        key = GetKey(content[..colon].TrimEnd(' '));
         return colon;
     }
 
@@ -804,12 +819,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <param name="requireKey">Whether a key prefix is required (fields) or forbidden (root and list-item arrays).</param>
     /// <returns>The header, or null when the content is not a header.</returns>
     /// <exception cref="ToonParseException">Thrown in strict mode for malformed bracket segments or delimiter mismatches.</exception>
-    private Header? TryParseHeader(Line line, string content, bool requireKey)
+    private Header? TryParseHeader(Line line, ReadOnlySpan<char> content, bool requireKey)
     {
         string? key = null;
         int bracketStart;
 
-        if (content.StartsWith('"'))
+        if (content.Length > 0 && content[0] == '"')
         {
             var end = FindClosingQuote(content, 0);
 
@@ -818,7 +833,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 return null;
             }
 
-            key = Unescape(content.AsSpan(1, end - 1), line.Number, ColumnOf(line, content) + 1);
+            key = Unescape(content.Slice(1, end - 1), line.Number, ColumnOf(line, content) + 1);
             bracketStart = end + 1;
         }
         else
@@ -833,7 +848,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
             if (bracketStart > 0)
             {
-                key = GetKey(content.AsSpan(0, bracketStart));
+                key = GetKey(content[..bracketStart]);
             }
         }
 
@@ -869,18 +884,20 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Set when an unquoted field name contains another delimiter character, i.e. the fields segment uses a different
     ///     delimiter than the bracket declares.
     /// </param>
-    private Header? TryParseHeaderSegments(Line line, string content, int bracketStart, string? key, out bool malformed, out bool mixedDelimiters)
+    private Header? TryParseHeaderSegments(Line line, ReadOnlySpan<char> content, int bracketStart, string? key, out bool malformed,
+                                           out bool mixedDelimiters)
     {
         malformed = true;
         mixedDelimiters = false;
-        var bracketEnd = content.IndexOf(']', bracketStart);
+        var bracketEnd = content[bracketStart..].IndexOf(']');
 
         if (bracketEnd < 0)
         {
             return null;
         }
 
-        var inner = content.AsSpan(bracketStart + 1, bracketEnd - bracketStart - 1);
+        bracketEnd += bracketStart;
+        var inner = content.Slice(bracketStart + 1, bracketEnd - bracketStart - 1);
         var delimiter = ',';
 
         if (inner.Length > 0 && inner[^1] is '\t' or '|')
@@ -899,14 +916,14 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         if (position < content.Length && content[position] == '{')
         {
-            var fieldsEnd = IndexOfUnquoted(content.AsSpan(position), '}');
+            var fieldsEnd = IndexOfUnquoted(content[position..], '}');
 
             if (fieldsEnd < 0)
             {
                 return null;
             }
 
-            var fieldsText = content.AsSpan(position + 1, fieldsEnd - 1);
+            var fieldsText = content.Slice(position + 1, fieldsEnd - 1);
             var rawFields = SplitDelimited(fieldsText, delimiter);
             var fieldsColumn = ColumnOf(line, content) + position + 1;
             fields = new string[rawFields.Count];
@@ -931,7 +948,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         malformed = false;
         var inlineValues = content[(position + 1)..].Trim(' ');
-        return new Header(key, length, delimiter, fields, inlineValues);
+        var inlineText = inlineValues.IsEmpty ? string.Empty : inlineValues.ToString();
+        return new Header(key, length, delimiter, fields, inlineText);
     }
 
     private static bool IsCanonicalLength(ReadOnlySpan<char> text)
@@ -1015,7 +1033,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>
     ///     The 1-based column of the first character of <paramref name="suffix"/>, a suffix of the line's content.
     /// </summary>
-    private static int ColumnOf(Line line, string suffix) => line.Indent + line.Content.Length - suffix.Length + 1;
+    private static int ColumnOf(Line line, ReadOnlySpan<char> suffix) => line.Indent + line.Content.Length - suffix.Length + 1;
 
     /// <summary>
     ///     Returns the string for an unquoted key, shared with earlier occurrences of the same key in the document.
@@ -1223,62 +1241,76 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return text.ToString();
         }
 
-        var sb = new StringBuilder(text.Length);
+        // Unescaped text is never longer than the escaped text
+        char[]? rented = null;
+        var buffer = text.Length <= 256 ? stackalloc char[256] : rented = ArrayPool<char>.Shared.Rent(text.Length);
 
-        for (var i = 0; i < text.Length; i++)
+        try
         {
-            var ch = text[i];
+            var length = 0;
 
-            if (ch != '\\')
+            for (var i = 0; i < text.Length; i++)
             {
-                sb.Append(ch);
-                continue;
+                var ch = text[i];
+
+                if (ch != '\\')
+                {
+                    buffer[length++] = ch;
+                    continue;
+                }
+
+                // Error columns point at the backslash
+                if (++i >= text.Length)
+                {
+                    throw new ToonParseException("Unterminated escape sequence", lineNumber, column + i - 1);
+                }
+
+                switch (text[i])
+                {
+                    case '\\':
+                        buffer[length++] = '\\';
+                        break;
+                    case '"':
+                        buffer[length++] = '"';
+                        break;
+                    case 'n':
+                        buffer[length++] = '\n';
+                        break;
+                    case 'r':
+                        buffer[length++] = '\r';
+                        break;
+                    case 't':
+                        buffer[length++] = '\t';
+                        break;
+                    case 'u':
+                        if (text.Length - (i + 1) < 4 ||
+                            !int.TryParse(text.Slice(i + 1, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var codePoint))
+                        {
+                            throw new ToonParseException("Invalid \\u escape: expected four hex digits", lineNumber, column + i - 1);
+                        }
+
+                        if (codePoint is >= 0xD800 and <= 0xDFFF)
+                        {
+                            throw new ToonParseException("Invalid \\u escape: surrogate code points are not allowed", lineNumber, column + i - 1);
+                        }
+
+                        buffer[length++] = (char)codePoint;
+                        i += 4;
+                        break;
+                    default:
+                        throw new ToonParseException($"Invalid escape sequence '\\{text[i]}'", lineNumber, column + i - 1);
+                }
             }
 
-            // Error columns point at the backslash
-            if (++i >= text.Length)
+            return new string(buffer[..length]);
+        }
+        finally
+        {
+            if (rented != null)
             {
-                throw new ToonParseException("Unterminated escape sequence", lineNumber, column + i - 1);
-            }
-
-            switch (text[i])
-            {
-                case '\\':
-                    sb.Append('\\');
-                    break;
-                case '"':
-                    sb.Append('"');
-                    break;
-                case 'n':
-                    sb.Append('\n');
-                    break;
-                case 'r':
-                    sb.Append('\r');
-                    break;
-                case 't':
-                    sb.Append('\t');
-                    break;
-                case 'u':
-                    if (text.Length - (i + 1) < 4 ||
-                        !int.TryParse(text.Slice(i + 1, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var codePoint))
-                    {
-                        throw new ToonParseException("Invalid \\u escape: expected four hex digits", lineNumber, column + i - 1);
-                    }
-
-                    if (codePoint is >= 0xD800 and <= 0xDFFF)
-                    {
-                        throw new ToonParseException("Invalid \\u escape: surrogate code points are not allowed", lineNumber, column + i - 1);
-                    }
-
-                    sb.Append((char)codePoint);
-                    i += 4;
-                    break;
-                default:
-                    throw new ToonParseException($"Invalid escape sequence '\\{text[i]}'", lineNumber, column + i - 1);
+                ArrayPool<char>.Shared.Return(rented, clearArray: true);
             }
         }
-
-        return sb.ToString();
     }
 
     #endregion

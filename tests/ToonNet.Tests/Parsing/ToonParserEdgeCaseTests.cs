@@ -337,4 +337,21 @@ departments:
 
         Assert.Equal(token, Assert.IsType<ToonString>(value).Value);
     }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(300)]
+    [InlineData(5000)]
+    public void Parse_EscapedStrings_OfAnyLength_RoundTrip(int repeat)
+    {
+        // Short strings are unescaped on the stack, long ones in a pooled buffer
+        var value = string.Concat(Enumerable.Repeat("a\"b\\c\n\t\u0001", repeat));
+        var document = new ToonDocument(new ToonObject { ["k"] = value, [value] = 1 });
+
+        var toon = new ToonNet.Core.Encoding.ToonEncoder().Encode(document);
+        var parsed = new ToonParser().Parse(toon).AsObject();
+
+        Assert.Equal(value, ((ToonString)parsed["k"]!).Value);
+        Assert.True(parsed.Properties.ContainsKey(value));
+    }
 }

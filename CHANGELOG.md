@@ -57,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collections and dictionaries are created through compiled `CreateRange` and constructor delegates, and dictionaries
   that only implement the generic interfaces are enumerated without `PropertyInfo.GetValue` per entry. `true` and
   `false` values share one instance each. Serializing 10,000 objects takes 20-30% less time and memory.
+- **ToonNet.Core:** The parser rents its line table from `ArrayPool` (cleared on return; for large documents it was a
+  multi-megabyte allocation on the large object heap per parse), reads list-item and header lines as spans instead of
+  substrings, and unescapes quoted strings in a stack or pooled buffer instead of a `StringBuilder`.
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common
