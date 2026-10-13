@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Core:** Multi-document streams no longer drop items that encode to an empty document (no properties, or
+  only null properties with `IgnoreNullValues`). With `ExplicitSeparator` they are written and read back; blank-line
+  output, where they cannot be represented, throws a `ToonSerializationException` instead of losing them on reading.
+  An empty, blank or multi-line `DocumentSeparator` throws an `ArgumentException`.
 - **ToonNet.Extensions.Yaml:** `FromYaml` counts the nesting depth of expanded aliases against `MaxDepth`, and rejects
   recursive aliases (`&a [*a]`) with a clear `YamlException`. Before, aliases could build a tree deeper than `MaxDepth`,
   and a recursive alias was only stopped by the stack guard with a misleading message.

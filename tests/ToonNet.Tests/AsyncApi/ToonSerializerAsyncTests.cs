@@ -651,6 +651,100 @@ public sealed class ToonSerializerAsyncTests
         }
     }
 
+    public sealed class OptionalUser
+    {
+        public string? Name { get; set; }
+    }
+
+    private static async IAsyncEnumerable<T> ToAsync<T>(IEnumerable<T> items)
+    {
+        foreach (var item in items)
+        {
+            await Task.Yield();
+            yield return item;
+        }
+    }
+
+    private static async Task<List<string?>> RoundTripExplicitAsync(string?[] names, int batchSize = 50)
+    {
+        var ignoreNulls = new ToonSerializerOptions { IgnoreNullValues = true };
+        var writeOptions = new ToonMultiDocumentWriteOptions
+        {
+            Mode = ToonMultiDocumentSeparatorMode.ExplicitSeparator,
+            BatchSize = batchSize
+        };
+
+        using var stream = new MemoryStream();
+        await ToonSerializer.SerializeStreamAsync(ToAsync(names.Select(n => new OptionalUser { Name = n })), stream, ignoreNulls, writeOptions);
+        stream.Position = 0;
+
+        using var reader = new StreamReader(stream);
+        var result = new List<string?>();
+
+        await foreach (var user in ToonSerializer.DeserializeStreamAsync<OptionalUser>(reader, ignoreNulls, ToonMultiDocumentReadOptions.ExplicitSeparator))
+        {
+            result.Add(Assert.IsType<OptionalUser>(user).Name);
+        }
+
+        return result;
+    }
+
+    [Theory]
+    [InlineData("a,~,b")]
+    [InlineData("~,a")]
+    [InlineData("a,~")]
+    [InlineData("a,~,~")]
+    [InlineData("~")]
+    [InlineData("~,~")]
+    public async Task SerializeStreamAsync_ExplicitSeparator_KeepsEmptyDocuments(string items)
+    {
+        // "~" is an item without a name, which encodes to an empty document
+        var names = items.Split(',').Select(n => n == "~" ? null : n).ToArray();
+
+        Assert.Equal(names, await RoundTripExplicitAsync(names));
+        Assert.Equal(names, await RoundTripExplicitAsync(names, batchSize: 1));
+    }
+
+    [Fact]
+    public async Task SerializeStreamAsync_BlankLine_RejectsEmptyDocument()
+    {
+        var ignoreNulls = new ToonSerializerOptions { IgnoreNullValues = true };
+        var items = ToAsync(new[] { new OptionalUser { Name = "a" }, new OptionalUser() });
+
+        using var stream = new MemoryStream();
+
+        var ex = await Assert.ThrowsAsync<ToonSerializationException>(() => ToonSerializer.SerializeStreamAsync(items, stream, ignoreNulls).AsTask());
+        Assert.Contains("ExplicitSeparator", ex.Message);
+    }
+
+    [Fact]
+    public async Task SerializeCollectionToStreamAsync_RejectsEmptyDocument()
+    {
+        using var stream = new MemoryStream();
+
+        await Assert.ThrowsAsync<ToonSerializationException>(() => ToonSerializer.SerializeCollectionToStreamAsync(
+            new[] { new OptionalUser() }, stream, new ToonSerializerOptions { IgnoreNullValues = true }).AsTask());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("--\n--")]
+    public async Task ExplicitSeparator_MustBeOneNonBlankLine(string separator)
+    {
+        using var stream = new MemoryStream();
+        var writeOptions = new ToonMultiDocumentWriteOptions { Mode = ToonMultiDocumentSeparatorMode.ExplicitSeparator, DocumentSeparator = separator };
+        var readOptions = new ToonMultiDocumentReadOptions { Mode = ToonMultiDocumentSeparatorMode.ExplicitSeparator, DocumentSeparator = separator };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => ToonSerializer.SerializeStreamAsync(GenerateUsersAsync(1), stream, null, writeOptions).AsTask());
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        {
+            await foreach (var _ in ToonSerializer.DeserializeStreamAsync<TestUser>(new StreamReader(stream), null, readOptions))
+            {
+            }
+        });
+    }
+
     // Helper: Generate async enumerable of test users
     private static async IAsyncEnumerable<TestUser> GenerateUsersAsync(int count)
     {

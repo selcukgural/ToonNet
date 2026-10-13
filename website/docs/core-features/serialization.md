@@ -412,8 +412,8 @@ Choose the separator mode that fits your use case:
 
 | Mode | Format | Use Case |
 |------|--------|----------|
-| **BlankLine** (default) | Documents separated by one blank line | Human-readable; the encoder never writes blank lines inside a document |
-| **ExplicitSeparator** | Documents separated by a `---` line (`DocumentSeparator`) | Explicit boundaries, YAML-like |
+| **BlankLine** (default) | Documents separated by one blank line | Human-readable; the encoder never writes blank lines inside a document. Items that encode to an empty document throw |
+| **ExplicitSeparator** | Documents separated by a `---` line (`DocumentSeparator`) | Explicit boundaries, YAML-like; keeps items that encode to an empty document |
 
 The separator is always written with `\n`, independent of the platform line ending. Read the file back with the
 same mode.

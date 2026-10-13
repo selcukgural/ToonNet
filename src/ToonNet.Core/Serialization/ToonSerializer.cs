@@ -235,6 +235,8 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     This method writes each object as a separate TOON document, separated by blank lines.
     ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
+    ///     An object that encodes to an empty document would be lost on reading, so it throws a
+    ///     <see cref="ToonSerializationException"/>.
     /// </remarks>
     public static async ValueTask SerializeCollectionToFileAsync<T>(IEnumerable<T> values, string filePath, ToonSerializerOptions? options = null,
                                                                     CancellationToken cancellationToken = default)
@@ -261,6 +263,7 @@ public static partial class ToonSerializer
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
+            EnsureSeparableByBlankLines(toonString, typeof(T));
             await writer.WriteAsync(toonString.AsMemory(), cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
@@ -284,6 +287,8 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     This method writes each object as a separate TOON document, separated by blank lines.
     ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
+    ///     An object that encodes to an empty document would be lost on reading, so it throws a
+    ///     <see cref="ToonSerializationException"/>.
     /// </remarks>
     public static async ValueTask SerializeCollectionToStreamAsync<T>(IEnumerable<T> values, Stream stream, ToonSerializerOptions? options = null,
                                                                       CancellationToken cancellationToken = default)
@@ -308,6 +313,7 @@ public static partial class ToonSerializer
             }
 
             var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
+            EnsureSeparableByBlankLines(toonString, typeof(T));
             await writer.WriteAsync(toonString.AsMemory(), cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
@@ -428,6 +434,8 @@ public static partial class ToonSerializer
     ///     This method uses batched writes for improved throughput. Items are accumulated up to the configured batch size 
     ///     before writing to the stream, reducing I/O overhead. Memory usage is proportional to batch size × item size.
     ///     For very large items (MB+), consider using a smaller batch size.
+    ///     An item that encodes to an empty document throws a <see cref="ToonSerializationException"/> in blank-line mode,
+    ///     where it could not be read back; <see cref="ToonMultiDocumentSeparatorMode.ExplicitSeparator"/> keeps it.
     /// </remarks>
     public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options,
                                                           ToonMultiDocumentWriteOptions writeOptions,
@@ -441,7 +449,10 @@ public static partial class ToonSerializer
 
         await using var writerDisposal = writer.ConfigureAwait(false);
 
+        ValidateSeparator(writeOptions.Mode, writeOptions.DocumentSeparator);
+
         var isFirst = true;
+        var lastIsEmpty = false;
         var batch = new StringBuilder();
         var itemCount = 0;
         var batchSize = Math.Max(1, writeOptions.BatchSize); // Ensure at least 1
@@ -466,9 +477,16 @@ public static partial class ToonSerializer
 
             // Serialize item
             var toonString = await SerializeAsync(item, options, cancellationToken).ConfigureAwait(false);
+
+            if (writeOptions.Mode != ToonMultiDocumentSeparatorMode.ExplicitSeparator)
+            {
+                EnsureSeparableByBlankLines(toonString, typeof(T));
+            }
+
             batch.Append(toonString);
 
             isFirst = false;
+            lastIsEmpty = toonString.Length == 0;
             itemCount++;
 
             // Flush batch when a size threshold reached
@@ -480,6 +498,12 @@ public static partial class ToonSerializer
             await writer.WriteAsync(batch.ToString().AsMemory(), cancellationToken).ConfigureAwait(false);
             batch.Clear();
             itemCount = 0;
+        }
+
+        // An empty last document needs a line of its own, or the reader would see nothing after the last separator
+        if (lastIsEmpty)
+        {
+            batch.Append('\n');
         }
 
         // Flush remaining items
@@ -746,6 +770,7 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(multiDocumentOptions);
+        ValidateSeparator(multiDocumentOptions.Mode, multiDocumentOptions.DocumentSeparator);
 
         var currentObject = new StringBuilder();
 
@@ -787,6 +812,31 @@ public static partial class ToonSerializer
         var lastToonString = currentObject.ToString();
         var lastObj = await DeserializeAsync<T>(lastToonString, options, cancellationToken).ConfigureAwait(false);
         yield return lastObj;
+    }
+
+    /// <summary>
+    ///     Rejects a document that encodes to nothing (an object without written properties) in blank-line separated
+    ///     output, where it would vanish: the reader cannot tell it from the separator.
+    /// </summary>
+    /// <exception cref="ToonSerializationException">Thrown when <paramref name="document"/> is empty.</exception>
+    private static void EnsureSeparableByBlankLines(string document, Type type)
+    {
+        if (document.Length == 0)
+        {
+            throw new ToonSerializationException($"An item of type {type.Name} encodes to an empty TOON document, which cannot be " +
+                                                 "written to blank-line separated output without being lost when it is read back. " +
+                                                 "Use ToonMultiDocumentWriteOptions.ExplicitSeparator.") { TargetType = type };
+        }
+    }
+
+    /// <exception cref="ArgumentException">Thrown when an explicit separator is empty, blank or spans several lines.</exception>
+    private static void ValidateSeparator(ToonMultiDocumentSeparatorMode mode, string? separator)
+    {
+        if (mode == ToonMultiDocumentSeparatorMode.ExplicitSeparator &&
+            (string.IsNullOrWhiteSpace(separator) || separator.AsSpan().IndexOfAny('\r', '\n') >= 0))
+        {
+            throw new ArgumentException("DocumentSeparator must be a single, non-blank line", nameof(separator));
+        }
     }
 
     #endregion

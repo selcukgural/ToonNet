@@ -109,6 +109,12 @@ Age: 35
 
 Separators are always written with `\n`, regardless of the platform line ending, and the file has no trailing newline.
 
+An item that encodes to an empty document (an object with no properties, or with only null properties and
+`IgnoreNullValues`) cannot be told apart from a blank-line separator, so blank-line output throws a
+`ToonSerializationException` for it. `ExplicitSeparator` output keeps such items: the empty document becomes an empty
+line between separators (and a final newline when it is the last item), and the reader returns it as an object.
+`DocumentSeparator` must be a single non-blank line.
+
 ### Batch Size Configuration
 
 Control how many serialized documents are buffered before each write:
