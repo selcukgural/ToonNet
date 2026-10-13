@@ -48,6 +48,7 @@ dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*"
 |-------|------|-----------------------------------|
 | `ParserOnlyBenchmarks` | `ParserOnlyBenchmarks.cs` | `*ParserOnly*` |
 | `EncoderOnlyBenchmarks` | `EncoderOnlyBenchmarks.cs` | `*EncoderOnly*` |
+| `TypedSerializationBenchmarks` | `TypedSerializationBenchmarks.cs` | `*TypedSerialization*` |
 | `SimpleBenchmarks`, `MediumBenchmarks`, `ComplexBenchmarks` | `Benchmarks.cs` | `*SimpleBenchmarks*`, `*MediumBenchmarks*`, `*ComplexBenchmarks*` |
 | `AsyncBenchmarks` | `AsyncBenchmarks.cs` | `*AsyncBenchmarks*` |
 | `StreamingSerializationBenchmarks` | `StreamingSerializationBenchmarks.cs` | `*StreamingSerialization*` |
@@ -80,6 +81,24 @@ models in `Models/BenchmarkModels.cs` and compare:
 
 > **Note:** these are not like-for-like. `SerializeGenerated` returns a `ToonDocument` (no text encoding), while
 > `SerializeReflection` returns the encoded TOON string. The deserialize benchmarks also include a serialize step.
+
+`TypedSerializationBenchmarks` compares the two `ToonSerializer` paths on lists of 100 and 10,000 items (`[Params]`),
+with System.Text.Json as a reference point:
+
+- `*_Serialize_Reflection` / `*_Deserialize_Reflection` - the reflection-based serializer (generated code turned off
+  through the internal `ToonSerializerOptions.UseGeneratedCode`)
+- `*_Serialize_Generated` / `*_Deserialize_Generated` - the same `[ToonSerializable]` models, dispatched to generated code
+- `*_Serialize_Json` / `*_Deserialize_Json` - `JsonSerializer` with default options
+- `*_ParseOnly` / `*_EncodeOnly` - `ToonParser` and `ToonEncoder` on their own (encoding a document parsed in setup)
+
+`Orders_*` use nested objects (a positional record, a nested class, an enum, a date and a list) written as list items;
+`Rows_*` use flat objects written as a tabular array. Setup throws when the two paths produce different text.
+
+```bash
+# A quick run (about 5 minutes); drop the job arguments for BenchmarkDotNet's default accuracy
+dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*TypedSerialization*" \
+  --launchCount 1 --warmupCount 3 --iterationCount 6
+```
 
 ### 4. Async & Streaming Benchmarks
 

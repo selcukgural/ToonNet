@@ -68,3 +68,62 @@ public partial class NullableBenchmarkModel
     public bool IsVerified { get; set; }
     public string RequiredField { get; set; } = "Always present";
 }
+/// <summary>
+///     Order status for <see cref="OrderBenchmarkModel"/>.
+/// </summary>
+public enum OrderStatus
+{
+    Pending,
+    Shipped,
+    Delivered
+}
+
+/// <summary>
+///     Customer of an order, a positional record (read through its constructor).
+/// </summary>
+[ToonSerializable]
+public partial record CustomerBenchmarkModel(string Name, string Email);
+
+/// <summary>
+///     Shipping address of an order.
+/// </summary>
+[ToonSerializable]
+public partial class AddressBenchmarkModel
+{
+    public string City { get; set; } = "";
+    public string ZipCode { get; set; } = "";
+}
+
+/// <summary>
+///     An order with a nested record, a nested object, a list and common scalar types; lists of it are written as
+///     expanded list items.
+/// </summary>
+[ToonSerializable]
+public partial class OrderBenchmarkModel
+{
+    public int Id { get; set; }
+    public CustomerBenchmarkModel Customer { get; set; } = new("", "");
+    public AddressBenchmarkModel Address { get; set; } = new();
+    public decimal Total { get; set; }
+    public double Rating { get; set; }
+    public bool Paid { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public OrderStatus Status { get; set; }
+    public List<string> Tags { get; set; } = [];
+}
+
+/// <summary>
+///     A flat row of primitives; lists of it are written in tabular form.
+/// </summary>
+[ToonSerializable]
+public partial class RowBenchmarkModel
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+    public int Age { get; set; }
+    public double Score { get; set; }
+    public bool IsActive { get; set; }
+    public string Department { get; set; } = "";
+    public long Salary { get; set; }
+}
