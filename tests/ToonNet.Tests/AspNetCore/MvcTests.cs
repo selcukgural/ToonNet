@@ -247,6 +247,66 @@ public class MvcTests
         Assert.Equal(formatterOutput, System.Text.Encoding.UTF8.GetString(resultStream.ToArray()));
     }
 
+    private static async Task<string> ExecuteToonResultAsync(object? value, ToonSerializerOptions? options = null)
+    {
+        var httpContext = new DefaultHttpContext { RequestServices = new ServiceCollection().AddOptions().BuildServiceProvider() };
+        var stream = new MemoryStream();
+        httpContext.Response.Body = stream;
+
+        await new ToonResult(value, options).ExecuteAsync(httpContext);
+
+        Assert.Equal("application/toon; charset=utf-8", httpContext.Response.ContentType);
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    [Fact]
+    public async Task ToonResult_NullValue_WritesToonNull()
+    {
+        // An empty body would read back as an empty object
+        Assert.Equal("null", await ExecuteToonResultAsync(null));
+        Assert.Equal("null", await ExecuteToonResultAsync(null, new ToonSerializerOptions { IgnoreNullValues = true }));
+        Assert.Null(ToonSerializer.Deserialize<TestModel>("null"));
+    }
+
+    [Fact]
+    public async Task ToonOutputFormatter_NullObject_WritesToonNull()
+    {
+        var formatter = new ToonOutputFormatter(new ToonSerializerOptions());
+        var httpContext = new DefaultHttpContext();
+        var stream = new MemoryStream();
+        httpContext.Response.Body = stream;
+
+        var context = new OutputFormatterWriteContext(httpContext, (s, e) => new StreamWriter(s, e, leaveOpen: true), typeof(TestModel), null);
+        await formatter.WriteResponseBodyAsync(context, new System.Text.UTF8Encoding(false));
+
+        Assert.Equal("null", System.Text.Encoding.UTF8.GetString(stream.ToArray()));
+    }
+
+    [Theory]
+    [InlineData("text/toon", "text/toon; charset=utf-8")]
+    [InlineData("application/toon", "application/toon; charset=utf-8")]
+    [InlineData("text/toon, application/toon", "text/toon; charset=utf-8")]
+    public async Task ToonOutputFormatter_AcceptHeader_SelectsToonMediaType(string accept, string expectedContentType)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMvc(o => o.ReturnHttpNotAcceptable = true).AddToonFormatters();
+        await using var provider = services.BuildServiceProvider();
+
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
+        httpContext.Request.Headers.Accept = accept;
+        var body = new MemoryStream();
+        httpContext.Response.Body = body;
+
+        var actionContext = new Microsoft.AspNetCore.Mvc.ActionContext(httpContext, new Microsoft.AspNetCore.Routing.RouteData(),
+                                                                       new Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor());
+        await new Microsoft.AspNetCore.Mvc.ObjectResult(new TestModel { Name = "A", Age = 1 }).ExecuteResultAsync(actionContext);
+
+        Assert.Equal(200, httpContext.Response.StatusCode);
+        Assert.Equal(expectedContentType, httpContext.Response.ContentType);
+        Assert.Equal("Name: A\nAge: 1", System.Text.Encoding.UTF8.GetString(body.ToArray()));
+    }
+
     private class TestModel
     {
         public string Name { get; set; } = "";

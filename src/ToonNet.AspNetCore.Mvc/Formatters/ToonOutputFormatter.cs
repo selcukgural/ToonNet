@@ -26,8 +26,10 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
 
+        // Same media types as the input formatter; the response uses the one the client asked for
         SupportedMediaTypes.Add(MediaTypeHeaderValue.Parse(ToonFormatterDefaults.MediaType));
-        
+        SupportedMediaTypes.Add(MediaTypeHeaderValue.Parse(ToonFormatterDefaults.TextMediaType));
+
         SupportedEncodings.Add(Encoding.UTF8);
         SupportedEncodings.Add(Encoding.Unicode);
     }
@@ -47,13 +49,10 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
         var httpContext = context.HttpContext;
         var response = httpContext.Response;
 
-        if (context.Object == null)
-        {
-            return;
-        }
-
-        // Serialize first, then write with the negotiated encoding so the body matches the Content-Type charset
-        var toonString = ToonSerializer.Serialize(context.Object, context.Object.GetType(), _options);
+        // Serialize first, then write with the negotiated encoding so the body matches the Content-Type charset.
+        // A null value (reached when MVC does not turn it into 204 No Content) is written as `null`, because an empty
+        // TOON document means an empty object.
+        var toonString = ToonSerializer.Serialize(context.Object, context.Object?.GetType() ?? context.ObjectType ?? typeof(object), _options);
 
         var writer = context.WriterFactory(response.Body, selectedEncoding);
 

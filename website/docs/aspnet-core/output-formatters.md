@@ -82,6 +82,10 @@ app.MapGet("/users/{id}", (int id) => Results.Extensions.Toon(GetUserFromDatabas
 formatters use the same `IOptions<ToonSerializerOptions>`: `AddToonNet(...)`, `services.Configure<ToonSerializerOptions>(...)`
 and the delegate passed to `AddToonFormatters` all configure that one instance.
 
+A null value is written as the TOON document `null` (status 200), like `Results.Json(null)`. An empty body is not used
+because an empty TOON document means an empty object. In controllers, MVC still answers a null `ObjectResult` with
+`204 No Content` unless `HttpNoContentOutputFormatter.TreatNullValueAsNoContent` is turned off.
+
 ## Content Negotiation
 
 Client specifies desired format via `Accept` header:
@@ -91,8 +95,8 @@ GET /api/users/1 HTTP/1.1
 Accept: application/toon
 ```
 
-The output formatter only produces `application/toon` (`text/toon` is accepted by the input formatter only). It is
-added after the JSON formatter, so JSON stays the default for `Accept: */*` or a missing `Accept` header; use
+The output formatter produces `application/toon` and `text/toon` (the media types the input formatter accepts) and
+answers with the one the client asked for. It is added after the JSON formatter, so JSON stays the default for `Accept: */*` or a missing `Accept` header; use
 `[Produces("application/toon")]` to always return TOON from an action.
 
 ## See Also

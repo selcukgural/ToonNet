@@ -37,6 +37,10 @@ public sealed class ToonResult : IResult
     /// <summary>
     /// Executes the result operation of the current context asynchronously.
     /// </summary>
+    /// <remarks>
+    /// A null value is written as <c>null</c> (like <c>Results.Json(null)</c>); an empty TOON body would mean an
+    /// empty object.
+    /// </remarks>
     /// <param name="httpContext">
     /// The <see cref="HttpContext"/> containing the HTTP response to write to.
     /// </param>
@@ -50,16 +54,11 @@ public sealed class ToonResult : IResult
         // ToonSerializer writes UTF-8 without a byte order mark
         httpContext.Response.ContentType = $"{ToonFormatterDefaults.MediaType}; charset=utf-8";
 
-        if (_value is null)
-        {
-            return;
-        }
-
         // Resolve options from DI if not provided
         var options = _options ?? httpContext.RequestServices.GetService<IOptions<ToonSerializerOptions>>()?.Value ?? ToonSerializerOptions.Default;
 
-        // Use non-generic SerializeToStreamAsync overload (eliminates reflection overhead)
-        var objectType = _value.GetType();
+        // A null value is written as the TOON document `null`; an empty body would read back as an empty object
+        var objectType = _value?.GetType() ?? typeof(object);
         await ToonSerializer.SerializeToStreamAsync(objectType, _value, httpContext.Response.Body, options, httpContext.RequestAborted)
             .ConfigureAwait(false);
     }

@@ -15,7 +15,7 @@ ToonNet.AspNetCore.Mvc provides **MVC input/output formatters** for serving and 
 
 - ✅ **Input Formatter** - Accept TOON in request body
 - ✅ **Output Formatter** - Serve TOON in response body
-- ✅ **Content Negotiation** - `Accept: application/toon` support
+- ✅ **Content Negotiation** - `Accept: application/toon` and `Accept: text/toon` support
 - ✅ **Model Binding** - Automatic TOON → C# object conversion
 - ✅ **ToonResult** - Return TOON responses from actions
 
@@ -280,6 +280,7 @@ app.MapGet("/data-custom", () => new ToonResult(data, customOptions));
 app.MapGet("/data-ext", () => Results.Extensions.Toon(data));  // same, via IResultExtensions
 
 // Without options, ToonResult uses IOptions<ToonSerializerOptions> from DI (AddToonNet) or the defaults.
+// A null value is written as `null` (an empty TOON body would mean an empty object).
 ```
 
 ---

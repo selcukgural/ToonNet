@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.AspNetCore.Mvc:** `ToonResult` and the output formatter write a null value as the TOON document `null`.
+  Before, they sent an empty body, which a TOON reader takes as an empty object.
+- **ToonNet.AspNetCore.Mvc:** The output formatter also serves `Accept: text/toon`, the second media type the input
+  formatter already accepted; the response uses the media type the client asked for.
 - **ToonNet.AspNetCore:** `ToonSerializerOptions.ToonOptions` set in the `AddToonNet` serializer delegate,
   `AddToonFormatters` or `Configure<ToonSerializerOptions>` is no longer overwritten with the registered `ToonOptions`.
   The link to the registered `ToonOptions` is now applied before any other configuration, whatever the call order.
