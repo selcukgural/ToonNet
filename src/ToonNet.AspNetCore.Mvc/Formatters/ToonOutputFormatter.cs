@@ -49,10 +49,20 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
         var httpContext = context.HttpContext;
         var response = httpContext.Response;
 
-        // Serialize first, then write with the negotiated encoding so the body matches the Content-Type charset.
         // A null value (reached when MVC does not turn it into 204 No Content) is written as `null`, because an empty
         // TOON document means an empty object.
-        var toonString = ToonSerializer.Serialize(context.Object, context.Object?.GetType() ?? context.ObjectType ?? typeof(object), _options);
+        var type = context.Object?.GetType() ?? context.ObjectType ?? typeof(object);
+
+        if (selectedEncoding.CodePage == Encoding.UTF8.CodePage)
+        {
+            // UTF-8 (the common case) is written by the serializer in pooled chunks, without an intermediate string
+            await ToonSerializer.SerializeToStreamAsync(type, context.Object, response.Body, _options, httpContext.RequestAborted)
+                                .ConfigureAwait(false);
+            return;
+        }
+
+        // Other encodings: serialize first, then write with the negotiated encoding so the body matches the charset
+        var toonString = ToonSerializer.Serialize(context.Object, type, _options);
 
         var writer = context.WriterFactory(response.Body, selectedEncoding);
 

@@ -222,6 +222,27 @@ public class MvcTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToonOutputFormatter_Utf8Selected_StreamsTheSerializerOutput(bool nullValue)
+    {
+        var formatter = new ToonOutputFormatter(new ToonSerializerOptions());
+        var httpContext = new DefaultHttpContext();
+        var stream = new MemoryStream();
+        httpContext.Response.Body = stream;
+        var model = nullValue ? null : new TestModel { Name = "Çağrı 😀 " + new string('x', 40_000), Age = 1 };
+
+        // UTF-8 output goes straight to the body, without the text writer
+        var context = new OutputFormatterWriteContext(httpContext, (_, _) => throw new InvalidOperationException("writer used"),
+                                                      typeof(TestModel), model);
+
+        await formatter.WriteResponseBodyAsync(context, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        var expected = nullValue ? "null" : ToonSerializer.Serialize(model);
+        Assert.Equal(System.Text.Encoding.UTF8.GetBytes(expected), stream.ToArray());
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task AddToonFormatters_UsesTheSharedSerializerOptions(bool configureThroughAddToonNet)

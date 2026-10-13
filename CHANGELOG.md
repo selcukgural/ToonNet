@@ -74,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.AspNetCore.Mvc:** `ToonInputFormatter` decodes the request body while reading it, through a stream that
   enforces the size limit, instead of copying the body into a `MemoryStream` first (which allocated about twice the
   body size).
+- **ToonNet.AspNetCore.Mvc:** `ToonOutputFormatter` writes UTF-8 responses through `ToonSerializer.SerializeToStreamAsync`
+  (pooled chunks, no intermediate string); other negotiated encodings keep the text writer. `ToonResult` already used
+  the stream API and gets the chunked output as well.
 - **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
   instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
   With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common
