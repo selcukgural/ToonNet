@@ -89,6 +89,51 @@ internal sealed class ToonTextBuffer : IDisposable
     /// <summary>Marks <paramref name="count"/> characters of the span from <see cref="GetSpan"/> as written.</summary>
     public void Advance(int count) => _length += count;
 
+    /// <summary>Clears the written characters so the buffer can be reused.</summary>
+    public void Clear()
+    {
+        _buffer.AsSpan(0, _length).Clear();
+        _length = 0;
+    }
+
+    /// <summary>
+    ///     Writes the characters to <paramref name="stream"/> as UTF-8 (without a byte order mark), in chunks through a
+    ///     pooled byte buffer, so no string or full-size byte array is created.
+    /// </summary>
+    public async ValueTask WriteUtf8Async(Stream stream, CancellationToken cancellationToken)
+    {
+        var bytes = ArrayPool<byte>.Shared.Rent(ChunkBytes);
+        var encoder = ToonTextEncoding.Utf8NoBom.GetEncoder();
+        var position = 0;
+
+        try
+        {
+            bool completed;
+
+            do
+            {
+                var (charsUsed, bytesUsed, done) = Encode(encoder, WrittenMemory.Span[position..], bytes);
+                position += charsUsed;
+                completed = done;
+                await stream.WriteAsync(bytes.AsMemory(0, bytesUsed), cancellationToken).ConfigureAwait(false);
+            }
+            while (!completed);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
+        }
+
+        static (int CharsUsed, int BytesUsed, bool Completed) Encode(System.Text.Encoder encoder, ReadOnlySpan<char> chars, byte[] bytes)
+        {
+            encoder.Convert(chars, bytes, flush: true, out var charsUsed, out var bytesUsed, out var completed);
+            return (charsUsed, bytesUsed, completed);
+        }
+    }
+
+    /// <summary>The size of the byte chunks <see cref="WriteUtf8Async"/> writes.</summary>
+    private const int ChunkBytes = 16 * 1024;
+
     /// <summary>Creates a string from the written characters.</summary>
     public override string ToString() => new(WrittenSpan);
 

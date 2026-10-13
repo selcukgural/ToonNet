@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ToonNet.Core.Encoding;
@@ -54,11 +53,32 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(type);
         options ??= ToonSerializerOptions.Default;
 
-        var toonValue = SerializeValue(value, type, options, 0, new SerializerState());
-        var document = new ToonDocument(toonValue ?? ToonNull.Instance);
-        var encoder = new ToonEncoder(options.ToonOptions);
+        using var buffer = new ToonTextBuffer();
+        SerializeTo(buffer, value, type, options);
+        return buffer.ToString();
+    }
 
-        return encoder.Encode(document);
+    /// <summary>
+    ///     Serializes a value and appends its TOON text to <paramref name="buffer"/>, so stream output needs no
+    ///     intermediate string.
+    /// </summary>
+    private static void SerializeTo(ToonTextBuffer buffer, object? value, Type type, ToonSerializerOptions options)
+    {
+        var toonValue = SerializeValue(value, type, options, 0, new SerializerState());
+        new ToonEncoder(options.ToonOptions).Write(new ToonDocument(toonValue ?? ToonNull.Instance), buffer);
+    }
+
+    /// <summary>
+    ///     Serializes a value and writes it to <paramref name="stream"/> as UTF-8 in pooled chunks.
+    /// </summary>
+    private static async ValueTask SerializeToUtf8StreamAsync(object? value, Type type, Stream stream, ToonSerializerOptions? options,
+                                                             CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var buffer = new ToonTextBuffer();
+        SerializeTo(buffer, value, type, options ?? ToonSerializerOptions.Default);
+        await buffer.WriteUtf8Async(stream, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -128,30 +148,15 @@ public static partial class ToonSerializer
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     /// <remarks>
-    /// This method uses ArrayPool&lt;byte&gt; for efficient memory usage.
-    /// Suitable for high-throughput scenarios with minimal GC pressure.
+    /// The text is encoded to UTF-8 in chunks through pooled buffers, without an intermediate string or a
+    /// full-size byte array.
     /// </remarks>
     public static async ValueTask SerializeToStreamAsync<T>(T? value, Stream stream, ToonSerializerOptions? options = null,
                                                             CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
-        
-        // Use ArrayPool to avoid allocating byte arrays
-        var encoding = System.Text.Encoding.UTF8;
-        var maxByteCount = encoding.GetMaxByteCount(toonString.Length);
-        var buffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
-        
-        try
-        {
-            var bytesWritten = encoding.GetBytes(toonString, 0, toonString.Length, buffer, 0);
-            await stream.WriteAsync(buffer.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
+        await SerializeToUtf8StreamAsync(value, typeof(T), stream, options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -172,9 +177,18 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
-        var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        await File.WriteAllTextAsync(filePath, toonString, ToonTextEncoding.Utf8NoBom, cancellationToken).ConfigureAwait(false);
+        // Serialize before creating the file, so a failure does not leave an empty or truncated file behind
+        using var buffer = new ToonTextBuffer();
+        SerializeTo(buffer, value, typeof(T), options ?? ToonSerializerOptions.Default);
+
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read, bufferSize: 1, useAsync: true);
+
+        await using (fileStream.ConfigureAwait(false))
+        {
+            await buffer.WriteUtf8Async(fileStream, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -191,8 +205,8 @@ public static partial class ToonSerializer
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     /// <remarks>
-    /// This method uses ArrayPool&lt;byte&gt; for efficient memory usage.
-    /// Suitable for high-throughput scenarios with minimal GC pressure.
+    /// The text is encoded to UTF-8 in chunks through pooled buffers, without an intermediate string or a
+    /// full-size byte array.
     /// </remarks>
     public static async ValueTask SerializeToStreamAsync(Type type, object? value, Stream stream, ToonSerializerOptions? options = null,
                                                          CancellationToken cancellationToken = default)
@@ -200,23 +214,7 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(stream);
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var toonString = Serialize(value, type, options);
-        
-        // Use ArrayPool to avoid allocating byte arrays
-        var encoding = System.Text.Encoding.UTF8;
-        var maxByteCount = encoding.GetMaxByteCount(toonString.Length);
-        var buffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
-        
-        try
-        {
-            var bytesWritten = encoding.GetBytes(toonString, 0, toonString.Length, buffer, 0);
-            await stream.WriteAsync(buffer.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
+        await SerializeToUtf8StreamAsync(value, type, stream, options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -251,6 +249,8 @@ public static partial class ToonSerializer
         await using var writerDisposal = writer.ConfigureAwait(false);
 
         var isFirst = true;
+        options ??= ToonSerializerOptions.Default;
+        using var buffer = new ToonTextBuffer();
 
         foreach (var value in values)
         {
@@ -262,9 +262,11 @@ public static partial class ToonSerializer
                 await writer.WriteAsync(BlankLineDocumentSeparator.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
-            var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
-            EnsureSeparableByBlankLines(toonString, typeof(T));
-            await writer.WriteAsync(toonString.AsMemory(), cancellationToken).ConfigureAwait(false);
+            // Each item is encoded into the same pooled buffer instead of a string per item
+            buffer.Clear();
+            SerializeTo(buffer, value, typeof(T), options);
+            EnsureSeparableByBlankLines(buffer.Length, typeof(T));
+            await writer.WriteAsync(buffer.WrittenMemory, cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -301,6 +303,8 @@ public static partial class ToonSerializer
         await using var writerDisposal = writer.ConfigureAwait(false);
 
         var isFirst = true;
+        options ??= ToonSerializerOptions.Default;
+        using var buffer = new ToonTextBuffer();
 
         foreach (var value in values)
         {
@@ -312,9 +316,11 @@ public static partial class ToonSerializer
                 await writer.WriteAsync(BlankLineDocumentSeparator.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
-            var toonString = await SerializeAsync(value, options, cancellationToken).ConfigureAwait(false);
-            EnsureSeparableByBlankLines(toonString, typeof(T));
-            await writer.WriteAsync(toonString.AsMemory(), cancellationToken).ConfigureAwait(false);
+            // Each item is encoded into the same pooled buffer instead of a string per item
+            buffer.Clear();
+            SerializeTo(buffer, value, typeof(T), options);
+            EnsureSeparableByBlankLines(buffer.Length, typeof(T));
+            await writer.WriteAsync(buffer.WrittenMemory, cancellationToken).ConfigureAwait(false);
 
             isFirst = false;
         }
@@ -453,9 +459,10 @@ public static partial class ToonSerializer
 
         var isFirst = true;
         var lastIsEmpty = false;
-        var batch = new StringBuilder();
+        using var batch = new ToonTextBuffer();
         var itemCount = 0;
         var batchSize = Math.Max(1, writeOptions.BatchSize); // Ensure at least 1
+        options ??= ToonSerializerOptions.Default;
 
         await foreach (var item in items.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
@@ -475,18 +482,18 @@ public static partial class ToonSerializer
                 }
             }
 
-            // Serialize item
-            var toonString = await SerializeAsync(item, options, cancellationToken).ConfigureAwait(false);
+            // Serialize the item straight into the batch
+            var start = batch.Length;
+            SerializeTo(batch, item, typeof(T), options);
+            var length = batch.Length - start;
 
             if (writeOptions.Mode != ToonMultiDocumentSeparatorMode.ExplicitSeparator)
             {
-                EnsureSeparableByBlankLines(toonString, typeof(T));
+                EnsureSeparableByBlankLines(length, typeof(T));
             }
 
-            batch.Append(toonString);
-
             isFirst = false;
-            lastIsEmpty = toonString.Length == 0;
+            lastIsEmpty = length == 0;
             itemCount++;
 
             // Flush batch when a size threshold reached
@@ -495,7 +502,7 @@ public static partial class ToonSerializer
                 continue;
             }
 
-            await writer.WriteAsync(batch.ToString().AsMemory(), cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(batch.WrittenMemory, cancellationToken).ConfigureAwait(false);
             batch.Clear();
             itemCount = 0;
         }
@@ -509,7 +516,7 @@ public static partial class ToonSerializer
         // Flush remaining items
         if (batch.Length > 0)
         {
-            await writer.WriteAsync(batch.ToString().AsMemory(), cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(batch.WrittenMemory, cancellationToken).ConfigureAwait(false);
         }
 
         await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -821,10 +828,10 @@ public static partial class ToonSerializer
     ///     Rejects a document that encodes to nothing (an object without written properties) in blank-line separated
     ///     output, where it would vanish: the reader cannot tell it from the separator.
     /// </summary>
-    /// <exception cref="ToonSerializationException">Thrown when <paramref name="document"/> is empty.</exception>
-    private static void EnsureSeparableByBlankLines(string document, Type type)
+    /// <exception cref="ToonSerializationException">Thrown when <paramref name="documentLength"/> is 0.</exception>
+    private static void EnsureSeparableByBlankLines(int documentLength, Type type)
     {
-        if (document.Length == 0)
+        if (documentLength == 0)
         {
             throw new ToonSerializationException($"An item of type {type.Name} encodes to an empty TOON document, which cannot be " +
                                                  "written to blank-line separated output without being lost when it is read back. " +

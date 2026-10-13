@@ -1,7 +1,5 @@
-using System.Buffers;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Text;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Encoding;
@@ -680,9 +678,15 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     public async Task EncodeToFileAsync(ToonDocument document, string filePath, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filePath);
-        
-        var encodedString = await EncodeAsync(document, cancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(filePath, encodedString, ToonTextEncoding.Utf8NoBom, cancellationToken).ConfigureAwait(false);
+
+        // Encode before creating the file, so a failure does not leave an empty or truncated file behind
+        using var buffer = await EncodeToBufferAsync(document, cancellationToken).ConfigureAwait(false);
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read, bufferSize: 1, useAsync: true);
+
+        await using (fileStream.ConfigureAwait(false))
+        {
+            await buffer.WriteUtf8Async(fileStream, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -696,28 +700,41 @@ public sealed class ToonEncoder(ToonOptions? options = null)
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     /// <remarks>
-    /// This method uses ArrayPool&lt;byte&gt; for efficient memory usage.
-    /// Suitable for high-throughput scenarios with minimal GC pressure.
+    /// The text is encoded to UTF-8 in chunks through pooled buffers, without an intermediate string or a
+    /// full-size byte array.
     /// </remarks>
     public async Task EncodeToStreamAsync(ToonDocument document, Stream stream, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        
-        var encodedString = await EncodeAsync(document, cancellationToken).ConfigureAwait(false);
-        
-        // Use ArrayPool to avoid allocating byte arrays
-        var encoding = System.Text.Encoding.UTF8;
-        var maxByteCount = encoding.GetMaxByteCount(encodedString.Length);
-        var buffer = ArrayPool<byte>.Shared.Rent(maxByteCount);
-        
+
+        using var buffer = await EncodeToBufferAsync(document, cancellationToken).ConfigureAwait(false);
+        await buffer.WriteUtf8Async(stream, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Encodes a document into a new pooled buffer on the thread pool, like <see cref="EncodeAsync"/>; the caller
+    ///     disposes the buffer.
+    /// </summary>
+    private async Task<ToonTextBuffer> EncodeToBufferAsync(ToonDocument document, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var buffer = new ToonTextBuffer();
+
         try
         {
-            var bytesWritten = encoding.GetBytes(encodedString, 0, encodedString.Length, buffer, 0);
-            await stream.WriteAsync(buffer.AsMemory(0, bytesWritten), cancellationToken).ConfigureAwait(false);
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Write(document, buffer);
+            }, cancellationToken).ConfigureAwait(false);
+
+            return buffer;
         }
-        finally
+        catch
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            buffer.Dispose();
+            throw;
         }
     }
 }

@@ -136,6 +136,20 @@ public class MvcTests
     }
 
     [Fact]
+    public async Task ToonInputFormatter_BodyExactlyAtLimit_IsRead()
+    {
+        var body = System.Text.Encoding.UTF8.GetBytes("Name: " + new string('x', 58));
+        var atLimit = new ToonInputFormatter(new ToonSerializerOptions(), maxRequestBodySize: body.Length);
+        var belowLimit = new ToonInputFormatter(new ToonSerializerOptions(), maxRequestBodySize: body.Length - 1);
+
+        var result = await atLimit.ReadAsync(CreateInputContext(body, ToonFormatterDefaults.MediaType));
+
+        Assert.False(result.HasError);
+        Assert.Equal(new string('x', 58), ((TestModel)result.Model!).Name);
+        await Assert.ThrowsAsync<BadHttpRequestException>(() => belowLimit.ReadAsync(CreateInputContext(body, ToonFormatterDefaults.MediaType)));
+    }
+
+    [Fact]
     public async Task ToonInputFormatter_DeclaredContentLengthOverLimit_Throws413BeforeReading()
     {
         var formatter = new ToonInputFormatter(new ToonSerializerOptions(), maxRequestBodySize: 64);

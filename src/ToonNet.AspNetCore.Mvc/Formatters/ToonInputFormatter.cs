@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Formatters;
@@ -92,31 +91,50 @@ public sealed class ToonInputFormatter : TextInputFormatter
             throw CreatePayloadTooLargeException();
         }
 
-        using var bodyBytes = new MemoryStream();
-        var buffer = ArrayPool<byte>.Shared.Rent(ReadBufferSize);
-
-        try
-        {
-            int read;
-
-            while ((read = await request.Body.ReadAsync(buffer.AsMemory(0, ReadBufferSize), cancellationToken).ConfigureAwait(false)) > 0)
-            {
-                if (bodyBytes.Length + read > _maxRequestBodySize)
-                {
-                    throw CreatePayloadTooLargeException();
-                }
-
-                bodyBytes.Write(buffer, 0, read);
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-
-        bodyBytes.Position = 0;
-        using var reader = new StreamReader(bodyBytes, encoding, detectEncodingFromByteOrderMarks: true);
+        // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
+        var body = new LimitedReadStream(request.Body, _maxRequestBodySize, CreatePayloadTooLargeException);
+        using var reader = new StreamReader(body, encoding, detectEncodingFromByteOrderMarks: true, ReadBufferSize, leaveOpen: true);
         return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     A read-only view of a stream that throws once more than a given number of bytes has been read.
+    /// </summary>
+    private sealed class LimitedReadStream(Stream inner, long limit, Func<Exception> createLimitException) : Stream
+    {
+        private long _read;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => Count(inner.Read(buffer, offset, count));
+
+        public override int Read(Span<byte> buffer) => Count(inner.Read(buffer));
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            Count(await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false));
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        private int Count(int read)
+        {
+            _read += read;
+            return _read > limit ? throw createLimitException() : read;
+        }
     }
 
     private BadHttpRequestException CreatePayloadTooLargeException()
