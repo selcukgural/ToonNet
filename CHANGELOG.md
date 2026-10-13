@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has a TOON number form (NaN and infinities are written as `null`).
 
 ### Changed
+- **ToonNet.Core (breaking):** `ToonObject.Properties` is a `ToonPropertyCollection` (an insertion-ordered dictionary)
+  instead of `Dictionary<string, ToonValue>`, and the constructor takes any `IEnumerable<KeyValuePair<string, ToonValue>>`.
+  With `Dictionary`, a key added after a removal took the removed key's slot, so the encoded key order changed. Common
+  dictionary members (indexer, `TryGetValue`, `ContainsKey`, `Remove`, `Keys`, `Values`, `Count`) are unchanged.
+- **ToonNet.Core:** Setting `ToonObject[key] = null` stores `ToonNull` instead of being ignored, and `ToonArray.Add(null)`
+  or its indexer store `ToonNull` instead of a null item.
 - **ToonNet.Core:** Exception messages no longer contain the offending value, which may be personal data and reached
   logs and (through MVC model state) HTTP 400 responses. The value is still available as
   `ToonSerializationException.Value` / `ToonEncodingException.ProblematicValue`; the message names the path, the

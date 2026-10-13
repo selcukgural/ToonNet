@@ -358,17 +358,29 @@ public sealed class ToonString(string value) : ToonValue
 ///     Represents an object (key-value pairs) in TOON format.
 /// </summary>
 /// <param name="properties">The dictionary of properties to initialize the object with.</param>
-public sealed class ToonObject(Dictionary<string, ToonValue> properties) : ToonValue
+public sealed class ToonObject : ToonValue
 {
     /// <summary>
     ///     Creates a new empty ToonObject.
     /// </summary>
-    public ToonObject() : this(new Dictionary<string, ToonValue>()) { }
+    public ToonObject()
+    {
+        Properties = new ToonPropertyCollection();
+    }
 
     /// <summary>
-    ///     Gets the properties dictionary.
+    ///     Creates a ToonObject with the given properties, in their enumeration order.
     /// </summary>
-    public Dictionary<string, ToonValue> Properties { get; } = properties;
+    /// <exception cref="ArgumentException">Thrown when a key occurs more than once.</exception>
+    public ToonObject(IEnumerable<KeyValuePair<string, ToonValue>> properties)
+    {
+        Properties = new ToonPropertyCollection(properties);
+    }
+
+    /// <summary>
+    ///     Gets the properties, in insertion order (key order is significant in TOON).
+    /// </summary>
+    public ToonPropertyCollection Properties { get; }
 
     /// <summary>
     ///     Gets the type of this value.
@@ -380,16 +392,11 @@ public sealed class ToonObject(Dictionary<string, ToonValue> properties) : ToonV
     /// </summary>
     /// <param name="key">The property key.</param>
     /// <returns>The property value, or null if not found.</returns>
+    /// <remarks>Setting <c>null</c> stores <see cref="ToonNull.Instance"/>, a TOON <c>null</c> value.</remarks>
     public ToonValue? this[string key]
     {
         get => Properties.GetValueOrDefault(key);
-        set
-        {
-            if (value != null)
-            {
-                Properties[key] = value;
-            }
-        }
+        set => Properties[key] = value ?? ToonNull.Instance;
     }
 }
 
@@ -411,12 +418,16 @@ public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null
     public List<ToonValue> Items { get; } = items;
 
     /// <summary>
-    ///     Gets the optional field names for tabular arrays.
+    ///     Gets the field names of the tabular header this array was parsed from, or the names passed when creating it.
     /// </summary>
+    /// <remarks>
+    ///     They describe the source text only: they are not updated when <see cref="Items"/> change, and the encoder does
+    ///     not use them. It writes an array in tabular form whenever its items are uniform objects with primitive values.
+    /// </remarks>
     public string[]? FieldNames { get; init; } = fieldNames;
 
     /// <summary>
-    ///     Gets a value indicating whether this is a tabular array (array of objects with named fields).
+    ///     Gets a value indicating whether <see cref="FieldNames"/> is set, i.e. the array was parsed from a tabular header.
     /// </summary>
     public bool IsTabular => FieldNames is { Length: > 0 };
 
@@ -438,12 +449,12 @@ public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null
     public ToonValue this[int index]
     {
         get => Items[index];
-        set => Items[index] = value;
+        set => Items[index] = value ?? ToonNull.Instance;
     }
 
     /// <summary>
     ///     Adds a value to the end of the array.
     /// </summary>
-    /// <param name="value">The value to add.</param>
-    public void Add(ToonValue value) => Items.Add(value);
+    /// <param name="value">The value to add; <c>null</c> adds <see cref="ToonNull.Instance"/>.</param>
+    public void Add(ToonValue? value) => Items.Add(value ?? ToonNull.Instance);
 }

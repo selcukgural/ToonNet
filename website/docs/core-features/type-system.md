@@ -161,8 +161,9 @@ string text = str;
 
 ## ToonObject
 
-Represents key-value pairs (like C# Dictionary or JSON object). The entries are stored in the `Properties`
-dictionary (`Dictionary<string, ToonValue>`), which keeps insertion order when encoding.
+Represents key-value pairs (like C# Dictionary or JSON object). The entries are stored in `Properties`, a
+`ToonPropertyCollection` that works like a dictionary but always keeps insertion order: a key added after a removal is
+written last, and replacing a value keeps the key's position. Setting `obj["key"] = null` stores a TOON `null`.
 
 ### Creating ToonObject
 
@@ -332,8 +333,8 @@ string name = ((ToonString)firstEmployee["Name"]!).Value;
 ```
 
 The encoder writes arrays of uniform objects like this one in tabular form
-(`[2]{Name,Department,Salary}:`). Parsed tabular arrays expose their field names in `FieldNames` (`IsTabular` is
-`true`).
+(`[2]{Name,Department,Salary}:`), deciding from the items. Parsed tabular arrays expose the header's field names in
+`FieldNames` (`IsTabular` is `true`); these describe the parsed text only and are not updated when the items change.
 
 ### Modifying Arrays
 

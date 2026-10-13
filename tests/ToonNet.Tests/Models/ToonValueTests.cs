@@ -157,11 +157,57 @@ public class ToonValueTests
     }
 
     [Fact]
-    public void ToonObject_Indexer_Set_Null_DoesNotAdd()
+    public void ToonObject_Indexer_Set_Null_StoresToonNull()
     {
         var obj = new ToonObject();
         obj["k"] = null;
-        Assert.Empty(obj.Properties);
+        Assert.Same(ToonNull.Instance, obj.Properties["k"]);
+        Assert.Equal("k: null", new ToonNet.Core.Encoding.ToonEncoder().Encode(new ToonDocument(obj)));
+    }
+
+    [Fact]
+    public void ToonArray_NullItems_AreToonNull()
+    {
+        var arr = new ToonArray();
+        arr.Add(null);
+        arr.Add(new ToonString("x"));
+        arr[1] = null!;
+
+        Assert.All(arr.Items, item => Assert.Same(ToonNull.Instance, item));
+    }
+
+    [Fact]
+    public void ToonObject_KeyAddedAfterRemoval_IsWrittenLast()
+    {
+        var obj = new ToonObject { ["a"] = 1, ["b"] = 2, ["c"] = 3 };
+
+        obj.Properties.Remove("b");
+        obj["d"] = 4;
+        obj["a"] = 5; // replacing keeps the position
+
+        Assert.Equal(["a", "c", "d"], obj.Properties.Keys);
+        Assert.Equal("a: 5\nc: 3\nd: 4", new ToonNet.Core.Encoding.ToonEncoder().Encode(new ToonDocument(obj)));
+    }
+
+    [Fact]
+    public void ToonPropertyCollection_BehavesLikeADictionary()
+    {
+        var properties = new ToonPropertyCollection { { "a", new ToonNumber(1) } };
+
+        Assert.False(properties.TryAdd("a", new ToonNumber(2)));
+        Assert.Throws<ArgumentException>(() => properties.Add("a", new ToonNumber(2)));
+        Assert.Throws<KeyNotFoundException>(() => properties["missing"]);
+        Assert.True(properties.TryGetValue("a", out var value));
+        Assert.Equal("1", value.ToString());
+        Assert.Equal(ToonNull.Instance, new ToonObject().Properties.GetValueOrDefault("x") ?? ToonNull.Instance);
+        Assert.Throws<ArgumentException>(() => new ToonObject(new[] { KeyValuePair.Create("k", (ToonValue)1), KeyValuePair.Create("k", (ToonValue)2) }));
+
+        IDictionary<string, ToonValue> asDictionary = properties;
+        asDictionary.Add(new KeyValuePair<string, ToonValue>("b", new ToonNumber(2)));
+        Assert.Equal(["a", "b"], asDictionary.Keys);
+        Assert.True(properties.Remove("a"));
+        Assert.Equal(0, properties.Keys.ToList().IndexOf("b"));
+        Assert.True(properties.ContainsKey("b"));
     }
 
     [Fact]
