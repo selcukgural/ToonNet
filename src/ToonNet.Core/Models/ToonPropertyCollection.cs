@@ -34,7 +34,8 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// <summary>
     ///     Creates an empty collection with room for <paramref name="capacity"/> properties.
     /// </summary>
-    internal ToonPropertyCollection(int capacity)
+    /// <param name="capacity">The number of properties to reserve room for; 0 or less reserves none.</param>
+    public ToonPropertyCollection(int capacity)
     {
         _entries = capacity > 0 ? new KeyValuePair<string, ToonValue>[capacity] : [];
     }

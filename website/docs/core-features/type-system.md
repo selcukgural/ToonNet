@@ -183,6 +183,9 @@ var obj2 = new ToonObject
     ["Age"] = 30,
     ["Email"] = "alice@example.com"
 };
+
+// Reserve room when the number of properties is known
+var obj3 = new ToonObject(capacity: 3);
 ```
 
 ### Accessing Properties

@@ -81,6 +81,12 @@ public static partial class ToonSerializer
             return ToonNull.Instance;
         }
 
+        // Typed conversion for the common primitives (no boxing); other types go through TrySerializePrimitive
+        if (PrimitiveAccessor.IsTypedPrimitive(Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T)))
+        {
+            return WriteTyped(value)!;
+        }
+
         return TrySerializePrimitive(value, out var result)
             ? result!
             : throw new ArgumentException($"{typeof(T).Name} is not a primitive TOON type", nameof(value));

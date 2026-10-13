@@ -186,7 +186,7 @@ internal sealed class SourceEmitter
         code.AppendLine("// Converters and derived types are handled by ToonSerializer, which knows the runtime type.");
         code.AppendLine($"if ({fallback}) return {reflection};");
         EmitPolicyLocal();
-        code.AppendLine($"var __obj = new {Models}ToonObject();");
+        code.AppendLine($"var __obj = new {Models}ToonObject({model.Properties.Length});");
 
         for (var i = 0; i < model.Properties.Length; i++)
         {
@@ -515,7 +515,7 @@ internal sealed class SourceEmitter
         {
             var key = plan.Key!.Inline == PrimitiveKind.String ? "__entry.Key" : $"{Helpers}.FormatKey(__entry.Key)";
 
-            code.AppendLine($"var __obj = new {Models}ToonObject();");
+            code.AppendLine($"var __obj = new {Models}ToonObject({CountExpression});");
             code.BeginBlock("foreach (var __entry in value)");
             code.AppendLine($"var __key = {key};");
             code.AppendLine("var __value = __entry.Value;");
@@ -528,7 +528,7 @@ internal sealed class SourceEmitter
             // Null items are always kept so that indexes are preserved, like ToonSerializer.
             var item = WriteExpression(element, NonNull(element, "__item"), "depth + 1");
 
-            code.AppendLine($"var __array = new {Models}ToonArray();");
+            code.AppendLine($"var __array = new {Models}ToonArray(new global::System.Collections.Generic.List<{Models}ToonValue>({CountExpression}));");
             code.BeginBlock("foreach (var __item in value)");
             code.AppendLine(element.CanBeNull
                                 ? $"__array.Items.Add(__item is null ? {Models}ToonNull.Instance : {item});"
@@ -539,6 +539,10 @@ internal sealed class SourceEmitter
 
         code.EndBlock();
     }
+
+    /// <summary>The item count of <c>value</c> when it is known without enumerating (to size the result), else 0.</summary>
+    private const string CountExpression =
+        "global::System.Linq.Enumerable.TryGetNonEnumeratedCount(value, out var __count) ? __count : 0";
 
     private void EmitReader(int id, ValuePlan plan)
     {
@@ -558,7 +562,7 @@ internal sealed class SourceEmitter
                 : $"{Helpers}.ReadPrimitive<{keyPlan.ValueTypeName}>(new {Models}ToonString(__entry.Key))";
 
             code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
-            code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>();");
+            code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>(__obj.Properties.Count);");
             code.BeginBlock("foreach (var __entry in __obj.Properties)");
             code.AppendLine($"__dictionary[{key}] = {ReadExpression(element, "__entry.Value", "depth + 1")};");
             code.EndBlock();

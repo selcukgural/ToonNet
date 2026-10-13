@@ -378,9 +378,11 @@ public sealed class ToonObject : ToonValue
     }
 
     /// <summary>
-    ///     Creates an empty ToonObject with room for <paramref name="capacity"/> properties.
+    ///     Creates an empty ToonObject with room for <paramref name="capacity"/> properties, so adding up to that many
+    ///     does not resize its storage.
     /// </summary>
-    internal ToonObject(int capacity)
+    /// <param name="capacity">The number of properties to reserve room for; 0 or less reserves none.</param>
+    public ToonObject(int capacity)
     {
         Properties = new ToonPropertyCollection(capacity);
     }
