@@ -13,7 +13,7 @@
 [![Spec](https://img.shields.io/badge/TOON%20spec%20v3.3.2-378%2F378%20fixtures-brightgreen?style=flat)](docs/TOON_SPEC_v3_COMPLIANCE.md#toonnet-implementation-status)
 [![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
-[Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api/intro) • [Samples](demo/ToonNet.Demo/Samples)
+[Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api-guide) • [Samples](demo/ToonNet.Demo/Samples)
 
 </div>
 
