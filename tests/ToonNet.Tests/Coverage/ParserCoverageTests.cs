@@ -135,6 +135,20 @@ public class ParserCoverageTests
         Assert.Throws<ToonParseException>(() => parser.Parse("a[1]{x,y}:\n  1,2\nb[1|]{x,y}:\n  1|2"));
     }
 
+    [Theory]
+    [InlineData("a:\n    b: 1\n  c: 2")]
+    [InlineData("items[2]:\n    - 1\n  - 2")]
+    [InlineData("t[2]{x}:\n    1\n  2")]
+    [InlineData("m[2:]{x}:\n    a: 1\n  b: 2")]
+    [InlineData("l[1]:\n  - a: 1\n      b: 2")]
+    public void DepthJumps_NonStrict_RejectLinesBetweenTheScopeAndTheJumpedDepth(string toon)
+    {
+        // A jumped first line sets the scope's depth (spec 4.4 §14.4); a line shallower than it inside the scope is an
+        // error, and a list-item object's first field opens no scope to jump into
+        Assert.Throws<ToonParseException>(() => new ToonParser(new ToonOptions { StrictMode = false }).Parse(toon));
+        Assert.Throws<ToonParseException>(() => new ToonParser().Parse(toon));
+    }
+
     [Fact]
     public void CrLfLineEndings_AreAccepted()
     {

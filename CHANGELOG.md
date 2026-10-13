@@ -38,9 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Keys follow §7.4: a quoted key may be followed by spaces before its colon, `: 1` has the empty key, and an
     unquoted key may contain quotes (`a"b:c"d: 1` has the key `a"b:c"d`).
   - `- []` is an empty inner array.
-  - Non-strict mode keeps only the five recoveries of §14.4. A row with too few or too many cells is an error (missing
-    cells were read as `null` and extra cells dropped), list items under `key:` without an array header are an error
-    (they were read as an array), and so is an indented first line.
+  - Non-strict mode applies exactly the five recoveries of §14.4. New: when the first line of a nested object, array
+    or keyed object is indented deeper than expected, its depth becomes the scope's depth. Removed: a row with too few
+    or too many cells is an error (missing cells were read as `null` and extra cells dropped), list items under `key:`
+    without an array header are an error (they were read as an array), and so is an indented first line.
 - **Dependencies:** ToonNet.Extensions.Yaml requires YamlDotNet 18.1.0 (was 16.2.0); ToonNet.AspNetCore references the
   latest 8.0.x patches of its Microsoft.Extensions dependencies (still 8.x, so .NET 8 stays supported).
   ToonNet.Core no longer depends on Microsoft.Extensions.ObjectPool (it has no package dependencies now).

@@ -1,6 +1,5 @@
 # Spec fixture cases (see Fixtures/v4.4) that ToonNet does not conform to yet.
 # One "<category>/<file>/<index>  # <test name>" per line. Remove a line once the case passes.
-decode/indentation-errors/24  # adopts the depth of a jumped first line in non-strict mode
 encode/arrays-nested/10  # quotes hash-leading string as list item
 encode/arrays-objects/9  # encodes a keyed-eligible object in a tabular column as a nested field group
 encode/arrays-primitive/10  # quotes hash-leading string in inline array

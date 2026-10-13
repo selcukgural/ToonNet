@@ -16,20 +16,19 @@ internal enum ToonNodeKind : byte
 }
 
 /// <summary>
-/// Parses TOON text into a document structure following TOON spec v3.3.2.
+/// Parses TOON text into a document structure following TOON spec v4.4.
 /// </summary>
 /// <remarks>
 /// <para>
 /// This is an internal implementation detail. Users should use <see cref="ToonSerializer"/> instead.
 /// </para>
 /// <para>
-/// The parser is line based: each line's depth is derived from its leading spaces and
-/// <see cref="ToonOptions.IndentSize"/>. With <see cref="ToonOptions.StrictMode"/> enabled, every strict-mode error of
-/// spec §14 is reported (count and width mismatches, malformed headers, duplicate keys, indentation that is not a
-/// multiple of the indent size, tabs in indentation, blank lines inside arrays). In non-strict mode depth is
-/// floor(spaces / indent size), a tab in indentation counts as <see cref="ToonOptions.IndentSize"/> spaces,
-/// malformed headers are read as literal keys, duplicate keys use the last value, array lengths are not checked,
-/// and list items under a bare <c>key:</c> (without an <c>[N]</c> header) are read as an array.
+/// The parser is line based: lines are prepared as spec §12 orders (byte-order mark, CR, trailing spaces, comment
+/// lines), and each line's depth is derived from its indentation and <see cref="ToonOptions.IndentSize"/>. With
+/// <see cref="ToonOptions.StrictMode"/> enabled, every error of spec §14 is reported. Non-strict mode applies exactly
+/// the five recoveries of §14.4: declared counts are not checked, duplicate keys and field names use the last value,
+/// a line's depth is its tabs plus floor(spaces / indent size), blank lines inside arrays and keyed objects are
+/// ignored, and a scope's deeper first line sets the depth of the scope.
 /// </para>
 /// <para>
 /// Numbers follow the JSON number grammar; tokens with leading zeros (<c>05</c>) or other text decode as strings.
@@ -495,6 +494,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
         internal bool ExitNesting;
         internal bool Done;
 
+        /// <summary>Non-strict mode: whether a deeper first line may set <see cref="Depth"/> (§14.4).</summary>
+        internal bool MayJump;
+
         // Strict mode: the keys read so far are on the parser's key stack from KeysStart (or, for large objects, in
         // LargeKeys); the last key is checked once its value has been read, as the tree-based parser did
         internal int KeysStart;
@@ -530,6 +532,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
         internal bool ItemOpen;
         internal bool ExitNesting;
         internal bool Done;
+
+        /// <summary>Non-strict mode: whether a deeper first item or row may set <see cref="Depth"/> (§14.4).</summary>
+        internal bool MayJump;
 
         /// <summary>The number of items to expect (the declared length, bounded by the lines left), for capacities.</summary>
         internal int CapacityHint;
@@ -671,6 +676,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 cursor.Mode = ObjectMode.Block;
                 cursor.Depth = value.Depth;
                 cursor.ExitNesting = true;
+                cursor.MayJump = !_options.StrictMode;
                 break;
             case RefKind.EmptyObject:
                 CheckEmptyContainerNesting(_lines[value.LineIndex]);
@@ -711,6 +717,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 cursor.HeaderIndex = value.HeaderIndex;
                 cursor.Depth = value.Depth;
                 cursor.ExitNesting = true;
+                cursor.MayJump = !_options.StrictMode;
                 break;
             case RefKind.EmptyRootObject:
                 break;
@@ -756,9 +763,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
                     if (line.Depth > cursor.Depth)
                     {
-                        throw new ToonParseException("Unexpected indentation", line.Number, line.Indent + 1);
+                        if (!cursor.MayJump)
+                        {
+                            throw new ToonParseException("Unexpected indentation", line.Number, line.Indent + 1);
+                        }
+
+                        cursor.Depth = line.Depth;
                     }
 
+                    cursor.MayJump = false;
                     _position = index + 1;
                     key = ReadField(index, ContentOf(line), cursor.Depth + 1, out value);
                     SetPendingKey(ref cursor, key, index);
@@ -821,8 +834,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         if (line.Depth > cursor.Depth)
         {
-            throw new ToonParseException("Unexpected indentation in keyed tabular object", line.Number, line.Indent + 1);
+            if (!cursor.MayJump)
+            {
+                throw new ToonParseException("Unexpected indentation in keyed tabular object", line.Number, line.Indent + 1);
+            }
+
+            cursor.Depth = line.Depth;
         }
+
+        cursor.MayJump = false;
 
         // Inside this object's span after the first entry row, or inside an enclosing array's span
         if (skippedBlank && (cursor.Count > 0 || _headerSpans > 0) && _options.StrictMode)
@@ -1054,6 +1074,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                     cursor.TabularFields = header.Fields;
                     cursor.LeafCount = header.LeafCount;
                     cursor.CapacityHint = ExpectedItemCapacity(header);
+                    cursor.MayJump = !_options.StrictMode;
                 }
                 else if (header.InlineLength > 0)
                 {
@@ -1065,6 +1086,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 {
                     cursor.Form = ArrayForm.List;
                     cursor.CapacityHint = ExpectedItemCapacity(header);
+                    cursor.MayJump = !_options.StrictMode;
                 }
 
                 break;
@@ -1102,6 +1124,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             case ArrayForm.Tabular:
             {
                 var index = PeekIndex(out var skippedRowBlank);
+                AdoptJumpedDepth(ref cursor, index);
 
                 if (index >= 0 && _lines[index].Depth == cursor.Depth && IsTabularRow(ContentOf(_lines[index]), cursor.Delimiter))
                 {
@@ -1138,6 +1161,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 }
 
                 var index = PeekIndex(out var skippedBlank);
+                AdoptJumpedDepth(ref cursor, index);
 
                 if (index >= 0 && _lines[index].Depth == cursor.Depth && IsListItem(ContentOf(_lines[index])))
                 {
@@ -1164,6 +1188,23 @@ internal sealed class ToonParser(ToonOptions? options = null)
         EndArray(ref cursor);
         item = default;
         return false;
+    }
+
+    /// <summary>
+    ///     Non-strict mode: a first item or row deeper than the array's content depth sets it (§14.4); the lines up to the
+    ///     end of the array are read at that depth, and a shallower line among them is an error of the enclosing scope.
+    /// </summary>
+    private void AdoptJumpedDepth(ref ArrayCursor cursor, int index)
+    {
+        if (cursor.MayJump)
+        {
+            cursor.MayJump = false;
+
+            if (index >= 0 && _lines[index].Depth > cursor.Depth)
+            {
+                cursor.Depth = _lines[index].Depth;
+            }
+        }
     }
 
     private void EndArray(ref ArrayCursor cursor)
