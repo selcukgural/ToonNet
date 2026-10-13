@@ -131,6 +131,25 @@ internal sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
+    ///     Checks a document without building it: the same checks and errors as <see cref="Parse"/>.
+    /// </summary>
+    /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
+    internal void Validate(string input)
+    {
+        BeginDocument(input);
+
+        try
+        {
+            Skip(ReadRoot());
+            EndDocument();
+        }
+        finally
+        {
+            ReleaseDocument();
+        }
+    }
+
+    /// <summary>
     ///     Prepares to read <paramref name="input"/> with the reader methods (<see cref="ReadRoot"/>, cursors);
     ///     <see cref="ReleaseDocument"/> must follow.
     /// </summary>

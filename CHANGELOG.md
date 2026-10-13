@@ -93,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** The encoder's pooled character buffer is made of chunks: growing keeps the full chunk and continues
   in a new one instead of copying everything into a larger array. Serializing to a string now allocates only the
   string (a third less memory for 10,000 objects with the reflection-based path).
+- **ToonNet.Core:** `ToonValidator.Validate` checks a document with the parser's cursors without building the
+  `ToonValue` tree; it reports the same errors.
 - **ToonNet.SourceGenerators:** Generated code reads `[ToonSerializable]` objects straight from the text too: each type
   with a usable constructor gets a text reader (keys matched with a compile-time switch per naming policy, values read
   into typed locals, nested generated types and collections through their own text readers), registered with

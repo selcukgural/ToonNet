@@ -132,6 +132,30 @@ public class SpecFixtureConformanceTests
 
     #endregion
 
+    /// <summary>
+    ///     The validator checks documents without building them; it must report exactly the errors parsing reports.
+    /// </summary>
+    [Fact]
+    public void Validate_ReportsTheSameErrorsAsParse_ForEveryDecodeFixture()
+    {
+        var errors = 0;
+
+        foreach (var fixture in Cases.Value.Values.Where(c => c.Category == "decode"))
+        {
+            var options = CreateOptions(fixture.Test);
+            var input = fixture.Test.GetProperty("input").GetString()!;
+
+            var parse = Record.Exception(() => new ToonParser(options).Parse(input));
+            var validate = Record.Exception(() => new ToonParser(options).Validate(input));
+
+            Assert.Equal(parse?.GetType(), validate?.GetType());
+            Assert.Equal(parse?.Message, validate?.Message);
+            errors += parse != null ? 1 : 0;
+        }
+
+        Assert.True(errors > 10, "the fixtures should include error cases");
+    }
+
     #region Execution
 
     /// <summary>Runs a fixture case and returns a failure description, or null when it conforms.</summary>

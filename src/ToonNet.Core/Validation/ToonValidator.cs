@@ -50,8 +50,7 @@ public static class ToonValidator
 
         try
         {
-            var parser = new ToonParser(options);
-            _ = parser.Parse(toonContent);
+            new ToonParser(options).Validate(toonContent);
         }
         catch (ToonParseException ex)
         {
@@ -68,8 +67,7 @@ public static class ToonValidator
 
         try
         {
-            var strictParser = new ToonParser(strictOptions);
-            _ = strictParser.Parse(toonContent);
+            new ToonParser(strictOptions).Validate(toonContent);
         }
         catch (ToonParseException ex)
         {
