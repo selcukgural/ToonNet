@@ -87,6 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are unchanged. Deserializing 10,000 objects with the reflection-based path takes 18 ms instead of 41 ms (nested)
   and 4 ms instead of 7 ms (flat rows), allocating 55-70% less. Strings, numbers, booleans, dates, times, `Guid` and
   enums are read from their tokens without allocating.
+- **ToonNet.Core:** The parser keeps array headers as a stack (an array's header is dropped when the array ends) and
+  the strict-mode duplicate-key check in a plain array, instead of lists that grew with the document: deserializing
+  10,000 nested objects allocates 15% less and runs about 8% faster.
 - **ToonNet.SourceGenerators:** Generated code reads `[ToonSerializable]` objects straight from the text too: each type
   with a usable constructor gets a text reader (keys matched with a compile-time switch per naming policy, values read
   into typed locals, nested generated types and collections through their own text readers), registered with

@@ -147,7 +147,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _position = 0;
         _depth = 0;
         _headerSpans = 0;
-        _keyStack.Clear();
+        _keyCount = 0;
         _headers.Clear();
 
         SplitLines(input);
@@ -172,7 +172,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _lines = [];
         _lineCount = 0;
         _input = string.Empty;
-        _keyStack.Clear();
+        Array.Clear(_keyStack);
+        _keyCount = 0;
         _headers.Clear();
     }
 
@@ -488,10 +489,17 @@ internal sealed class ToonParser(ToonOptions? options = null)
         public readonly string[]? Fields => Form == ArrayForm.Tabular ? TabularFields : null;
     }
 
-    /// <summary>The keys of the objects being read (strict mode), for duplicate checks.</summary>
-    private readonly List<string> _keyStack = [];
+    /// <summary>
+    ///     The keys of the objects being read (strict mode), for duplicate checks: each object's keys from its
+    ///     <see cref="ObjectCursor.KeysStart"/> up to <see cref="_keyCount"/>.
+    /// </summary>
+    private string[] _keyStack = new string[32];
 
-    /// <summary>The array headers read so far in the document, referred to by index.</summary>
+    private int _keyCount;
+
+    /// <summary>
+    ///     The headers of the arrays being read, referred to by index; an array's header is removed when the array ends.
+    /// </summary>
     private readonly List<Header> _headers = [];
 
     /// <summary>The line at <paramref name="index"/>.</summary>
@@ -604,7 +612,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>Starts reading the fields of an object value.</summary>
     internal ObjectCursor BeginObject(in ValueRef value)
     {
-        var cursor = new ObjectCursor { KeysStart = _keyStack.Count };
+        var cursor = new ObjectCursor { KeysStart = _keyCount };
 
         switch (value.Kind)
         {
@@ -745,7 +753,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         }
         else
         {
-            var keys = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyStack)[cursor.KeysStart..];
+            var keys = _keyStack.AsSpan(cursor.KeysStart, _keyCount - cursor.KeysStart);
             duplicate = false;
 
             foreach (var seen in keys)
@@ -761,12 +769,17 @@ internal sealed class ToonParser(ToonOptions? options = null)
             {
                 if (keys.Length < LinearKeyCheckLimit)
                 {
-                    _keyStack.Add(key);
+                    if (_keyCount == _keyStack.Length)
+                    {
+                        Array.Resize(ref _keyStack, _keyStack.Length * 2);
+                    }
+
+                    _keyStack[_keyCount++] = key;
                 }
                 else
                 {
                     cursor.LargeKeys = new HashSet<string>(keys.ToArray(), StringComparer.Ordinal) { key };
-                    _keyStack.RemoveRange(cursor.KeysStart, _keyStack.Count - cursor.KeysStart);
+                    _keyCount = cursor.KeysStart;
                 }
             }
         }
@@ -787,10 +800,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         cursor.Done = true;
 
-        if (_keyStack.Count > cursor.KeysStart)
-        {
-            _keyStack.RemoveRange(cursor.KeysStart, _keyStack.Count - cursor.KeysStart);
-        }
+        // The keys stay in the array until they are overwritten or the document is released
+        _keyCount = cursor.KeysStart;
 
         if (cursor.ExitNesting)
         {
@@ -1055,6 +1066,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
         if (cursor.ExitNesting)
         {
             _depth--;
+        }
+
+        // Arrays nest, so their headers form a stack: the header and anything read after it are no longer needed
+        if (cursor.HasHeader && cursor.HeaderIndex < _headers.Count)
+        {
+            _headers.RemoveRange(cursor.HeaderIndex, _headers.Count - cursor.HeaderIndex);
         }
     }
 
