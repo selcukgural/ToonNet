@@ -291,7 +291,7 @@ text: `true`/`yes`/`on` and `false`/`no`/`off` (lowercase, capitalized or upperc
 and empty values become null, and numbers follow the TOON number rules (JSON number grammar plus an optional
 leading `+`, exact value when it fits in a `decimal`). Anything else stays a string, so values such as `007`,
 `1,000` or `(5)` are not changed. When converting back, strings that would otherwise read as another type are
-quoted (`"42"`, `"true"`, `""`).
+quoted (`"42"`, `"true"`, `"yes"`, `""`), so a TOON → YAML → TOON round trip keeps them strings.
 
 ### Boolean Variants
 ```yaml

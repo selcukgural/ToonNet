@@ -457,6 +457,35 @@ public class ToonYamlConverterTests
         Assert.Equal(toon, ToonYamlConvert.FromYaml(yaml));
     }
 
+    [Theory]
+    [InlineData("yes")]
+    [InlineData("Yes")]
+    [InlineData("YES")]
+    [InlineData("no")]
+    [InlineData("No")]
+    [InlineData("on")]
+    [InlineData("ON")]
+    [InlineData("off")]
+    [InlineData("Off")]
+    [InlineData("True")]
+    [InlineData("FALSE")]
+    [InlineData("Null")]
+    [InlineData("NULL")]
+    [InlineData("~")]
+    [InlineData("+5")]
+    [InlineData("-0")]
+    [InlineData("1e3")]
+    [InlineData("0.5")]
+    public void ToYaml_EveryStringTheReaderWouldType_IsQuoted(string text)
+    {
+        var value = new ToonObject { ["v"] = new ToonString(text) };
+
+        var yaml = ToonYamlConverter.ToYaml(value);
+        var back = ToonYamlConverter.FromYaml(yaml).AsObject();
+
+        Assert.Equal(text, Assert.IsType<ToonString>(back["v"]).Value);
+    }
+
     [Fact]
     public void ToYaml_UsesToonOptions()
     {

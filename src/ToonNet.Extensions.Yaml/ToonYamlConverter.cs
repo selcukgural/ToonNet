@@ -5,6 +5,7 @@ using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.EventEmitters;
 
 namespace ToonNet.Extensions.Yaml;
 
@@ -145,11 +146,32 @@ public static class ToonYamlConverter
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        // Quote strings a YAML reader would otherwise resolve to another type ("42", "true", "null", "")
-        var serializer = new SerializerBuilder().WithIndentedSequences().WithQuotingNecessaryStrings().Build();
+        // Quote strings a YAML reader would otherwise resolve to another type ("42", "true", "null", ""), and every
+        // string FromYaml would read as something else (for example the YAML 1.1 booleans yes/no/on/off)
+        var serializer = new SerializerBuilder().WithIndentedSequences()
+                                                .WithQuotingNecessaryStrings()
+                                                .WithEventEmitter(next => new QuoteRetypedStringsEmitter(next))
+                                                .Build();
 
         var obj = ConvertToonValueToObject(value);
         return serializer.Serialize(obj);
+    }
+
+    /// <summary>
+    ///     Writes a string as a double-quoted scalar when <see cref="FromYaml(string)"/> would read the plain form as
+    ///     another type, so a TOON → YAML → TOON round trip keeps it a string.
+    /// </summary>
+    private sealed class QuoteRetypedStringsEmitter(IEventEmitter nextEmitter) : ChainedEventEmitter(nextEmitter)
+    {
+        public override void Emit(ScalarEventInfo eventInfo, IEmitter emitter)
+        {
+            if (eventInfo.Source.Value is string text && ConvertPlainScalar(text) is not ToonString)
+            {
+                eventInfo.Style = ScalarStyle.DoubleQuoted;
+            }
+
+            base.Emit(eventInfo, emitter);
+        }
     }
 
     #region YAML to TOON Conversion
@@ -277,6 +299,14 @@ public static class ToonYamlConverter
             return new ToonString(value);
         }
 
+        return ConvertPlainScalar(value);
+    }
+
+    /// <summary>
+    ///     Types the text of a plain scalar (see <see cref="ConvertYamlScalar"/>).
+    /// </summary>
+    private static ToonValue ConvertPlainScalar(string value)
+    {
         switch (value)
         {
             case "" or "~" or "null" or "Null" or "NULL":

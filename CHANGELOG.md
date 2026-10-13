@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has the new API.
 
 ### Fixed
+- **ToonNet.Extensions.Yaml:** `ToYaml` quotes every string that `FromYaml` would read as another type. Before, a TOON
+  string such as `"yes"`, `"on"` or `"Off"` was written as a plain YAML scalar and came back as a boolean.
 - **ToonNet.Core:** `[ToonSerializable(NamingPolicy = ...)]` now also applies when the type is converted with reflection
   (options with converters, derived runtime types, generic types). Before, only the generated code used it, so the same
   object could be written as `first_name` or `FirstName` depending on the path.
