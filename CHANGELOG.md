@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has a TOON number form (NaN and infinities are written as `null`).
 
 ### Changed
+- **Dependencies:** ToonNet.Extensions.Yaml requires YamlDotNet 18.1.0 (was 16.2.0); ToonNet.AspNetCore references the
+  latest 8.0.x patches of its Microsoft.Extensions dependencies (still 8.x, so .NET 8 stays supported).
 - **ToonNet.Core:** Less per-value overhead in the reflection-based serializer: the dictionary and collection interface
   lookups are cached per type, `ToonSerializerOptions.GetConverter` no longer allocates a closure, and the encoder's
   `StringBuilder` pool keeps builders up to 64K characters (the default policy discarded anything above 4K).

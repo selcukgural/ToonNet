@@ -19,6 +19,10 @@ updates:
       - dependency-name: "Microsoft.CodeAnalysis.*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
+      # Patch releases of the 8.x Microsoft.Extensions packages arrive together instead of one PR per package
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
       test-dependencies:
         patterns:
           - "xunit*"
