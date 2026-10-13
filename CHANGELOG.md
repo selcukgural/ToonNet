@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports it.
 
 ### Added
+- **All packages:** A `net10.0` build next to `net8.0` (the source generator stays `netstandard2.0`); the tests run
+  on both.
 - **ToonNet.AspNetCore.Mvc:** `ToonResult` takes an optional status code (`new ToonResult(value, options, 201)`,
   `Results.Extensions.Toon(value, StatusCodes.Status201Created)`) and implements `IStatusCodeHttpResult`,
   `IValueHttpResult` and `IContentTypeHttpResult`.
