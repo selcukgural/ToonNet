@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **ToonNet.Core (breaking):** `[ToonIgnore]`, `[ToonProperty]`, `[ToonPropertyOrder]` and `[ToonConverter]` can no
+  longer be applied to fields. Only properties are serialized, so on a field they had no effect; now the compiler
+  reports it.
+
 ### Added
 - **ToonNet.Core:** `ToonNumber.TryParse` parses a TOON number token, and `ToonNumber.IsFinite` tells whether a number
   has a TOON number form (NaN and infinities are written as `null`).

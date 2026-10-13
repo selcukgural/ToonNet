@@ -4,10 +4,10 @@ namespace ToonNet.Core.Serialization.Attributes;
 /// Marks a property to be ignored during serialization/deserialization.
 /// </summary>
 /// <remarks>
-/// This attribute can be applied to properties or fields to exclude them from the serialization
+/// This attribute can be applied to properties to exclude them from the serialization
 /// and deserialization process when working with TOON format.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+[AttributeUsage(AttributeTargets.Property)]
 public sealed class ToonIgnoreAttribute : Attribute;
 
 /// <summary>
@@ -21,10 +21,10 @@ public sealed class ToonIgnoreAttribute : Attribute;
 /// Thrown when the provided <paramref name="name"/> is null.
 /// </exception>
 /// <remarks>
-/// This attribute allows you to define a custom name for a property or field when serialized
+/// This attribute allows you to define a custom name for a property when serialized
 /// into TOON format, overriding the default property name.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+[AttributeUsage(AttributeTargets.Property)]
 public sealed class ToonPropertyAttribute(string name) : Attribute
 {
     /// <summary>
@@ -40,9 +40,9 @@ public sealed class ToonPropertyAttribute(string name) : Attribute
 /// The order value that determines the position of the property during serialization.
 /// </param>
 /// <remarks>
-/// This attribute can be applied to properties or fields to control their order in the serialized output.
+/// This attribute can be applied to properties to control their order in the serialized output.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+[AttributeUsage(AttributeTargets.Property)]
 public sealed class ToonPropertyOrderAttribute(int order) : Attribute
 {
     /// <summary>
@@ -62,10 +62,10 @@ public sealed class ToonPropertyOrderAttribute(int order) : Attribute
 /// Thrown when the provided <paramref name="converterType"/> is null.
 /// </exception>
 /// <remarks>
-/// This attribute allows you to define a custom converter for a property, field, class, or struct,
+/// This attribute allows you to define a custom converter for a property, class, or struct,
 /// enabling custom serialization and deserialization logic.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Class | AttributeTargets.Struct)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Class | AttributeTargets.Struct)]
 public sealed class ToonConverterAttribute(Type converterType) : Attribute
 {
     /// <summary>
