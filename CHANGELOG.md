@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **ToonNet.Core:** `DeserializeFromStreamAsync`, `DeserializeFromFileAsync` and the other stream and file readers
   decode into pooled buffers instead of reading the whole text into a string first.
+- **ToonNet.Core:** Planning nested field groups and keyed tables of typed objects rents its temporary arrays from
+  the pool instead of allocating several arrays the size of the collection: serializing 10,000 records with nested
+  groups to a reused buffer writer allocates 3 KB instead of 569 KB, a keyed table 158 KB instead of 709 KB.
 - **ToonNet.AspNetCore.Mvc:** `ToonInputFormatter` reads UTF-8 request bodies with the new stream reader, decoding into
   a pooled buffer instead of a string (other charsets are read as before). A UTF-8 body that starts with a UTF-16
   byte order mark is now rejected as ill-formed UTF-8 instead of being decoded as UTF-16.

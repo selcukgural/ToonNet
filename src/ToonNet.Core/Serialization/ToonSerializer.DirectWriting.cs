@@ -1131,6 +1131,9 @@ public static partial class ToonSerializer
 
             public readonly object? this[int index] => _items[index];
 
+            /// <summary>The items.</summary>
+            public readonly ReadOnlySpan<object?> Span => _items.AsSpan(0, Count);
+
             public void Dispose()
             {
                 if (_items.Length > 0)

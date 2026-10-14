@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Collections;
 using System.Runtime.InteropServices;
 using ToonNet.Core.Encoding;
 
@@ -57,14 +59,7 @@ public static partial class ToonSerializer
                 }
             }
 
-            var objects = new object[items.Count];
-
-            for (var i = 0; i < objects.Length; i++)
-            {
-                objects[i] = items[i]!;
-            }
-
-            return AddColumns(plan, objects, kinds[0], infos[0]!, 1);
+            return AddColumns(plan, items.Span, kinds[0], infos[0]!, 1);
         }
 
         /// <summary>
@@ -75,7 +70,12 @@ public static partial class ToonSerializer
                                      out TablePlan plan)
         {
             plan = new TablePlan();
-            entries = [];
+            entries = new List<KeyValuePair<string, object>>(kind switch
+            {
+                DirectKind.Dictionary => (value as ICollection)?.Count ?? 0,
+                DirectKind.Generated => info.Writer!.PropertyCount,
+                _ => info.Metadata!.Properties.Length
+            });
 
             switch (kind)
             {
@@ -151,32 +151,40 @@ public static partial class ToonSerializer
                 return PlanResult.Unknown;
             }
 
-            var values = new object[entries.Count];
-            var valueKind = DirectKind.Null;
-            DirectTypeInfo? valueInfo = null;
-            Type? valueType = null;
+            var values = ArrayPool<object?>.Shared.Rent(entries.Count);
 
-            for (var i = 0; i < values.Length; i++)
+            try
             {
-                values[i] = entries[i].Value;
-                var entryKind = Classify(values[i], values[i].GetType(), null, out var entryInfo);
+                var valueKind = DirectKind.Null;
+                DirectTypeInfo? valueInfo = null;
+                Type? valueType = null;
 
-                if (entryKind is DirectKind.Primitive or DirectKind.Collection)
+                for (var i = 0; i < entries.Count; i++)
                 {
-                    return PlanResult.NotTabular;
+                    var entryValue = values[i] = entries[i].Value;
+                    var entryKind = Classify(entryValue, entryValue.GetType(), null, out var entryInfo);
+
+                    if (entryKind is DirectKind.Primitive or DirectKind.Collection)
+                    {
+                        return PlanResult.NotTabular;
+                    }
+
+                    if (entryKind is not (DirectKind.Object or DirectKind.Generated) || (valueType != null && entryValue.GetType() != valueType))
+                    {
+                        return PlanResult.Unknown;
+                    }
+
+                    valueKind = entryKind;
+                    valueInfo = entryInfo;
+                    valueType = entryValue.GetType();
                 }
 
-                if (entryKind is not (DirectKind.Object or DirectKind.Generated) || (valueType != null && values[i].GetType() != valueType))
-                {
-                    return PlanResult.Unknown;
-                }
-
-                valueKind = entryKind;
-                valueInfo = entryInfo;
-                valueType = values[i].GetType();
+                return AddColumns(plan, values.AsSpan(0, entries.Count), valueKind, valueInfo!, 1);
             }
-
-            return AddColumns(plan, values, valueKind, valueInfo!, 1);
+            finally
+            {
+                ArrayPool<object?>.Shared.Return(values, clearArray: true);
+            }
         }
 
         /// <summary>Adds an entry with a written value; returns false for a null value that is written (a primitive).</summary>
@@ -192,19 +200,37 @@ public static partial class ToonSerializer
         }
 
         /// <summary>
-        ///     Adds the columns of <paramref name="objects"/> (all of one type, with <paramref name="info"/>) at nesting
-        ///     <paramref name="level"/>: a column per written property, a nested field group for properties whose values
-        ///     are all objects of one type.
+        ///     Adds the columns of <paramref name="objects"/> (all of one type, with <paramref name="info"/>, none null) at
+        ///     nesting <paramref name="level"/>: a column per written property, a nested field group for properties whose
+        ///     values are all objects of one type.
         /// </summary>
-        private PlanResult AddColumns(TablePlan plan, object[] objects, DirectKind kind, DirectTypeInfo info, int level)
+        private PlanResult AddColumns(TablePlan plan, ReadOnlySpan<object?> objects, DirectKind kind, DirectTypeInfo info, int level)
         {
             if (level > _options.ValidatedMaxDepth)
             {
                 return PlanResult.Unknown; // the tree reports the error
             }
 
+            // The values of one non-primitive property at a time, rented when the first one is read
+            object?[]? rented = null;
+
+            try
+            {
+                return AddColumns(plan, objects, kind, info, level, ref rented);
+            }
+            finally
+            {
+                if (rented != null)
+                {
+                    ArrayPool<object?>.Shared.Return(rented, clearArray: true);
+                }
+            }
+        }
+
+        private PlanResult AddColumns(TablePlan plan, ReadOnlySpan<object?> objects, DirectKind kind, DirectTypeInfo info, int level,
+                                      ref object?[]? rented)
+        {
             var first = plan.Columns.Count;
-            var values = new object?[objects.Length];
 
             if (kind == DirectKind.Object)
             {
@@ -241,7 +267,7 @@ public static partial class ToonSerializer
                         {
                             foreach (var item in objects)
                             {
-                                absent += primitive.IsNull(item) ? 1 : 0;
+                                absent += primitive.IsNull(item!) ? 1 : 0;
                             }
                         }
 
@@ -250,9 +276,11 @@ public static partial class ToonSerializer
                     }
                     else
                     {
+                        var values = (rented ??= ArrayPool<object?>.Shared.Rent(objects.Length)).AsSpan(0, objects.Length);
+
                         for (var i = 0; i < objects.Length; i++)
                         {
-                            values[i] = property.Getter(objects[i]);
+                            values[i] = property.Getter(objects[i]!);
                         }
 
                         result = AddColumn(plan, names[p], values, property.Property.PropertyType, new PlanColumn(p, property, null, true), level);
@@ -271,64 +299,76 @@ public static partial class ToonSerializer
                 var seen = new HashSet<string>(StringComparer.Ordinal);
 
                 // The row shapes tell which primitive properties are written (null ones are left out with IgnoreNullValues)
-                var shapes = new bool[objects.Length * count];
+                var shapeArray = ArrayPool<bool>.Shared.Rent(objects.Length * count);
 
-                for (var i = 0; i < objects.Length; i++)
+                try
                 {
-                    if (writer.GetRowShapeOf(objects[i], _writer, shapes.AsSpan(i * count, count)) == ToonRowShape.NotRow)
+                    var shapes = shapeArray.AsSpan(0, objects.Length * count);
+                    shapes.Clear();
+
+                    for (var i = 0; i < objects.Length; i++)
                     {
-                        return PlanResult.NotTabular;
+                        if (writer.GetRowShapeOf(objects[i]!, _writer, shapes.Slice(i * count, count)) == ToonRowShape.NotRow)
+                        {
+                            return PlanResult.NotTabular;
+                        }
+                    }
+
+                    for (var p = 0; p < count; p++)
+                    {
+                        if (!_includeReadOnly && writer.IsReadOnlyProperty(p))
+                        {
+                            continue;
+                        }
+
+                        var name = writer.GetName(p, _options);
+
+                        if (!seen.Add(name))
+                        {
+                            return PlanResult.Unknown; // properties sharing a name: the tree keeps the last value
+                        }
+
+                        PlanResult result;
+                        var propertyKind = writer.GetPropertyKind(p);
+
+                        if (propertyKind == ToonPropertyKind.Dynamic)
+                        {
+                            return PlanResult.Unknown; // a converter or runtime-typed value
+                        }
+
+                        if (propertyKind == ToonPropertyKind.Primitive)
+                        {
+                            var absent = 0;
+
+                            for (var i = 0; i < objects.Length; i++)
+                            {
+                                absent += shapes[i * count + p] ? 0 : 1;
+                            }
+
+                            result = absent == 0 ? AddCell(plan, name, new PlanColumn(p, null, writer, false))
+                                : absent == objects.Length ? PlanResult.Absent : PlanResult.NotTabular;
+                        }
+                        else
+                        {
+                            var values = (rented ??= ArrayPool<object?>.Shared.Rent(objects.Length)).AsSpan(0, objects.Length);
+
+                            for (var i = 0; i < objects.Length; i++)
+                            {
+                                values[i] = writer.GetValueOf(objects[i]!, p);
+                            }
+
+                            result = AddColumn(plan, name, values, typeof(object), new PlanColumn(p, null, writer, true), level);
+                        }
+
+                        if (result is PlanResult.NotTabular or PlanResult.Unknown)
+                        {
+                            return result;
+                        }
                     }
                 }
-
-                for (var p = 0; p < count; p++)
+                finally
                 {
-                    if (!_includeReadOnly && writer.IsReadOnlyProperty(p))
-                    {
-                        continue;
-                    }
-
-                    var name = writer.GetName(p, _options);
-
-                    if (!seen.Add(name))
-                    {
-                        return PlanResult.Unknown; // properties sharing a name: the tree keeps the last value
-                    }
-
-                    PlanResult result;
-                    var propertyKind = writer.GetPropertyKind(p);
-
-                    if (propertyKind == ToonPropertyKind.Dynamic)
-                    {
-                        return PlanResult.Unknown; // a converter or runtime-typed value
-                    }
-
-                    if (propertyKind == ToonPropertyKind.Primitive)
-                    {
-                        var absent = 0;
-
-                        for (var i = 0; i < objects.Length; i++)
-                        {
-                            absent += shapes[i * count + p] ? 0 : 1;
-                        }
-
-                        result = absent == 0 ? AddCell(plan, name, new PlanColumn(p, null, writer, false))
-                            : absent == objects.Length ? PlanResult.Absent : PlanResult.NotTabular;
-                    }
-                    else
-                    {
-                        for (var i = 0; i < objects.Length; i++)
-                        {
-                            values[i] = writer.GetValueOf(objects[i], p);
-                        }
-
-                        result = AddColumn(plan, name, values, typeof(object), new PlanColumn(p, null, writer, true), level);
-                    }
-
-                    if (result is PlanResult.NotTabular or PlanResult.Unknown)
-                    {
-                        return result;
-                    }
+                    ArrayPool<bool>.Shared.Return(shapeArray);
                 }
             }
 
@@ -347,7 +387,7 @@ public static partial class ToonSerializer
         ///     Adds the column of one property from its values: primitives (or nulls) are cells, objects of one type a
         ///     nested field group; anything else rules the form out or is left to the tree.
         /// </summary>
-        private PlanResult AddColumn(TablePlan plan, string name, object?[] values, Type declaredType, PlanColumn source, int level)
+        private PlanResult AddColumn(TablePlan plan, string name, ReadOnlySpan<object?> values, Type declaredType, PlanColumn source, int level)
         {
             int absent = 0, primitives = 0;
             DirectKind childKind = default;
@@ -404,14 +444,9 @@ public static partial class ToonSerializer
             var index = plan.Columns.Count;
             plan.Columns.Add(default);
             plan.Sources.Add(source);
-            var children = new object[values.Length];
 
-            for (var i = 0; i < children.Length; i++)
-            {
-                children[i] = values[i]!;
-            }
-
-            var result = AddColumns(plan, children, childKind, childInfo!, level + 1);
+            // The values are the objects of the group (none is null); their own columns are planned with other buffers
+            var result = AddColumns(plan, values, childKind, childInfo!, level + 1);
 
             if (result != PlanResult.Tabular)
             {
