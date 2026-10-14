@@ -121,8 +121,7 @@ public class ToonJsonConverterTests
         var invalidJson = "{invalid json";
 
         // JsonReaderException derives from JsonException
-        var ex = Assert.ThrowsAny<JsonException>(() => ToonJsonConverter.FromJson(invalidJson));
-        Assert.NotNull(ex);
+        Assert.ThrowsAny<JsonException>(() => ToonJsonConverter.FromJson(invalidJson));
     }
 
     #endregion
@@ -221,8 +220,7 @@ public class ToonJsonConverterTests
         var doc = new ToonDocument(obj);
         var json = ToonJsonConverter.ToJson(doc, new JsonWriterOptions { Indented = true });
 
-        Assert.Contains("\n", json);
-        Assert.Contains("  ", json); // Check for indentation
+        Assert.Equal("{\n  \"name\": \"Alice\",\n  \"age\": 30\n}", json.ReplaceLineEndings("\n"));
     }
 
     [Fact]
@@ -258,7 +256,7 @@ public class ToonJsonConverterTests
         var toonString = @"
 name: Alice
 age: 30
-tags: dev, admin
+tags[2]: dev,admin
 ";
 
         // TOON → JSON → TOON
@@ -281,6 +279,8 @@ tags: dev, admin
 
         Assert.Equal(((ToonString)originalRoot["name"]!).Value, ((ToonString)resultRoot["name"]!).Value);
         Assert.Equal(((ToonNumber)originalRoot["age"]!).Value, ((ToonNumber)resultRoot["age"]!).Value);
+        Assert.Equal(["dev", "admin"], resultRoot["tags"]!.AsArray().Items.Select(t => t.GetValue<string>()));
+        Assert.True(ToonValue.DeepEquals(originalDoc.Root, resultDoc.Root));
     }
 
     [Fact]
@@ -606,7 +606,7 @@ server:
     enabled: true
   cors:
     enabled: true
-    origins: app.example.com, admin.example.com, api.example.com
+    origins[3]: app.example.com,admin.example.com,api.example.com
     
 database:
   primary:
@@ -644,7 +644,7 @@ cache:
     
 logging:
   level: info
-  outputs: console, file
+  outputs[2]: console,file
   structured: true
   
 features:
@@ -681,23 +681,17 @@ monitoring:
 
         // Verify application section
         Assert.Equal("ToonNet API", root.GetProperty("application").GetProperty("name").GetString());
-        // Version is parsed as number 2.1, but it's fine
-        var version = root.GetProperty("application").GetProperty("version");
-        Assert.True(version.ValueKind is JsonValueKind.Number or JsonValueKind.String);
+        // 2.1.0 is not a number: it stays a string
+        Assert.Equal("2.1.0", root.GetProperty("application").GetProperty("version").GetString());
         Assert.Equal("production", root.GetProperty("application").GetProperty("environment").GetString());
 
         // Verify nested server.ssl
         var ssl = root.GetProperty("server").GetProperty("ssl");
         Assert.True(ssl.GetProperty("enabled").GetBoolean());
 
-        // Verify CORS origins (inline array becomes array in JSON)
+        // An inline array becomes a JSON array
         var origins = root.GetProperty("server").GetProperty("cors").GetProperty("origins");
-
-        if (origins.ValueKind == JsonValueKind.Array)
-        {
-            Assert.Equal(3, origins.GetArrayLength());
-            Assert.Equal("app.example.com", origins[0].GetString());
-        }
+        Assert.Equal(["app.example.com", "admin.example.com", "api.example.com"], origins.EnumerateArray().Select(o => o.GetString()));
 
         // Verify database pooling
         var pooling = root.GetProperty("database").GetProperty("primary").GetProperty("pooling");
@@ -712,11 +706,7 @@ monitoring:
 
         // Verify logging 
         var outputs = root.GetProperty("logging").GetProperty("outputs");
-
-        if (outputs.ValueKind == JsonValueKind.Array)
-        {
-            Assert.True(outputs.GetArrayLength() >= 2);
-        }
+        Assert.Equal(["console", "file"], outputs.EnumerateArray().Select(o => o.GetString()));
 
         // Verify features with nested rate limit
         var rateLimit = root.GetProperty("features").GetProperty("rateLimit");
@@ -862,6 +852,9 @@ monitoring:
         Assert.Equal(viaText.Name, direct.Name);
         Assert.Equal(viaText.Tags, direct.Tags);
         Assert.Equal(viaText.Price, direct.Price);
+        Assert.Equal("Ada", direct.Name);
+        Assert.Equal(["x", "y"], direct.Tags);
+        Assert.Equal(12345678901234567890.5m, direct.Price);
     }
 
     public sealed class JsonParseModel
@@ -870,4 +863,98 @@ monitoring:
         public List<string> Tags { get; set; } = [];
         public decimal Price { get; set; }
     }
+
+    #region Exact conversions
+
+    [Fact]
+    public void ToJson_Indented_IndentsNumberArrays()
+    {
+        var json = ToonConvert.ToJson("a[3]: 1,2.5,1e-7\nb: 4\nc[2]{x}:\n  1\n  2", new JsonWriterOptions { Indented = true });
+
+        var expected = System.Text.Json.Nodes.JsonNode.Parse(json)!.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        Assert.Equal(expected.ReplaceLineEndings("\n"), json.ReplaceLineEndings("\n"));
+        Assert.Contains("\n    1,\n    2.5,\n    1e-7\n  ]", json.ReplaceLineEndings("\n"));
+    }
+
+    public static TheoryData<string, string> ExactConversions => new()
+    {
+        // Strings that need quotes in TOON
+        { """[" a","05","-","- x","\u0001","true","1e3","a,b","x: y","#c",""]""", "[11]: \" a\",\"05\",\"-\",\"- x\",\"\\u0001\",\"true\",\"1e3\",\"a,b\",\"x: y\",\"#c\",\"\"" },
+        // Keys that need quotes
+        { """{"a b":1,"":2,"x:y":3,"-":4}""", "\"a b\": 1\n\"\": 2\n\"x:y\": 3\n\"-\": 4" },
+        // Uniform objects: a table, nested field groups, key order of the first row
+        { """{"m":[{"a":1,"b":2},{"b":3,"a":4}]}""", "m[2]{a,b}:\n  1,2\n  4,3" },
+        { """{"m":[{"a":1,"b":{"c":2,"d":3}},{"a":4,"b":{"c":5,"d":6}}]}""", "m[2]{a,b{c,d}}:\n  1,2,3\n  4,5,6" },
+        { """{"m":{"x":{"h":"a","p":1},"y":{"h":"b","p":2}}}""", "m[2:]{h,p}:\n  x: a,1\n  y: b,2" },
+        // Empty and nested containers, mixed arrays
+        { """{"e":{},"aa":[[]],"n":[[1,2],[3]]}""", "e:\naa[1]:\n  - [0]:\nn[2]:\n  - [2]: 1,2\n  - [1]: 3" },
+        { """[1,"a",null,true,{"k":1},[2]]""", "[6]:\n  - 1\n  - a\n  - null\n  - true\n  - k: 1\n  - [1]: 2" },
+        // Roots
+        { "null", "null" },
+        { "42", "42" },
+        { "[]", "[]" },
+        { "{}", "" }
+    };
+
+    [Theory]
+    [MemberData(nameof(ExactConversions))]
+    public void FromJson_GivesExactToon_AndRoundTrips(string json, string toon)
+    {
+        Assert.Equal(toon, ToonConvert.FromJson(json));
+
+        // Back to JSON: the same data
+        var back = System.Text.Json.Nodes.JsonNode.Parse(ToonConvert.ToJson(toon));
+        Assert.True(System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(json), back), ToonConvert.ToJson(toon));
+    }
+
+    [Fact]
+    public void Numbers_TakeTheirCanonicalForm()
+    {
+        // Exact decimals, the exponent form below 1e-6, -0 as 0, no trailing zeros
+        const string json = """{"a":0.1,"b":12345678901234567890,"c":1E-7,"d":-0,"e":1.50,"f":100e2}""";
+
+        Assert.Equal("a: 0.1\nb: 12345678901234567890\nc: 1e-7\nd: 0\ne: 1.5\nf: 10000", ToonConvert.FromJson(json));
+        Assert.Equal("""{"a":0.1,"b":12345678901234567890,"c":1e-7,"d":0,"e":1.5,"f":10000}""", ToonConvert.ToJson(ToonConvert.FromJson(json)));
+    }
+
+    [Fact]
+    public void FromJson_Options_DelimiterAndIndent()
+    {
+        var options = new ToonNet.Core.ToonOptions { Delimiter = '|', IndentSize = 4 };
+
+        Assert.Equal("p[2|]: a,b|\"c|d\"\nq:\n    r: 1", new ToonEncoder(options).Encode(ToonJsonConverter.FromJson("""{"p":["a,b","c|d"],"q":{"r":1}}""")));
+    }
+
+    [Fact]
+    public void BigIntegers_BeyondDecimal_AreRoundedToDouble()
+    {
+        // TOON numbers beyond decimal are read as the closest double, as by other JSON tools
+        Assert.Equal("n: 1.2345678901234568e+29", ToonConvert.FromJson("""{"n":123456789012345678901234567890}"""));
+        Assert.Equal("""{"n":"1e400"}""", ToonConvert.ToJson(ToonConvert.FromJson("""{"n":1e400}""")));
+    }
+
+    [Fact]
+    public void FromJson_UnpairedSurrogateEscape_IsAJsonException()
+    {
+        Assert.ThrowsAny<JsonException>(() => ToonConvert.FromJson("""{"s":"\uD800"}"""));
+    }
+
+    [Fact]
+    public void ToJson_NonFiniteNumbers_AreNull()
+    {
+        Assert.Equal("""[null,null]""", ToonJsonConverter.ToJson(new ToonArray([new ToonNumber(double.NaN), new ToonNumber(double.PositiveInfinity)])));
+    }
+
+    [Fact]
+    public void FromJsonElement_AndConvenienceMethods()
+    {
+        using var json = JsonDocument.Parse("""{"Name":"Ada","Tags":["x"]}""");
+
+        Assert.Equal("Name: Ada\nTags[1]: x", new ToonEncoder().Encode(ToonJsonConverter.FromJson(json.RootElement)));
+        Assert.Equal("Ada", ToonConvert.DeserializeFromJson<JsonParseModel>("""{"Name":"Ada","Tags":[],"Price":1}""")!.Name);
+        Assert.Equal("{\n  \"Name\": \"Ada\",\n  \"Tags\": [],\n  \"Price\": 2\n}",
+                     ToonConvert.SerializeToJson(new JsonParseModel { Name = "Ada", Price = 2 }).ReplaceLineEndings("\n"));
+    }
+
+    #endregion
 }

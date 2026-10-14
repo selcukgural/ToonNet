@@ -74,6 +74,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Parse`/`Deserialize` read it in non-strict mode, so a miscounted length or a repeated key does not fail the answer.
 
 ### Fixed
+- **ToonNet.Extensions.Json:** `ToJson` with `Indented = true` wrote arrays of numbers on one line with a misplaced
+  bracket (`[1,2,3\n  ]`); numbers are now indented like other values. A JSON string with an unpaired surrogate escape
+  (`"\uD800"`) throws `JsonException`, as documented, instead of `InvalidOperationException`.
+- **ToonNet.Core:** A `JsonNode` that holds a CLR value written as a JSON string (`JsonValue.Create(DateTime)`, a
+  `Guid`, a `char`) threw when serialized, and one that holds NaN or an infinity threw `ArgumentException`; they are
+  written as their JSON text and as `null`. A JSON number beyond the range of a double (`1e400`) in a `JsonElement` or
+  `JsonNode` is kept as a string, as `ToonConvert.FromJson` keeps it, instead of becoming `null`.
+- **ToonNet.Extensions.Yaml:** Explicit core-schema tags decide the type of a scalar in any style (`!!int "42"` is
+  42, `!!bool "true"` true, `!!null ''` null; a value that does not fit its tag is a `YamlException`), a byte order mark
+  at the start is ignored, and `ToYaml` also quotes the strings YAML 1.1 readers would type (`2001-12-14`, `12:30:00`,
+  `0b101`, `1_000`), as its documentation promised.
 - **ToonNet.Core:** Reading a document with many objects of the same keys sometimes allocated a new string for two of the
   keys on every object (about 14% more memory for 10,000 orders): the parser's key cache used string hashes, which are
   randomized per process, so two keys shared a slot in some runs and not in others. The cache now uses a fixed hash and

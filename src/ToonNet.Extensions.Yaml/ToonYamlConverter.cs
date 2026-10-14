@@ -19,7 +19,7 @@ namespace ToonNet.Extensions.Yaml;
 ///     It includes methods for serializing and deserializing TOON documents and values,
 ///     ensuring compatibility with the YamlDotNet library.
 /// </remarks>
-public static class ToonYamlConverter
+public static partial class ToonYamlConverter
 {
     /// <summary>
     ///     The maximum number of nodes that YAML aliases (<c>*anchor</c>) may expand to in a single input.
@@ -57,7 +57,10 @@ public static class ToonYamlConverter
     /// </exception>
     /// <remarks>
     ///     This method parses the provided YAML string into a <see cref="YamlStream"/> and converts
-    ///     its root node into a <see cref="ToonDocument"/>. If the YAML stream contains no documents,
+    ///     its root node into a <see cref="ToonDocument"/>. A stream of several documents (<c>---</c>) gives the first.
+    ///     Keys of a mapping must be distinct (YAML 1.2), and a merge key (<c>&lt;&lt;: *base</c>, a YAML 1.1 feature) is an
+    ///     ordinary key. Explicit tags of the core schema (<c>!!str</c>, <c>!!int</c>, <c>!!float</c>, <c>!!bool</c>,
+    ///     <c>!!null</c>) decide the type of a scalar. If the YAML stream contains no documents,
     ///     an empty <see cref="ToonDocument"/> is returned.
     /// </remarks>
     public static ToonDocument FromYaml(string yaml)
@@ -88,6 +91,12 @@ public static class ToonYamlConverter
     public static ToonDocument FromYaml(string yaml, ToonOptions? options)
     {
         ArgumentNullException.ThrowIfNull(yaml);
+
+        // A byte order mark at the start of the stream is not content (YAML 1.2 §5.2)
+        if (yaml.Length > 0 && yaml[0] == '\uFEFF')
+        {
+            yaml = yaml[1..];
+        }
 
         // YamlStream.Load is recursive and expands aliases, so untrusted input is checked
         // with the iterative event parser first to avoid stack overflows and alias bombs.
@@ -167,11 +176,11 @@ public static class ToonYamlConverter
     ///     Writes a string as a double-quoted scalar when <see cref="FromYaml(string)"/> would read the plain form as
     ///     another type, so a TOON → YAML → TOON round trip keeps it a string.
     /// </summary>
-    private sealed class QuoteRetypedStringsEmitter(IEventEmitter nextEmitter) : ChainedEventEmitter(nextEmitter)
+    private sealed partial class QuoteRetypedStringsEmitter(IEventEmitter nextEmitter) : ChainedEventEmitter(nextEmitter)
     {
         public override void Emit(ScalarEventInfo eventInfo, IEmitter emitter)
         {
-            if (eventInfo.Source.Value is string text && (ConvertPlainScalar(text) is not ToonString || IsYaml11Boolean(text)))
+            if (eventInfo.Source.Value is string text && (ConvertPlainScalar(text) is not ToonString || IsYaml11Boolean(text) || IsYaml11Typed(text)))
             {
                 eventInfo.Style = ScalarStyle.DoubleQuoted;
             }
@@ -182,6 +191,18 @@ public static class ToonYamlConverter
         /// <summary>The YAML 1.1 booleans (and <c>y</c>/<c>n</c>), which YAML 1.1 readers would not read as strings.</summary>
         private static bool IsYaml11Boolean(string text) => text is "y" or "Y" or "n" or "N" or "yes" or "Yes" or "YES" or "no" or "No" or "NO" or
             "on" or "On" or "ON" or "off" or "Off" or "OFF";
+
+        /// <summary>
+        ///     Text YAML 1.1 readers type but the 1.2 core schema does not: binary (<c>0b101</c>), numbers with underscores
+        ///     (<c>1_000</c>), base 60 (<c>12:30:00</c>) and timestamps (<c>2001-12-14</c>).
+        /// </summary>
+        private static bool IsYaml11Typed(string text) =>
+            text.Length > 0 && (char.IsAsciiDigit(text[0]) || text[0] is '-' or '+' or '.') && Yaml11Typed().IsMatch(text);
+
+        [System.Text.RegularExpressions.GeneratedRegex(
+            @"^(?:[-+]?0b[01_]+|[-+]?[0-9][0-9_]*_[0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?|[-+]?\.?[0-9_]+_[0-9_]*|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+(?:\.[0-9_]*)?|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:(?:[Tt]|[ \t]+)[0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]*)?(?:[ \t]*(?:Z|[-+][0-9]{1,2}(?::[0-9]{2})?))?)?)$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+        private static partial System.Text.RegularExpressions.Regex Yaml11Typed();
     }
 
     #region YAML to TOON Conversion
@@ -374,7 +395,23 @@ public static class ToonYamlConverter
     {
         var value = scalar.Value ?? string.Empty;
 
-        if (scalar.Style is not (ScalarStyle.Plain or ScalarStyle.Any) || (!scalar.Tag.IsEmpty && scalar.Tag.Value is StringTag or "!"))
+        if (!scalar.Tag.IsEmpty)
+        {
+            // An explicit tag decides the type, in any style: !!int "42" is the number 42
+            switch (scalar.Tag.Value)
+            {
+                case StringTag or "!":
+                    return new ToonString(value);
+                case NullTag:
+                    return ToonNull.Instance;
+                case BoolTag:
+                    return ConvertPlainScalar(value) is ToonBoolean boolean ? boolean : throw Retype(scalar, "!!bool");
+                case IntTag or FloatTag:
+                    return ParseCoreNumber(value) ?? throw Retype(scalar, scalar.Tag.Value == IntTag ? "!!int" : "!!float");
+            }
+        }
+
+        if (scalar.Style is not (ScalarStyle.Plain or ScalarStyle.Any))
         {
             return new ToonString(value);
         }
@@ -382,7 +419,14 @@ public static class ToonYamlConverter
         return ConvertPlainScalar(value);
     }
 
+    private static YamlException Retype(YamlScalarNode scalar, string tag) =>
+        new(scalar.Start, scalar.End, $"The value '{scalar.Value}' is not a {tag} of the YAML 1.2 core schema");
+
     private const string StringTag = "tag:yaml.org,2002:str";
+    private const string NullTag = "tag:yaml.org,2002:null";
+    private const string BoolTag = "tag:yaml.org,2002:bool";
+    private const string IntTag = "tag:yaml.org,2002:int";
+    private const string FloatTag = "tag:yaml.org,2002:float";
 
     /// <summary>
     ///     Types the text of a plain scalar (see <see cref="ConvertYamlScalar"/>).

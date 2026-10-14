@@ -168,14 +168,30 @@ public static class ToonJsonConverter
     {
         ArgumentNullException.ThrowIfNull(value);
 
+        var options = writerOptions ?? DefaultWriterOptions;
         using var stream = new MemoryStream();
 
-        using var writer = new Utf8JsonWriter(stream, writerOptions ?? DefaultWriterOptions);
+        using (var writer = new Utf8JsonWriter(stream, options with { Indented = false }))
+        {
+            WriteToonValueAsJson(writer, value);
+        }
 
-        WriteToonValueAsJson(writer, value);
-        writer.Flush();
+        if (!options.Indented)
+        {
+            return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        }
 
-        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        // Numbers are written as raw values (their canonical text), which Utf8JsonWriter does not indent: indent the
+        // compact text through a JsonDocument, which writes them in place
+        using var compact = JsonDocument.Parse(stream.ToArray(), new JsonDocumentOptions { MaxDepth = (options.MaxDepth > 0 ? options.MaxDepth : 1000) + 1 });
+        using var indented = new MemoryStream();
+
+        using (var writer = new Utf8JsonWriter(indented, options))
+        {
+            compact.RootElement.WriteTo(writer);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(indented.ToArray());
     }
 
     #region JSON to TOON Conversion
@@ -213,13 +229,26 @@ public static class ToonJsonConverter
         {
             JsonValueKind.Object                          => ConvertJsonObject(element, strict),
             JsonValueKind.Array                           => ConvertJsonArray(element, strict),
-            JsonValueKind.String                          => new ToonString(element.GetString()!),
+            JsonValueKind.String                          => new ToonString(GetString(element)),
             JsonValueKind.Number                          => ConvertJsonNumber(element),
             JsonValueKind.True                            => new ToonBoolean(true),
             JsonValueKind.False                           => new ToonBoolean(false),
             JsonValueKind.Null or JsonValueKind.Undefined => ToonNull.Instance,
             _                                             => throw new JsonException($"Unsupported JSON value kind: {element.ValueKind}")
         };
+    }
+
+    /// <summary>A JSON string; one with an unpaired surrogate escape (<c>"\uD800"</c>) is a <see cref="JsonException"/>.</summary>
+    private static string GetString(JsonElement element)
+    {
+        try
+        {
+            return element.GetString()!;
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new JsonException("A JSON string has an unpaired surrogate escape, which is not valid text.", ex);
+        }
     }
 
     /// <summary>

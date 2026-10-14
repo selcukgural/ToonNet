@@ -152,20 +152,48 @@ internal static class ToonJsonInterop
                 return result;
             }
             default:
+            {
+                var value = node.AsValue();
+
+                // A value parsed from JSON text holds a JsonElement: convert it as one (its number text decides)
+                if (value.TryGetValue<JsonElement>(out var element))
+                {
+                    return FromElement(element);
+                }
+
+                // A value created from a CLR value can hold a NaN or an infinity, which has no JSON form (and no value
+                // kind): TOON writes null (§3)
+                if ((value.TryGetValue<double>(out var d) && !double.IsFinite(d)) || (value.TryGetValue<float>(out var f) && !float.IsFinite(f)))
+                {
+                    return ToonNull.Instance;
+                }
+
                 return node.GetValueKind() switch
                 {
-                    JsonValueKind.String => new ToonString(node.GetValue<string>()),
+                    // A string, or a value written as one (a DateTime, Guid, char, ...): its JSON text decides
+                    JsonValueKind.String => new ToonString(value.TryGetValue<string>(out var text) ? text : ReadJsonString(node.ToJsonString())),
                     JsonValueKind.Number => Number(node.ToJsonString()),
                     JsonValueKind.True => ToonBoolean.True,
                     JsonValueKind.False => ToonBoolean.False,
                     _ => ToonNull.Instance
                 };
+            }
         }
     }
 
-    /// <summary>A JSON number with its digits (as a decimal when it fits exactly, else the closest double).</summary>
-    private static ToonValue Number(string text) =>
-        ToonNumber.TryParse(text, out var number) ? number : new ToonNumber(double.Parse(text, System.Globalization.CultureInfo.InvariantCulture));
+    /// <summary>The string a JSON string literal stands for.</summary>
+    private static string ReadJsonString(string json)
+    {
+        var reader = new Utf8JsonReader(System.Text.Encoding.UTF8.GetBytes(json));
+        reader.Read();
+        return reader.GetString()!;
+    }
+
+    /// <summary>
+    ///     A JSON number with its digits (as a decimal when it fits exactly, else the closest double); one that is not
+    ///     finite as a double (<c>1e400</c>) is kept as a string, as <c>ToonConvert.FromJson</c> keeps it.
+    /// </summary>
+    private static ToonValue Number(string text) => ToonNumber.TryParse(text, out var number) ? number : new ToonString(text);
 
     /// <summary>The UTF-8 JSON text of a TOON value (numbers in their canonical form).</summary>
     private static byte[] ToJson(ToonValue value)
