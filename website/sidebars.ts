@@ -17,6 +17,7 @@ const sidebars: SidebarsConfig = {
     'intro',
     'api-guide',
     'toon-spec',
+    'comparison',
     {
       type: 'category',
       label: 'Getting Started',
