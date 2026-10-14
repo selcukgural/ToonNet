@@ -41,7 +41,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     private readonly ToonOptions _options = options ?? ToonOptions.Default;
 
     /// <summary>The text being parsed; lines and tokens are offsets into it.</summary>
-    private string _input = string.Empty;
+    private ToonText _input;
     /// <summary>The lines of the document being parsed, in an array rented from <see cref="ArrayPool{T}.Shared"/>.</summary>
     private Line[] _lines = [];
 
@@ -127,7 +127,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
     /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
     /// <exception cref="InvalidOperationException">Thrown when MaxDepth exceeds 200 without AllowExtendedLimits.</exception>
-    public ToonDocument Parse(string input)
+    public ToonDocument Parse(ToonText input)
     {
         BeginDocument(input);
 
@@ -148,7 +148,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Checks a document without building it: the same checks and errors as <see cref="Parse"/>.
     /// </summary>
     /// <exception cref="ToonParseException">Thrown when the input is invalid.</exception>
-    internal void Validate(string input)
+    internal void Validate(ToonText input)
     {
         BeginDocument(input);
 
@@ -169,13 +169,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when input is null.</exception>
     /// <exception cref="ToonParseException">Thrown for errors in a line's indentation.</exception>
-    internal void BeginDocument(string input)
+    internal void BeginDocument(ToonText input)
     {
-        ArgumentNullException.ThrowIfNull(input);
         _ = _options.ValidatedMaxDepth;
 
         _input = input;
-        _lines = ArrayPool<Line>.Shared.Rent(input.AsSpan().Count('\n') + 1);
+        _lines = ArrayPool<Line>.Shared.Rent(input.Span.Count('\n') + 1);
         _position = 0;
         _depth = 0;
         _headerSpans = 0;
@@ -183,7 +182,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _headers.Clear();
         _lastFields = null;
 
-        SplitLines(input);
+        SplitLines(input.Span);
 
         _useKeyCache = _lineCount >= KeyCacheMinLines;
 
@@ -204,7 +203,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         ArrayPool<Line>.Shared.Return(_lines);
         _lines = [];
         _lineCount = 0;
-        _input = string.Empty;
+        _input = default;
         Array.Clear(_keyStack);
         _keyCount = 0;
         _headers.Clear();
@@ -243,8 +242,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(filePath);
         
-        var input = await Encoding.ToonTextEncoding.ReadFileAsync(filePath, cancellationToken).ConfigureAwait(false);
-        return await ParseAsync(input, cancellationToken).ConfigureAwait(false);
+        using var input = await Encoding.ToonTextEncoding.ReadFileAsync(filePath, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Parse(input.Text);
     }
 
     /// <summary>
@@ -260,8 +260,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
         
-        var input = await Encoding.ToonTextEncoding.ReadToEndAsync(stream, leaveOpen: true, cancellationToken).ConfigureAwait(false);
-        return await ParseAsync(input, cancellationToken).ConfigureAwait(false);
+        using var input = await Encoding.ToonTextEncoding.ReadAsync(stream, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Parse(input.Text);
     }
 
     #endregion
@@ -273,18 +274,18 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     §12 orders: a byte-order mark at the start is removed, a CR before each LF and trailing spaces are excluded,
     ///     and comment lines (§5.1) are dropped.
     /// </summary>
-    private void SplitLines(string input)
+    private void SplitLines(ReadOnlySpan<char> input)
     {
         var lines = _lines;
         var count = 0;
-        var start = input.StartsWith('\uFEFF') ? 1 : 0;
+        var start = !input.IsEmpty && input[0] == '\uFEFF' ? 1 : 0;
 
         for (var number = 1; start <= input.Length; number++)
         {
-            var newline = input.AsSpan(start).IndexOf('\n');
+            var newline = input[start..].IndexOf('\n');
             var end = newline < 0 ? input.Length : start + newline;
             var length = end > start && input[end - 1] == '\r' ? end - start - 1 : end - start;
-            var text = input.AsSpan(start, length).TrimEnd(' ');
+            var text = input.Slice(start, length).TrimEnd(' ');
 
             // A comment line: only spaces before '#'
             var first = text.IndexOfAnyExcept(' ');
@@ -304,9 +305,9 @@ internal sealed class ToonParser(ToonOptions? options = null)
     ///     Creates the line that starts at <paramref name="start"/> in <paramref name="input"/> (without its line break
     ///     and trailing spaces).
     /// </summary>
-    private Line CreateLine(string input, int start, int length, int number)
+    private Line CreateLine(ReadOnlySpan<char> input, int start, int length, int number)
     {
-        var raw = input.AsSpan(start, length);
+        var raw = input.Slice(start, length);
         var index = raw.IndexOfAnyExcept(' ', '\t');
 
         if (index < 0)
@@ -1078,7 +1079,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 else if (header.InlineLength > 0)
                 {
                     cursor.Form = ArrayForm.Inline;
-                    cursor.TokenCount = SplitDelimited(_input.AsSpan(header.InlineStart, header.InlineLength), header.Delimiter).Count;
+                    cursor.TokenCount = SplitDelimited(_input.Span.Slice(header.InlineStart, header.InlineLength), header.Delimiter).Count;
                     cursor.CapacityHint = cursor.TokenCount;
                 }
                 else
@@ -1313,7 +1314,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>The text of a primitive token.</summary>
-    internal ReadOnlySpan<char> TokenOf(in ValueRef value) => _input.AsSpan(value.Start, value.Length);
+    internal ReadOnlySpan<char> TokenOf(in ValueRef value) => _input.Span.Slice(value.Start, value.Length);
 
     /// <summary>Whether a value is the primitive <c>null</c>.</summary>
     internal bool IsNull(in ValueRef value) => value.Kind == RefKind.Primitive && TokenOf(value).SequenceEqual("null");
@@ -1350,7 +1351,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         switch (value.NodeKind)
         {
             case ToonNodeKind.Primitive:
-                if (value.Length > 0 && _input[value.Start] == '"')
+                if (value.Length > 0 && _input.Span[value.Start] == '"')
                 {
                     ReadQuotedString(value);
                 }
@@ -1451,7 +1452,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         for (var i = 0; i < fields.Length; i++)
         {
             var token = tokens[i];
-            row.Properties[fields[i].Name] = ParsePrimitive(_input.AsSpan(token.Start, token.Length), line, ColumnAt(line, token.Start));
+            row.Properties[fields[i].Name] = ParsePrimitive(_input.Span.Slice(token.Start, token.Length), line, ColumnAt(line, token.Start));
         }
 
         return row;
@@ -1471,7 +1472,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
             if (field.End == i + 1)
             {
                 var token = tokens[field.Leaf];
-                value = ParsePrimitive(_input.AsSpan(token.Start, token.Length), line, ColumnAt(line, token.Start));
+                value = ParsePrimitive(_input.Span.Slice(token.Start, token.Length), line, ColumnAt(line, token.Start));
             }
             else
             {
@@ -1797,7 +1798,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         var rest = content[i..];
 
         // Parsing reads up to the matching brace only, so a text that starts with the last list parses to it
-        if (_lastFields != null && delimiter == _lastFieldsDelimiter && rest.StartsWith(_input.AsSpan(_lastFieldsStart, _lastFieldsLength)))
+        if (_lastFields != null && delimiter == _lastFieldsDelimiter && rest.StartsWith(_input.Span.Slice(_lastFieldsStart, _lastFieldsLength)))
         {
             i += _lastFieldsLength;
             leafCount = _lastLeafCount;
@@ -2010,11 +2011,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
     private static int ColumnAt(in Line line, int offset) => line.Indent + 1 + offset - line.Start;
 
     /// <summary>The text of a line after its indentation.</summary>
-    private ReadOnlySpan<char> ContentOf(Line line) => _input.AsSpan(line.Start, line.Length);
+    private ReadOnlySpan<char> ContentOf(Line line) => _input.Span.Slice(line.Start, line.Length);
 
     /// <summary>Where <paramref name="part"/>, a slice of the input, starts in the input.</summary>
     private int OffsetOf(ReadOnlySpan<char> part) =>
-        (int)(Unsafe.ByteOffset(ref MemoryMarshal.GetReference(_input.AsSpan()), ref MemoryMarshal.GetReference(part)) / sizeof(char));
+        (int)(Unsafe.ByteOffset(ref MemoryMarshal.GetReference(_input.Span), ref MemoryMarshal.GetReference(part)) / sizeof(char));
 
     /// <summary>
     ///     Returns the string for an unquoted key, shared with earlier occurrences of the same key in the document.

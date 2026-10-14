@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **ToonNet.Core:** UTF-8 and span input without an intermediate string: `ToonSerializer.Deserialize<T>` and
+  `Deserialize(…, Type)` accept `ReadOnlySpan<byte>` (UTF-8), `ReadOnlySpan<char>` and `Stream` (read synchronously to
+  its end), `DeserializeFromStreamAsync(Stream, Type)` joins the generic overload, and `ToonDocument.Parse` accepts
+  `ReadOnlySpan<byte>` and `ReadOnlySpan<char>`, so the NativeAOT-safe path reads bytes too. The text is decoded into
+  a pooled buffer that the parser reads in place and that is cleared before it goes back to the pool; a large document
+  no longer allocates a string twice its size on the large object heap. Ill-formed UTF-8 is a `ToonParseException`,
+  as before.
+
+### Changed
+- **ToonNet.Core:** `DeserializeFromStreamAsync`, `DeserializeFromFileAsync` and the other stream and file readers
+  decode into pooled buffers instead of reading the whole text into a string first.
+- **ToonNet.Core (source compatibility):** With the new overloads, a call that passes a bare `null` literal, such as
+  `ToonDocument.Parse(null!)` or `ToonSerializer.Deserialize<T>(null!)`, is ambiguous; cast it, for example
+  `(string)null!`, as with System.Text.Json.
+
 ## [3.0.0] - 2026-10-14
 
 > All packages move to 3.0.0. The encoder, parser, serializer and source generator follow TOON spec v4.4 and pass all

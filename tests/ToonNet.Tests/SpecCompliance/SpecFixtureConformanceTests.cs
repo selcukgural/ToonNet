@@ -154,6 +154,39 @@ public class SpecFixtureConformanceTests
         Assert.True(errors > 10, "the fixtures should include error cases");
     }
 
+    /// <summary>
+    ///     UTF-8 input is decoded into a pooled buffer and parsed without a string; it must give exactly what parsing the
+    ///     string gives, also when a stream delivers the bytes a few at a time, splitting multi-byte sequences.
+    /// </summary>
+    [Fact]
+    public void Utf8Input_ParsesLikeTheString_ForEveryDecodeFixture()
+    {
+        foreach (var fixture in Cases.Value.Values.Where(c => c.Category == "decode"))
+        {
+            var options = CreateOptions(fixture.Test);
+            var input = fixture.Test.GetProperty("input").GetString()!;
+            var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+
+            var expected = Describe(() => ToonDocument.Parse(input, options));
+
+            Assert.Equal(expected, Describe(() => ToonDocument.Parse(bytes, options)));
+            Assert.Equal(expected, Describe(() => ToonDocument.Parse(input.AsSpan(), options)));
+            Assert.Equal(expected, Describe(() => new ToonParser(options).ParseFromStreamAsync(new TrickleStream(bytes)).GetAwaiter().GetResult()));
+        }
+
+        static string Describe(Func<ToonDocument> parse)
+        {
+            try
+            {
+                return ToJson(parse().Root);
+            }
+            catch (ToonException ex)
+            {
+                return ex.GetType().Name + ": " + ex.Message;
+            }
+        }
+    }
+
     #region Execution
 
     /// <summary>Runs a fixture case and returns a failure description, or null when it conforms.</summary>

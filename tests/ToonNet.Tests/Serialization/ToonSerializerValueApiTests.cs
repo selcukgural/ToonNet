@@ -94,7 +94,7 @@ public class ToonSerializerValueApiTests
     [Fact]
     public void ToonDocumentParse_NullInput_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => ToonDocument.Parse(null!));
+        Assert.Throws<ArgumentNullException>(() => ToonDocument.Parse((string)null!));
     }
 
     private static ToonValue Nest(int levels)

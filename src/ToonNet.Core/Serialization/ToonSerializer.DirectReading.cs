@@ -22,7 +22,7 @@ public static partial class ToonSerializer
     internal static int DirectReadFallbacks;
 
     /// <summary>Deserializes a document, reading straight from the text when the options allow it.</summary>
-    private static object? DeserializeText(string toonString, Type type, ToonSerializerOptions options)
+    private static object? DeserializeText(ToonText toonString, Type type, ToonSerializerOptions options)
     {
         if (options.Converters.Count == 0)
         {
@@ -240,7 +240,7 @@ public static partial class ToonSerializer
 
         private ToonReader Reader => _reader ??= new ToonReader(_parser, this);
 
-        public static object? Read(string text, Type type, ToonSerializerOptions options)
+        public static object? Read(ToonText text, Type type, ToonSerializerOptions options)
         {
             var parser = new ToonParser(options.ToonOptions);
             parser.BeginDocument(text);

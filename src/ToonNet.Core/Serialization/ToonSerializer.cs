@@ -588,6 +588,7 @@ public static partial class ToonSerializer
     [RequiresDynamicCode(ReflectionMessage)]
     public static object? Deserialize(string toonString, Type type, ToonSerializerOptions? options = null)
     {
+        ArgumentNullException.ThrowIfNull(toonString);
         options ??= ToonSerializerOptions.Default;
 
         return DeserializeText(toonString, type, options);
@@ -676,9 +677,10 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(filePath);
 
-        var toonString = await ToonTextEncoding.ReadFileAsync(filePath, cancellationToken).ConfigureAwait(false);
+        using var text = await ToonTextEncoding.ReadFileAsync(filePath, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        return await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
+        return (T?)DeserializeText(text.Text, typeof(T), options ?? ToonSerializerOptions.Default);
     }
 
 
@@ -700,9 +702,7 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        var toonString = await ToonTextEncoding.ReadToEndAsync(stream, leaveOpen: true, cancellationToken).ConfigureAwait(false);
-
-        return await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
+        return (T?)await DeserializeFromStreamAsync(stream, typeof(T), options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -903,9 +903,9 @@ public static partial class ToonSerializer
                     {
                         read = await reader.ReadAsync(_buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
                     }
-                    catch (DecoderFallbackException ex)
+                    catch (DecoderFallbackException)
                     {
-                        throw ToonTextEncoding.InvalidUtf8(ex);
+                        throw ToonTextEncoding.InvalidUtf8();
                     }
 
                     if (read == 0)

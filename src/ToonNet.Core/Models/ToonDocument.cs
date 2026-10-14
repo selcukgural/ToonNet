@@ -36,7 +36,34 @@ public sealed class ToonDocument(ToonValue root)
     /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
     public static ToonDocument Parse(string toon, ToonOptions? options = null)
     {
+        ArgumentNullException.ThrowIfNull(toon);
         return new Parsing.ToonParser(options).Parse(toon);
+    }
+
+    /// <summary>
+    ///     Parses UTF-8 encoded TOON text into a document, without creating an intermediate string.
+    /// </summary>
+    /// <param name="utf8Toon">The UTF-8 encoded TOON text; a byte order mark at the start is ignored.</param>
+    /// <param name="options">Parsing options (indentation, strict mode, limits); defaults when null.</param>
+    /// <returns>The parsed document.</returns>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
+    public static ToonDocument Parse(ReadOnlySpan<byte> utf8Toon, ToonOptions? options = null)
+    {
+        using var text = Encoding.ToonTextEncoding.Decode(utf8Toon);
+        return new Parsing.ToonParser(options).Parse(text.Text);
+    }
+
+    /// <summary>
+    ///     Parses TOON text in a span of characters into a document.
+    /// </summary>
+    /// <param name="toon">The TOON text.</param>
+    /// <param name="options">Parsing options (indentation, strict mode, limits); defaults when null.</param>
+    /// <returns>The parsed document.</returns>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
+    public static ToonDocument Parse(ReadOnlySpan<char> toon, ToonOptions? options = null)
+    {
+        using var text = Encoding.ToonPooledText.Copy(toon);
+        return new Parsing.ToonParser(options).Parse(text.Text);
     }
 
     /// <summary>

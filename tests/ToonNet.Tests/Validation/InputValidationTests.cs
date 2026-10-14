@@ -20,7 +20,7 @@ public class InputValidationTests
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentNullException>(() => parser.Parse((string)null!));
-        Assert.Equal("input", ex.ParamName);
+        Assert.Equal("text", ex.ParamName);
     }
 
     [Fact]
