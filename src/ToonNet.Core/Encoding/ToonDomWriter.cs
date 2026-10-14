@@ -12,15 +12,9 @@ namespace ToonNet.Core.Encoding;
 ///     The serializer also uses it for values it does not write directly (converter output, <see cref="ToonValue"/>
 ///     properties), so it exposes the field, array and list-item steps, not only the root.
 /// </remarks>
-internal sealed class ToonDomWriter(ToonWriter writer)
+internal class ToonDomWriter(ToonWriter writer)
 {
     private readonly ToonWriter _writer = writer;
-
-    /// <summary>
-    ///     Arrays shortened for a prompt, with the number of items left out, which a comment line after the array tells
-    ///     (<c># 380 more items</c>).
-    /// </summary>
-    public IReadOnlyDictionary<ToonArray, int>? OmittedItems { get; init; }
 
     /// <summary>
     ///     Writes the root value: an object as top-level fields, an array with a key-less header, or a single primitive
@@ -138,14 +132,13 @@ internal sealed class ToonDomWriter(ToonWriter writer)
             }
         }
 
-        if (OmittedItems != null && OmittedItems.TryGetValue(array, out var omitted))
-        {
-            // A comment line, which parsers drop (§5.1), at the depth of the items
-            writer.StartLine(childDepth);
-            writer.Write(omitted == 1 ? "# 1 more item" : $"# {omitted.ToString(System.Globalization.CultureInfo.InvariantCulture)} more items");
-        }
-
+        WriteAfterArray(array, childDepth);
         writer.ExitNesting();
+    }
+
+    /// <summary>Writes what follows an array's items (nothing; a subclass writes comments for prompts).</summary>
+    protected virtual void WriteAfterArray(ToonArray array, int childDepth)
+    {
     }
 
     /// <summary>

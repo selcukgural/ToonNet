@@ -291,8 +291,24 @@ public static class ToonPrompt
 
         using var buffer = new ToonTextBuffer();
         var writer = new ToonWriter(buffer, options);
-        new ToonDomWriter(writer) { OmittedItems = omitted }.WriteRoot(shortened);
+        new PromptWriter(writer, omitted).WriteRoot(shortened);
         return buffer.ToString();
+    }
+
+    /// <summary>Writes a comment line after each shortened array, saying how many items were left out.</summary>
+    private sealed class PromptWriter(ToonWriter writer, Dictionary<ToonArray, int> omitted) : ToonDomWriter(writer)
+    {
+        private readonly ToonWriter _writer = writer;
+
+        protected override void WriteAfterArray(ToonArray array, int childDepth)
+        {
+            if (omitted.TryGetValue(array, out var count))
+            {
+                // A comment line, which parsers drop (§5.1), at the depth of the items
+                _writer.StartLine(childDepth);
+                _writer.Write(count == 1 ? "# 1 more item" : $"# {count.ToString(System.Globalization.CultureInfo.InvariantCulture)} more items");
+            }
+        }
     }
 
     /// <summary>A copy of the parts of the tree with long arrays, shortened; other parts are shared.</summary>
