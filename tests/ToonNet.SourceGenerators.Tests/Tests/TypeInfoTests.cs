@@ -180,6 +180,24 @@ public partial class TypeInfoTests
     }
 
     [Fact]
+    public async Task AsyncEnumerableAt_ReadsTheItemsOfANestedArray()
+    {
+        var rows = Enumerable.Range(0, 500).Select(i => new WriterRow { Id = i, Name = $"n{i}", Mood = Mood.Calm }).ToList();
+        var nested = ToonSerializer.Serialize(new Dictionary<string, object> { ["meta"] = 1, ["data"] = new Dictionary<string, object> { ["rows"] = rows } });
+        var read = new List<WriterRow?>();
+
+        await foreach (var row in ToonSerializer.DeserializeAsyncEnumerableAt(new MemoryStream(Encoding.UTF8.GetBytes(nested)), "$.data.rows",
+                                                                              WriterRow.ToonTypeInfo))
+        {
+            read.Add(row);
+        }
+
+        Assert.Equal(ToonSerializer.Serialize(rows), ToonSerializer.Serialize(read));
+        Assert.Equal(ToonSerializer.Serialize(rows), ToonSerializer.Serialize(ToonSerializer.DeserializeAt(nested, "$.data.rows",
+                                                                                                           ToonTypeInfo.CreateList(WriterRow.ToonTypeInfo))));
+    }
+
+    [Fact]
     public void GetGenerated_ReturnsTheGeneratedTypeInfo()
     {
         Assert.Same(ParcelDepot.ToonTypeInfo, ToonTypeInfo.GetGenerated<ParcelDepot>());

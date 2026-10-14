@@ -206,4 +206,159 @@ public class AsyncEnumerableTests
     {
         Assert.Throws<ArgumentNullException>(() => ToonSerializer.DeserializeAsyncEnumerable<Item>((Stream)null!));
     }
+
+    #region DeserializeAsyncEnumerableAt
+
+    /// <summary>Puts a root document in an envelope, as the value of <c>$.data.rows</c>, with siblings around it.</summary>
+    private static string Envelope(string root, int indent = 2)
+    {
+        var pad = new string(' ', indent);
+        var lines = root.Split('\n').Select((line, i) => i == 0 ? pad + "rows" + line : line.Length == 0 ? line : pad + line);
+
+        return $"""
+                meta:
+                {pad}rows: 1
+                {pad}data:
+                {pad}{pad}rows[1]: x
+                data:
+                {pad}count: 2
+                {pad}other:
+                {pad}{pad}rows[2]: a,b
+                {string.Join('\n', lines)}
+                {pad}after:
+                {pad}{pad}x: 1
+                tail: 2
+                """;
+    }
+
+    [Theory]
+    [InlineData(false, 1, 2)]
+    [InlineData(false, 64, 2)]
+    [InlineData(true, 1, 2)]
+    [InlineData(true, 500, 4)]
+    [InlineData(true, 32 * 1024, 2)]
+    public async Task NestedArrays_ReadLikeDeserializeAt(bool nested, int batch, int indent)
+    {
+        var options = new ToonSerializerOptions { ToonOptions = new ToonOptions { IndentSize = indent } };
+        var root = ToonSerializer.Serialize(Items(500, nested), options);
+        var text = Envelope(root, indent);
+        var expected = Describe(ToonSerializer.DeserializeAt<List<Item?>>(text, "$.data.rows", options)!);
+        Assert.Equal(500, ToonSerializer.DeserializeAt<List<Item?>>(text, "$.data.rows", options)!.Count);
+        var bytes = Text.Encoding.UTF8.GetBytes(text);
+
+        Assert.Equal(expected, Describe(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new TrickleStream(bytes, 7), "$.data.rows", options, batch))));
+        Assert.Equal(expected, Describe(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(bytes), "$.data.rows", options))));
+        Assert.Equal(expected, Describe(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(bytes), "$['data']['rows']", options))));
+    }
+
+    [Theory]
+    [InlineData("[3]: 1,2,3")]
+    [InlineData("[0]:")]
+    [InlineData(": []")]
+    [InlineData("[2]{Id,Label}:\n  1,a\n  # note\n  2,b")]
+    [InlineData("[2|]{Id|Label}:\n  1|a\n  2|b")]
+    [InlineData("[2]:\n  - Id: 1\n    Sizes[2]: 1,2\n  - Id: 2\n    Child:\n      Id: 3")]
+    public async Task Forms_ReadLikeDeserializeAt(string root)
+    {
+        var text = Envelope(root);
+        var expected = ToonSerializer.Serialize(ToonSerializer.DeserializeAt<List<object?>>(text.Replace("rows: []", "rows[0]:"), "$.data.rows"));
+
+        foreach (var batch in new[] { 1, 1 << 20 })
+        {
+            Assert.Equal(expected,
+                         ToonSerializer.Serialize(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<object>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)),
+                                                                                                                  "$.data.rows", new ToonSerializerOptions(), batch))));
+        }
+    }
+
+    [Fact]
+    public async Task QuotedKeys_AndTheRoot()
+    {
+        var text = "\"the data\":\n  \"rows\"[2]{Id}:\n    1\n    2";
+
+        Assert.Equal([1, 2], (await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)),
+                                                                                              "$['the data'].rows"))).Select(i => i!.Id));
+
+        var root = ToonSerializer.Serialize(Items(3, false));
+        Assert.Equal(3, (await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(root)), "$"))).Count);
+    }
+
+    [Theory]
+    [InlineData("$.missing")]
+    [InlineData("$.data.missing")]
+    [InlineData("$.data.count.rows")]
+    [InlineData("$.meta.rows.x")]
+    [InlineData("$.tail.rows")]
+    public async Task Missing_GivesNoItems(string path)
+    {
+        var text = Envelope("[1]{Id}:\n  1");
+
+        Assert.Empty(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), path)));
+        Assert.Null(ToonSerializer.DeserializeAt<List<Item>>(text, path));
+    }
+
+    [Theory]
+    [InlineData("$.data.count")]
+    [InlineData("$.data.after")]
+    public async Task NotAnArray_Throws(string path)
+    {
+        var text = Envelope("[1]{Id}:\n  1");
+
+        var ex = await Assert.ThrowsAsync<ToonSerializationException>(() =>
+            ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), path)));
+        Assert.Equal($"The value at {path} is not an array", ex.Message);
+
+        await Assert.ThrowsAsync<ToonSerializationException>(() =>
+            ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes("data:\n  rows[1:]{Id}:\n    a: 1")),
+                                                                      "$.data.rows")));
+    }
+
+    [Fact]
+    public async Task OtherSingularPaths_ReadTheWholeDocument()
+    {
+        var text = "pages[2]:\n  - rows[1]{Id}:\n      1\n  - rows[2]{Id}:\n      2\n      3";
+
+        Assert.Equal([2, 3], (await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)),
+                                                                                              "$.pages[1].rows"))).Select(i => i!.Id));
+        Assert.Throws<ArgumentException>(() => ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(), "$.pages[*].rows"));
+        Assert.Throws<ToonPathException>(() => ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(), "pages"));
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidDocuments))]
+    public async Task NestedErrors_MatchDeserializeAt(string root)
+    {
+        if (!root.StartsWith('[') || root.Contains("extra"))
+        {
+            return; // not an array, or content after it (a sibling in an envelope)
+        }
+
+        var text = Envelope(root);
+        var whole = Record.Exception(() => ToonSerializer.DeserializeAt<List<object?>>(text, "$.data.rows"));
+        Assert.NotNull(whole);
+
+        foreach (var batch in new[] { 1, 1 << 20 })
+        {
+            var streamed = await Record.ExceptionAsync(() =>
+                ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<object>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.rows",
+                                                                            new ToonSerializerOptions(), batch)));
+
+            Assert.NotNull(streamed);
+            Assert.Equal(whole.GetType(), streamed.GetType());
+            Assert.Equal(whole.Message, streamed.Message);
+        }
+    }
+
+    [Fact]
+    public async Task ReadingStops_AtTheEndOfTheArray()
+    {
+        var junk = string.Concat(Enumerable.Repeat("junk line that is not read\n", 100_000));
+        var text = "data:\n  rows[2]{Id}:\n    1\n    2\n" + junk;
+        var stream = new CountingStream(Text.Encoding.UTF8.GetBytes(text));
+
+        Assert.Equal(2, (await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(stream, "$.data.rows"))).Count);
+        Assert.True(stream.BytesRead < 100_000, $"read {stream.BytesRead} bytes");
+    }
+
+    #endregion
 }

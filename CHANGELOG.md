@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   members' text without building anything. In a quick measurement on 10,000 rows, such a filter runs 2.3x faster than
   parsing and selecting with 100x less memory, and `DeserializeAll` 2.3x faster than deserializing everything and
   filtering with LINQ, with 13x less memory; selecting one value skips the rest at the speed of validation.
+- **ToonNet.Core:** `ToonSerializer.DeserializeAsyncEnumerableAt<T>(stream, "$.data.orders")` (also with a `ToonTypeInfo`)
+  streams the items of an array inside a document, such as the rows of a response envelope, in batches as
+  `DeserializeAsyncEnumerable` does for a root array: memory stays flat, and the stream is read no further than the end
+  of the array. Other singular paths read the whole document first. (A path overload of `DeserializeAsyncEnumerable`
+  would make existing calls with `null` options ambiguous, hence the name.)
 
 ## [3.3.0] - 2026-10-14
 

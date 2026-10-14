@@ -91,6 +91,21 @@ if (!converted.Contains("A1,9.99,1x2") || convertedBack.Products[1].Size.Height 
     return 1;
 }
 
+// The items of a nested array, streamed
+var streamedProducts = new List<Product?>();
+
+await foreach (var product in ToonSerializer.DeserializeAsyncEnumerableAt(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(expected)), "$.Products",
+                                                                          Product.ToonTypeInfo))
+{
+    streamedProducts.Add(product);
+}
+
+if (streamedProducts is not [{ Sku: "A1" }, { Sku: "B2" }])
+{
+    Console.WriteLine("FAILED: nested array streaming");
+    return 1;
+}
+
 // Paths, values and type infos on a parsed tree
 var tree = ToonDocument.Parse(expected).Root;
 var cheap = tree.Select("$.Products[?@.Price < 10 && match(@.Sku, 'A.')].Sku");
