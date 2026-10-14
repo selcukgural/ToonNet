@@ -104,9 +104,9 @@ and read it back to the same values.
 | 'ToonNet (type info)'  | Serialize   | Servers   | 10000 |    886.436 us |    10.4876 us |     5.4852 us | 26.86x faster |   0.28x |   138.6719 |  138.6719 |  138.6719 |  1026.13 KB | 27.53x less |
 | System.Text.Json       | Serialize   | Servers   | 10000 |    926.520 us |     6.3501 us |     2.8195 us | 25.69x faster |   0.24x |   246.0938 |  246.0938 |  246.0938 |  1573.04 KB | 17.96x less |
 
-In this run a gen-2 collection emptied the pooled line table during "ToonNet" Deserialize Orders 10,000 (and "type info"),
-so it was allocated again (6,956 KB instead of 5,550 KB). Measured on its own, the case takes 9,161–9,208 us with
-5,550.09 KB, as in the earlier runs.
+In this run "ToonNet" and "ToonNet (type info)" Deserialize Orders 10,000 allocated more than in every other run (6,956 KB
+and 6,253 KB instead of 5,550 KB). The cause is not known: it did not show up when the case was measured on its own
+(twice: 9,161–9,208 us, 5,550.09 KB), nor under forced gen-2 collections and memory pressure.
 
 ## UTF-8 input and output
 

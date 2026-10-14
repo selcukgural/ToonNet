@@ -200,8 +200,7 @@ reference. Setup checks that both TOON libraries produce identical text first.
 | Products (nested field groups) | 33.76 ms · 28.8 MB | **4.89 ms · 3.4 MB** (6.9x faster) | 5.57 ms · 3.4 MB | 6.26 ms · 3.5 MB |
 | Servers (keyed table) | 15.32 ms · 21.9 MB | **3.39 ms · 3.1 MB** (4.5x faster) | 3.77 ms · 3.1 MB | 2.75 ms · 2.5 MB |
 
-¹ Measured on its own; in the full run a gen-2 collection emptied the pooled line table during this case (see the
-results file).
+¹ Measured on its own; in the full run this case allocated more for a reason not yet known (see the results file).
 
 With 100 items ToonNet serializes 10–13x and deserializes 3–3.4x faster than Toon.Format. The overloads that take a
 `ToonTypeInfo` (no reflection, for trimming and NativeAOT) are as fast as "ToonNet": 19–28x and 4.7–8x faster than
