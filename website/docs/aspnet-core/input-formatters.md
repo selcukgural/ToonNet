@@ -102,7 +102,9 @@ returned to the client.
 
 ## Encoding
 
-Request bodies are decoded with the charset from the `Content-Type` header; UTF-8 and UTF-16 are supported.
+Request bodies are decoded with the charset from the `Content-Type` header; UTF-8 and UTF-16 are supported. UTF-8
+bodies (the default) are decoded strictly into a pooled buffer and parsed there, without creating a string; ill-formed
+UTF-8 is reported as a model error.
 
 ## See Also
 

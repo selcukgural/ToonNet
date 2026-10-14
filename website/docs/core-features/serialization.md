@@ -23,6 +23,25 @@ string toon = ToonSerializer.Serialize(person);
 
 The output has no trailing newline.
 
+### Serialize to UTF-8
+
+When the text goes to the network, a file or a byte buffer, write UTF-8 directly. These overloads encode the
+serializer's pooled buffer straight to bytes, without creating an intermediate string; the bytes are exactly the
+UTF-8 of `Serialize`, without a byte order mark.
+
+```csharp
+byte[] utf8 = ToonSerializer.SerializeToUtf8Bytes(person);
+
+// Any IBufferWriter<byte>: a PipeWriter, an ArrayBufferWriter<byte>, ...
+var buffer = new ArrayBufferWriter<byte>();
+ToonSerializer.Serialize(buffer, person);
+
+// A stream, synchronously (it is left open)
+ToonSerializer.Serialize(stream, person);
+```
+
+The value is serialized completely before anything is written, so a failure leaves the destination untouched.
+
 ### Serialize to Stream
 
 ```csharp
@@ -35,8 +54,6 @@ await ToonSerializer.SerializeToStreamAsync(person, stream);  // written as UTF-
 ```csharp
 await ToonSerializer.SerializeToFileAsync(person, "person.toon");  // written as UTF-8
 ```
-
-There are no synchronous stream or file overloads; use `Serialize` and write the string yourself if you need one.
 
 ## Serialization Options
 
@@ -523,7 +540,10 @@ await foreach (var logEntry in ToonSerializer.DeserializeStreamAsync<LogEntry>("
 2. **Use async methods** for I/O-bound operations
 3. **Metadata is cached**: the first call for a type builds and caches its metadata; later calls reuse it
 4. **Stream large collections**: use `SerializeStreamAsync` instead of building one huge string
-5. **Profile your code**: Use BenchmarkDotNet for optimization
+5. **Write bytes directly**: when the destination wants UTF-8, `SerializeToUtf8Bytes` or a buffer writer skips the
+   string (on 10,000 records: 2–11% faster, about half the allocation; a reused `ArrayBufferWriter<byte>` makes
+   writing flat tables almost allocation-free)
+6. **Profile your code**: Use BenchmarkDotNet for optimization
 
 ```csharp
 // Good: Reuse options
@@ -547,6 +567,10 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 |--------|-------------|----------|
 | `Serialize<T>(T value, options)` | Serialize to string | Simple, in-memory data |
 | `Serialize(object value, Type type, options)` | Serialize with a runtime type | Non-generic code |
+| `SerializeToUtf8Bytes<T>(T value, options)` | Serialize to UTF-8 bytes | Network, caches, byte APIs |
+| `SerializeToUtf8Bytes(object value, Type type, options)` | Same, with a runtime type | Non-generic code |
+| `Serialize<T>(IBufferWriter<byte>, T value, options)` | Write UTF-8 to a buffer writer (also with a `Type`) | Pipelines, pooled buffers |
+| `Serialize<T>(Stream, T value, options)` | Write UTF-8 to a stream synchronously (also with a `Type`) | Synchronous I/O |
 | `SerializeToValue<T>(T value, options)` | Convert to a `ToonValue` tree without text | Inspect or modify before encoding |
 | `SerializeAsync<T>(T value, options, ct)` | Serialize to string (`ValueTask<string>`) | Async call sites |
 | `SerializeToStreamAsync<T>(T value, Stream, options, ct)` | Write UTF-8 to a stream | Network, files |

@@ -112,8 +112,11 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
   primitive properties are read and written through typed delegates, so their values are not boxed
 - **Cursor parser** - One quote-aware scan per line, values read from spans, the line table and buffers rented from
   `ArrayPool`, repeated keys and headers shared instead of allocated again
+- **UTF-8 in and out** - Bytes, spans, streams and `IBufferWriter<byte>` (a `PipeWriter`) are read and written through
+  pooled buffers, without intermediate strings: reading bytes is 4–15% faster and allocates 21–46% less than going
+  through a string
 - **NativeAOT and trimming** - `ToonNet.Core` is annotated; generated `Serialize`/`Deserialize` methods with
-  `ToonEncoder` and `ToonDocument.Parse` run in NativeAOT apps (tested in CI)
+  `ToonEncoder` and `ToonDocument.Parse` (text or UTF-8) run in NativeAOT apps (tested in CI)
 - **.NET 8 and .NET 10** - Builds for both; `ToonNet.Core` has no package dependencies
 
 **Async I/O:**
@@ -346,6 +349,11 @@ string toon = ToonSerializer.Serialize(myObject);
 
 // Deserialize TOON string to object
 var obj = ToonSerializer.Deserialize<MyClass>(toonString);
+
+// UTF-8 in and out, without intermediate strings
+byte[] utf8 = ToonSerializer.SerializeToUtf8Bytes(myObject);
+ToonSerializer.Serialize(bufferWriter, myObject);              // any IBufferWriter<byte>, e.g. a PipeWriter
+var fromBytes = ToonSerializer.Deserialize<MyClass>(utf8);     // ReadOnlySpan<byte>, ReadOnlySpan<char> or Stream
 ```
 
 ### Format Conversion (String-based)
@@ -400,6 +408,9 @@ string yaml = ToonYamlConvert.ToYaml(toonString);
 |--------|---------|-------|--------|----------|
 | `Serialize<T>(obj)` | Core | C# Object | TOON string | Save objects as TOON |
 | `Deserialize<T>(toon)` | Core | TOON string | C# Object | Load TOON into objects |
+| `SerializeToUtf8Bytes<T>(obj)` | Core | C# Object | UTF-8 bytes | Network, caches |
+| `Serialize<T>(IBufferWriter<byte> \| Stream, obj)` | Core | C# Object | UTF-8 | Pipelines, synchronous I/O |
+| `Deserialize<T>(utf8)` | Core | UTF-8 bytes, chars or stream | C# Object | Read bytes without a string |
 | `FromJson(json)` | Extensions.Json | JSON string | TOON string | Convert JSON to TOON |
 | `ToJson(toon)` | Extensions.Json | TOON string | JSON string | Convert TOON to JSON |
 | `DeserializeFromJson<T>(json)` | Extensions.Json | JSON string | C# Object | Parse JSON (System.Text.Json) |

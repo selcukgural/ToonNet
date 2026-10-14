@@ -34,6 +34,10 @@ string toon = ToonSerializer.Serialize(person, options);
 Person p = ToonSerializer.Deserialize<Person>(toon);
 Person p = ToonSerializer.Deserialize<Person>(toon, options);
 
+// UTF-8, as JsonSerializer.SerializeToUtf8Bytes and Deserialize(ReadOnlySpan<byte>)
+byte[] utf8 = ToonSerializer.SerializeToUtf8Bytes(person);
+Person p = ToonSerializer.Deserialize<Person>(utf8);
+
 // JSON ↔ TOON conversion (ToonNet.Extensions.Json package)
 string toon = ToonConvert.FromJson(jsonString);  // JSON → TOON
 string json = ToonConvert.ToJson(toonString);    // TOON → JSON
@@ -60,6 +64,15 @@ var person = ToonSerializer.Deserialize<Person>(toon);
 
 Console.WriteLine(person.Name); // "John"
 Console.WriteLine(person.Age);  // 30
+```
+
+Bytes, character spans and streams are read without an intermediate string, and objects can be written as UTF-8 to
+a `byte[]`, an `IBufferWriter<byte>` or a `Stream`:
+
+```csharp
+var fromBytes = ToonSerializer.Deserialize<Person>(utf8Bytes);  // ReadOnlySpan<byte>
+var fromStream = ToonSerializer.Deserialize<Person>(stream);    // read to the end
+ToonSerializer.Serialize(pipeWriter, person);                   // IBufferWriter<byte>
 ```
 
 ### 3. **JSON String → TOON String**

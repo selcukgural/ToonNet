@@ -10,10 +10,13 @@ Optimize ToonNet serialization and deserialization performance.
 2. **Low-allocation text handling**: The parser reads values from spans and rents its line table from `ArrayPool`;
    the encoder writes into a pooled character buffer, and stream and file output is written as UTF-8 in pooled chunks
    without an intermediate string
-3. **Source generator (optional)**: [`ToonNet.SourceGenerators`](source-generators) generates
+3. **UTF-8 in and out**: `Deserialize` over `ReadOnlySpan<byte>`, `ReadOnlySpan<char>` and `Stream` decodes into a
+   pooled buffer that the parser reads in place; `SerializeToUtf8Bytes` and `Serialize` to an `IBufferWriter<byte>` or
+   a `Stream` encode straight from the pooled buffer. Neither creates an intermediate string
+4. **Source generator (optional)**: [`ToonNet.SourceGenerators`](source-generators) generates
    `Serialize`/`Deserialize` methods at compile time
-4. **Streaming**: Write and read large datasets one document at a time
-5. **Reusable Options**: Cache `ToonSerializerOptions` instances
+5. **Streaming**: Write and read large datasets one document at a time
+6. **Reusable Options**: Cache `ToonSerializerOptions` instances
 
 ## Best Practices
 

@@ -110,7 +110,13 @@ public partial class Catalog
 
 string toon = new ToonEncoder().Encode(Catalog.Serialize(catalog));
 Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
+
+// The same with UTF-8 bytes, without intermediate strings
+byte[] utf8 = new ToonEncoder().EncodeToUtf8Bytes(Catalog.Serialize(catalog));
+Catalog fromBytes = Catalog.Deserialize(ToonDocument.Parse(utf8));
 ```
+
+`ToonEncoder.Encode(document, IBufferWriter<byte>)` writes the UTF-8 to a buffer writer such as a `PipeWriter`.
 
 This holds as long as the options contain no converters and objects are of their declared types (a derived instance
 is handed to the reflection-based serializer). The repository's CI publishes such an app with NativeAOT and fails on

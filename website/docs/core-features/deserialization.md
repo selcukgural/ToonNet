@@ -25,6 +25,24 @@ Console.WriteLine($"{person.Name} is {person.Age} years old");
 // Output: Alice is 30 years old
 ```
 
+### Deserialize from UTF-8
+
+Bytes from the network, a file or a cache can be read without turning them into a string first. The text is decoded
+into a pooled buffer that the parser reads in place, and the buffer is cleared before it goes back to the pool. A
+byte order mark at the start is ignored; ill-formed UTF-8 is a `ToonParseException`.
+
+```csharp
+byte[] utf8 = await httpClient.GetByteArrayAsync(url);
+var person = ToonSerializer.Deserialize<Person>(utf8);          // ReadOnlySpan<byte>
+
+var fromChars = ToonSerializer.Deserialize<Person>(text.AsSpan(10, 200));  // ReadOnlySpan<char>
+var fromStream = ToonSerializer.Deserialize<Person>(stream);    // read to the end, synchronously
+```
+
+Each also has an overload with a `Type`. On 10,000 records, reading bytes this way is 4–15% faster than decoding them
+to a string and calling `Deserialize<T>(string)`, with 21–46% less allocation; a large document no longer needs a
+string twice its size on the large object heap.
+
 ### Deserialize from Stream
 
 ```csharp
@@ -37,9 +55,6 @@ var data = await ToonSerializer.DeserializeFromStreamAsync<MyData>(stream);  // 
 ```csharp
 var config = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon");  // read as UTF-8
 ```
-
-There are no synchronous stream or file overloads; read the text yourself and call `Deserialize<T>(string)` if you
-need one.
 
 ## Deserializing Different Types
 
@@ -489,9 +504,12 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 |--------|-------------|----------|
 | `Deserialize<T>(string toon, options)` | Deserialize from string | Simple, in-memory data |
 | `Deserialize(string toon, Type type, options)` | Same, with a runtime type | Non-generic code |
+| `Deserialize<T>(ReadOnlySpan<byte> utf8, options)` | Deserialize UTF-8 bytes without a string (also with a `Type`) | Network, caches, byte APIs |
+| `Deserialize<T>(ReadOnlySpan<char> toon, options)` | Deserialize a span of characters (also with a `Type`) | Slices of larger text |
+| `Deserialize<T>(Stream, options)` | Read UTF-8 from a stream synchronously (also with a `Type`) | Synchronous I/O |
 | `DeserializeFromValue<T>(ToonValue value, options)` | Convert a `ToonValue` tree without text | Data from `ToonDocument.Parse` or `SerializeToValue` |
 | `DeserializeAsync<T>(string toon, options, ct)` | Deserialize from string (`ValueTask<T?>`) | Async call sites |
-| `DeserializeFromStreamAsync<T>(Stream, options, ct)` | Read UTF-8 from a stream | Network data |
+| `DeserializeFromStreamAsync<T>(Stream, options, ct)` | Read UTF-8 from a stream (also with a `Type`) | Network data |
 | `DeserializeFromFileAsync<T>(string filePath, options, ct)` | Read UTF-8 from a file | File input |
 | `DeserializeStreamAsync<T>(string filePath \| StreamReader, ...)` | Yield one object per document | Multi-document files, see [Streaming](streaming) |
 
