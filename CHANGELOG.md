@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> Measured on 10,000 records (benchmark/ToonNet.Comparison/RESULTS.md): ToonNet stays 19–28x faster at serializing and
+> 4.5–8x faster at deserializing than Toon.Format, the `ToonTypeInfo` overloads are as fast as generated code with
+> reflection available, and serializing nested field groups and keyed tables allocates about 35% less.
+
 ### Added
 - **ToonNet.Core:** UTF-8 and span input without an intermediate string: `ToonSerializer.Deserialize<T>` and
   `Deserialize(…, Type)` accept `ReadOnlySpan<byte>` (UTF-8), `ReadOnlySpan<char>` and `Stream` (read synchronously to
