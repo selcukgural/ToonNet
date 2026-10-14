@@ -40,6 +40,14 @@ internal sealed class ToonPathTokenFilter
         public readonly ToonValue Literal = literal;
     }
 
+    /// <summary><c>starts_with(@.member, 'text')</c> and the other string tests of the extensions.</summary>
+    private sealed class StringTest(int member, PathFunction.StringTest test, string literal) : Node
+    {
+        public readonly int Member = member;
+        public readonly PathFunction.StringTest Test = test;
+        public readonly string Literal = literal;
+    }
+
     private readonly Node _root;
 
     private ToonPathTokenFilter(string[] members, Node root)
@@ -71,6 +79,9 @@ internal sealed class ToonPathTokenFilter
                 return Convert(not.Operand, members) is { } operand ? new Not(operand) : null;
             case QueryExpression query when MemberOf(query, members) is var member and >= 0:
                 return new Exists(member);
+            case FunctionExpression { Custom: { Test: not PathFunction.StringTest.None } function, Arguments: [QueryExpression query, LiteralExpression { Value: ToonString text }] }
+                when MemberOf(query, members) is var tested and >= 0:
+                return new StringTest(tested, function.Test, text.Value);
             case ComparisonExpression { Left: QueryExpression left, Right: LiteralExpression literal } comparison
                 when MemberOf(left, members) is var leftMember and >= 0:
                 return new Compare(leftMember, comparison.Operator, literal.Value);
@@ -132,16 +143,22 @@ internal sealed class ToonPathTokenFilter
     ///     Tests the members of a child: <paramref name="found"/> tells which members it has, <paramref name="values"/>
     ///     where their values are (primitives as tokens; objects and arrays were skipped).
     /// </summary>
-    public bool Test(ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found) => Test(_root, parser, values, found);
+    /// <returns>The result, or null when the tokens do not decide it (a member is an object or array a test needs).</returns>
+    public bool? Test(ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found)
+    {
+        var undecided = false;
+        var result = Test(_root, parser, values, found, ref undecided);
+        return undecided ? null : result;
+    }
 
-    private static bool Test(Node node, ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found)
+    private static bool Test(Node node, ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found, ref bool undecided)
     {
         switch (node)
         {
             case And and:
                 foreach (var operand in and.Operands)
                 {
-                    if (!Test(operand, parser, values, found))
+                    if (!Test(operand, parser, values, found, ref undecided))
                     {
                         return false;
                     }
@@ -151,7 +168,7 @@ internal sealed class ToonPathTokenFilter
             case Or or:
                 foreach (var operand in or.Operands)
                 {
-                    if (Test(operand, parser, values, found))
+                    if (Test(operand, parser, values, found, ref undecided))
                     {
                         return true;
                     }
@@ -159,9 +176,27 @@ internal sealed class ToonPathTokenFilter
 
                 return false;
             case Not not:
-                return !Test(not.Operand, parser, values, found);
+                return !Test(not.Operand, parser, values, found, ref undecided);
             case Exists exists:
                 return found[exists.Member];
+            case StringTest test:
+            {
+                if (!found[test.Member])
+                {
+                    return false;
+                }
+
+                ref readonly var tested = ref values[test.Member];
+
+                if (tested.NodeKind != ToonNodeKind.Primitive)
+                {
+                    // contains() looks for an item in an array: the tree decides
+                    undecided |= test.Test == PathFunction.StringTest.Contains && tested.NodeKind == ToonNodeKind.Array;
+                    return false;
+                }
+
+                return TestString(parser, tested, test.Test, test.Literal);
+            }
             default:
             {
                 var compare = (Compare)node;
@@ -183,6 +218,36 @@ internal sealed class ToonPathTokenFilter
                 return CompareToken(parser, value, compare.Operator, compare.Literal);
             }
         }
+    }
+
+    /// <summary>A string test of a primitive token: false when the token is not a string.</summary>
+    private static bool TestString(ToonParser parser, in ToonParser.ValueRef value, PathFunction.StringTest test, string literal)
+    {
+        var token = parser.TokenOf(value);
+        var text = token;
+
+        if (token.Length > 0 && token[0] == '"')
+        {
+            text = token[1..^1];
+
+            if (text.Contains('\\'))
+            {
+                text = parser.ReadQuotedString(value);
+            }
+        }
+        else if (token.SequenceEqual("true") || token.SequenceEqual("false") || token.SequenceEqual("null") ||
+                 ToonParser.TryParseNumberParts(token, out _, out _, out _))
+        {
+            return false;
+        }
+
+        return test switch
+        {
+            PathFunction.StringTest.StartsWith => text.StartsWith(literal, StringComparison.Ordinal),
+            PathFunction.StringTest.EndsWith => text.EndsWith(literal, StringComparison.Ordinal),
+            PathFunction.StringTest.Contains => text.Contains(literal, StringComparison.Ordinal),
+            _ => text.Equals(literal, StringComparison.OrdinalIgnoreCase)
+        };
     }
 
     /// <summary>Compares a primitive token with a literal as <see cref="ToonPathEvaluator.Compare"/> compares their values.</summary>

@@ -210,7 +210,7 @@ public static partial class ToonSerializer
     public static List<T?> DeserializeAll<T>(string toon, string path, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(toon);
-        return DeserializeAllText<T>(toon, ToonPath.Parse(path, options?.PathLimits), options ?? ToonSerializerOptions.Default);
+        return DeserializeAllText<T>(toon, ToonPath.Parse(path, options?.PathOptions), options ?? ToonSerializerOptions.Default);
     }
 
     /// <summary>
@@ -230,7 +230,7 @@ public static partial class ToonSerializer
     [RequiresDynamicCode(ReflectionMessage)]
     public static List<T?> DeserializeAll<T>(ReadOnlySpan<byte> utf8Toon, string path, ToonSerializerOptions? options = null)
     {
-        var compiled = ToonPath.Parse(path, options?.PathLimits);
+        var compiled = ToonPath.Parse(path, options?.PathOptions);
         using var text = ToonTextEncoding.Decode(utf8Toon);
         return DeserializeAllText<T>(text.Text, compiled, options ?? ToonSerializerOptions.Default);
     }
@@ -255,7 +255,7 @@ public static partial class ToonSerializer
                                                                   CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(utf8Toon);
-        var compiled = ToonPath.Parse(path, options?.PathLimits);
+        var compiled = ToonPath.Parse(path, options?.PathOptions);
 
         using var text = await ToonTextEncoding.ReadAsync(utf8Toon, cancellationToken).ConfigureAwait(false);
         return DeserializeAllText<T>(text.Text, compiled, options ?? ToonSerializerOptions.Default);
@@ -279,7 +279,7 @@ public static partial class ToonSerializer
     public static List<T?> DeserializeAll<T>(string toon, string path, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(toon);
-        return DeserializeAllText(toon, ToonPath.Parse(path, options?.PathLimits), typeInfo, options);
+        return DeserializeAllText(toon, ToonPath.Parse(path, options?.PathOptions), typeInfo, options);
     }
 
     /// <summary>
@@ -299,7 +299,7 @@ public static partial class ToonSerializer
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
     public static List<T?> DeserializeAll<T>(ReadOnlySpan<byte> utf8Toon, string path, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
     {
-        var compiled = ToonPath.Parse(path, options?.PathLimits);
+        var compiled = ToonPath.Parse(path, options?.PathOptions);
         using var text = ToonTextEncoding.Decode(utf8Toon);
         return DeserializeAllText(text.Text, compiled, typeInfo, options);
     }
@@ -324,7 +324,7 @@ public static partial class ToonSerializer
                                                                   ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(utf8Toon);
-        var compiled = ToonPath.Parse(path, options?.PathLimits);
+        var compiled = ToonPath.Parse(path, options?.PathOptions);
         ArgumentNullException.ThrowIfNull(typeInfo);
 
         using var text = await ToonTextEncoding.ReadAsync(utf8Toon, cancellationToken).ConfigureAwait(false);
@@ -427,7 +427,7 @@ public static partial class ToonSerializer
     private static ToonPath SingularPath(string path, ToonSerializerOptions? options)
     {
         ArgumentNullException.ThrowIfNull(path);
-        var compiled = ToonPath.Parse(path, options?.PathLimits);
+        var compiled = ToonPath.Parse(path, options?.PathOptions);
 
         return compiled.IsSingular
             ? compiled

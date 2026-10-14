@@ -113,7 +113,7 @@ To read the items of an array inside a document from a stream as they arrive, se
 
 ## Paths From Untrusted Input
 
-Regular expressions run on .NET's non-backtracking engine (linear time), and `ToonPathLimits` bound everything else.
+Regular expressions run on .NET's non-backtracking engine (linear time), and `ToonPathOptions` bound everything else.
 Each descendant segment (`..`) visits the whole subtree, so nested ones multiply the work (`$..*..*..*..*` on a small,
 deep document would visit billions of values); the step budget and the timeout stop such queries.
 
@@ -129,7 +129,7 @@ The defaults suit paths written in code. For paths that clients send (for exampl
 stricter limits, on a compiled path or on the serializer options:
 
 ```csharp
-var limits = new ToonPathLimits
+var limits = new ToonPathOptions
 {
     MaxLength = 256,
     MaxNesting = 8,
@@ -141,11 +141,11 @@ var limits = new ToonPathLimits
 var path = ToonPath.Parse(filterFromClient, limits);      // the limits stay with the compiled path
 var rows = path.SelectFrom(toon);
 
-var options = new ToonSerializerOptions { PathLimits = limits };
+var options = new ToonSerializerOptions { PathOptions = limits };
 var orders = ToonSerializer.DeserializeAll<Order>(toon, filterFromClient, options);
 ```
 
-`ToonSerializerOptions.PathLimits` applies to `DeserializeAt`, `DeserializeAll` and `DeserializeAsyncEnumerableAt`; the
+`ToonSerializerOptions.PathOptions` applies to `DeserializeAt`, `DeserializeAll` and `DeserializeAsyncEnumerableAt`; the
 methods of `ToonValue` that take path text (`Select`, `SetValue`, ...) use the defaults. Paths with the default limits
 are compiled once and cached (up to 512 characters); paths with other limits are compiled on each `Parse`.
 

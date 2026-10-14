@@ -204,7 +204,7 @@ public class ToonPathTextTests
         for (var round = 0; round < 200; round++)
         {
             var rows = string.Join("\n", Enumerable.Range(0, 20).Select(_ => "  " + Cell() + "," + Cell()));
-            var toon = "rows[20]{a,b}:\n" + rows + "\nlist[2]:\n  - a: 1\n    b[1]: x\n  - c: 2";
+            var toon = "rows[20]{a,b}:\n" + rows + "\nlist[3]:\n  - a: 1\n    b[1]: x\n  - c: 2\n  - a[2]: a,b\n    c: a";
 
             for (var f = 0; f < 10; f++)
             {
@@ -212,12 +212,17 @@ public class ToonPathTextTests
                 var comparison = random.Next(2) == 0
                     ? $"{member} {ops[random.Next(ops.Length)]} {literals[random.Next(literals.Length)]}"
                     : $"{literals[random.Next(literals.Length)]} {ops[random.Next(ops.Length)]} {member}";
-                var filter = random.Next(4) switch
+                string[] functions = ["starts_with", "ends_with", "contains", "equals_ignore_case"];
+                string[] texts = ["'a'", "''", "'b'", "'A'", "'\"'", "'x'", "'é'", "'1'", "'tru'"];
+                var test = $"{functions[random.Next(functions.Length)]}({member}, {texts[random.Next(texts.Length)]})";
+                var filter = random.Next(6) switch
                 {
                     0 => comparison,
                     1 => $"!({comparison})",
                     2 => $"{comparison} && @.a",
-                    _ => $"{comparison} || !@.b"
+                    3 => $"{comparison} || !@.b",
+                    4 => test,
+                    _ => $"!{test} && {comparison}"
                 };
 
                 AssertSameAsTree(ToonPath.Parse($"$.rows[?{filter}]"), toon);

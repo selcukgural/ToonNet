@@ -20,10 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   On a tree: `Select`, `SelectSingle`, `SelectMatches` (with normalized paths such as `$['orders'][2]`), `SetValue`
   (creates missing objects and arrays on the way) and `RemoveAll`. Paths are compiled once and cached, and invalid ones
   throw `ToonPathException` with the position of the error. Regular expressions run in linear time, and
-  `ToonPathLimits` bound the length (4,096 characters) and nesting (64) of a path, the length of a pattern (1,024), and
+  `ToonPathOptions` bound the length (4,096 characters) and nesting (64) of a path, the length of a pattern (1,024), and
   the work (a million steps plus 16 per value of the document) and time (10 seconds) of an evaluation, so paths from
   untrusted input cannot hang a query, exhaust the stack, or multiply the work with nested `..` segments. Stricter limits
-  go to `ToonPath.Parse(path, limits)` or `ToonSerializerOptions.PathLimits`.
+  go to `ToonPath.Parse(path, limits)` or `ToonSerializerOptions.PathOptions`.
+- **ToonNet.Core:** Filters can call ToonNet's string, type and aggregate functions besides the five of RFC 9535:
+  `starts_with`, `ends_with`, `contains` (a substring, or an item of an array), `equals_ignore_case` (ordinal),
+  `lower`, `upper`, `trim`, `type` (`'string'`, `'number'`, ...), and `sum`, `min`, `max`, `avg` over the values a query
+  selects (exact with decimals): `$.users[?ends_with(@.email, '@firma.com')]`,
+  `$.orders[?sum(@.lines[*].price) > 1000]`. Over text, `starts_with`, `ends_with`, `contains` and
+  `equals_ignore_case` on a member are tested on its text, like comparisons. Your own functions are registered with
+  `ToonPathFunctions` (`AddPredicate`, `AddFunction`, `AddNodesPredicate`, `AddNodesFunction`) and passed in
+  `ToonPathOptions.Functions`; `ToonPathOptions.StandardFunctionsOnly` allows only the functions of RFC 9535, for paths
+  that must work with other JSONPath implementations.
 - **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
   creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.
 - **ToonNet.Core:** `ToonSerializer.Deserialize<T>(ToonDocumentReader)` (also with a `Type`, or a `ToonTypeInfo`

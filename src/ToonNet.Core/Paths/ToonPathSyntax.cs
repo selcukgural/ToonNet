@@ -72,7 +72,10 @@ internal enum FunctionKind : byte
     Count,
     Match,
     Search,
-    Value
+    Value,
+
+    /// <summary>A ToonNet extension or a registered function (<see cref="FunctionExpression.Custom"/>).</summary>
+    Custom
 }
 
 /// <summary>The declared types of function parameters and results (RFC 9535 §2.4.1).</summary>
@@ -102,7 +105,11 @@ internal sealed class FunctionExpression(FunctionKind function, PathExpression[]
 
     public PathExpression[] Arguments { get; } = arguments;
 
-    public ExpressionType ResultType => Function is FunctionKind.Match or FunctionKind.Search ? ExpressionType.Logical : ExpressionType.Value;
+    public ExpressionType ResultType => Custom?.Result ??
+                                        (Function is FunctionKind.Match or FunctionKind.Search ? ExpressionType.Logical : ExpressionType.Value);
+
+    /// <summary>The function of <see cref="FunctionKind.Custom"/>.</summary>
+    public PathFunction? Custom { get; init; }
 
     /// <summary>The compiled regular expression of <c>match</c> or <c>search</c> when the pattern is a literal (null when invalid).</summary>
     public System.Text.RegularExpressions.Regex? LiteralRegex { get; init; }

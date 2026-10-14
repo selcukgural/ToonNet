@@ -324,10 +324,23 @@ internal sealed class ToonPathTextEvaluator
         {
             var tokenCheckpoint = parser.Save(child);
 
-            if (TestTokens(walker, child, tokenFilter))
+            switch (TestTokens(walker, child, tokenFilter))
             {
-                parser.Restore(tokenCheckpoint);
-                Walk(walker, child, index + 1);
+                case true:
+                    parser.Restore(tokenCheckpoint);
+                    Walk(walker, child, index + 1);
+                    return;
+                case false:
+                    return;
+            }
+
+            // The tokens did not decide: test the child's tree
+            parser.Restore(tokenCheckpoint);
+            var childTree = parser.BuildValue(child);
+
+            if (ToonPathEvaluator.Test(selector.Filter!, childTree, childTree, walker.Work))
+            {
+                WalkTree(walker, childTree, index + 1);
             }
 
             return;
@@ -371,7 +384,7 @@ internal sealed class ToonPathTextEvaluator
     }
 
     /// <summary>Reads past a child, noting where the members a token filter reads are, and tests the filter.</summary>
-    private static bool TestTokens(Walker walker, in ToonParser.ValueRef child, ToonPathTokenFilter filter)
+    private static bool? TestTokens(Walker walker, in ToonParser.ValueRef child, ToonPathTokenFilter filter)
     {
         var parser = walker.Parser;
         var names = filter.Members;

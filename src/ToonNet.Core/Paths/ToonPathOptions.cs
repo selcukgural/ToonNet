@@ -1,26 +1,27 @@
 namespace ToonNet.Core.Paths;
 
 /// <summary>
-///     Limits on compiling and evaluating a <see cref="ToonPath"/>, which keep paths from untrusted input (such as a filter
-///     a client sends) from using unbounded time or memory. The defaults suit paths written in code; give stricter limits
-///     to <see cref="ToonPath.Parse(string, ToonPathLimits)"/> for paths from clients.
+///     Options for compiling and evaluating a <see cref="ToonPath"/>: the functions its filters may call, and limits that
+///     keep paths from untrusted input (such as a filter a client sends) from using unbounded time or memory. The defaults
+///     suit paths written in code; give stricter limits to <see cref="ToonPath.Parse(string, ToonPathOptions)"/> for paths
+///     from clients.
 /// </summary>
 /// <example>
 ///     <code>
-///     var limits = new ToonPathLimits { MaxLength = 256, MaxNesting = 8, MaxSteps = 100_000, MaxStepsPerValue = 4,
+///     var limits = new ToonPathOptions { MaxLength = 256, MaxNesting = 8, MaxSteps = 100_000, MaxStepsPerValue = 4,
 ///                                       Timeout = TimeSpan.FromMilliseconds(200) };
 ///     var path = ToonPath.Parse(filterFromClient, limits);   // ToonPathException when longer or deeper
 ///     var rows = path.SelectFrom(toon);                      // InvalidOperationException (too much work), TimeoutException
 ///
 ///     // The serializer's path methods take the limits from the options
-///     var options = new ToonSerializerOptions { PathLimits = limits };
+///     var options = new ToonSerializerOptions { PathOptions = limits };
 ///     var orders = ToonSerializer.DeserializeAll&lt;Order&gt;(toon, filterFromClient, options);
 ///     </code>
 /// </example>
-public sealed class ToonPathLimits
+public sealed class ToonPathOptions
 {
-    /// <summary>The default limits, used by the methods that take path text.</summary>
-    public static ToonPathLimits Default { get; } = new();
+    /// <summary>The default options, used by the methods that take path text.</summary>
+    public static ToonPathOptions Default { get; } = new();
 
     private readonly int _maxLength = 4096;
     private readonly int _maxNesting = 64;
@@ -96,6 +97,20 @@ public sealed class ToonPathLimits
             ? value
             : throw new ArgumentOutOfRangeException(nameof(value), value, "Timeout must be positive, or Timeout.InfiniteTimeSpan");
     }
+
+    /// <summary>
+    ///     Functions the path's filters may call besides the standard and built-in ones (see <see cref="ToonPathFunctions"/>);
+    ///     null for none.
+    /// </summary>
+    public ToonPathFunctions? Functions { get; init; }
+
+    /// <summary>
+    ///     Whether only the five functions of RFC 9535 (<c>length</c>, <c>count</c>, <c>match</c>, <c>search</c>,
+    ///     <c>value</c>) may be called, so a path that compiles also works with other JSONPath implementations. By default
+    ///     (false), the ToonNet extensions (<c>starts_with</c>, <c>contains</c>, <c>lower</c>, <c>sum</c>, ...) and
+    ///     <see cref="Functions"/> may be called too.
+    /// </summary>
+    public bool StandardFunctionsOnly { get; init; }
 
     private static int Positive(int value) =>
         value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "The limit must be at least 1");

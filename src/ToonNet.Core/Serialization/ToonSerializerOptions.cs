@@ -156,10 +156,10 @@ public sealed class ToonSerializerOptions : IValidatableObject
     /// <summary>
     ///     Gets or sets the limits on the paths the serializer's path methods take as text (<c>DeserializeAt</c>,
     ///     <c>DeserializeAll</c>, <c>DeserializeAsyncEnumerableAt</c>): their length and nesting, and the work and time of
-    ///     an evaluation. Null (the default) uses <see cref="Paths.ToonPathLimits.Default"/>. Set stricter limits when
+    ///     an evaluation. Null (the default) uses <see cref="Paths.ToonPathOptions.Default"/>. Set stricter limits when
     ///     paths come from clients.
     /// </summary>
-    public Paths.ToonPathLimits? PathLimits { get; set; }
+    public Paths.ToonPathOptions? PathOptions { get; set; }
 
     /// <summary>
     ///     Gets a new instance with the default settings. Each call returns a new instance, so changing one does not change
@@ -182,7 +182,7 @@ public sealed class ToonSerializerOptions : IValidatableObject
             AllowExtendedLimits = AllowExtendedLimits,
             MaxDepth = MaxDepth,
             IncludeReadOnlyProperties = IncludeReadOnlyProperties,
-            PathLimits = PathLimits
+            PathOptions = PathOptions
         };
 
         copy.Converters.AddRange(Converters);

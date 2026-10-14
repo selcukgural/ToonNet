@@ -13,17 +13,17 @@ internal sealed class ToonPathParser
     private const long MaxInteger = (1L << 53) - 1;
 
     private readonly string _text;
-    private readonly ToonPathLimits _limits;
+    private readonly ToonPathOptions _limits;
     private int _position;
     private int _nesting;
 
-    private ToonPathParser(string text, ToonPathLimits limits)
+    private ToonPathParser(string text, ToonPathOptions limits)
     {
         _text = text;
         _limits = limits;
     }
 
-    public static Query Parse(string text, ToonPathLimits limits)
+    public static Query Parse(string text, ToonPathOptions limits)
     {
         var parser = new ToonPathParser(text, limits);
 
@@ -620,6 +620,7 @@ internal sealed class ToonPathParser
     {
         FunctionKind function;
         ExpressionType[] parameters;
+        PathFunction? custom = null;
 
         switch (name)
         {
@@ -628,7 +629,21 @@ internal sealed class ToonPathParser
             case "match": function = FunctionKind.Match; parameters = [ExpressionType.Value, ExpressionType.Value]; break;
             case "search": function = FunctionKind.Search; parameters = [ExpressionType.Value, ExpressionType.Value]; break;
             case "value": function = FunctionKind.Value; parameters = [ExpressionType.Nodes]; break;
-            default: throw Error($"Unknown function '{name}'", start);
+            default:
+                custom = _limits.StandardFunctionsOnly
+                    ? null
+                    : PathFunction.Extensions.GetValueOrDefault(name) ?? _limits.Functions?.Find(name);
+
+                if (custom == null)
+                {
+                    throw Error(_limits.StandardFunctionsOnly && (PathFunction.Extensions.ContainsKey(name) || _limits.Functions?.Find(name) != null)
+                                    ? $"'{name}' is not a function of RFC 9535 (StandardFunctionsOnly is set)"
+                                    : $"Unknown function '{name}'", start);
+                }
+
+                function = FunctionKind.Custom;
+                parameters = custom.Parameters;
+                break;
         }
 
         _position++; // '('
@@ -681,7 +696,7 @@ internal sealed class ToonPathParser
             };
         }
 
-        return new FunctionExpression(function, arguments.ToArray());
+        return new FunctionExpression(function, arguments.ToArray()) { Custom = custom };
     }
 
     #endregion

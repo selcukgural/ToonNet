@@ -6,8 +6,8 @@ using ToonNet.Core.Models;
 namespace ToonNet.Core.Paths;
 
 /// <summary>
-///     The work one evaluation may do (<see cref="ToonPathLimits.MaxSteps"/>, plus
-///     <see cref="ToonPathLimits.MaxStepsPerValue"/> per value of the document), so a path from untrusted input cannot make a
+///     The work one evaluation may do (<see cref="ToonPathOptions.MaxSteps"/>, plus
+///     <see cref="ToonPathOptions.MaxStepsPerValue"/> per value of the document), so a path from untrusted input cannot make a
 ///     query run away: each descendant segment (<c>..</c>) multiplies the values it visits by the depth of the document,
 ///     so <c>$..*..*..*..*</c> on a small, deep document would otherwise visit billions of values.
 /// </summary>
@@ -21,28 +21,28 @@ internal sealed class EvaluationBudget
     private readonly long _deadline;
     private int _untilClockCheck = StepsPerClockCheck;
 
-    /// <summary>A budget for a tree: its values are counted when <see cref="ToonPathLimits.MaxSteps"/> is used up.</summary>
-    public EvaluationBudget(ToonValue root, ToonPathLimits limits) : this(limits)
+    /// <summary>A budget for a tree: its values are counted when <see cref="ToonPathOptions.MaxSteps"/> is used up.</summary>
+    public EvaluationBudget(ToonValue root, ToonPathOptions options) : this(options)
     {
-        _remaining = limits.MaxSteps;
-        _root = limits.MaxStepsPerValue > 0 ? root : null;
+        _remaining = options.MaxSteps;
+        _root = options.MaxStepsPerValue > 0 ? root : null;
     }
 
     /// <summary>A budget for a document of <paramref name="length"/> characters (each value takes at least one).</summary>
-    public EvaluationBudget(int length, ToonPathLimits limits) : this(limits)
+    public EvaluationBudget(int length, ToonPathOptions options) : this(options)
     {
-        _remaining = limits.MaxSteps + (long)limits.MaxStepsPerValue * length;
+        _remaining = options.MaxSteps + (long)options.MaxStepsPerValue * length;
     }
 
-    private EvaluationBudget(ToonPathLimits limits)
+    private EvaluationBudget(ToonPathOptions options)
     {
-        Limits = limits;
-        _deadline = limits.Timeout == Timeout.InfiniteTimeSpan
+        Options = options;
+        _deadline = options.Timeout == Timeout.InfiniteTimeSpan
             ? long.MaxValue
-            : Environment.TickCount64 + (long)Math.Ceiling(limits.Timeout.TotalMilliseconds);
+            : Environment.TickCount64 + (long)Math.Ceiling(options.Timeout.TotalMilliseconds);
     }
 
-    public ToonPathLimits Limits { get; }
+    public ToonPathOptions Options { get; }
 
     public void Spend(int steps = 1)
     {
@@ -57,7 +57,7 @@ internal sealed class EvaluationBudget
 
             if (Environment.TickCount64 > _deadline)
             {
-                throw new TimeoutException($"The path took longer than its timeout of {Limits.Timeout} (see ToonPathLimits).");
+                throw new TimeoutException($"The path took longer than its timeout of {Options.Timeout} (see ToonPathOptions).");
             }
         }
     }
@@ -66,7 +66,7 @@ internal sealed class EvaluationBudget
     {
         if (_root != null)
         {
-            _remaining += Limits.MaxStepsPerValue * CountValues(_root);
+            _remaining += Options.MaxStepsPerValue * CountValues(_root);
             _root = null;
 
             if (_remaining >= 0)
@@ -76,7 +76,7 @@ internal sealed class EvaluationBudget
         }
 
         throw new InvalidOperationException(
-            "The path does too much work for the size of the document (see ToonPathLimits); nested descendant segments (..) multiply the values a query visits.");
+            "The path does too much work for the size of the document (see ToonPathOptions); nested descendant segments (..) multiply the values a query visits.");
     }
 
     private static long CountValues(ToonValue root)
@@ -497,13 +497,36 @@ internal static class ToonPathEvaluator
                 return new ToonNumber((long)SelectNodes(function.Arguments[0], root, current, work).Count);
             case FunctionKind.Value:
                 return SelectNodes(function.Arguments[0], root, current, work) is [var single] ? single.Value : null;
+            case FunctionKind.Custom:
+                return (ToonValue?)InvokeCustom(function, root, current, work);
             default:
                 throw new InvalidOperationException("The function does not return a value.");
         }
     }
 
+    /// <summary>Calls an extension or registered function with its arguments: values (null for Nothing) or lists of values.</summary>
+    private static object? InvokeCustom(FunctionExpression function, ToonValue root, ToonValue current, EvaluationBudget work)
+    {
+        var custom = function.Custom!;
+        var arguments = new object?[function.Arguments.Length];
+
+        for (var i = 0; i < arguments.Length; i++)
+        {
+            arguments[i] = custom.Parameters[i] == ExpressionType.Nodes
+                ? SelectNodes(function.Arguments[i], root, current, work).ConvertAll(n => n.Value)
+                : Evaluate(function.Arguments[i], root, current, work);
+        }
+
+        return custom.Invoke(arguments);
+    }
+
     private static bool TestFunction(FunctionExpression function, ToonValue root, ToonValue current, EvaluationBudget work)
     {
+        if (function.Function == FunctionKind.Custom)
+        {
+            return (bool)InvokeCustom(function, root, current, work)!;
+        }
+
         if (Evaluate(function.Arguments[0], root, current, work) is not ToonString text)
         {
             return false;
@@ -512,7 +535,7 @@ internal static class ToonPathEvaluator
         var full = function.Function == FunctionKind.Match;
         var regex = function.HasLiteralRegex
             ? function.LiteralRegex
-            : Evaluate(function.Arguments[1], root, current, work) is ToonString pattern ? ToonPathRegex.Get(pattern.Value, full, work.Limits.MaxPatternLength) : null;
+            : Evaluate(function.Arguments[1], root, current, work) is ToonString pattern ? ToonPathRegex.Get(pattern.Value, full, work.Options.MaxPatternLength) : null;
 
         return regex != null && regex.IsMatch(text.Value);
     }

@@ -18,11 +18,11 @@ namespace ToonNet.Core.Paths;
 ///     <para>
 ///         A path is immutable and thread-safe. <see cref="Parse(string)"/> caches the paths it compiles (up to 512 characters),
 ///         so the methods that take path text (such as <see cref="ToonValue.Select(string)"/>) compile each path once.
-///         Regular expressions run in linear time, and <see cref="ToonPathLimits"/> bound the length and nesting of a path
+///         Regular expressions run in linear time, and <see cref="ToonPathOptions"/> bound the length and nesting of a path
 ///         (4,096 characters and 64 levels by default) and the work of an evaluation (a million steps plus 16 per value of
 ///         the document, beyond which it throws <see cref="InvalidOperationException"/>), so a path from untrusted input
 ///         cannot make a query slow through a pattern, exhaust the stack, or multiply the work with nested descendant
-///         segments. Give stricter limits to <see cref="Parse(string, ToonPathLimits)"/> for paths from clients.
+///         segments. Give stricter options to <see cref="Parse(string, ToonPathOptions)"/> for paths from clients.
 ///     </para>
 /// </remarks>
 public sealed class ToonPath
@@ -34,15 +34,15 @@ public sealed class ToonPath
 
     private static readonly ConcurrentDictionary<string, ToonPath> Cache = new(StringComparer.Ordinal);
 
-    private ToonPath(string text, Query query, ToonPathLimits limits)
+    private ToonPath(string text, Query query, ToonPathOptions options)
     {
         Text = text;
         Query = query;
-        Limits = limits;
+        Options = options;
     }
 
-    /// <summary>The limits the path was compiled with, which also bound its evaluations.</summary>
-    public ToonPathLimits Limits { get; }
+    /// <summary>The options the path was compiled with (functions, limits), which also bound its evaluations.</summary>
+    public ToonPathOptions Options { get; }
 
     /// <summary>The text of the path.</summary>
     public string Text { get; }
@@ -58,7 +58,7 @@ public sealed class ToonPath
     /// </summary>
     public bool IsSingular => Query.IsSingular;
 
-    /// <summary>Compiles a path with the default limits, or returns the compiled path from the cache.</summary>
+    /// <summary>Compiles a path with the default options, or returns the compiled path from the cache.</summary>
     /// <param name="path">The path, starting with <c>$</c>.</param>
     /// <returns>The compiled path.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="path"/> is null.</exception>
@@ -66,28 +66,28 @@ public sealed class ToonPath
     public static ToonPath Parse(string path) => Parse(path, null);
 
     /// <summary>
-    ///     Compiles a path with limits on its length and nesting, which also bound its evaluations (see
-    ///     <see cref="ToonPathLimits"/>); use stricter limits for paths from untrusted input.
+    ///     Compiles a path with options on its length and nesting, which also bound its evaluations (see
+    ///     <see cref="ToonPathOptions"/>); use stricter options for paths from untrusted input.
     /// </summary>
     /// <param name="path">The path, starting with <c>$</c>.</param>
-    /// <param name="limits">The limits; <see cref="ToonPathLimits.Default"/> when null.</param>
+    /// <param name="options">The options; <see cref="ToonPathOptions.Default"/> when null.</param>
     /// <returns>The compiled path.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="path"/> is null.</exception>
-    /// <exception cref="ToonPathException">Thrown when the path is not valid or exceeds the limits, with the position of the error.</exception>
-    public static ToonPath Parse(string path, ToonPathLimits? limits)
+    /// <exception cref="ToonPathException">Thrown when the path is not valid or exceeds the options, with the position of the error.</exception>
+    public static ToonPath Parse(string path, ToonPathOptions? options)
     {
         ArgumentNullException.ThrowIfNull(path);
-        limits ??= ToonPathLimits.Default;
+        options ??= ToonPathOptions.Default;
 
-        // Only paths with the default limits are cached
-        var cacheable = ReferenceEquals(limits, ToonPathLimits.Default) && path.Length <= MaxCachedLength;
+        // Only paths with the default options are cached
+        var cacheable = ReferenceEquals(options, ToonPathOptions.Default) && path.Length <= MaxCachedLength;
 
         if (cacheable && Cache.TryGetValue(path, out var cached))
         {
             return cached;
         }
 
-        var compiled = new ToonPath(path, ToonPathParser.Parse(path, limits), limits);
+        var compiled = new ToonPath(path, ToonPathParser.Parse(path, options), options);
 
         if (!cacheable)
         {
@@ -103,18 +103,18 @@ public sealed class ToonPath
         return compiled;
     }
 
-    /// <summary>Compiles a path with the default limits, without throwing when it is not valid.</summary>
+    /// <summary>Compiles a path with the default options, without throwing when it is not valid.</summary>
     /// <param name="path">The path, starting with <c>$</c>.</param>
     /// <param name="result">The compiled path, or null.</param>
     /// <returns>Whether the path is valid.</returns>
     public static bool TryParse([NotNullWhen(true)] string? path, [NotNullWhen(true)] out ToonPath? result) => TryParse(path, null, out result);
 
-    /// <summary>Compiles a path with limits, without throwing when it is not valid or exceeds them.</summary>
+    /// <summary>Compiles a path with options, without throwing when it is not valid or exceeds them.</summary>
     /// <param name="path">The path, starting with <c>$</c>.</param>
-    /// <param name="limits">The limits; <see cref="ToonPathLimits.Default"/> when null.</param>
+    /// <param name="options">The options; <see cref="ToonPathOptions.Default"/> when null.</param>
     /// <param name="result">The compiled path, or null.</param>
-    /// <returns>Whether the path is valid within the limits.</returns>
-    public static bool TryParse([NotNullWhen(true)] string? path, ToonPathLimits? limits, [NotNullWhen(true)] out ToonPath? result)
+    /// <returns>Whether the path is valid within the options.</returns>
+    public static bool TryParse([NotNullWhen(true)] string? path, ToonPathOptions? options, [NotNullWhen(true)] out ToonPath? result)
     {
         if (path == null)
         {
@@ -124,7 +124,7 @@ public sealed class ToonPath
 
         try
         {
-            result = Parse(path, limits);
+            result = Parse(path, options);
             return true;
         }
         catch (ToonPathException)
@@ -141,7 +141,7 @@ public sealed class ToonPath
     public IReadOnlyList<ToonValue> Select(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false, new EvaluationBudget(root, Limits));
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false, new EvaluationBudget(root, Options));
         var values = new ToonValue[nodes.Count];
 
         for (var i = 0; i < values.Length; i++)
@@ -208,7 +208,7 @@ public sealed class ToonPath
             var root = parser.Parse(text).Root;
             var location = new ToonPathTextEvaluator.LocationStack();
 
-            foreach (var node in ToonPathEvaluator.Select(Query, root, root, track: sink.WantsLocations, new EvaluationBudget(root, Limits)))
+            foreach (var node in ToonPathEvaluator.Select(Query, root, root, track: sink.WantsLocations, new EvaluationBudget(root, Options)))
             {
                 sink.Add(node.Value, location, node.Location);
             }
@@ -220,7 +220,7 @@ public sealed class ToonPath
 
         try
         {
-            evaluator.Evaluate(parser, sink, new EvaluationBudget(text.Length, Limits));
+            evaluator.Evaluate(parser, sink, new EvaluationBudget(text.Length, Options));
         }
         finally
         {
@@ -248,7 +248,7 @@ public sealed class ToonPath
     public IReadOnlyList<ToonPathMatch> SelectMatches(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true, new EvaluationBudget(root, Limits));
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true, new EvaluationBudget(root, Options));
         var matches = new ToonPathMatch[nodes.Count];
 
         for (var i = 0; i < matches.Length; i++)
@@ -267,7 +267,7 @@ public sealed class ToonPath
     public ToonValue? SelectSingle(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false, new EvaluationBudget(root, Limits));
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false, new EvaluationBudget(root, Options));
 
         return nodes.Count switch
         {
@@ -380,7 +380,7 @@ public sealed class ToonPath
     public int RemoveAll(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true, new EvaluationBudget(root, Limits));
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true, new EvaluationBudget(root, Options));
 
         if (nodes.Count == 0)
         {

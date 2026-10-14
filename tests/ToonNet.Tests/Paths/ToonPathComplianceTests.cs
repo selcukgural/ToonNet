@@ -41,12 +41,18 @@ public class ToonPathComplianceTests
         var test = Cases.Value[name];
         var selector = test.GetProperty("selector").GetString()!;
 
+        // The ToonNet extensions do not change any standard result: the suite passes with and without them
+        var standardOnly = new ToonPathOptions { StandardFunctionsOnly = true };
+
         if (test.TryGetProperty("invalid_selector", out _))
         {
             Assert.False(ToonPath.TryParse(selector, out _), $"'{selector}' should be invalid");
             Assert.Throws<ToonPathException>(() => ToonPath.Parse(selector));
+            Assert.False(ToonPath.TryParse(selector, standardOnly, out _));
             return;
         }
+
+        Assert.True(ToonPath.TryParse(selector, standardOnly, out _), $"'{selector}' should be valid with standard functions only");
 
         var path = ToonPath.Parse(selector);
         var document = ToToon(test.GetProperty("document"));
