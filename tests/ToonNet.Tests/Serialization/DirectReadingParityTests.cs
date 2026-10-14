@@ -101,16 +101,18 @@ public class DirectReadingParityTests
         AssertParity<Dictionary<string, Person>>("[2:]{Name,Home{City}}:\n  p: a,x\n  q: b,y");
         AssertParity<List<Dictionary<string, object?>>>("[1]{a,g{b,h{c}}}:\n  1,2,3");
         AssertParity<List<Dictionary<string, object?>>>("[1]{a,a,g{b},g{c}}:\n  1,2,3,4", lenient);
-        AssertParity<List<Address>>("[1]{City,City}:\n  a,b", lenient, expectFallback: true); // a repeated property
+        AssertParity<List<Address>>("[1]{City,City}:\n  a,b", lenient); // a repeated property: the last value, read directly
     }
 
     [Fact]
     public void DocumentsTheReaderHandsBack_MatchTheTree()
     {
-        // Keys in another order than the properties, and repeated keys, take the tree-based path
-        AssertParity<Address>("Zip: 1\nCity: x", expectFallback: true);
-        AssertParity<Address>("City: a\nCity: b", new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } },
-                              expectFallback: true);
+        // Keys in another order than the properties, and repeated keys, are read directly: the object is the same
+        AssertParity<Address>("Zip: 1\nCity: x");
+        AssertParity<Address>("City: a\nCity: b", new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } });
+        AssertParity<List<Address>>("[3]:\n  - City: a\n    Zip: 1\n  - Zip: 2\n    City: b\n  - Zip: 3");
+
+        // Constructor parameters with a repeated key take the tree-based path
         AssertParity<Positional>("Age: 1\nAge: 2", new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } },
                                  expectFallback: true);
     }

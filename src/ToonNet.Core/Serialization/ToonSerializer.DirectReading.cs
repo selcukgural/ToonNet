@@ -497,15 +497,15 @@ public static partial class ToonSerializer
         }
 
         /// <summary>
-        ///     Creates the instance, then sets properties as their keys are read. Keys must come in property order, as
-        ///     the tree-based path sets properties in that order.
+        ///     Creates the instance, then sets properties as their keys are read, in any order. The object ends up as the
+        ///     tree-based path makes it (which sets properties in property order): a repeated key (non-strict mode) sets
+        ///     the last value; only the order in which setters run follows the document.
         /// </summary>
         private object ReadWithSetters(in ToonParser.ValueRef value, TypeMetadata metadata, ReadLookup lookup, int depth)
         {
             var instance = metadata.Activator.New([]);
             var properties = metadata.Properties;
             var cursor = _parser.BeginObject(value);
-            var last = -1;
 
             while (_parser.NextProperty(ref cursor, out var key, out var fieldValue))
             {
@@ -515,12 +515,6 @@ public static partial class ToonSerializer
                     continue;
                 }
 
-                if (slot.Property <= last)
-                {
-                    throw new DirectReadFallbackException(); // another order, or a repeated key
-                }
-
-                last = slot.Property;
                 var property = properties[slot.Property];
 
                 if (property.Primitive is { } primitive && property.Converter == null && (!_hasConverters || !IsConverted(property.Property.PropertyType)) &&

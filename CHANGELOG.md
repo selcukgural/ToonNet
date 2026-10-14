@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   take linear time, and buffers that held document text are cleared on error paths too. Upgrading is recommended for
   services that read TOON from untrusted sources.
 
+### Changed
+- **ToonNet.Core:** Objects whose keys come in another order than their properties (as other producers and LLMs write
+  them) are read straight from the text; before, one such object made the reflection-based reader read the whole
+  document again through the tree. On 200,000 list items with one reordered object: 3.4x faster, half the allocation.
+
 ### Added
 - **ToonNet.Core:** `ToonSerializer.DeserializeAsyncEnumerable<T>(Stream)` (and an overload with a `ToonTypeInfo`) reads
   the items of a root array (tabular, list or inline) as they arrive, a batch of about 32 KB at a time, without holding
