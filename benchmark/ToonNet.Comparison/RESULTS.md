@@ -7,7 +7,7 @@ directory on 2026-10-14 (the UTF-8 table with `--filter "*Utf8Benchmarks*"`).
 BenchmarkDotNet v0.15.8, macOS Tahoe 26.6.2 (25G83) [Darwin 25.6.0]
 Apple M3 Max, 1 CPU, 16 logical and 16 physical cores
 .NET SDK 10.0.105, .NET 10.0.5 (Arm64 RyuJIT armv8.0-a)
-Toon.Format 1.0.0, ToonNet 3.1.0 (unreleased)
+Toon.Format 1.0.0, ToonNet 3.1.0
 ```
 
 - **Employees:** flat records (tabular form)

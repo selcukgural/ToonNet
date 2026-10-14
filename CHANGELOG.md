@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> Measured on 10,000 records (benchmark/ToonNet.Comparison/RESULTS.md): ToonNet stays 19–28x faster at serializing and
-> 4.5–8x faster at deserializing than Toon.Format, the `ToonTypeInfo` overloads are as fast as generated code with
-> reflection available, and serializing nested field groups and keyed tables allocates about 35% less.
+## [3.1.0] - 2026-10-14
+
+> All packages move to 3.1.0. Nothing is removed; the one source change is that a bare `null` argument now needs a cast
+> (see Changed). New: UTF-8, span and stream input and output without intermediate strings; `ToonTypeInfo` overloads
+> that need no reflection (trimming and NativeAOT) at the speed of generated code; `ToonDocumentWriter` and
+> `ToonDocumentReader` for documents without a tree; converters that only affect the values they convert. Measured on 10,000 records (benchmark/ToonNet.Comparison/RESULTS.md), ToonNet stays
+> 19–28x faster at serializing and 4.5–8x faster at deserializing than Toon.Format, and serializing nested field groups
+> and keyed tables allocates about 35% less. Rebuild with the 3.1 generator to get the `ToonTypeInfo` property and
+> generated code alongside converters; code from the 3.0 generator keeps working as before.
 
 ### Added
 - **ToonNet.Core:** UTF-8 and span input without an intermediate string: `ToonSerializer.Deserialize<T>` and
