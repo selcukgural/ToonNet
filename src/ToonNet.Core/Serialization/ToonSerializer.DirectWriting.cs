@@ -330,10 +330,94 @@ public static partial class ToonSerializer
         /// </summary>
         private readonly bool _generatedOnly;
 
+        /// <summary>With converters: tells which types generated code can still write.</summary>
+        private readonly ConverterCheck? _converterCheck;
+
+        /// <summary>Per type, whether a converter of the options writes it (types are looked up once per document).</summary>
+        private Dictionary<Type, bool>? _convertedTypes;
+
+        private bool IsConverted(Type type)
+        {
+            _convertedTypes ??= [];
+
+            if (!_convertedTypes.TryGetValue(type, out var converted))
+            {
+                _convertedTypes[type] = converted = _options.GetConverter(type) != null;
+            }
+
+            return converted;
+        }
+
+        /// <summary>
+        ///     Whether a converter writes values declared as <paramref name="type"/> (a nullable value type's values have its
+        ///     underlying runtime type), so they cannot be written by the typed fast paths.
+        /// </summary>
+        private bool IsConvertedDeclared(Type type) =>
+            _hasConverters && (IsConverted(type) || (Nullable.GetUnderlyingType(type) is { } underlying && IsConverted(underlying)));
+
+        /// <summary>
+        ///     With converters: per runtime type, how it is written when no converter applies to it, or null when one
+        ///     does (looked up once per document).
+        /// </summary>
+        private Dictionary<Type, DirectTypeInfo?>? _infosWithConverters;
+
+        // The last types looked up: the items of a collection usually share their type
+        private Type? _lastRuntimeType;
+        private DirectTypeInfo? _lastInfo;
+        private Type? _lastDeclaredType;
+        private bool _lastDeclaredConverted;
+
+        /// <summary>Whether a converter applies to the declared type of a value, remembering the last answer.</summary>
+        private bool IsDeclaredTypeConverted(Type declaredType)
+        {
+            if (declaredType != _lastDeclaredType)
+            {
+                _lastDeclaredConverted = IsConverted(declaredType);
+                _lastDeclaredType = declaredType;
+            }
+
+            return _lastDeclaredConverted;
+        }
+
+        private DirectTypeInfo? GetInfoWithConverters(Type runtimeType)
+        {
+            if (runtimeType == _lastRuntimeType)
+            {
+                return _lastInfo;
+            }
+
+            _lastRuntimeType = runtimeType;
+            return _lastInfo = LookUpInfoWithConverters(runtimeType);
+        }
+
+        private DirectTypeInfo? LookUpInfoWithConverters(Type runtimeType)
+        {
+            _infosWithConverters ??= [];
+
+            if (!_infosWithConverters.TryGetValue(runtimeType, out var info))
+            {
+                if (!IsConverted(runtimeType))
+                {
+                    info = GetDirectTypeInfo(runtimeType);
+
+                    // Generated code does not consult converters: it is used only when none applies to what it converts
+                    if (info.HasGeneratedCode && (!_options.UseGeneratedCode || !_converterCheck!.AllowsGeneratedCode(runtimeType)))
+                    {
+                        info = GetReflectionTypeInfo(runtimeType);
+                    }
+                }
+
+                _infosWithConverters[runtimeType] = info;
+            }
+
+            return info;
+        }
+
         public DirectWriter(ToonTextBuffer buffer, ToonSerializerOptions options, bool generatedOnly = false)
         {
             _options = options;
             _generatedOnly = generatedOnly;
+            _converterCheck = GetConverterCheck(options);
             _writer = new ToonWriter(buffer, options.ToonOptions);
             _tree = new ToonDomWriter(_writer);
             _hasConverters = options.Converters.Count != 0;
@@ -407,8 +491,7 @@ public static partial class ToonSerializer
 
             var runtimeType = value.GetType();
 
-            if (propertyConverter != null ||
-                (_hasConverters && (_options.GetConverter(runtimeType) ?? _options.GetConverter(declaredType)) != null))
+            if (propertyConverter != null)
             {
                 return DirectKind.Tree;
             }
@@ -419,12 +502,25 @@ public static partial class ToonSerializer
                 return info.Kind;
             }
 
-            info = GetDirectTypeInfo(runtimeType);
-
-            if (info.HasGeneratedCode && (_hasConverters || !_options.UseGeneratedCode))
+            if (_hasConverters)
             {
-                // Without generated code the type is converted with reflection, which direct writing does as well
-                info = GetReflectionTypeInfo(runtimeType);
+                // A converter for the runtime or the declared type writes the value through its tree
+                if (IsDeclaredTypeConverted(declaredType) || GetInfoWithConverters(runtimeType) is not { } converterFree)
+                {
+                    return DirectKind.Tree;
+                }
+
+                info = converterFree;
+            }
+            else
+            {
+                info = GetDirectTypeInfo(runtimeType);
+
+                if (info.HasGeneratedCode && !_options.UseGeneratedCode)
+                {
+                    // Without generated code the type is converted with reflection, which direct writing does as well
+                    info = GetReflectionTypeInfo(runtimeType);
+                }
             }
 
             return info.Kind == DirectKind.Object && GetDistinctPropertyNames(info.Metadata!, _options) == null ? DirectKind.Tree : info.Kind;
@@ -479,7 +575,7 @@ public static partial class ToonSerializer
 
                 var startLine = count > 0 || !firstOnCurrentLine;
 
-                if (property.Primitive is { } primitive && property.Converter == null && !_hasConverters)
+                if (property.Primitive is { } primitive && property.Converter == null && !IsConvertedDeclared(property.Property.PropertyType))
                 {
                     if (_ignoreNulls && primitive.IsNull(instance))
                     {
@@ -616,7 +712,7 @@ public static partial class ToonSerializer
                 case DirectKind.Generated:
                     return info.Writer!.MayBeKeyedOf(value, _writer);
                 case DirectKind.Dictionary:
-                    if (!_hasConverters && IsPrimitiveType(info.Entries!.ValueType))
+                    if (IsPrimitiveType(info.Entries!.ValueType) && !IsConvertedDeclared(info.Entries.ValueType))
                     {
                         return false;
                     }
@@ -644,7 +740,7 @@ public static partial class ToonSerializer
                             continue;
                         }
 
-                        if (property.Primitive is { } primitive && property.Converter == null && !_hasConverters)
+                        if (property.Primitive is { } primitive && property.Converter == null && !IsConvertedDeclared(property.Property.PropertyType))
                         {
                             if (_ignoreNulls && primitive.IsNull(value))
                             {
@@ -970,7 +1066,7 @@ public static partial class ToonSerializer
 
                     bool isNull;
 
-                    if (property.Primitive is { } primitive && !_hasConverters)
+                    if (property.Primitive is { } primitive && !IsConvertedDeclared(property.Property.PropertyType))
                     {
                         isNull = primitive.IsNull(item);
                     }
@@ -1143,7 +1239,7 @@ public static partial class ToonSerializer
                     first = false;
                     var property = properties[p];
 
-                    if (property.Primitive is { } primitive && !_hasConverters)
+                    if (property.Primitive is { } primitive && !IsConvertedDeclared(property.Property.PropertyType))
                     {
                         primitive.WriteText(writer, item);
                     }

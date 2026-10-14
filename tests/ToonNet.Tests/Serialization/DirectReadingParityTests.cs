@@ -113,11 +113,51 @@ public class DirectReadingParityTests
                               expectFallback: true);
         AssertParity<Positional>("Age: 1\nAge: 2", new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } },
                                  expectFallback: true);
+    }
 
-        // Options with converters always do
-        var withConverter = new ToonSerializerOptions();
-        withConverter.AddConverter(new UpperCaseStringConverter());
-        Assert.Equal("ADA", ToonSerializer.Deserialize<Address>("City: ada", withConverter)!.City);
+    /// <summary>
+    ///     With converters, values a converter reads are converted from their own tree, as the tree-based path converts
+    ///     them; everything else is still read straight from the text.
+    /// </summary>
+    [Fact]
+    public void Converters_ReadConvertedValuesFromTheirTree_AndTheRestDirectly()
+    {
+        ToonSerializerOptions With(params IToonConverter[] converters)
+        {
+            var options = new ToonSerializerOptions();
+
+            foreach (var converter in converters)
+            {
+                options.AddConverter(converter);
+            }
+
+            return options;
+        }
+
+        var variants = new[]
+        {
+            With(new UpperCaseStringConverter()),
+            With(new HashIntConverter()),
+            With(new CityConverter()),
+            With(new CountedListConverter()),
+            With(new HashIntConverter(), new CityConverter(), new UpperCaseStringConverter())
+        };
+
+        foreach (var options in variants)
+        {
+            var person = CreatePerson();
+            person.Anything = 5;
+            RoundTrip(person, options);
+            RoundTrip(new Person(), options);
+            RoundTrip(new List<Row> { new() { Id = 1, Name = "a", Score = 1.5 }, new() { Id = 2 } }, options);
+            RoundTrip(new Dictionary<string, Address> { ["a"] = new() { City = "x" }, ["b"] = new() }, options);
+            RoundTrip(new List<int?> { 1, null, 3 }, options);
+            AssertParity<Address>("City: ada\nZip: null", options);
+        }
+
+        // A converter reads the values of its type, from text the converter did not write too
+        Assert.Equal("ADA", ToonSerializer.Deserialize<Address>("City: ada", With(new UpperCaseStringConverter()))!.City);
+        Assert.Equal([7, 8], ToonSerializer.Deserialize<List<int>>("[2]: \"#7\",8", With(new HashIntConverter())));
     }
 
     [Theory]
@@ -163,10 +203,66 @@ public class DirectReadingParityTests
         public Dictionary<string, int> Scores { get; set; } = [];
     }
 
+    /// <summary>Writes integers as "#n" and reads both forms.</summary>
+    private sealed class HashIntConverter : ToonConverter<int>
+    {
+        public override ToonValue Write(int value, ToonSerializerOptions options) => new ToonString("#" + value);
+
+        public override int Read(ToonValue value, ToonSerializerOptions options) => value switch
+        {
+            ToonString s => int.Parse(s.Value.TrimStart('#'), System.Globalization.CultureInfo.InvariantCulture),
+            ToonNumber n => (int)n.Value,
+            _ => throw new ToonSerializationException("not an int")
+        };
+    }
+
+    /// <summary>Writes an address as one string.</summary>
+    private sealed class CityConverter : ToonConverter<Address>
+    {
+        public override ToonValue Write(Address? value, ToonSerializerOptions options) =>
+            value is null ? ToonNull.Instance : new ToonString($"{value.City}|{value.Zip}");
+
+        public override Address Read(ToonValue value, ToonSerializerOptions options)
+        {
+            if (value is ToonNull)
+            {
+                return null!;
+            }
+
+            if (value is ToonObject obj)
+            {
+                return new Address { City = obj.Properties["City"].ToString()!, Zip = obj.Properties["Zip"] is ToonString zip ? zip.Value : null };
+            }
+
+            var parts = ((ToonString)value).Value.Split('|');
+            return new Address { City = parts[0], Zip = parts[1].Length == 0 ? null : parts[1] };
+        }
+    }
+
+    /// <summary>Writes a list of integers as its count and sum.</summary>
+    private sealed class CountedListConverter : ToonConverter<List<int>>
+    {
+        public override ToonValue Write(List<int>? value, ToonSerializerOptions options) =>
+            value is null ? ToonNull.Instance : new ToonString($"{value.Count}:{string.Join('+', value)}");
+
+        public override List<int> Read(ToonValue value, ToonSerializerOptions options)
+        {
+            if (value is ToonNull)
+            {
+                return null!;
+            }
+
+            var text = ((ToonString)value).Value;
+            var items = text[(text.IndexOf(':') + 1)..];
+            return items.Length == 0 ? [] : items.Split('+').Select(int.Parse).ToList();
+        }
+    }
+
     private sealed class UpperCaseStringConverter : ToonConverter<string>
     {
-        public override ToonValue Write(string? value, ToonSerializerOptions options) => new ToonString(value!);
+        public override ToonValue Write(string? value, ToonSerializerOptions options) => value is null ? ToonNull.Instance : new ToonString(value);
 
-        public override string Read(ToonValue value, ToonSerializerOptions options) => ((ToonString)value).Value.ToUpperInvariant();
+        public override string Read(ToonValue value, ToonSerializerOptions options) =>
+            value is ToonString s ? s.Value.ToUpperInvariant() : value is ToonNull ? null! : value.ToString()!.ToUpperInvariant();
     }
 }

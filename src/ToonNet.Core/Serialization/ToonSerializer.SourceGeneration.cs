@@ -92,6 +92,91 @@ public static partial class ToonSerializer
         return options.Converters.Count == 0 && options.UseGeneratedCode ? FindGeneratedSerializer(type) : null;
     }
 
+    /// <summary>
+    ///     Tells, for options with converters, whether generated code can convert a type: no converter may apply to the
+    ///     type or to anything its generated code (and the generated code of the types it reaches) converts itself.
+    /// </summary>
+    internal sealed class ConverterCheck(IToonConverter[] converters, ToonSerializerOptions options)
+    {
+        private readonly ConcurrentDictionary<Type, bool> _allowed = new();
+
+        /// <summary>Whether the check was made for exactly these converters (the list can change between calls).</summary>
+        public bool IsFor(List<IToonConverter> current)
+        {
+            if (current.Count != converters.Length)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < converters.Length; i++)
+            {
+                if (!ReferenceEquals(current[i], converters[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public bool AllowsGeneratedCode(Type type) => _allowed.GetOrAdd(type, static (t, check) => check.Compute(t), this);
+
+        private bool Compute(Type type)
+        {
+            var pending = new Stack<Type>();
+            var visited = new HashSet<Type> { type };
+            pending.Push(type);
+
+            while (pending.TryPop(out var current))
+            {
+                // Code from generators that do not list what they convert is not used with converters
+                if (IsConverted(current) || FindGeneratedSerializer(current)?.Writer?.InlineTypes is not { } inlineTypes)
+                {
+                    return false;
+                }
+
+                foreach (var inlineType in inlineTypes)
+                {
+                    if (IsConverted(inlineType))
+                    {
+                        return false;
+                    }
+
+                    var target = Nullable.GetUnderlyingType(inlineType) ?? inlineType;
+
+                    if (target != current && FindGeneratedSerializer(target) != null && visited.Add(target))
+                    {
+                        pending.Push(target);
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>Whether a converter reads or writes the type, directly or through a nullable's underlying type.</summary>
+        private bool IsConverted(Type type) =>
+            options.GetConverter(type) != null || (Nullable.GetUnderlyingType(type) is { } underlying && options.GetConverter(underlying) != null);
+    }
+
+    /// <summary>The converter check for the options' current converters, or null when they have none.</summary>
+    internal static ConverterCheck? GetConverterCheck(ToonSerializerOptions options)
+    {
+        if (options.Converters.Count == 0)
+        {
+            return null;
+        }
+
+        var check = options.ConverterCheck;
+
+        if (check == null || !check.IsFor(options.Converters))
+        {
+            options.ConverterCheck = check = new ConverterCheck([.. options.Converters], options);
+        }
+
+        return check;
+    }
+
     internal static ToonValue WritePrimitiveForGeneratedCode<T>(T value)
     {
         if (value is null)

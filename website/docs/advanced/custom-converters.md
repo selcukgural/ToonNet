@@ -175,6 +175,15 @@ public class AddressConverter : ToonConverter<Address>
 
 An `Address` property is then written as `Address: "1 Main St, New York, 10001"`.
 
+## Performance
+
+Converters exchange `ToonValue` trees, but only for the values they convert: the rest of the document is still written
+and read straight from the text. Generated code (`[ToonSerializable]`) does not consult converters, so the serializer
+uses it for a type only when no converter applies to the type or to anything its generated code converts itself
+(property, element, key and value types, and the types with generated code it reaches); for the other types it uses
+reflection. A converter for a type your models do not use costs nothing measurable; a converter for `int` turns
+generated code off for every model with an `int` property.
+
 ## Error Handling
 
 ```csharp

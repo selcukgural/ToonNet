@@ -76,6 +76,14 @@ public abstract class ToonObjectWriter
 
     internal abstract object? GetValueOf(object value, int index);
 
+    /// <summary>
+    ///     The types the generated writer and reader convert themselves, without asking the serializer (property, element,
+    ///     key and value types, nested types with generated code); null for code from generators that do not list them.
+    ///     When no converter of the options applies to any of them, the serializer uses the generated code although the
+    ///     options have converters.
+    /// </summary>
+    public virtual Type[]? InlineTypes => null;
+
     internal abstract void WriteValueOf(object value, int index, ToonWriter writer);
 }
 

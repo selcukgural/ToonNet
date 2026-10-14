@@ -21,20 +21,19 @@ public static partial class ToonSerializer
     [ThreadStatic]
     internal static int DirectReadFallbacks;
 
-    /// <summary>Deserializes a document, reading straight from the text when the options allow it.</summary>
+    /// <summary>
+    ///     Deserializes a document straight from the text; values with a converter are converted from their own tree.
+    /// </summary>
     private static object? DeserializeText(ToonText toonString, Type type, ToonSerializerOptions options)
     {
-        if (options.Converters.Count == 0)
+        try
         {
-            try
-            {
-                return DirectReader.Read(toonString, type, options);
-            }
-            catch
-            {
-                // Report the error exactly as the tree-based path does (or read what direct reading gave up on)
-                DirectReadFallbacks++;
-            }
+            return DirectReader.Read(toonString, type, options);
+        }
+        catch
+        {
+            // Report the error exactly as the tree-based path does (or read what direct reading gave up on)
+            DirectReadFallbacks++;
         }
 
         var document = new ToonParser(options.ToonOptions).Parse(toonString);
@@ -267,6 +266,38 @@ public static partial class ToonSerializer
         ///     reflection falls back instead.
         /// </summary>
         private readonly bool _generatedOnly = generatedOnly;
+
+        private readonly bool _hasConverters = options.Converters.Count != 0;
+
+        /// <summary>With converters: tells which types generated code can still read.</summary>
+        private readonly ConverterCheck? _converterCheck = GetConverterCheck(options);
+
+        /// <summary>Per target type, whether a converter of the options reads it (types are looked up once per document).</summary>
+        private Dictionary<Type, bool>? _convertedTypes;
+
+        /// <summary>
+        ///     Whether a converter of the options reads values of <paramref name="type"/>, directly or (for a nullable value
+        ///     type) through its underlying type, as <see cref="DeserializeValue"/> checks; such values are read from their
+        ///     tree.
+        /// </summary>
+        private bool IsConverted(Type type)
+        {
+            if (!_hasConverters)
+            {
+                return false;
+            }
+
+            _convertedTypes ??= [];
+
+            if (!_convertedTypes.TryGetValue(type, out var converted))
+            {
+                converted = _options.GetConverter(type) != null ||
+                            (Nullable.GetUnderlyingType(type) is { } underlying && _options.GetConverter(underlying) != null);
+                _convertedTypes[type] = converted;
+            }
+
+            return converted;
+        }
         private SerializerState? _state;
         private ToonReader? _reader;
 
@@ -326,9 +357,11 @@ public static partial class ToonSerializer
                 return ReadGeneratedValue(value, GetGeneratedOnlyReadTypeInfo(targetType), depth);
             }
 
-            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode);
+            // Generated code does not consult converters: with converters, it reads only types where none applies
+            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode &&
+                                                   (_converterCheck == null || _converterCheck.AllowsGeneratedCode(Nullable.GetUnderlyingType(targetType) ?? targetType)));
 
-            if (propertyConverter != null || info.Kind == ReadKind.Tree)
+            if (propertyConverter != null || info.Kind == ReadKind.Tree || IsConverted(targetType))
             {
                 return ReadTree(value, targetType, propertyConverter, depth);
             }
@@ -490,7 +523,8 @@ public static partial class ToonSerializer
                 last = slot.Property;
                 var property = properties[slot.Property];
 
-                if (property.Primitive is { } primitive && property.Converter == null && primitive.TryReadToken(instance, _parser, fieldValue))
+                if (property.Primitive is { } primitive && property.Converter == null && !IsConverted(property.Property.PropertyType) &&
+                    primitive.TryReadToken(instance, _parser, fieldValue))
                 {
                     continue;
                 }
@@ -596,10 +630,11 @@ public static partial class ToonSerializer
             var elementType = info.ElementType!;
             var cursor = _parser.BeginArray(value);
             var items = factory.Helpers.CreateList(cursor.CapacityHint);
+            var primitiveItems = factory.HasPrimitiveItems && !IsConverted(elementType);
 
             while (_parser.NextItem(ref cursor, out var item))
             {
-                if (factory.HasPrimitiveItems && factory.Helpers.TryAddToken(items, _parser, item))
+                if (primitiveItems && factory.Helpers.TryAddToken(items, _parser, item))
                 {
                     continue;
                 }

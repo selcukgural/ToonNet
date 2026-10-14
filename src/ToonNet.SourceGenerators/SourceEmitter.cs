@@ -775,6 +775,8 @@ internal sealed class SourceEmitter
         var properties = _model.Properties;
         var kind = Serialization + "ToonPropertyKind";
 
+        EmitInlineTypes();
+
         code.BeginBlock($"public override {kind} GetPropertyKind(int index) => index switch");
 
         for (var i = 0; i < properties.Length; i++)
@@ -1615,6 +1617,58 @@ internal sealed class SourceEmitter
     private static string Literal(string value) => SymbolDisplay.FormatLiteral(value, true);
 
     private string Accessibility() => _model.PublicMethods ? "public" : "internal";
+
+    /// <summary>
+    /// The types the generated code converts itself (not handed to the serializer), so the serializer can tell whether
+    /// a converter of the options would apply to one of them.
+    /// </summary>
+    private void EmitInlineTypes()
+    {
+        var types = new List<string>();
+
+        void Collect(ValuePlan plan)
+        {
+            if (plan.Kind == ValueKind.Reflection)
+            {
+                return; // the serializer converts it, consulting the converters
+            }
+
+            if (!types.Contains(plan.ValueTypeName))
+            {
+                types.Add(plan.ValueTypeName);
+            }
+
+            if (plan.Element != null)
+            {
+                Collect(plan.Element);
+            }
+
+            if (plan.Key != null)
+            {
+                Collect(plan.Key);
+            }
+        }
+
+        foreach (var property in _model.Properties)
+        {
+            if (property.ConverterTypeName == null)
+            {
+                Collect(property.Plan);
+            }
+        }
+
+        if (_model.Constructor != null)
+        {
+            foreach (var parameter in _model.Constructor.Parameters)
+            {
+                Collect(parameter.Plan);
+            }
+        }
+
+        _code.AppendLine(types.Count == 0
+                             ? "public override global::System.Type[] InlineTypes { get; } = global::System.Array.Empty<global::System.Type>();"
+                             : $"public override global::System.Type[] InlineTypes {{ get; }} = new global::System.Type[] {{ {string.Join(", ", types.Select(t => $"typeof({t})"))} }};");
+    }
 
     private static string ConverterField(PropertyModel property) => $"__ToonConverter_{property.Name}";
 

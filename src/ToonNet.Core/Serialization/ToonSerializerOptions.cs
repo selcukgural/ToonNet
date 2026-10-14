@@ -105,6 +105,12 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public List<IToonConverter> Converters { get; } = [];
 
     /// <summary>
+    ///     For the converters last seen, per type with generated code, whether no converter applies to what its generated
+    ///     code converts itself (see <see cref="ToonObjectWriter.InlineTypes"/>).
+    /// </summary>
+    internal ToonSerializer.ConverterCheck? ConverterCheck { get; set; }
+
+    /// <summary>
     ///     Gets or sets whether to include read-only properties in serialization.
     ///     Default value is true.
     /// </summary>

@@ -259,7 +259,7 @@ public static partial class ToonSerializer
 
                     PlanResult result;
 
-                    if (property.Primitive is { } primitive && !_hasConverters)
+                    if (property.Primitive is { } primitive && !IsConvertedDeclared(property.Property.PropertyType))
                     {
                         var absent = 0;
 

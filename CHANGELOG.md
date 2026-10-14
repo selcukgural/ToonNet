@@ -55,6 +55,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** Planning nested field groups and keyed tables of typed objects rents its temporary arrays from
   the pool instead of allocating several arrays the size of the collection: serializing 10,000 records with nested
   groups to a reused buffer writer allocates 3 KB instead of 569 KB, a keyed table 158 KB instead of 709 KB.
+- **ToonNet.Core, ToonNet.SourceGenerators:** Converters no longer slow everything down. Before, options with any
+  converter read the whole document through a `ToonValue` tree and turned generated code off for every type. Now values a
+  converter applies to are converted from their own tree while the rest is read straight from the text, and generated
+  code is still used for types where no converter applies to anything it converts itself (generated code now lists those
+  types in `ToonObjectWriter.InlineTypes`; code from older generators keeps the previous behavior until it is rebuilt).
+  On 10,000 records with a converter for a type the models do not use, serializing went from 2–2.3x to within a few
+  percent of the time without converters, and deserializing from 2.2–2.9x to the same time. The fast paths of the
+  reflection-based writer also stay on for properties no converter applies to.
 - **ToonNet.AspNetCore.Mvc:** `ToonInputFormatter` reads UTF-8 request bodies with the new stream reader, decoding into
   a pooled buffer instead of a string (other charsets are read as before). A UTF-8 body that starts with a UTF-16
   byte order mark is now rejected as ill-formed UTF-8 instead of being decoded as UTF-16.
