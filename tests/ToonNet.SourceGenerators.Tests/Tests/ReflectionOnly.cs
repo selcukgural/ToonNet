@@ -23,6 +23,7 @@ internal static class ReflectionOnly
             UnmappedMemberHandling = options.UnmappedMemberHandling,
             RespectRequiredMembers = options.RespectRequiredMembers,
             PathOptions = options.PathOptions,
+            SerializeRuntimeTypes = options.SerializeRuntimeTypes,
             UseGeneratedCode = false
         };
 

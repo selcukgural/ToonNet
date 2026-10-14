@@ -61,12 +61,17 @@ public class StrictMemberTests
     }
 
     [Fact]
-    public void Defaults_SkipUnknownKeysAndMissingRequiredProperties()
+    public void Defaults_SkipUnknownKeys_AndRequireRequiredProperties()
     {
-        var account = ToonSerializer.Deserialize<Account>("Age: 3\nUnknown: 1")!;
+        // Since 4.0 a missing required property is an error by default, as in System.Text.Json
+        Assert.True(new ToonSerializerOptions().RespectRequiredMembers);
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Account>("Age: 3\nUnknown: 1"));
+        Assert.Contains("required property 'Name' is missing", ex.Message);
 
+        var account = ToonSerializer.Deserialize<Account>("Age: 3\nUnknown: 1", new ToonSerializerOptions { RespectRequiredMembers = false })!;
         Assert.Null(account.Name);
         Assert.Equal(3, account.Age);
+        Assert.Equal("a", ToonSerializer.Deserialize<Account>("Name: a\nUnknown: 1")!.Name);
     }
 
     [Fact]

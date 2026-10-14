@@ -245,8 +245,9 @@ internal sealed class SourceEmitter
 
         if (model.CheckRuntimeType)
         {
-            code.AppendLine("// Derived types are handled by ToonSerializer, which knows the runtime type.");
-            code.AppendLine($"if (value.GetType() != typeof({model.TypeOfName})) return {reflection};");
+            // A derived object is written as this type, unless the options ask for runtime types (ToonNet 4.0)
+            code.AppendLine("// Derived types written as their runtime type are handled by ToonSerializer, which knows it.");
+            code.AppendLine($"if (options.SerializeRuntimeTypes && value.GetType() != typeof({model.TypeOfName})) return {reflection};");
         }
         EmitPolicyLocal();
         code.AppendLine(ConvertLocal);
@@ -517,7 +518,9 @@ internal sealed class SourceEmitter
                 // Objects of exactly the declared type are written by its field writer; derived types need their own,
                 // and an object that may be a keyed tabular object (§9.5) needs the serializer to decide
                 var keyedCheck = $"!{plan.ValueTypeName}.__ToonMayBeKeyed({value}, writer)";
-                code.BeginBlock(plan.CheckRuntimeType ? $"if ({value}.GetType() == typeof({plan.ValueTypeName}) && {keyedCheck})" : $"if ({keyedCheck})");
+                code.BeginBlock(plan.CheckRuntimeType
+                                    ? $"if ((!options.SerializeRuntimeTypes || {value}.GetType() == typeof({plan.ValueTypeName})) && {keyedCheck})"
+                                    : $"if ({keyedCheck})");
                 code.AppendLine(StartLine);
                 code.AppendLine("writer.EnterValue(depth + 1);");
                 code.AppendLine($"writer.Write({EncodedNameExpression(property, ":")});");
@@ -878,6 +881,17 @@ internal sealed class SourceEmitter
         code.AppendLine(readOnly.Count == 0
                             ? "public override bool IsReadOnlyProperty(int index) => false;"
                             : $"public override bool IsReadOnlyProperty(int index) => index is {string.Join(" or ", readOnly)};");
+
+        // The declared types, which values are written as (ToonNet 4.0)
+        code.BeginBlock("public override global::System.Type? GetPropertyType(int index) => index switch");
+
+        for (var i = 0; i < properties.Length; i++)
+        {
+            code.AppendLine($"{i} => typeof({properties[i].TypeOfName}),");
+        }
+
+        code.AppendLine("_ => throw new global::System.ArgumentOutOfRangeException(nameof(index))");
+        code.EndBlock(";");
 
         code.BeginBlock($"public override object? GetValue({type} value, int index) => index switch");
 
@@ -1855,7 +1869,7 @@ internal sealed class SourceEmitter
             }
 
             code.AppendLine("var __value = __entry.Value;");
-            EmitStore("__obj.Properties[__key]", element, "__value", "depth + 1", useDeclaredType: false);
+            EmitStore("__obj.Properties[__key]", element, "__value", "depth + 1", useDeclaredType: true); // declared as the value type (4.0)
             code.EndBlock();
 
             if (tracksPath)
@@ -1892,7 +1906,7 @@ internal sealed class SourceEmitter
 
             if (element.Kind != ValueKind.Reflection)
             {
-                branches.Add($"if (__convert && {Helpers}.TryWriteConverted<{element.TypeName}>(__item, options, false, out var __c)) " +
+                branches.Add($"if (__convert && {Helpers}.TryWriteConverted<{element.TypeName}>(__item, options, true, out var __c)) " +
                              $"__array.Items.Add(__c ?? {Models}ToonNull.Instance);");
             }
 

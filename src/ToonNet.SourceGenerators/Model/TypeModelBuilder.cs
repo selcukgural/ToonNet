@@ -381,7 +381,14 @@ internal static class TypeModelBuilder
             ? converterType.ToDisplayString(TypeOfFormat)
             : null;
 
+        // As reflection reads: public setters (set, init), and non-public ones of properties marked [ToonInclude]
         var setter = FindSetter(property);
+
+        if (setter != null && setter.DeclaredAccessibility != Accessibility.Public && !IsIncluded(property))
+        {
+            setter = null;
+        }
+
         var write = GetWriteKind(property, setter, type, compilation, canUseUnsafeAccessor, boundToConstructor, setsRequiredMembers);
 
         return new PropertyModel(
@@ -396,6 +403,20 @@ internal static class TypeModelBuilder
             SetterOwner: write == WriteKind.Accessor ? setter!.ContainingType.ToDisplayString(TypeOfFormat) : null,
             SetterOwnerIsValueType: setter?.ContainingType.IsValueType ?? false,
             IsRequired: property.IsRequired);
+    }
+
+    /// <summary>Whether the property, or one it overrides, is marked <c>[ToonInclude]</c>.</summary>
+    private static bool IsIncluded(IPropertySymbol property)
+    {
+        for (var current = property; current != null; current = current.OverriddenProperty)
+        {
+            if (current.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "ToonNet.Core.Serialization.Attributes.ToonIncludeAttribute"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The setter of the property, or of the property it overrides when the override only redefines the getter.</summary>

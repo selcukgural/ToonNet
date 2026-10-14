@@ -61,7 +61,10 @@ public static partial class ToonSerializer
             return primitiveValue;
         }
 
-        if (generatedAllowed && GetGeneratedSerializer(runtimeType, options) is { } generated)
+        // An object is written as the type it is declared as (unless the options say otherwise)
+        var writtenType = WrittenType(declaredType, runtimeType, options);
+
+        if (generatedAllowed && GetGeneratedSerializer(writtenType, options) is { } generated)
         {
             try
             {
@@ -73,7 +76,7 @@ public static partial class ToonSerializer
             }
         }
 
-        if (GetTypeMetadata(runtimeType).TypeConverter is { } typeConverter)
+        if (GetTypeMetadata(writtenType).TypeConverter is { } typeConverter)
         {
             return typeConverter.Write(value, options);
         }
@@ -107,12 +110,43 @@ public static partial class ToonSerializer
                 return SerializeCollection(enumerable, options, depth, state);
             }
 
-            return SerializeObject(value, runtimeType, options, depth, state);
+            return SerializeObject(value, writtenType, options, depth, state);
         }
         finally
         {
             state.Visiting.Remove(value);
         }
+    }
+
+    /// <summary>
+    ///     The type whose properties an object is written with: the type it is declared as, when that is a class or an
+    ///     interface (not <c>object</c>) the value is assignable to and the value is written as an object (not a
+    ///     primitive, collection, dictionary or document); otherwise, or with
+    ///     <see cref="ToonSerializerOptions.SerializeRuntimeTypes"/>, its runtime type.
+    /// </summary>
+    internal static Type WrittenType(Type declaredType, Type runtimeType, ToonSerializerOptions options) =>
+        runtimeType == declaredType || options.SerializeRuntimeTypes ? runtimeType : NarrowedType(declaredType, runtimeType);
+
+    private static readonly ConcurrentDictionary<(Type Declared, Type Runtime), Type> NarrowedTypes = new();
+
+    private static Type NarrowedType(Type declaredType, Type runtimeType)
+    {
+        if (declaredType == typeof(object) || declaredType.IsValueType)
+        {
+            return runtimeType;
+        }
+
+        return NarrowedTypes.GetOrAdd((declaredType, runtimeType), static key =>
+        {
+            var (declared, runtime) = key;
+            var writtenAsObject = runtime.IsClass && runtime != typeof(string) && runtime != typeof(Uri) && !typeof(IEnumerable).IsAssignableFrom(runtime) &&
+                                  !typeof(ToonValue).IsAssignableFrom(runtime) && !ToonJsonInterop.IsDocumentType(runtime);
+
+            // An asynchronous sequence keeps its runtime type, which the writer rejects with a clear error
+            var asynchronous = declared.IsGenericType && declared.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>);
+
+            return writtenAsObject && !asynchronous && declared.IsAssignableFrom(runtime) && !typeof(IEnumerable).IsAssignableFrom(declared) ? declared : runtime;
+        });
     }
 
     /// <summary>
@@ -181,10 +215,13 @@ public static partial class ToonSerializer
         var array = new ToonArray(new List<ToonValue>(enumerable is ICollection collection ? collection.Count : 0));
         var index = 0;
 
+        // The items are declared as the collection's item type
+        var itemType = GetElementType(enumerable.GetType()) ?? typeof(object);
+
         foreach (var item in enumerable)
         {
             state.Push(index++);
-            array.Items.Add(SerializeValue(item, item?.GetType() ?? typeof(object), options, depth + 1, state) ?? ToonNull.Instance);
+            array.Items.Add(SerializeValue(item, itemType, options, depth + 1, state) ?? ToonNull.Instance);
             state.Pop();
         }
 
@@ -211,11 +248,14 @@ public static partial class ToonSerializer
 
         var obj = new ToonObject(value is ICollection collection ? collection.Count : 0);
 
+        // The values are declared as the dictionary's value type
+        var valueType = GetDictionaryEntryReader(value.GetType())?.ValueType ?? typeof(object);
+
         foreach (var (rawKey, entryValue) in entries)
         {
             var key = FormatDictionaryKey(rawKey);
             state.Push(key);
-            var itemValue = SerializeValue(entryValue, entryValue?.GetType() ?? typeof(object), options, depth + 1, state);
+            var itemValue = SerializeValue(entryValue, valueType, options, depth + 1, state);
             state.Pop();
 
             if (itemValue != null)

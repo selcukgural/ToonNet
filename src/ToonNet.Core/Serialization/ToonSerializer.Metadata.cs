@@ -194,6 +194,13 @@ public static partial class ToonSerializer
     private static readonly ConcurrentDictionary<Type, IToonConverter> AttributeConverterCache = new();
 
     /// <summary>
+    ///     The setter reading may use: a public one (<c>set</c>, <c>init</c>), or a non-public one when the property is
+    ///     marked <see cref="ToonIncludeAttribute"/>; null otherwise.
+    /// </summary>
+    internal static MethodInfo? SettableFromDocuments(PropertyInfo property) =>
+        property.SetMethod is { } setter && (setter.IsPublic || property.IsDefined(typeof(ToonIncludeAttribute), inherit: true)) ? setter : null;
+
+    /// <summary>
     /// Retrieves cached type metadata for a specified type, or generates and stores it if not already cached.
     /// </summary>
     /// <remarks>
@@ -229,7 +236,7 @@ public static partial class ToonSerializer
                 {
                     Property = prop,
                     Getter = CompileGetter(prop),
-                    Setter = prop.CanWrite ? CompileSetter(prop) : null,
+                    Setter = SettableFromDocuments(prop) is not null ? CompileSetter(prop) : null,
                     AttributeName = prop.GetCustomAttribute<ToonPropertyAttribute>()?.Name,
                     Converter = CreateAttributeConverter(prop.GetCustomAttribute<ToonConverterAttribute>()),
                     Primitive = PrimitiveAccessor.Create(prop),

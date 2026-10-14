@@ -124,15 +124,16 @@ public class GeneratedConverterTests
     }
 
     [Fact]
-    public void ItemsAreConvertedByTheirRuntimeTypeOnly()
+    public void ItemsAreConvertedByTheirDeclaredType()
     {
-        // The converter applies to exactly the base type: not to derived items, which have no declared type of their own
+        // The converter of the item type applies to derived items too (since 4.0 items are declared as the item type)
         var options = With(new ExactShapeConverter());
         var shapes = new ShapeBox { Main = new ConvertedShape { Name = "m" }, Items = [new ConvertedShape { Name = "a" }, new DerivedShape { Name = "b", Sides = 3 }] };
         var expected = ToonSerializer.Serialize(shapes, ReflectionOnly.Options(options));
 
         Assert.Contains("shape:m", expected);
-        Assert.Contains("Sides: 3", expected);
+        Assert.Contains("shape:b", expected);
+        Assert.DoesNotContain("Sides", expected);
         Assert.Equal(expected, ToonSerializer.Serialize(shapes, options));
         Assert.Equal(expected, ToonSerializer.Serialize(shapes, ShapeBox.ToonTypeInfo, options));
         Assert.Equal(expected, new ToonEncoder().Encode(ShapeBox.Serialize(shapes, options)));

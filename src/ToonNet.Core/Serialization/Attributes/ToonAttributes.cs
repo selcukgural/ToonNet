@@ -11,6 +11,19 @@ namespace ToonNet.Core.Serialization.Attributes;
 public sealed class ToonIgnoreAttribute : Attribute;
 
 /// <summary>
+/// Lets reading set a property through its non-public setter (<c>private set</c>, <c>protected set</c>,
+/// <c>internal set</c>), as System.Text.Json's <c>[JsonInclude]</c> does.
+/// </summary>
+/// <remarks>
+/// Without it, reading sets only public setters (<c>set</c> and <c>init</c>): a non-public setter usually means the
+/// property is not for callers to set, and a document from a client must not set what the code keeps for itself
+/// (<c>IsAdmin { get; private set; }</c>). A property with only a non-public setter is then read-only, as for
+/// <see cref="ToonSerializerOptions.IncludeReadOnlyProperties"/>.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class ToonIncludeAttribute : Attribute;
+
+/// <summary>
 /// Specifies a custom name for a property in TOON format.
 /// </summary>
 /// <param name="name">

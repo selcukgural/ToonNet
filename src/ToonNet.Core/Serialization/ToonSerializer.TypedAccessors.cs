@@ -68,7 +68,7 @@ public static partial class ToonSerializer
                 (true, false) => typeof(StructPrimitiveAccessor<,>).MakeGenericType(declaringType, property.PropertyType),
                 (true, true) => typeof(StructNullablePrimitiveAccessor<,>).MakeGenericType(declaringType, underlying!)
             };
-            return (PrimitiveAccessor)Activator.CreateInstance(accessorType, getter, property.GetSetMethod(nonPublic: true))!;
+            return (PrimitiveAccessor)Activator.CreateInstance(accessorType, getter, SettableFromDocuments(property))!;
         }
 
         public static bool IsTypedPrimitive(Type type)

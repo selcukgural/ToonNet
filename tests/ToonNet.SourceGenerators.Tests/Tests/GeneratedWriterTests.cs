@@ -188,6 +188,7 @@ public class GeneratedWriterTests
         yield return new ToonSerializerOptions { PropertyNamingPolicy = PropertyNamingPolicy.LowerCase };
         yield return new ToonSerializerOptions { PropertyNamingPolicy = (PropertyNamingPolicy)42 };
         yield return new ToonSerializerOptions { ToonOptions = new ToonOptions { Delimiter = '|', IndentSize = 4 } };
+        yield return new ToonSerializerOptions { SerializeRuntimeTypes = true };
     }
 
     private static void AssertSameText<T>(T value, Func<T, ToonSerializerOptions?, ToonDocument>? generatedTree = null)
@@ -195,7 +196,7 @@ public class GeneratedWriterTests
         foreach (var options in OptionVariants())
         {
             var variant = $"policy {options.PropertyNamingPolicy}, ignore nulls {options.IgnoreNullValues}, " +
-                          $"read-only {options.IncludeReadOnlyProperties}, delimiter '{options.ToonOptions.Delimiter}'";
+                          $"read-only {options.IncludeReadOnlyProperties}, delimiter '{options.ToonOptions.Delimiter}', runtime types {options.SerializeRuntimeTypes}";
             var fallbacks = ToonSerializer.DirectWriteFallbacks;
             var direct = ToonSerializer.Serialize(value, options);
             Assert.True(fallbacks == ToonSerializer.DirectWriteFallbacks, $"fell back ({variant})");
@@ -342,13 +343,27 @@ public class GeneratedWriterTests
     }
 
     [Fact]
-    public void DerivedRuntimeTypes_AreWrittenWithTheirOwnProperties()
+    public void DerivedObjects_AreWrittenAsTheirDeclaredType_UnlessRuntimeTypesAreAsked()
     {
         var node = new WriterNode { Name = "n", Child = new DerivedWriterNode { Name = "d" } };
+        var list = new List<WriterNode> { new DerivedWriterNode(), new() };
 
         AssertSameText(node, WriterNode.Serialize);
-        AssertSameText(new List<WriterNode> { new DerivedWriterNode(), new() });
-        Assert.Contains("Extra: 7", ToonSerializer.Serialize(node));
+        AssertSameText(list);
+
+        // Since 4.0 the declared type decides, as in System.Text.Json: a derived type's members stay out
+        Assert.DoesNotContain("Extra", ToonSerializer.Serialize(node));
+        Assert.DoesNotContain("Extra", ToonSerializer.Serialize(node, WriterNode.ToonTypeInfo));
+        Assert.DoesNotContain("Extra", ToonSerializer.Serialize(list));
+        Assert.DoesNotContain("Extra", ToonSerializer.Serialize<WriterNode>(new DerivedWriterNode()));
+
+        var runtime = new ToonSerializerOptions { SerializeRuntimeTypes = true };
+        Assert.Contains("Extra: 7", ToonSerializer.Serialize(node, runtime));
+        Assert.Contains("Extra: 7", ToonSerializer.Serialize(node, WriterNode.ToonTypeInfo, runtime));
+        Assert.Contains("Extra: 7", ToonSerializer.Serialize(list, runtime));
+
+        // A value declared as object is written as what it is
+        Assert.Contains("Extra: 7", ToonSerializer.Serialize(new WriterNode { Anything = new DerivedWriterNode() }));
     }
 
     [Fact]

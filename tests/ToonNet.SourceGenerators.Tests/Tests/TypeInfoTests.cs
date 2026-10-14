@@ -241,8 +241,10 @@ public partial class TypeInfoTests
     [Fact]
     public void StrictMemberOptions_AreSupportedWithATypeInfo()
     {
-        // Off by default, so a missing required property and an unknown key are skipped
-        Assert.Null(ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2")!.Name);
+        // Required members are checked by default (since 4.0) and unknown keys skipped; both can be turned off and on
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2"));
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize("Age: 1\nOther: 2", RequiredRow.ToonTypeInfo));
+        Assert.Null(ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2", new ToonSerializerOptions { RespectRequiredMembers = false })!.Name);
 
         foreach (var options in new[]
                  {

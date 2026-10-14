@@ -84,7 +84,8 @@ internal sealed record ParameterModel(string Name, string TypeName, int Property
 /// <param name="IsNullableValueType">Whether the declared type is <c>Nullable&lt;T&gt;</c>.</param>
 /// <param name="Inline">For <see cref="ValueKind.Inline"/>: which inline conversion to use.</param>
 /// <param name="CheckRuntimeType">For <see cref="ValueKind.Generated"/>: the type is not sealed, so a derived instance
-/// is handed to the reflection-based serializer (which writes the runtime type).</param>
+/// is handed to the reflection-based serializer when the options ask for runtime types (it is written as this type
+/// otherwise).</param>
 /// <param name="Element">The element plan of a collection, or the value plan of a dictionary.</param>
 /// <param name="Key">The key plan of a dictionary.</param>
 internal sealed record ValuePlan(
