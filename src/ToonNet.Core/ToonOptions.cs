@@ -155,7 +155,8 @@ public sealed class ToonOptions : IValidatableObject
     }
 
     /// <summary>
-    ///     Gets the default instance of <see cref="ToonOptions" /> with standard settings.
+    ///     Gets a new instance with the default settings. Each call returns a new instance, so changing one does not change
+    ///     the defaults: create and keep your own instance (<c>new ToonOptions { ... }</c>) to use other settings.
     /// </summary>
     public static ToonOptions Default => new();
 }

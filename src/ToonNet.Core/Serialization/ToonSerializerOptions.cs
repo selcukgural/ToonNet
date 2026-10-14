@@ -117,7 +117,8 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public bool IncludeReadOnlyProperties { get; set; } = true;
 
     /// <summary>
-    ///     Gets the default instance with standard settings.
+    ///     Gets a new instance with the default settings. Each call returns a new instance, so changing one does not change
+    ///     the defaults: create and keep your own instance (<c>new ToonSerializerOptions { ... }</c>) to use other settings.
     /// </summary>
     public static ToonSerializerOptions Default => new();
 
