@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (flag combinations, undefined values, aliases and names that differ only in case still go through `ToString` and
   `Enum.Parse`): on 2,000 objects with three enum properties, 1.7x faster with about 60% less allocation in both
   directions.
+- **ToonNet.Core:** Primitive and enum properties of structs are read and written in place in the boxed instance,
+  like those of classes, instead of boxing each value: on 2,000 structs with four properties, writing is 1.4x faster
+  and reading 2x faster, with a third of the allocation, the same as for classes.
 - **ToonNet.Core:** Serializing an `IAsyncEnumerable<T>` throws `ToonSerializationException`; before, it was written as an
   object without properties (an empty document, which reads back as an empty object). The MVC output formatter and
   `ToonResult` collect such sequences into a list first.

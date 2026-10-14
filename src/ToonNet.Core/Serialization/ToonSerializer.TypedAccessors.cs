@@ -43,23 +43,31 @@ public static partial class ToonSerializer
         public abstract void WriteText(ToonWriter writer, object instance);
 
         /// <summary>
-        ///     Creates an accessor for a property of a class with a primitive or enum type; null for other properties.
+        ///     Creates an accessor for a property of a class or struct with a primitive or enum type; null for other
+        ///     properties.
         /// </summary>
         [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
         [UnconditionalSuppressMessage("Trimming", "IL2076", Justification = ToonSerializer.ReflectionJustification)]
         public static PrimitiveAccessor? Create(PropertyInfo property)
         {
             var declaringType = property.DeclaringType!;
             var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
 
-            if (declaringType.IsValueType || !(IsTypedPrimitive(type) || type.IsEnum) || property.GetGetMethod() is not { } getter)
+            if (!(IsTypedPrimitive(type) || type.IsEnum) || property.GetGetMethod() is not { } getter)
             {
                 return null;
             }
 
-            var accessorType = Nullable.GetUnderlyingType(property.PropertyType) is { } underlying
-                ? typeof(NullablePrimitiveAccessor<,>).MakeGenericType(declaringType, underlying)
-                : typeof(PrimitiveAccessor<,>).MakeGenericType(declaringType, property.PropertyType);
+            // Struct properties are reached through a reference into the boxed instance, as the compiled setters do
+            var underlying = Nullable.GetUnderlyingType(property.PropertyType);
+            var accessorType = (declaringType.IsValueType, underlying != null) switch
+            {
+                (false, false) => typeof(PrimitiveAccessor<,>).MakeGenericType(declaringType, property.PropertyType),
+                (false, true) => typeof(NullablePrimitiveAccessor<,>).MakeGenericType(declaringType, underlying!),
+                (true, false) => typeof(StructPrimitiveAccessor<,>).MakeGenericType(declaringType, property.PropertyType),
+                (true, true) => typeof(StructNullablePrimitiveAccessor<,>).MakeGenericType(declaringType, underlying!)
+            };
             return (PrimitiveAccessor)Activator.CreateInstance(accessorType, getter, property.GetSetMethod(nonPublic: true))!;
         }
 
@@ -155,6 +163,106 @@ public static partial class ToonSerializer
         public override void WriteText(ToonWriter writer, object instance)
         {
             if (_get((TDeclaring)instance) is { } value)
+            {
+                WriteTypedText(writer, value);
+            }
+            else
+            {
+                writer.WriteNull();
+            }
+        }
+    }
+
+    private delegate TValue RefGetter<TDeclaring, out TValue>(ref TDeclaring instance);
+
+    private delegate void RefSetter<TDeclaring, in TValue>(ref TDeclaring instance, TValue value);
+
+    /// <summary>A <see cref="PrimitiveAccessor"/> for a property of a struct, which reads and writes the boxed instance in place.</summary>
+    private sealed class StructPrimitiveAccessor<TDeclaring, TValue> : PrimitiveAccessor where TDeclaring : struct
+    {
+        private readonly RefGetter<TDeclaring, TValue> _get;
+        private readonly RefSetter<TDeclaring, TValue>? _set;
+
+        public StructPrimitiveAccessor(MethodInfo getter, MethodInfo? setter)
+        {
+            _get = getter.CreateDelegate<RefGetter<TDeclaring, TValue>>();
+            _set = setter?.CreateDelegate<RefSetter<TDeclaring, TValue>>();
+        }
+
+        private TValue Get(object instance) => _get(ref Unsafe.Unbox<TDeclaring>(instance));
+
+        public override ToonValue? Write(object instance) => WriteTyped(Get(instance));
+
+        public override bool TryRead(object instance, ToonValue value)
+        {
+            if (_set == null || !TryReadTyped(value, out TValue result))
+            {
+                return false;
+            }
+
+            _set(ref Unsafe.Unbox<TDeclaring>(instance), result);
+            return true;
+        }
+
+        public override bool TryReadToken(object instance, ToonParser parser, in ToonParser.ValueRef value)
+        {
+            if (_set == null || !ToonSerializer.TryReadToken(parser, value, out TValue result))
+            {
+                return false;
+            }
+
+            _set(ref Unsafe.Unbox<TDeclaring>(instance), result);
+            return true;
+        }
+
+        public override bool IsNull(object instance) => Get(instance) is null;
+
+        public override void WriteText(ToonWriter writer, object instance) => WriteTypedText(writer, Get(instance));
+    }
+
+    /// <summary>A <see cref="StructPrimitiveAccessor{TDeclaring,TValue}"/> for a <see cref="Nullable{T}"/> property.</summary>
+    private sealed class StructNullablePrimitiveAccessor<TDeclaring, TValue> : PrimitiveAccessor where TDeclaring : struct where TValue : struct
+    {
+        private readonly RefGetter<TDeclaring, TValue?> _get;
+        private readonly RefSetter<TDeclaring, TValue?>? _set;
+
+        public StructNullablePrimitiveAccessor(MethodInfo getter, MethodInfo? setter)
+        {
+            _get = getter.CreateDelegate<RefGetter<TDeclaring, TValue?>>();
+            _set = setter?.CreateDelegate<RefSetter<TDeclaring, TValue?>>();
+        }
+
+        private TValue? Get(object instance) => _get(ref Unsafe.Unbox<TDeclaring>(instance));
+
+        public override ToonValue? Write(object instance) => Get(instance) is { } value ? WriteTyped(value) : null;
+
+        public override bool TryRead(object instance, ToonValue value)
+        {
+            if (_set == null || !TryReadTyped<TValue?>(value, out var result))
+            {
+                return false;
+            }
+
+            _set(ref Unsafe.Unbox<TDeclaring>(instance), result);
+            return true;
+        }
+
+        public override bool TryReadToken(object instance, ToonParser parser, in ToonParser.ValueRef value)
+        {
+            if (_set == null || !ToonSerializer.TryReadToken<TValue?>(parser, value, out var result))
+            {
+                return false;
+            }
+
+            _set(ref Unsafe.Unbox<TDeclaring>(instance), result);
+            return true;
+        }
+
+        public override bool IsNull(object instance) => !Get(instance).HasValue;
+
+        public override void WriteText(ToonWriter writer, object instance)
+        {
+            if (Get(instance) is { } value)
             {
                 WriteTypedText(writer, value);
             }

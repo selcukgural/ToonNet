@@ -58,12 +58,12 @@ public class TypedEnumAndDictionaryTests
         var text = ToonSerializer.Serialize(holder);
         var root = (ToonObject)ToonDocument.Parse(text).Root;
 
-        Assert.Equal(holder.Plain.ToString(), ((ToonString)root["Plain"]).Value);
-        Assert.Equal(holder.Small.ToString(), ((ToonString)root["Small"]).Value);
-        Assert.Equal(holder.Signed.ToString(), ((ToonString)root["Signed"]).Value);
-        Assert.Equal(holder.Access.ToString(), ((ToonString)root["Access"]).Value);
-        Assert.Equal(holder.Alias.ToString(), ((ToonString)root["Alias"]).Value);
-        Assert.Equal(holder.CaseOnly.ToString(), ((ToonString)root["CaseOnly"]).Value);
+        Assert.Equal(holder.Plain.ToString(), ((ToonString)root["Plain"]!).Value);
+        Assert.Equal(holder.Small.ToString(), ((ToonString)root["Small"]!).Value);
+        Assert.Equal(holder.Signed.ToString(), ((ToonString)root["Signed"]!).Value);
+        Assert.Equal(holder.Access.ToString(), ((ToonString)root["Access"]!).Value);
+        Assert.Equal(holder.Alias.ToString(), ((ToonString)root["Alias"]!).Value);
+        Assert.Equal(holder.CaseOnly.ToString(), ((ToonString)root["CaseOnly"]!).Value);
 
         // Tables write the same cells, and the tree writes the same text
         List<Holder> rows = [holder, holder];
