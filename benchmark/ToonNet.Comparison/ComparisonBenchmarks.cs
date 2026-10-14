@@ -22,7 +22,8 @@ public enum Shape
 }
 
 /// <summary>
-///     Typed serialization and deserialization with ToonNet (generated code and reflection), the official TOON library
+///     Typed serialization and deserialization with ToonNet (generated code, the reflection-free type info overloads, and
+///     reflection), the official TOON library
 ///     (Toon.Format) and System.Text.Json as a reference point. Setup checks that ToonNet and Toon.Format write the same
 ///     text and read it back to the same values, so the comparison is between equal outputs.
 /// </summary>
@@ -36,10 +37,12 @@ public class ComparisonBenchmarks
 
     private Func<object?> _serializeToonNet = null!;
     private Func<object?> _serializeToonNetReflection = null!;
+    private Func<object?> _serializeToonNetTypeInfo = null!;
     private Func<object?> _serializeToonFormat = null!;
     private Func<object?> _serializeJson = null!;
     private Func<object?> _deserializeToonNet = null!;
     private Func<object?> _deserializeToonNetReflection = null!;
+    private Func<object?> _deserializeToonNetTypeInfo = null!;
     private Func<object?> _deserializeToonFormat = null!;
     private Func<object?> _deserializeJson = null!;
 
@@ -55,31 +58,33 @@ public class ComparisonBenchmarks
         switch (Data)
         {
             case Shape.Employees:
-                Bind(Datasets.Employees(Count));
+                Bind(Datasets.Employees(Count), ToonTypeInfo.CreateList(Employee.ToonTypeInfo));
                 break;
             case Shape.Orders:
-                Bind(Datasets.Orders(Count));
+                Bind(Datasets.Orders(Count), ToonTypeInfo.CreateList(Order.ToonTypeInfo));
                 break;
             case Shape.Products:
-                Bind(Datasets.Products(Count));
+                Bind(Datasets.Products(Count), ToonTypeInfo.CreateList(Product.ToonTypeInfo));
                 break;
             default:
-                Bind(Datasets.Servers(Count));
+                Bind(Datasets.Servers(Count), ToonTypeInfo.CreateDictionary(Server.ToonTypeInfo));
                 break;
         }
     }
 
-    private void Bind<T>(T value)
+    private void Bind<T>(T value, ToonTypeInfo<T> typeInfo)
     {
         var toon = Parity.CheckTyped(Data.ToString(), value);
         var json = JsonSerializer.Serialize(value);
 
         _serializeToonNet = () => ToonSerializer.Serialize(value, Generated);
         _serializeToonNetReflection = () => ToonSerializer.Serialize(value, Reflection);
+        _serializeToonNetTypeInfo = () => ToonSerializer.Serialize(value, typeInfo);
         _serializeToonFormat = () => Toon.Format.ToonEncoder.Encode(value);
         _serializeJson = () => JsonSerializer.Serialize(value);
         _deserializeToonNet = () => ToonSerializer.Deserialize<T>(toon, Generated);
         _deserializeToonNetReflection = () => ToonSerializer.Deserialize<T>(toon, Reflection);
+        _deserializeToonNetTypeInfo = () => ToonSerializer.Deserialize(toon, typeInfo);
         _deserializeToonFormat = () => Toon.Format.ToonDecoder.Decode<T>(toon);
         _deserializeJson = () => JsonSerializer.Deserialize<T>(json);
     }
@@ -96,6 +101,10 @@ public class ComparisonBenchmarks
     [BenchmarkCategory("Serialize")]
     public object? Serialize_ToonNetReflection() => _serializeToonNetReflection();
 
+    [Benchmark(Description = "ToonNet (type info)")]
+    [BenchmarkCategory("Serialize")]
+    public object? Serialize_ToonNetTypeInfo() => _serializeToonNetTypeInfo();
+
     [Benchmark(Description = "System.Text.Json")]
     [BenchmarkCategory("Serialize")]
     public object? Serialize_Json() => _serializeJson();
@@ -111,6 +120,10 @@ public class ComparisonBenchmarks
     [Benchmark(Description = "ToonNet (reflection)")]
     [BenchmarkCategory("Deserialize")]
     public object? Deserialize_ToonNetReflection() => _deserializeToonNetReflection();
+
+    [Benchmark(Description = "ToonNet (type info)")]
+    [BenchmarkCategory("Deserialize")]
+    public object? Deserialize_ToonNetTypeInfo() => _deserializeToonNetTypeInfo();
 
     [Benchmark(Description = "System.Text.Json")]
     [BenchmarkCategory("Deserialize")]
