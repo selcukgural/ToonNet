@@ -11,6 +11,12 @@ if (args.Length > 0 && args[0] == "parity")
     return Parity.Report(args.Length > 1 ? int.Parse(args[1]) : 20_000) ? 0 : 1;
 }
 
+// `gate --report <file>` and `gate --compare <base> <head>`: the performance gate of CI
+if (args.Length > 0 && args[0] == "gate")
+{
+    return Gate.Run(args);
+}
+
 var config = DefaultConfig.Instance.WithSummaryStyle(SummaryStyle.Default.WithRatioStyle(RatioStyle.Trend));
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
 return 0;

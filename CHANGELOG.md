@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **CI:** A performance gate. Every pull request and push measures 80 scenarios on the base commit and the head, on the
+  same machine (time as a ratio to System.Text.Json doing the same work, interleaved in one process, and exact
+  allocated bytes per operation), and fails on more than 15% slowdown or 3% more allocation
+  (`dotnet run --project benchmark/ToonNet.Comparison -- gate`).
+
 ## [3.1.0] - 2026-10-14
 
 > All packages move to 3.1.0. Nothing is removed; the one source change is that a bare `null` argument now needs a cast
