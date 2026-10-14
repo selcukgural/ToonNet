@@ -162,7 +162,8 @@ var last   = await ToonSerializer.DeserializeAtAsync<Order>(stream, "$.data.orde
 ```
 
 - In strict mode (the default), the parser skips what comes before the value without building it, reads the value
-  straight into objects and stops at its end: the text after it is not read, and errors there are not reported. A small
+  straight into objects and stops at its end: the text after it is not read, and errors there are not reported. A key
+  repeated on the way to the value gives its first value (parsing the whole document would report it). A small
   object at the start of a 10,000-row document is read about 20x faster than the whole document.
 - A missing value gives `default`. Conversion errors carry the path in the document (`$.data.orders[1].Id`).
 - Non-strict mode, where a repeated key replaces an earlier one, parses the whole document.

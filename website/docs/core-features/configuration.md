@@ -186,6 +186,10 @@ converted by generated code or by reflection.
 Naming policies apply to property names only. Dictionary keys are written as they are, and a `[ToonProperty("name")]`
 attribute overrides the policy for that property.
 
+Keep the names distinct after the policy: ToonNet does not check it. Two properties that become the same key
+(`UserId` and `userId` under `CamelCase`) are written as one key, with the value of the last, and reading sets both
+from it.
+
 ## IgnoreNullValues
 
 Control null value serialization.

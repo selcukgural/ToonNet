@@ -623,8 +623,9 @@ catch (ToonSerializationException ex)
 Both derive from `ToonException`. Keys in paths and messages are escaped and cut to 64 characters, so a key with a line
 break or a control character cannot forge a log line. When the target type's constructor throws, the message names only
 the exception's type (`The constructor of Money threw ArgumentException`); the exception itself is the
-`InnerException`, so its message does not reach clients through model-state errors. Text nested deeper than `ToonOptions.MaxDepth` is a `ToonParseException` (with the
-line and column); exceeding `ToonSerializerOptions.MaxDepth` while converting is a `ToonSerializationException` (with the
+`InnerException`, so its message does not reach clients through model-state errors. When reading fails, the document
+is read again to report the error exactly, so constructors and setters can run twice for it: keep them free of side
+effects. Text nested deeper than `ToonOptions.MaxDepth` is a `ToonParseException` (with the line and column); exceeding `ToonSerializerOptions.MaxDepth` while converting is a `ToonSerializationException` (with the
 path).
 
 ## Common Issues

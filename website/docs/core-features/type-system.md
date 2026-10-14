@@ -25,7 +25,7 @@ that TOON spec §3 requires implementations to document.
 | enum | string | Member name (flags: `A, B`); names are matched case-insensitively and numbers are accepted when reading |
 | `null` | `null` | Omitted from objects when `IgnoreNullValues` is set; always kept in arrays |
 | arrays, `IEnumerable<T>` | array | Readable into arrays, `List<T>`, `IReadOnlyList<T>`, `HashSet<T>`, `ISet<T>`, immutable collections and other collections with a parameterless constructor |
-| dictionaries | object | Keys formatted with the invariant culture; readable into string, numeric, enum, `Guid` (and other parsable) keys |
+| dictionaries | object | Keys formatted with the invariant culture, as values of their type are; readable into string, numeric, `bool`, enum, `Guid`, date and time keys. Keys of other types are written with `ToString()`, which reading cannot convert back |
 | objects whose values are uniform objects (at least two) | object, keyed tabular form | `servers[2:]{host,port}:` with one `name: cells` row per entry (spec §9.5); applies to dictionaries and classes alike |
 | lists of uniform objects | array, tabular form | Nested objects of the same shape become nested field groups: `orders[2]{id,customer{name,country}}:` (spec §9.3) |
 | other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the declared type is used (a value declared as `object` is written with its runtime type; `SerializeRuntimeTypes` writes every value with it). Reading sets public setters, and non-public ones marked `[ToonInclude]` |
