@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   document again through the tree. On 200,000 list items with one reordered object: 3.4x faster, half the allocation.
 
 ### Added
+- **ToonNet.Core:** `SerializeAsync(Stream, value)` and `DeserializeAsync<T>(Stream)` in the shape of
+  `JsonSerializer` (with `Type` and `ToonTypeInfo` overloads), next to `SerializeToStreamAsync` and
+  `DeserializeFromStreamAsync`, so code written the System.Text.Json way compiles.
 - **ToonNet.Core:** `ToonSerializerOptions.PropertyNameCaseInsensitive` matches keys to property and constructor
   parameter names ignoring case when reading (`name` fills `Name`), as documents from other producers and LLMs often
   differ in case. An exact match is preferred, names that differ only in case still need an exact match, and the last

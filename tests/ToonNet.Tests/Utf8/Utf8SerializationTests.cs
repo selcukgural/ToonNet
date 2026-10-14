@@ -74,6 +74,26 @@ public class Utf8SerializationTests
     }
 
     [Fact]
+    public async Task AsyncStreams_InTheSystemTextJsonShape()
+    {
+        var items = Items(50);
+        var expected = ToonSerializer.Serialize(items);
+
+        var stream = new MemoryStream();
+        await ToonSerializer.SerializeAsync(stream, items);
+        Assert.Equal(expected, Text.Encoding.UTF8.GetString(stream.ToArray()));
+
+        stream.Position = 0;
+        var back = await ToonSerializer.DeserializeAsync<List<Item>>(stream);
+        Assert.Equal(expected, ToonSerializer.Serialize(back));
+
+        var typed = new MemoryStream();
+        await ToonSerializer.SerializeAsync(typed, items, typeof(List<Item>));
+        typed.Position = 0;
+        Assert.Equal(expected, ToonSerializer.Serialize((List<Item>?)await ToonSerializer.DeserializeAsync(typed, typeof(List<Item>))));
+    }
+
+    [Fact]
     public void RoundTrip_ThroughBytes()
     {
         var items = Items(500);

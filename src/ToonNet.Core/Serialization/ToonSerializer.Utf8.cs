@@ -129,6 +129,126 @@ public static partial class ToonSerializer
 
     #endregion
 
+    #region Asynchronous streams in the System.Text.Json shape
+
+    /// <summary>
+    ///     Asynchronously serializes a value and writes it to a stream as UTF-8 (the shape of
+    ///     <c>JsonSerializer.SerializeAsync</c>; the same as <see cref="SerializeToStreamAsync{T}(T, Stream, ToonSerializerOptions, CancellationToken)"/>).
+    /// </summary>
+    /// <typeparam name="T">The type of the value.</typeparam>
+    /// <param name="utf8Stream">The stream to write to; it is left open.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static ValueTask SerializeAsync<T>(Stream utf8Stream, T? value, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(utf8Stream);
+        return SerializeToUtf8StreamAsync(value, typeof(T), utf8Stream, options, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a value of the specified type and writes it to a stream as UTF-8.
+    /// </summary>
+    /// <param name="utf8Stream">The stream to write to; it is left open.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="type">The type of the value.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="type"/> is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static ValueTask SerializeAsync(Stream utf8Stream, object? value, Type type, ToonSerializerOptions? options = null,
+                                           CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(utf8Stream);
+        ArgumentNullException.ThrowIfNull(type);
+        return SerializeToUtf8StreamAsync(value, type, utf8Stream, options, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously reads UTF-8 encoded TOON text from a stream to its end and deserializes it (the shape of
+    ///     <c>JsonSerializer.DeserializeAsync</c>; the same as <see cref="DeserializeFromStreamAsync{T}(Stream, ToonSerializerOptions, CancellationToken)"/>).
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="utf8Stream">The stream to read; it is read to the end and left open.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or parsing fails.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static async ValueTask<T?> DeserializeAsync<T>(Stream utf8Stream, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        return (T?)await DeserializeFromStreamAsync(utf8Stream, typeof(T), options, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Asynchronously reads UTF-8 encoded TOON text from a stream to its end and deserializes it to the specified type.
+    /// </summary>
+    /// <param name="utf8Stream">The stream to read; it is read to the end and left open.</param>
+    /// <param name="type">The target type to deserialize to.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="type"/> is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or parsing fails.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static ValueTask<object?> DeserializeAsync(Stream utf8Stream, Type type, ToonSerializerOptions? options = null,
+                                                      CancellationToken cancellationToken = default)
+    {
+        return DeserializeFromStreamAsync(utf8Stream, type, options, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Asynchronously serializes a value with its <see cref="ToonTypeInfo{T}"/> and writes it to a stream as UTF-8,
+    ///     without reflection.
+    /// </summary>
+    /// <typeparam name="T">The type of the value.</typeparam>
+    /// <param name="utf8Stream">The stream to write to; it is left open.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
+    /// <param name="options">Optional serialization options; converters are not supported.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    public static ValueTask SerializeAsync<T>(Stream utf8Stream, T? value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null,
+                                              CancellationToken cancellationToken = default) =>
+        SerializeToStreamAsync(value, utf8Stream, typeInfo, options, cancellationToken);
+
+    /// <summary>
+    ///     Asynchronously reads UTF-8 encoded TOON text from a stream to its end and deserializes it with a
+    ///     <see cref="ToonTypeInfo{T}"/>, without reflection.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="utf8Stream">The stream to read; it is read to the end and left open.</param>
+    /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
+    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters or ask for case-insensitive reading.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or parsing fails.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
+    public static ValueTask<T?> DeserializeAsync<T>(Stream utf8Stream, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null,
+                                                    CancellationToken cancellationToken = default) =>
+        DeserializeFromStreamAsync(utf8Stream, typeInfo, options, cancellationToken);
+
+    #endregion
+
     #region UTF-8 and span deserialization
 
     /// <summary>
