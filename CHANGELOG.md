@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-14
+
+> All packages move to 3.2.0. Reading untrusted input now costs memory and time in proportion to its size (see
+> Security); upgrading is recommended for services that read TOON from untrusted sources. Behaviour to check when
+> upgrading: exception messages are one line, `FromYaml` follows the YAML 1.2 core schema (`yes`/`no` are strings),
+> serializing an `IAsyncEnumerable<T>` throws, and the multi-document methods have new names (the old ones still work,
+> marked `[Obsolete]`). New: `DeserializeAsyncEnumerable` for large root arrays, `ReadFromToonAsync` for Minimal APIs,
+> `PropertyNameCaseInsensitive`, `UnmappedMemberHandling` and `RespectRequiredMembers`, and document and JSON values.
+> Measured on 10,000 records (benchmark/ToonNet.Comparison/RESULTS.md), ToonNet stays 18–28x faster at serializing and
+> 4.4–7.5x faster at deserializing than Toon.Format; dictionaries, enums and structs are 1.4–4.5x faster on the
+> reflection path. Rebuild with the 3.2 generator so that generated `Deserialize` methods follow the new reading
+> options.
+
 ### Security
 - **ToonNet.Core:** Reading untrusted documents is hardened so that their cost stays in proportion to their size:
   declared array lengths reserve memory only within a budget of the document's lines (honest lengths are still
@@ -1333,7 +1346,10 @@ Each release includes:
 
 ---
 
-[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/selcukgural/ToonNet/compare/v3.1.0...v3.2.0
+[3.1.0]: https://github.com/selcukgural/ToonNet/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/selcukgural/ToonNet/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/selcukgural/ToonNet/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/selcukgural/ToonNet/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/selcukgural/ToonNet/compare/v1.2.0...v1.3.0

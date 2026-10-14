@@ -108,8 +108,7 @@ the reflection-based path). The generated code produces the same TOON as `ToonSe
 property access, key encoding and matching, and primitive conversions are compiled in, which makes it faster than
 the reflection-based path. In the repository's benchmarks on lists of 10,000 objects
 ([RESULTS.md](https://github.com/selcukgural/ToonNet/blob/master/benchmark/ToonNet.Comparison/RESULTS.md)),
-serializing with generated code takes 8–41% less time and deserializing up to 12% less (about the same for flat
-records).
+serializing with generated code takes 9–32% less time and deserializing 5–15% less (least for keyed tables).
 
 ## Performance Comparison
 

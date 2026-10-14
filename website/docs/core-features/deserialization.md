@@ -40,7 +40,7 @@ var fromStream = ToonSerializer.Deserialize<Person>(stream);    // read to the e
 ```
 
 Each also has an overload with a `Type`. On 10,000 records, reading bytes this way takes about the same time as decoding
-them to a string and calling `Deserialize<T>(string)` (−5% to +7%), with 22–43% less allocation; a large document no longer needs a
+them to a string and calling `Deserialize<T>(string)` (−6% to +1%), with 18–46% less allocation; a large document no longer needs a
 string twice its size on the large object heap.
 
 ### Deserialize from Stream
