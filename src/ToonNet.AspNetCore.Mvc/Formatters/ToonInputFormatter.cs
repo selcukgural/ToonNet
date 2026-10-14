@@ -94,7 +94,18 @@ public sealed class ToonInputFormatter : TextInputFormatter
                 model = ToonSerializer.Deserialize(content, context.ModelType, _options);
             }
 
-            return await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false);
+            return body.HasContent ? await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false) : await NoContentAsync(context).ConfigureAwait(false);
+        }
+        catch (ToonException) when (!body.HasContent)
+        {
+            // Whitespace that is not valid TOON (a tab in strict mode) is still no content
+            return await NoContentAsync(context).ConfigureAwait(false);
+        }
+        catch (DecoderFallbackException)
+        {
+            // Ill-formed text in another charset is an error too, not text with U+FFFD in it
+            context.ModelState.TryAddModelError(context.ModelName, $"The request body is not valid {encoding.WebName}.");
+            return await InputFormatterResult.FailureAsync().ConfigureAwait(false);
         }
         catch (ToonException ex)
         {
@@ -103,10 +114,21 @@ public sealed class ToonInputFormatter : TextInputFormatter
         }
     }
 
+    /// <summary>
+    ///     A body with only whitespace binds nothing, as MVC handles Content-Length: 0 (an empty TOON document would bind
+    ///     an empty object): the default value when the model allows empty input, no value otherwise.
+    /// </summary>
+    private Task<InputFormatterResult> NoContentAsync(InputFormatterContext context) =>
+        context.TreatEmptyInputAsDefaultValue
+            ? InputFormatterResult.SuccessAsync(GetDefaultValueForType(context.ModelType))
+            : InputFormatterResult.NoValueAsync();
+
     /// <summary>Reads a body in an encoding other than UTF-8 as text.</summary>
     private static async Task<string> ReadTextAsync(Stream body, Encoding encoding, CancellationToken cancellationToken)
     {
-        using var reader = new StreamReader(body, encoding, detectEncodingFromByteOrderMarks: true, ReadBufferSize, leaveOpen: true);
+        // Strict decoding in the negotiated charset (a byte order mark at the start is read as U+FEFF, which TOON ignores)
+        var strict = Encoding.GetEncoding(encoding.CodePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+        using var reader = new StreamReader(body, strict, detectEncodingFromByteOrderMarks: false, ReadBufferSize, leaveOpen: true);
         return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -115,7 +137,13 @@ public sealed class ToonInputFormatter : TextInputFormatter
     /// </summary>
     private sealed class LimitedReadStream(Stream inner, long limit, Func<Exception> createLimitException) : Stream
     {
+        /// <summary>Spaces, tabs, line breaks and the bytes of a UTF-8 byte order mark (which in UTF-16 bodies are not alone).</summary>
+        private static readonly System.Buffers.SearchValues<byte> Blank = System.Buffers.SearchValues.Create([(byte)' ', (byte)'\t', (byte)'\r', (byte)'\n', 0x00, 0xEF, 0xBB, 0xBF, 0xFE, 0xFF]);
+
         private long _read;
+
+        /// <summary>Whether a byte other than whitespace (or a byte order mark) was read.</summary>
+        public bool HasContent { get; private set; }
 
         public override bool CanRead => true;
         public override bool CanSeek => false;
@@ -128,25 +156,35 @@ public sealed class ToonInputFormatter : TextInputFormatter
             set => throw new NotSupportedException();
         }
 
-        public override int Read(byte[] buffer, int offset, int count) => Count(inner.Read(buffer, offset, count));
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
 
-        public override int Read(Span<byte> buffer) => Count(inner.Read(buffer));
+        public override int Read(Span<byte> buffer) => Count(buffer, inner.Read(buffer));
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
             ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
 
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-            Count(await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false));
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var read = await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            return Count(buffer.Span, read);
+        }
 
         public override void Flush() { }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
-        private int Count(int read)
+        private int Count(ReadOnlySpan<byte> buffer, int read)
         {
             _read += read;
-            return _read > limit ? throw createLimitException() : read;
+
+            if (_read > limit)
+            {
+                throw createLimitException();
+            }
+
+            HasContent = HasContent || buffer[..read].IndexOfAnyExcept(Blank) >= 0;
+            return read;
         }
     }
 

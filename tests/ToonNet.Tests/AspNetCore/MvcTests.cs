@@ -229,6 +229,42 @@ public class MvcTests
         Assert.Equal(name, Assert.IsType<TestModel>(result.Model).Name);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("\n\n")]
+    [InlineData("  \r\n\t")]
+    [InlineData("\uFEFF")]
+    public async Task ToonInputFormatter_BlankBody_IsNoValue_LikeAnEmptyBody(string body)
+    {
+        // Without Content-Length (a chunked request), the formatter sees the body; whitespace binds nothing
+        var formatter = new ToonInputFormatter(new ToonSerializerOptions());
+        var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+
+        var result = await formatter.ReadRequestBodyAsync(CreateInputContext(bytes, ToonFormatterDefaults.MediaType), System.Text.Encoding.UTF8);
+        Assert.False(result.IsModelSet);
+        Assert.False(result.HasError);
+
+        var lenient = new InputFormatterContext(CreateInputContext(bytes, ToonFormatterDefaults.MediaType).HttpContext, nameof(TestModel),
+                                                new ModelStateDictionary(), new EmptyModelMetadataProvider().GetMetadataForType(typeof(TestModel)),
+                                                (s, e) => new StreamReader(s, e), treatEmptyInputAsDefaultValue: true);
+        var defaulted = await formatter.ReadRequestBodyAsync(lenient, System.Text.Encoding.UTF8);
+        Assert.True(defaulted.IsModelSet);
+        Assert.Null(defaulted.Model);
+    }
+
+    [Fact]
+    public async Task ToonInputFormatter_IllFormedUtf16_ReturnsModelError()
+    {
+        var formatter = new ToonInputFormatter(new ToonSerializerOptions());
+        byte[] body = [(byte)'N', 0, (byte)':', 0, (byte)' ', 0, 0x00, 0xD8]; // "N: " and a lone high surrogate
+        var context = CreateInputContext(body, ToonFormatterDefaults.MediaType + "; charset=utf-16");
+
+        var result = await formatter.ReadAsync(context);
+
+        Assert.True(result.HasError);
+        Assert.Contains("not valid utf-16", context.ModelState[nameof(TestModel)]!.Errors[0].ErrorMessage);
+    }
+
     [Fact]
     public async Task ToonInputFormatter_Utf16Body_UsesRequestEncoding()
     {
