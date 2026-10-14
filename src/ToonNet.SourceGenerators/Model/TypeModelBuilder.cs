@@ -37,6 +37,19 @@ internal static class TypeModelBuilder
             }
         }
 
+        // Shapes generated code cannot have: instances (static classes), boxing and generic arguments (ref structs), or
+        // a name the generated file can refer to (file-local types)
+        var unsupported = type.IsStatic ? "a static class has no instances to serialize"
+            : type.IsRefLikeType ? "a ref struct cannot be boxed or used as a type argument"
+            : type.IsFileLocal ? "a file-local type cannot be named from the generated file"
+            : null;
+
+        if (unsupported != null)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.UnsupportedTypeKind, location, type.Name, unsupported));
+            return Empty(type, diagnostics);
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var attribute = context.Attributes[0];
@@ -131,8 +144,9 @@ internal static class TypeModelBuilder
             HasTypeConverter: hasTypeConverter,
             RegisterWithSerializer: !hasTypeConverter && CanRegister(type, compilation),
             TypeInfoProperty: !hasTypeConverter && CanRegister(type, compilation) ? GetTypeInfoProperty(type, compilation) : TypeInfoProperty.None,
-            EmitSerializeMethod: !MethodNameTaken(type, "Serialize", diagnostics, location),
-            EmitDeserializeMethod: !MethodNameTaken(type, "Deserialize", diagnostics, location),
+            EmitSerializeMethod: !MethodNameTaken(type, "Serialize", type, compilation, diagnostics, location),
+            EmitDeserializeMethod: !MethodNameTaken(type, "Deserialize", compilation.GetTypeByMetadataName("ToonNet.Core.Models.ToonDocument"), compilation,
+                                                    diagnostics, location),
             FixedNamingPolicy: namingPolicy,
             Properties: new EquatableArray<PropertyModel>(propertyModels),
             Constructor: type.IsAbstract ? null : constructorModel,
@@ -210,12 +224,19 @@ internal static class TypeModelBuilder
     }
 
     /// <summary>
-    /// Whether a member that is not a method (a property, field, event or nested type) takes the name of a generated
-    /// static method, which would not compile; reports TOON009 then.
+    /// Whether a member takes the name of a generated static method, which would not compile: one that is not a method
+    /// (a property, field, event or nested type), or a method with the generated method's parameters
+    /// (<paramref name="firstParameter"/>, <c>ToonSerializerOptions</c>); reports TOON009 then.
     /// </summary>
-    private static bool MethodNameTaken(INamedTypeSymbol type, string name, List<DiagnosticInfo> diagnostics, Location? location)
+    private static bool MethodNameTaken(INamedTypeSymbol type, string name, ITypeSymbol? firstParameter, Compilation compilation,
+                                        List<DiagnosticInfo> diagnostics, Location? location)
     {
-        if (type.GetMembers(name).All(member => member is IMethodSymbol) && type.GetTypeMembers(name).IsEmpty)
+        var options = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSerializerOptions");
+        var sameSignature = type.GetMembers(name).OfType<IMethodSymbol>().Any(method =>
+            method.Parameters.Length == 2 && SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, firstParameter) &&
+            SymbolEqualityComparer.Default.Equals(method.Parameters[1].Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated), options));
+
+        if (!sameSignature && type.GetMembers(name).All(member => member is IMethodSymbol) && type.GetTypeMembers(name).IsEmpty)
         {
             return false;
         }

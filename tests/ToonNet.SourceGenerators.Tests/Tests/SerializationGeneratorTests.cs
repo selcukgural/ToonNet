@@ -136,7 +136,7 @@ public class SerializationGeneratorTests
         {
             Name = "Precision Test",
             Age = 42,
-            Balance = 123.456789m,
+            Balance = 1234567890.123456789012345678m,
             IsActive = false
         };
 
@@ -144,7 +144,8 @@ public class SerializationGeneratorTests
         var doc = SimpleModel.Serialize(model);
         var deserialized = SimpleModel.Deserialize(doc);
 
-        // Assert
+        // Assert: all 28 digits of the decimal, in the text and back
+        Assert.Equal("1234567890.123456789012345678", doc.Root["Balance"]!.ToString());
         Assert.Equal(model.Balance, deserialized.Balance);
         Assert.Equal(model.Age, deserialized.Age);
     }

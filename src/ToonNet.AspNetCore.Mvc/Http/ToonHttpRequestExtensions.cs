@@ -110,13 +110,23 @@ public static class ToonHttpRequestExtensions
         var body = new LimitedReadStream(request.Body, long.MaxValue, static () => new InvalidOperationException());
         T? value;
 
+        // UTF-8 bodies are checked for content as they are read; others once decoded
+        string? content = null;
+        bool HasContent() => content == null ? body.HasContent : RequestBody.HasContent(content);
+
         try
         {
-            value = encoding.CodePage == Encoding.UTF8.CodePage
-                ? await readUtf8(body, options, cancellationToken).ConfigureAwait(false)
-                : readText(await RequestBody.ReadTextAsync(body, encoding, cancellationToken).ConfigureAwait(false), options);
+            if (encoding.CodePage == Encoding.UTF8.CodePage)
+            {
+                value = await readUtf8(body, options, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                content = await RequestBody.ReadTextAsync(body, encoding, cancellationToken).ConfigureAwait(false);
+                value = readText(content, options);
+            }
         }
-        catch (ToonException) when (!body.HasContent)
+        catch (ToonException) when (!HasContent())
         {
             // Whitespace that is not valid TOON (a tab in strict mode) is still a blank body
             return default;
@@ -126,7 +136,7 @@ public static class ToonHttpRequestExtensions
             throw new ToonException($"The request body is not valid {encoding.WebName}.", ex);
         }
 
-        return body.HasContent ? value : default;
+        return HasContent() ? value : default;
     }
 
     /// <summary>The encoding of a request with a TOON content type (UTF-8 when it has no charset).</summary>
@@ -155,8 +165,9 @@ public static class ToonHttpRequestExtensions
             encoding = Encoding.GetEncoding(contentType.Charset.Value!.Trim('"'));
             return true;
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
         {
+            // An unknown name, or one .NET knows but does not support (utf-7): the client chose it, so it is not a 500
             unknownCharset = contentType.Charset.Value;
             return false;
         }

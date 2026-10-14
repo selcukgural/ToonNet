@@ -100,6 +100,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   two slots per key.
 - **ToonNet.Core:** `DeserializeAsyncEnumerable` reported conversion errors with the index of the item in its batch
   (`$[780].Id` for item 15,780); errors now name the item of the whole array.
+- **ToonNet.AspNetCore.Mvc:** A body made only of characters whose bytes look like whitespace or a byte order mark (`ﻻ`
+  in UTF-8, `†` in UTF-16) was taken as blank and bound no value; UTF-8 bodies are checked byte by byte, others once
+  decoded. `charset=utf-7` made `ReadFromToonAsync` fail with a 500 error instead of `InvalidOperationException`.
+- **ToonNet.Core:** A constructor parameter of a nullable enum type with a default value (`Permission? p =
+  Permission.Write`) threw `InvalidCastException` when the document left it out.
+- **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that
+  did not compile; it reports `TOON010` instead. A method with the parameters of a generated `Serialize` or
+  `Deserialize` method also reports `TOON009` and leaves that method out.
+- **ToonNet.AspNetCore:** A configured delimiter that is not a known name or one of the three characters (`pipes`, `;`)
+  was cut to its first character; it fails at startup with the key and value in the message.
 
 ## [3.3.0] - 2026-10-14
 

@@ -41,10 +41,10 @@ public partial class Person
 /// </summary>
 public sealed class DateTimeOffsetConverter : ToonConverter<DateTimeOffset>
 {
+    // A prefix the serializer's own format does not have, so tests see that the converter ran
     public override ToonValue? Write(DateTimeOffset value, ToonSerializerOptions options)
     {
-        // Format as ISO 8601 string
-        return new ToonString(value.ToString("O"));
+        return new ToonString("at " + value.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
     }
 
     public override DateTimeOffset Read(ToonValue value, ToonSerializerOptions options)
@@ -52,10 +52,11 @@ public sealed class DateTimeOffsetConverter : ToonConverter<DateTimeOffset>
         if (value is ToonNull)
             return default;
 
-        if (value is not ToonString str)
-            throw new InvalidOperationException("Expected string value for DateTimeOffset");
+        if (value is not ToonString str || !str.Value.StartsWith("at ", StringComparison.Ordinal))
+            throw new InvalidOperationException("Expected 'at <ISO 8601>' for DateTimeOffset");
 
-        if (DateTimeOffset.TryParse(str.Value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var result))
+        if (DateTimeOffset.TryParse(str.Value[3..], System.Globalization.CultureInfo.InvariantCulture,
+                                    System.Globalization.DateTimeStyles.RoundtripKind, out var result))
             return result;
 
         throw new InvalidOperationException($"Could not parse '{str.Value}' as DateTimeOffset");

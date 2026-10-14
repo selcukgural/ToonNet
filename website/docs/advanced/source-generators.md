@@ -190,7 +190,8 @@ public partial class User
 | `TOON006` | Warning | A property or constructor parameter is converted with reflection; the message says why |
 | `TOON007` | Error | Same as `TOON006`, on a type with `AllowReflectionFallback = false` |
 | `TOON008` | Error | A `[ToonProperty]` name contains an unpaired surrogate, which TOON cannot represent |
-| `TOON009` | Warning | A member of the type is named `Serialize` or `Deserialize`, so that generated static method is left out; use `ToonSerializer` with `ToonTypeInfo` instead |
+| `TOON009` | Warning | A member of the type is named `Serialize` or `Deserialize` (a property, field or nested type, or a method with the generated method's parameters), so that generated static method is left out; use `ToonSerializer` with `ToonTypeInfo` instead |
+| `TOON010` | Error | The type is a static class, a ref struct or a file-local type, which generated code cannot serialize |
 
 ## Viewing generated code
 

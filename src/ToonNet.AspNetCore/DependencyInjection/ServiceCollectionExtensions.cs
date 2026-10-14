@@ -161,12 +161,15 @@ public static class ServiceCollectionExtensions
         var delimiterString = section.GetValue<string?>(nameof(ToonOptions.Delimiter));
         if (!string.IsNullOrEmpty(delimiterString))
         {
+            // Anything else (a misspelled name, several characters) fails at startup instead of keeping its first character
             options.Delimiter = delimiterString.ToLowerInvariant() switch
             {
-                "comma" => ',',
-                "tab"   => '\t',
-                "pipe"  => '|',
-                _       => delimiterString[0]
+                "comma" or ","   => ',',
+                "tab" or "\t"    => '\t',
+                "pipe" or "|"    => '|',
+                _ => throw new InvalidOperationException(
+                    $"Invalid {section.Path}:{nameof(ToonOptions.Delimiter)} value '{delimiterString}'. " +
+                    "Expected one of: comma, tab, pipe, or the character itself (',', a tab, '|').")
             };
         }
 

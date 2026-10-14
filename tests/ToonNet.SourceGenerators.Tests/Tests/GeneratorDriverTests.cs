@@ -81,6 +81,86 @@ public class GeneratorDriverTests
         Assert.DoesNotContain("static global::ToonNet.Core.Models.ToonDocument Serialize(", LastGeneratedSources.Single());
     }
 
+    [Theory]
+    [InlineData("public static partial class Holder { public static int X { get; set; } }", "static class")]
+    [InlineData("public ref partial struct Span { public int X { get; set; } }", "ref struct")]
+    [InlineData("file partial class Local { public int X { get; set; } }", "file-local")]
+    public void UnsupportedTypeKinds_ReportToon010_AndGenerateNothing(string declaration, string reason)
+    {
+        var (diagnostics, errors, generated) = Run($$"""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] {{declaration}}
+            """);
+
+        Assert.Empty(errors);
+        var diagnostic = Assert.Single(diagnostics, d => d.Id == "TOON010");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(reason, diagnostic.GetMessage());
+        Assert.Empty(generated);
+    }
+
+    [Fact]
+    public void MethodsWithTheGeneratedSignature_ReportToon009_OtherOverloadsDoNot()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Models;
+            using ToonNet.Core.Serialization;
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Taken
+            {
+                public int Value { get; set; }
+                public static ToonDocument Serialize(Taken value, ToonSerializerOptions? options = null) => new(new ToonObject());
+                public static Taken Deserialize(ToonDocument document, ToonSerializerOptions? options = null) => new();
+            }
+            [ToonSerializable] public partial class Overloaded
+            {
+                public int Value { get; set; }
+                public static string Serialize(Overloaded value, int indent) => "";
+                public string Serialize() => "";
+                public static Overloaded Deserialize(string text) => new();
+            }
+            """);
+
+        Assert.Empty(errors);
+        Assert.Equal(2, diagnostics.Count(d => d.Id == "TOON009"));
+        Assert.All(diagnostics.Where(d => d.Id == "TOON009"), d => Assert.Contains("Taken", d.GetMessage()));
+        Assert.Contains(LastGeneratedSources, source => source.Contains("partial class Overloaded") &&
+                                                         source.Contains("static global::ToonNet.Core.Models.ToonDocument Serialize("));
+    }
+
+    [Fact]
+    public void UnrelatedEdits_ReuseTheGeneratedOutput()
+    {
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+                         .Split(Path.PathSeparator)
+                         .Select(path => MetadataReference.CreateFromFile(path))
+                         .Append(MetadataReference.CreateFromFile(typeof(ToonSerializer).Assembly.Location));
+        var parseOptions = new CSharpParseOptions(LanguageVersion.CSharp12);
+        var compilation = CSharpCompilation.Create("Snippet",
+                                                   [CSharpSyntaxTree.ParseText("""
+                                                        using ToonNet.Core.Serialization.Attributes;
+                                                        namespace App;
+                                                        [ToonSerializable] public partial class Person { public string Name { get; set; } = ""; public int Age { get; set; } }
+                                                        """, parseOptions)],
+                                                   references,
+                                                   new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        GeneratorDriver driver = CSharpGeneratorDriver.Create([new Generator::ToonNet.SourceGenerators.ToonSerializableGenerator().AsSourceGenerator()],
+                                                              parseOptions: parseOptions,
+                                                              driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None,
+                                                                                                        trackIncrementalGeneratorSteps: true));
+        driver = driver.RunGenerators(compilation);
+        driver = driver.RunGenerators(compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace App; public class Other { public int X; }",
+                                                                                            parseOptions)));
+
+        var outputs = driver.GetRunResult().Results.Single().TrackedOutputSteps.SelectMany(step => step.Value).SelectMany(step => step.Outputs).ToList();
+        Assert.NotEmpty(outputs);
+        Assert.All(outputs, output => Assert.True(output.Reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged,
+                                                  output.Reason.ToString()));
+    }
+
     [Fact]
     public void ToonTypeInfoProperty_IsGenerated_UnlessAMemberTakesTheName()
     {

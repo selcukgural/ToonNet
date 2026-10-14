@@ -75,6 +75,10 @@ public sealed class ToonInputFormatter : TextInputFormatter
         // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
         var body = new LimitedReadStream(request.Body, _maxRequestBodySize, CreatePayloadTooLargeException);
 
+        // UTF-8 bodies are checked for content as they are read; others once decoded
+        string? content = null;
+        bool HasContent() => content == null ? body.HasContent : RequestBody.HasContent(content);
+
         try
         {
             object? model;
@@ -88,13 +92,13 @@ public sealed class ToonInputFormatter : TextInputFormatter
             }
             else
             {
-                var content = await RequestBody.ReadTextAsync(body, encoding, httpContext.RequestAborted).ConfigureAwait(false);
+                content = await RequestBody.ReadTextAsync(body, encoding, httpContext.RequestAborted).ConfigureAwait(false);
                 model = ToonSerializer.Deserialize(content, context.ModelType, _options);
             }
 
-            return body.HasContent ? await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false) : await NoContentAsync(context).ConfigureAwait(false);
+            return HasContent() ? await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false) : await NoContentAsync(context).ConfigureAwait(false);
         }
-        catch (ToonException) when (!body.HasContent)
+        catch (ToonException) when (!HasContent())
         {
             // Whitespace that is not valid TOON (a tab in strict mode) is still no content
             return await NoContentAsync(context).ConfigureAwait(false);

@@ -115,7 +115,7 @@ public static partial class ToonSerializer
                                                 parameter,
                                                 metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name,
                                                                                                       StringComparison.OrdinalIgnoreCase)),
-                                                parameter.HasDefaultValue ? parameter.DefaultValue
+                                                parameter.HasDefaultValue ? DefaultOf(parameter)
                                                 : parameter.ParameterType.IsValueType ? System.Activator.CreateInstance(parameter.ParameterType)
                                                 : null))
                                     .ToArray();
@@ -126,6 +126,18 @@ public static partial class ToonSerializer
                 Arguments = arguments,
                 BoundToConstructor = [.. metadata.Properties.Select(p => arguments.Any(a => a.Property == p))]
             };
+        }
+
+        /// <summary>
+        ///     The default value of an optional parameter as the parameter's type: reflection gives an enum default of a
+        ///     nullable enum parameter (<c>Perm? p = Perm.Write</c>) as its underlying number.
+        /// </summary>
+        private static object? DefaultOf(ParameterInfo parameter)
+        {
+            var value = parameter.DefaultValue;
+            var target = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+
+            return value != null && target.IsEnum && value.GetType() != target ? Enum.ToObject(target, value) : value;
         }
 
         /// <summary>
