@@ -164,6 +164,14 @@ public partial class CaseShadow
     public BoxSize? Other { get; set; }
 }
 
+/// <summary>A row whose second property is written by its runtime type: the first object's shape is unknown.</summary>
+[ToonSerializable]
+public partial class LooseRow
+{
+    public int Id { get; set; }
+    public object? Extra { get; set; }
+}
+
 /// <summary>
 /// ToonSerializer writes [ToonSerializable] types with their generated field writers; the text must match the
 /// generated tree and the reflection-based writer for every option combination, without falling back.
@@ -228,6 +236,16 @@ public class GeneratedWriterTests
         Rows = Rows(true),
         Leaves = new Dictionary<string, WriterLeaf> { ["k"] = new() { Text = "v" }, ["empty"] = new() }
     };
+
+    [Fact]
+    public void RowsAfterAnObjectOfUnknownShape_MatchTheTree()
+    {
+        var rows = new List<LooseRow> { new() { Id = 1, Extra = "a" }, new() { Id = 2, Extra = null } };
+        var direct = ToonSerializer.Serialize(rows);
+
+        Assert.Equal(ToonSerializer.Serialize(rows, ReflectionOnly.Options()), direct);
+        Assert.StartsWith("[2]{Id,Extra}:", direct);
+    }
 
     [Fact]
     public void Rows_MatchTheTree()

@@ -1136,6 +1136,7 @@ public static partial class ToonSerializer
             var columns = new bool[count];
             var current = count <= 64 ? stackalloc bool[count] : new bool[count];
             var unknown = false;
+            var hasReference = false;
             included = null;
 
             for (var i = 0; i < items.Count; i++)
@@ -1145,7 +1146,8 @@ public static partial class ToonSerializer
                     return TabularShape.Unknown;
                 }
 
-                var target = i == 0 ? columns.AsSpan() : current;
+                // The first row's columns are the reference (an object of unknown shape leaves its columns incomplete)
+                var target = hasReference ? current : columns.AsSpan();
 
                 switch (objectWriter.GetRowShapeOf(items[i]!, _writer, target))
                 {
@@ -1156,9 +1158,13 @@ public static partial class ToonSerializer
                         continue;
                 }
 
-                if (i > 0 && !current.SequenceEqual(columns))
+                if (!hasReference)
                 {
-                    return TabularShape.NotTabular; // the key sets differ
+                    hasReference = true;
+                }
+                else if (!current.SequenceEqual(columns))
+                {
+                    return TabularShape.NotTabular; // the key sets of two rows differ
                 }
             }
 

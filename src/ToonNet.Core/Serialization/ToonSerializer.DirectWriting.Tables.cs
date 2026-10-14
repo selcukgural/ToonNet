@@ -79,6 +79,11 @@ public static partial class ToonSerializer
 
             switch (kind)
             {
+                // A converter for an entry's declared type (which the tree consults) is left to the tree; the generated
+                // writer does not tell its declared types
+                case DirectKind.Dictionary when _hasConverters && IsConvertedDeclared(info.Entries!.ValueType):
+                case DirectKind.Generated when _hasConverters:
+                    return PlanResult.Unknown;
                 case DirectKind.Dictionary:
                     foreach (var (rawKey, entryValue) in info.Entries!.Read(value))
                     {
@@ -125,7 +130,7 @@ public static partial class ToonSerializer
                             continue;
                         }
 
-                        if (properties[p].Converter != null)
+                        if (properties[p].Converter != null || IsConvertedProperty(properties[p]))
                         {
                             return PlanResult.Unknown;
                         }
@@ -350,6 +355,11 @@ public static partial class ToonSerializer
                         }
                         else
                         {
+                            if (_hasConverters)
+                            {
+                                return PlanResult.Unknown; // the declared type, which a converter may match, is not known here
+                            }
+
                             var values = (rented ??= ArrayPool<object?>.Shared.Rent(objects.Length)).AsSpan(0, objects.Length);
 
                             for (var i = 0; i < objects.Length; i++)
@@ -396,7 +406,8 @@ public static partial class ToonSerializer
 
             foreach (var value in values)
             {
-                var kind = Classify(value, value?.GetType() ?? declaredType, null, out var info);
+                // The declared type too: the tree uses a converter for it
+                var kind = Classify(value, declaredType, null, out var info);
 
                 switch (kind)
                 {

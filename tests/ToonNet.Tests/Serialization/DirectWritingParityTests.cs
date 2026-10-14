@@ -28,6 +28,57 @@ public class DirectWritingParityTests
         return direct;
     }
 
+    public interface IAnimal
+    {
+        string Name { get; }
+    }
+
+    public sealed class Dog : IAnimal
+    {
+        public string Name { get; set; } = "";
+        public int Age { get; set; }
+    }
+
+    public sealed class Zoo
+    {
+        public IAnimal? A { get; set; }
+        public IAnimal? B { get; set; }
+    }
+
+    public sealed class Owner
+    {
+        public string Name { get; set; } = "";
+        public IAnimal? Pet { get; set; }
+    }
+
+    /// <summary>Applies to the declared interface only, not to the runtime type.</summary>
+    private sealed class AnimalConverter : ToonConverter<IAnimal>
+    {
+        public override bool CanConvert(Type type) => type == typeof(IAnimal);
+
+        public override ToonValue Write(IAnimal? value, ToonSerializerOptions options) => new ToonString("animal:" + value!.Name);
+
+        public override IAnimal Read(ToonValue value, ToonSerializerOptions options) => new Dog { Name = ((ToonString)value).Value[7..] };
+    }
+
+    [Fact]
+    public void ConvertersForADeclaredType_ApplyInTablesAndKeyedObjects()
+    {
+        // Without the converter these would be a keyed table and a table with a nested field group
+        var options = new ToonSerializerOptions();
+        options.AddConverter(new AnimalConverter());
+
+        var zoo = AssertParity(new Zoo { A = new Dog { Name = "Rex", Age = 3 }, B = new Dog { Name = "Max", Age = 5 } }, options);
+        Assert.Contains("animal:Rex", zoo);
+
+        var owners = AssertParity(new List<Owner> { new() { Name = "a", Pet = new Dog { Name = "Rex" } }, new() { Name = "b", Pet = new Dog { Name = "Max" } } },
+                                  options);
+        Assert.Contains("animal:Max", owners);
+
+        // Dictionary values are written by their runtime type, in both paths
+        AssertParity(new Dictionary<string, IAnimal> { ["x"] = new Dog { Name = "Rex" }, ["y"] = new Dog { Name = "Max" } }, options);
+    }
+
     private static IEnumerable<ToonSerializerOptions> OptionVariants()
     {
         yield return new ToonSerializerOptions();
