@@ -224,7 +224,8 @@ public sealed class ToonRuleSet
 
         return new ToonRuleResult(violations, truncated: droppedWarnings);
 
-        // Collects a violation; false when that was the last error allowed (warnings beyond the limit are dropped)
+        // Collects a violation; false when an error comes after the last one allowed, which is then left out (so the
+        // result is truncated only when a violation was left out); warnings beyond the limit are dropped
         bool Add(ToonRuleViolation violation)
         {
             if (violation.Severity == ToonRuleSeverity.Warning)
@@ -242,8 +243,14 @@ public sealed class ToonRuleSet
                 return true;
             }
 
+            if (errors == max)
+            {
+                return false;
+            }
+
             violations.Add(violation);
-            return ++errors < max;
+            errors++;
+            return true;
         }
     }
 

@@ -196,7 +196,8 @@ internal sealed class EvaluationBudget
 
         if (_text is { } text)
         {
-            _remaining += Options.MaxStepsPerValue * CountTextValues(text.Span);
+            // As for a tree: the values, and a value per 16 characters
+            _remaining += Options.MaxStepsPerValue * (CountTextValues(text.Span) + text.Length / 16);
             _text = null;
 
             if (_remaining >= 0)
@@ -350,6 +351,11 @@ internal sealed class EvaluationBudget
         }
     }
 
+    /// <summary>
+    ///     The values of a tree, and a value per 16 characters of its strings and keys: the work a query does is counted
+    ///     in steps per 16 characters it reads, so long strings get the allowance to be read (as text evaluation counts
+    ///     the characters of the document).
+    /// </summary>
     private static long CountValues(ToonValue root)
     {
         var count = 0L;
@@ -362,9 +368,13 @@ internal sealed class EvaluationBudget
 
             switch (value)
             {
+                case ToonString text:
+                    count += text.Value.Length / 16;
+                    break;
                 case ToonObject obj:
-                    foreach (var (_, member) in obj.Properties)
+                    foreach (var (key, member) in obj.Properties)
                     {
+                        count += key.Length / 16;
                         pending.Push(member);
                     }
 
@@ -709,8 +719,12 @@ internal static class ToonPathEvaluator
                 var left = Evaluate(comparison.Left, root, current, work);
                 var right = Evaluate(comparison.Right, root, current, work);
 
-                // Comparing strings, objects and arrays reads them
-                if (left is not (null or ToonNumber or ToonBoolean or ToonNull) && right is not (null or ToonNumber or ToonBoolean or ToonNull))
+                // Comparing strings, objects and arrays reads them: two strings as far as the shorter one goes
+                if (left is ToonString leftText && right is ToonString rightText)
+                {
+                    work.SpendText(Math.Min(leftText.Value.Length, rightText.Value.Length));
+                }
+                else if (left is not (null or ToonNumber or ToonBoolean or ToonNull) && right is not (null or ToonNumber or ToonBoolean or ToonNull))
                 {
                     work.SpendValue(left.ValueType <= right.ValueType ? left : right);
                 }

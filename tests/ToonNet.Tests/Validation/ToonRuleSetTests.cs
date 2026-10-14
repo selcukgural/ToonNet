@@ -223,6 +223,20 @@ public class ToonRuleSetTests
         Assert.Throws<ToonRuleException>(result.ThrowIfInvalid);
     }
 
+    [Fact]
+    public void IsTruncated_OnlyWhenAViolationIsLeftOut()
+    {
+        var rules = new ToonRuleSet { MaxViolations = 3 }.Rule("$.a[*]", "@ > 5", "small {value}");
+
+        var exact = rules.Validate("a[3]: 1,2,3");
+        Assert.False(exact.IsTruncated);
+        Assert.Equal(["small 1", "small 2", "small 3"], exact.Violations.Select(v => v.Message));
+
+        var over = rules.Validate("a[4]: 1,2,3,4");
+        Assert.True(over.IsTruncated);
+        Assert.Equal(["small 1", "small 2", "small 3"], over.Violations.Select(v => v.Message));
+    }
+
     [Theory]
     [InlineData("Required")]
     [InlineData("Forbidden")]

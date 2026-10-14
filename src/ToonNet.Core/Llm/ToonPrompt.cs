@@ -27,8 +27,10 @@ public static class ToonPrompt
 {
     /// <summary>
     ///     Takes the TOON out of a model's answer: the content of the first fenced code block marked <c>toon</c>
-    ///     (<c>```toon</c> or <c>~~~toon</c>), else of the first unmarked block, else the whole answer without the blank
-    ///     lines around it. A block the answer leaves unclosed (a cut-off answer) runs to the end.
+    ///     (<c>```toon</c> or <c>~~~toon</c>), else of the first unmarked block that is not empty, else the whole answer
+    ///     without the blank lines around it, lone fence lines and the indentation all its lines share. Fences may be
+    ///     indented (an answer in a list item); their content loses the fence's indentation. A block the answer leaves
+    ///     unclosed (a cut-off answer) runs to the end.
     /// </summary>
     /// <param name="modelOutput">The model's answer.</param>
     /// <returns>The TOON text.</returns>
@@ -39,6 +41,7 @@ public static class ToonPrompt
 
         var lines = modelOutput.Replace("\r\n", "\n").Split('\n');
         string? unmarked = null;
+        var otherBlocks = new List<Range>(); // blocks marked with another language (python, json, ...)
 
         for (var i = 0; i < lines.Length; i++)
         {
@@ -62,15 +65,20 @@ public static class ToonPrompt
                 return content;
             }
 
-            if (info.Length == 0)
+            // An empty unmarked block is most likely a closing fence whose opening fence the model left out
+            if (info.Length == 0 && !string.IsNullOrWhiteSpace(content))
             {
                 unmarked ??= content;
+            }
+            else if (info.Length > 0)
+            {
+                otherBlocks.Add(i..Math.Min(end + 1, lines.Length));
             }
 
             i = end;
         }
 
-        return unmarked ?? TrimBlankLines(lines);
+        return unmarked ?? WholeAnswer(lines, otherBlocks);
     }
 
     /// <summary>A fence opening a code block: up to three spaces, then three or more backticks or tildes, then an info string.</summary>
@@ -80,12 +88,13 @@ public static class ToonPrompt
         info = "";
         indent = 0;
 
-        while (indent < line.Length && indent < 4 && line[indent] == ' ')
+        // Any indentation (CommonMark allows three spaces; models indent fences inside list items)
+        while (indent < line.Length && line[indent] == ' ')
         {
             indent++;
         }
 
-        if (indent > 3 || indent >= line.Length || line[indent] is not ('`' or '~'))
+        if (indent >= line.Length || line[indent] is not ('`' or '~'))
         {
             return false;
         }
@@ -120,7 +129,7 @@ public static class ToonPrompt
     private static bool IsClosingFence(string line, string fence)
     {
         var text = line.Trim();
-        return text.Length >= fence.Length && text.All(c => c == fence[0]) && line.Length - line.TrimStart(' ').Length <= 3;
+        return text.Length >= fence.Length && text.All(c => c == fence[0]);
     }
 
     private static string RemoveIndent(string line, int indent)
@@ -133,6 +142,25 @@ public static class ToonPrompt
         }
 
         return line[spaces..];
+    }
+
+    /// <summary>
+    ///     The answer without the blocks of other languages, lone fence lines, the blank lines around it and the
+    ///     indentation its lines share.
+    /// </summary>
+    private static string WholeAnswer(string[] all, List<Range> otherBlocks)
+    {
+        var lines = all.Where((line, index) => !IsFenceLine(line) && !otherBlocks.Any(block => index >= block.Start.Value && index < block.End.Value))
+                       .ToArray();
+        var text = TrimBlankLines(lines).Split('\n');
+        var indent = text.Where(line => !string.IsNullOrWhiteSpace(line)).Select(line => line.Length - line.TrimStart(' ').Length).DefaultIfEmpty(0).Min();
+        return string.Join('\n', text.Select(line => RemoveIndent(line, indent)));
+
+        static bool IsFenceLine(string line)
+        {
+            var trimmed = line.Trim();
+            return trimmed.Length >= 3 && (trimmed.All(c => c == '`') || trimmed.All(c => c == '~'));
+        }
     }
 
     private static string TrimBlankLines(string[] lines)

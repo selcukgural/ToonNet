@@ -306,64 +306,81 @@ public sealed class ToonPath
             throw new InvalidOperationException("The root cannot be replaced; set a path below it.");
         }
 
-        var container = root;
+        // The first pass only checks, on detached new containers, so a path that fails halfway leaves the tree unchanged.
+        Walk(apply: false);
+        Walk(apply: true);
 
-        for (var i = 0; i < segments.Length; i++)
+        void Walk(bool apply)
         {
-            var selector = segments[i].Selectors[0];
-            var last = i == segments.Length - 1;
-            ToonValue? next = last ? value ?? ToonNull.Instance : null;
+            var container = root;
 
-            if (selector.Kind == SelectorKind.Name)
+            for (var i = 0; i < segments.Length; i++)
             {
-                if (container is not ToonObject obj)
-                {
-                    throw NotA(container, "an object", i);
-                }
+                var selector = segments[i].Selectors[0];
+                var last = i == segments.Length - 1;
+                ToonValue? next = last ? value ?? ToonNull.Instance : null;
 
-                if (!last && obj.Properties.TryGetValue(selector.Name!, out var existing))
+                if (selector.Kind == SelectorKind.Name)
                 {
-                    container = existing;
-                    continue;
-                }
-
-                next ??= CreateFor(segments[i + 1]);
-                obj.Properties[selector.Name!] = next;
-                container = next;
-            }
-            else
-            {
-                if (container is not ToonArray array)
-                {
-                    throw NotA(container, "an array", i);
-                }
-
-                var count = array.Items.Count;
-                var index = selector.Index < 0 ? count + selector.Index : selector.Index;
-
-                if (index < 0 || index > count)
-                {
-                    throw new InvalidOperationException(
-                        $"The index {selector.Index} of the path '{Text}' is outside the array of {count} item{(count == 1 ? "" : "s")}.");
-                }
-
-                if (index < count)
-                {
-                    if (last)
+                    if (container is not ToonObject obj)
                     {
-                        array.Items[(int)index] = next!;
-                    }
-                    else
-                    {
-                        container = array.Items[(int)index];
+                        throw NotA(container, "an object", i);
                     }
 
-                    continue;
-                }
+                    if (!last && obj.Properties.TryGetValue(selector.Name!, out var existing))
+                    {
+                        container = existing;
+                        continue;
+                    }
 
-                next ??= CreateFor(segments[i + 1]);
-                array.Items.Add(next);
-                container = next;
+                    next ??= CreateFor(segments[i + 1]);
+
+                    if (apply)
+                    {
+                        obj.Properties[selector.Name!] = next;
+                    }
+
+                    container = next;
+                }
+                else
+                {
+                    if (container is not ToonArray array)
+                    {
+                        throw NotA(container, "an array", i);
+                    }
+
+                    var count = array.Items.Count;
+                    var index = selector.Index < 0 ? count + selector.Index : selector.Index;
+
+                    if (index < 0 || index > count)
+                    {
+                        throw new InvalidOperationException(
+                            $"The index {selector.Index} of the path '{Text}' is outside the array of {count} item{(count == 1 ? "" : "s")}.");
+                    }
+
+                    if (index < count)
+                    {
+                        if (!last)
+                        {
+                            container = array.Items[(int)index];
+                        }
+                        else if (apply)
+                        {
+                            array.Items[(int)index] = next!;
+                        }
+
+                        continue;
+                    }
+
+                    next ??= CreateFor(segments[i + 1]);
+
+                    if (apply)
+                    {
+                        array.Items.Add(next);
+                    }
+
+                    container = next;
+                }
             }
         }
 

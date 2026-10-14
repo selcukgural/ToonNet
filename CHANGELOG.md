@@ -222,6 +222,13 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   or `SerializeDocumentsAsync` to a path no longer empties the file, and long paths in error messages are shortened.
 - **ToonNet.Core:** `ToonPrompt.DescribeShape` follows the serializer's forms: field groups and keyed tables, `|null`
   in table cells, `[Flags]` enums, `<any>` for converted members, and `/` between choices when `|` is the delimiter.
+- **ToonNet.Core:** Path queries give long strings the allowance to be read: the step budget grows with a step per 16
+  characters of the document's strings and keys, so a filter that reads a 20 MB string once no longer exceeds it, and
+  comparing two strings costs as much as the shorter one. `SetValue` checks the whole path before it changes the tree,
+  so a path that fails halfway leaves no new containers behind. `ToonRuleResult.IsTruncated` is false when exactly
+  `MaxViolations` errors were found. `ToonPrompt.Extract` skips an empty unmarked block, reads indented fences (an
+  answer in a list item), and when there is no block, ignores lone fence lines, blocks of other languages and the
+  indentation all lines share.
 - **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
   so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that

@@ -75,8 +75,9 @@ public sealed class ToonPathOptions
     }
 
     /// <summary>
-    ///     The steps an evaluation may take per value of the document (per line, when the path is evaluated over TOON
-    ///     text), beyond <see cref="MaxSteps"/> (default 16; 0 makes
+    ///     The steps an evaluation may take per value of the document and per 16 characters of its strings and keys (per
+    ///     line and per 16 characters, when the path is evaluated over TOON text), beyond <see cref="MaxSteps"/> (default
+    ///     16; 0 makes
     ///     <see cref="MaxSteps"/> the whole budget). Beyond the budget, evaluation throws
     ///     <see cref="ToonPathLimitException"/>: nested descendant segments (<c>$..*..*..*</c>) multiply the values a
     ///     query visits.

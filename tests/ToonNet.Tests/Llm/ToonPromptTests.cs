@@ -68,8 +68,13 @@ public class ToonPromptTests
     [InlineData("  ```toon\n  a:\n    b: 1\n  ```", "a:\n  b: 1")]
     [InlineData("```toon\na: 1\nb: 2", "a: 1\nb: 2")]
     [InlineData("\n\na: 1\n  b: 2\n\n", "a: 1\n  b: 2")]
-    [InlineData("```python\nx = 1\n```\na: 1", "```python\nx = 1\n```\na: 1")]
+    [InlineData("```python\nx = 1\n```\na: 1", "a: 1")]
     [InlineData("``` toon extra\na: 1\n```", "a: 1")]
+    [InlineData("a: 1\nb: 2\n```", "a: 1\nb: 2")]                                  // a closing fence without an opening one
+    [InlineData("```\n```\nHere:\n```\na: 1\n```", "a: 1")]                       // an empty unmarked block is skipped
+    [InlineData("1. The answer:\n\n    ```toon\n    a:\n      b: 1\n    ```", "a:\n  b: 1")] // a fence in a list item
+    [InlineData("    a: 1\n    b: 2", "a: 1\nb: 2")]                              // the shared indentation goes
+    [InlineData("```json\n{}\n```\n  a: 1\n```", "a: 1")]
     public void Extract_Forms(string answer, string expected)
     {
         Assert.Equal(expected, ToonPrompt.Extract(answer));

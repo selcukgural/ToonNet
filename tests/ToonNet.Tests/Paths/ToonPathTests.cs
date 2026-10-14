@@ -303,14 +303,43 @@ public class ToonPathTests
 
         Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?lower($.s) == 'x']").SelectFrom(toon));
         Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?length($.s) == 1]").SelectFrom(toon));
-        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?$.s == 'x']").Select(ToonDocument.Parse(toon).Root));
+        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?contains($.s, 'x')]").Select(ToonDocument.Parse(toon).Root));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), watch.Elapsed.ToString());
+
+        // Comparing with a short string reads only as far as it goes
+        Assert.Empty(ToonPath.Parse("$.items[?$.s == 'x']").Select(ToonDocument.Parse(toon).Root));
 
         // The timeout comes when expected, not after the next thousand steps
         var options = new ToonPathOptions { MaxSteps = long.MaxValue / 4, Timeout = TimeSpan.FromMilliseconds(200) };
         watch.Restart();
         Assert.True(Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?length($.s) == 1]", options).SelectFrom(toon)).IsTimeout);
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), watch.Elapsed.ToString());
+    }
+
+    [Fact]
+    public void LargeStrings_GetTheAllowanceToBeRead()
+    {
+        // A 20 MB string read once is 1.25 million steps, more than MaxSteps: the allowance grows with the characters
+        var toon = "s: " + new string('A', 20_000_000) + "\nn: 1";
+
+        Assert.Empty(ToonPath.Parse("$[?contains(@, 'B')]").Select(ToonDocument.Parse(toon).Root));
+        Assert.Empty(ToonPath.Parse("$[?contains(@, 'B')]").SelectFrom(toon));
+        Assert.Equal(20_000_000, Assert.Single(ToonPath.Parse("$[?length(@) > 5]").SelectFrom(toon)).GetValue<string>().Length);
+    }
+
+    [Fact]
+    public void SetValue_LeavesTheTreeUnchanged_WhenThePathFails()
+    {
+        var root = Root();
+        var before = root.DeepClone();
+
+        // The containers for audit and its list would be made before the index 1 of the new list fails
+        Assert.Equal("The index 1 of the path '$.audit.history[1].at' is outside the array of 0 items.",
+                     Assert.Throws<InvalidOperationException>(() => root.SetValue("$.audit.history[1].at", 1)).Message);
+        Assert.Throws<InvalidOperationException>(() => root.SetValue("$.meta.extra.list[-1]", 1));
+        Assert.Throws<InvalidOperationException>(() => root.SetValue("$.orders[3][1]", 1));
+
+        Assert.True(ToonValue.DeepEquals(root, before));
     }
 
     [Fact]
