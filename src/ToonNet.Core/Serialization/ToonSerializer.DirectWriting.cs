@@ -356,6 +356,13 @@ public static partial class ToonSerializer
             _hasConverters && (IsConverted(type) || (Nullable.GetUnderlyingType(type) is { } underlying && IsConverted(underlying)));
 
         /// <summary>
+        ///     Whether a converter writes the values of a property, which then cannot be written by the typed fast paths;
+        ///     without converters, no property type is looked up.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool IsConvertedProperty(PropertyMetadata property) => _hasConverters && IsConvertedDeclared(property.Property.PropertyType);
+
+        /// <summary>
         ///     With converters: per runtime type, how it is written when no converter applies to it, or null when one
         ///     does (looked up once per document).
         /// </summary>
@@ -575,7 +582,7 @@ public static partial class ToonSerializer
 
                 var startLine = count > 0 || !firstOnCurrentLine;
 
-                if (property.Primitive is { } primitive && property.Converter == null && !IsConvertedDeclared(property.Property.PropertyType))
+                if (property.Primitive is { } primitive && property.Converter == null && !IsConvertedProperty(property))
                 {
                     if (_ignoreNulls && primitive.IsNull(instance))
                     {
@@ -712,7 +719,7 @@ public static partial class ToonSerializer
                 case DirectKind.Generated:
                     return info.Writer!.MayBeKeyedOf(value, _writer);
                 case DirectKind.Dictionary:
-                    if (IsPrimitiveType(info.Entries!.ValueType) && !IsConvertedDeclared(info.Entries.ValueType))
+                    if (IsPrimitiveType(info.Entries!.ValueType) && !(_hasConverters && IsConvertedDeclared(info.Entries.ValueType)))
                     {
                         return false;
                     }
@@ -740,7 +747,7 @@ public static partial class ToonSerializer
                             continue;
                         }
 
-                        if (property.Primitive is { } primitive && property.Converter == null && !IsConvertedDeclared(property.Property.PropertyType))
+                        if (property.Primitive is { } primitive && property.Converter == null && !IsConvertedProperty(property))
                         {
                             if (_ignoreNulls && primitive.IsNull(value))
                             {
@@ -1066,7 +1073,7 @@ public static partial class ToonSerializer
 
                     bool isNull;
 
-                    if (property.Primitive is { } primitive && !IsConvertedDeclared(property.Property.PropertyType))
+                    if (property.Primitive is { } primitive && !IsConvertedProperty(property))
                     {
                         isNull = primitive.IsNull(item);
                     }
@@ -1239,7 +1246,7 @@ public static partial class ToonSerializer
                     first = false;
                     var property = properties[p];
 
-                    if (property.Primitive is { } primitive && !IsConvertedDeclared(property.Property.PropertyType))
+                    if (property.Primitive is { } primitive && !IsConvertedProperty(property))
                     {
                         primitive.WriteText(writer, item);
                     }

@@ -523,7 +523,7 @@ public static partial class ToonSerializer
                 last = slot.Property;
                 var property = properties[slot.Property];
 
-                if (property.Primitive is { } primitive && property.Converter == null && !IsConverted(property.Property.PropertyType) &&
+                if (property.Primitive is { } primitive && property.Converter == null && (!_hasConverters || !IsConverted(property.Property.PropertyType)) &&
                     primitive.TryReadToken(instance, _parser, fieldValue))
                 {
                     continue;
