@@ -102,6 +102,8 @@ Defaults that let documents and responses do more than the code meant, now as Sy
 - **ToonNet.Extensions.Yaml:** `ToonYamlConverter.MaxAliasExpansionChars`, the characters YAML aliases may copy.
 
 ### Changed
+- **ToonNet.Extensions.Yaml:** `ToonYamlConverter.MaxAliasExpansionNodes` and `MaxAliasExpansionChars` are
+  `static readonly` fields instead of constants, so a later release can change them without recompiling callers.
 - **All packages:** Packages are published with NuGet Trusted Publishing (a short-lived key per run instead of a stored
   API key) and with a signed build provenance attestation per package (`gh attestation verify <package> --repo
   selcukgural/ToonNet`). Builds on CI are deterministic, with repository-relative source paths in the embedded PDBs.
@@ -238,6 +240,14 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   reading a primitive into `object` gives. The getters of a disposed `ToonDocumentReader` throw
   `ObjectDisposedException` instead of reading buffers returned to the pool. Errors in the second and later documents
   of `DeserializeDocumentsAsync` have the line of the stream, not the line within the document.
+- **ToonNet.Extensions.Yaml:** `ToYaml` double-quotes strings with a carriage return or a YAML 1.1 line break (NEL,
+  U+2028, U+2029), which readers changed into line feeds, and writes trees up to 200 levels deep (YamlDotNet stopped at
+  50) with a clear `YamlException` beyond. `!!int` accepts only core-schema integers (`!!int 1.5` was 1.5) and `!!null`
+  only the null forms (`!!null foo` was null).
+- **ToonNet.Extensions.Json:** `FromJson(JsonElement, ToonOptions)` limits nesting with `ToonOptions.MaxDepth`, as
+  the string overload does; a property name with an unpaired surrogate escape is a `JsonException` (it was an
+  `InvalidOperationException`); `ToJson` writes trees of the greatest depth TOON allows (Utf8JsonWriter stopped one
+  level short of `MaxDepth = 1000`).
 - **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
   so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that

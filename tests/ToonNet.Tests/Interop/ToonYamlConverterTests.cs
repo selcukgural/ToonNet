@@ -644,6 +644,10 @@ public class ToonYamlConverterTests
     [InlineData("a: !!null ''", "a: null")]
     [InlineData("a: !!str 42", "a: \"42\"")]
     [InlineData("a: ! true", "a: \"true\"")]
+    [InlineData("a: !!int 0x1F", "a: 31")]
+    [InlineData("a: !!int +7", "a: 7")]
+    [InlineData("a: !!float 7", "a: 7")]
+    [InlineData("a: !!null ~", "a: null")]
     public void ExplicitTags_DecideTheType(string yaml, string toon)
     {
         Assert.Equal(toon, ToonYamlConvert.FromYaml(yaml));
@@ -652,9 +656,46 @@ public class ToonYamlConverterTests
     [Theory]
     [InlineData("a: !!int abc")]
     [InlineData("a: !!bool yes")]
+    [InlineData("a: !!int 1.5")]
+    [InlineData("a: !!int -0x1F")]
+    [InlineData("a: !!int 1e3")]
+    [InlineData("a: !!int ''")]
+    [InlineData("a: !!null foo")]
+    [InlineData("a: !!null 0")]
     public void ExplicitTags_ThatDoNotFit_AreErrors(string yaml)
     {
         Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConvert.FromYaml(yaml));
+    }
+
+    [Theory]
+    [InlineData("a\rb")]
+    [InlineData("a\r\nb")]
+    [InlineData("a\u0085b")]
+    [InlineData("a\u2028b")]
+    [InlineData("a\u2029b\nc")]
+    public void ToYaml_KeepsCarriageReturnsAndOtherLineBreaks(string text)
+    {
+        // Readers turn these into line feeds or spaces outside double quotes
+        var yaml = ToonYamlConverter.ToYaml(new ToonObject { ["s"] = new ToonString(text) });
+
+        Assert.StartsWith("s: \"", yaml);
+        Assert.Equal(text, ToonYamlConverter.FromYaml(yaml).Root["s"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ToYaml_WritesDeepTrees()
+    {
+        // YamlDotNet stops at 50 levels by default
+        ToonValue Nest(int depth) => depth == 0 ? new ToonNumber(1) : depth % 2 == 0 ? new ToonObject { ["k"] = Nest(depth - 1) } : new ToonArray { Items = { Nest(depth - 1) } };
+        var tree = Nest(201); // collections at depths 0 to 200
+
+        var yaml = ToonYamlConverter.ToYaml(tree);
+
+        Assert.True(ToonValue.DeepEquals(tree, ToonYamlConverter.FromYaml(yaml, new Core.ToonOptions { MaxDepth = 200 }).Root));
+        Assert.Equal("Maximum nesting depth of 200 exceeded",
+                     Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.ToYaml(Nest(202))).Message);
+        Assert.Equal(ToonYamlConverter.ToYaml(new ToonArray { Items = { ToonNull.Instance, new ToonNumber(1) } }),
+                     ToonYamlConverter.ToYaml(new ToonArray { Items = { null!, new ToonNumber(1) } }));
     }
 
     [Fact]

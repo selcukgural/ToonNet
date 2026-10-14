@@ -828,6 +828,49 @@ monitoring:
     }
 
     [Fact]
+    public void FromJsonElement_UsesMaxDepth()
+    {
+        // A JsonElement parsed elsewhere (with its own limit) was converted whatever its depth
+        using var json = JsonDocument.Parse(new string('[', 6) + new string(']', 6), new JsonDocumentOptions { MaxDepth = 100 });
+
+        Assert.NotNull(ToonJsonConverter.FromJson(json.RootElement, new ToonNet.Core.ToonOptions { MaxDepth = 5 }));
+        Assert.Equal("The JSON is nested deeper than the maximum depth of 4",
+                     Assert.Throws<JsonException>(() => ToonJsonConverter.FromJson(json.RootElement, new ToonNet.Core.ToonOptions { MaxDepth = 4 })).Message);
+        Assert.NotNull(ToonJsonConverter.FromJson(json.RootElement));
+    }
+
+    [Fact]
+    public void ToJson_WritesTheDeepestTreeToonAllows()
+    {
+        // Collections at depths 0 to 1000 (MaxDepth 1000 with extended limits); Utf8JsonWriter's default stopped at 1000
+        ToonValue tree = new ToonNumber(1);
+
+        for (var i = 0; i <= 1000; i++)
+        {
+            tree = new ToonArray { Items = { tree } };
+        }
+
+        var json = ToonJsonConverter.ToJson(tree);
+        Assert.Equal(new string('[', 1001) + "1" + new string(']', 1001), json);
+        Assert.Equal(json, string.Concat(ToonJsonConverter.ToJson(tree, new JsonWriterOptions { Indented = true }).Where(c => !char.IsWhiteSpace(c))));
+        Assert.Throws<InvalidOperationException>(() => ToonJsonConverter.ToJson(new ToonArray { Items = { tree } }));
+        Assert.Throws<InvalidOperationException>(() => ToonJsonConverter.ToJson(tree, new JsonWriterOptions { MaxDepth = 10 }));
+    }
+
+    [Fact]
+    public void KeysWithAnUnpairedSurrogate_AreJsonErrors()
+    {
+        var ex = Assert.Throws<JsonException>(() => ToonJsonConverter.FromJson("""{"a\uD800": 1}"""));
+        Assert.Equal("A JSON property name has an unpaired surrogate escape, which is not valid text.", ex.Message);
+    }
+
+    [Fact]
+    public void NullItemsPutIntoATree_AreWrittenAsNull()
+    {
+        Assert.Equal("[null,1]", ToonJsonConverter.ToJson(new ToonArray { Items = { null!, new ToonNumber(1) } }));
+    }
+
+    [Fact]
     public void FromJson_AcceptsCommentsAndTrailingCommas()
     {
         const string json = """

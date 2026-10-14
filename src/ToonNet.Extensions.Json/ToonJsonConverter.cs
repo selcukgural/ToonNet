@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
@@ -24,8 +25,12 @@ public static class ToonJsonConverter
     private static readonly JsonWriterOptions DefaultWriterOptions = new()
     {
         Indented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+        MaxDepth = MaxJsonDepth
     };
+
+    /// <summary>The depth <see cref="ToJson(ToonValue, JsonWriterOptions?)"/> writes by default: TOON's greatest depth (1000) and the root.</summary>
+    private const int MaxJsonDepth = 1001;
 
     /// <summary>
     ///     Converts a JSON string to a TOON document.
@@ -108,12 +113,19 @@ public static class ToonJsonConverter
     ///     Converts a JsonElement to a TOON document; duplicate keys are an error when
     ///     <see cref="ToonOptions.StrictMode"/> is on (the default), otherwise the last value wins.
     /// </summary>
-    /// <exception cref="JsonException">Thrown for duplicate keys in strict mode.</exception>
+    /// <exception cref="JsonException">
+    ///     Thrown for duplicate keys in strict mode, and when the element is nested deeper than
+    ///     <see cref="ToonOptions.MaxDepth"/> (the root is at depth 0, as in TOON).
+    /// </exception>
     public static ToonDocument FromJson(JsonElement element, ToonOptions? options)
     {
-        var toonValue = ConvertJsonElementToToonValue(element, (options ?? ToonOptions.Default).StrictMode);
+        options ??= ToonOptions.Default;
+        var toonValue = ConvertJsonElementToToonValue(element, new Reading(options.StrictMode, options.MaxDepth), 0);
         return new ToonDocument(toonValue);
     }
+
+    /// <summary>What converting a JSON element needs: the duplicate-key rule and the depth limit.</summary>
+    private readonly record struct Reading(bool Strict, int MaxDepth);
 
     /// <summary>
     ///     Converts a TOON document to a JSON string.
@@ -158,6 +170,10 @@ public static class ToonJsonConverter
     /// <exception cref="ArgumentNullException">
     ///     Thrown when the <paramref name="value"/> is null.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown when the value is nested deeper than the writer's <see cref="JsonWriterOptions.MaxDepth"/> (by default
+    ///     1,001 levels with the root, the most a TOON document can have).
+    /// </exception>
     /// <remarks>
     ///     This method serializes the provided TOON value into a JSON string. The serialization
     ///     process uses a <see cref="Utf8JsonWriter"/> to write the JSON output. Complex TOON
@@ -169,6 +185,14 @@ public static class ToonJsonConverter
         ArgumentNullException.ThrowIfNull(value);
 
         var options = writerOptions ?? DefaultWriterOptions;
+
+        // Utf8JsonWriter counts the root container as depth 1: its default of 1000 stopped a tree of the greatest
+        // ToonOptions.MaxDepth (1000, with the root at 0) one level short
+        if (options.MaxDepth == 0)
+        {
+            options = options with { MaxDepth = MaxJsonDepth };
+        }
+
         using var stream = new MemoryStream();
 
         using (var writer = new Utf8JsonWriter(stream, options with { Indented = false }))
@@ -183,7 +207,7 @@ public static class ToonJsonConverter
 
         // Numbers are written as raw values (their canonical text), which Utf8JsonWriter does not indent: indent the
         // compact text through a JsonDocument, which writes them in place
-        using var compact = JsonDocument.Parse(stream.ToArray(), new JsonDocumentOptions { MaxDepth = (options.MaxDepth > 0 ? options.MaxDepth : 1000) + 1 });
+        using var compact = JsonDocument.Parse(stream.ToArray(), new JsonDocumentOptions { MaxDepth = options.MaxDepth });
         using var indented = new MemoryStream();
 
         using (var writer = new Utf8JsonWriter(indented, options))
@@ -203,7 +227,8 @@ public static class ToonJsonConverter
     ///     The <see cref="JsonElement"/> to convert. The element's <see cref="JsonValueKind"/> determines
     ///     the type of TOON value created.
     /// </param>
-    /// <param name="strict">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>).</param>
+    /// <param name="reading">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>), and the depth limit.</param>
+    /// <param name="depth">The depth of the element (the root is at 0).</param>
     /// <returns>
     ///     A <see cref="ToonValue"/> representing the JSON element. The returned value can be one of the following:
     ///     <list type="bullet">
@@ -223,12 +248,17 @@ public static class ToonJsonConverter
     ///     <paramref name="element"/> to the corresponding TOON value type. Unsupported kinds will result
     ///     in a <see cref="JsonException"/> being thrown.
     /// </remarks>
-    private static ToonValue ConvertJsonElementToToonValue(JsonElement element, bool strict)
+    private static ToonValue ConvertJsonElementToToonValue(JsonElement element, Reading reading, int depth)
     {
+        if (element.ValueKind is JsonValueKind.Object or JsonValueKind.Array && depth > reading.MaxDepth)
+        {
+            throw new JsonException($"The JSON is nested deeper than the maximum depth of {reading.MaxDepth}");
+        }
+
         return element.ValueKind switch
         {
-            JsonValueKind.Object                          => ConvertJsonObject(element, strict),
-            JsonValueKind.Array                           => ConvertJsonArray(element, strict),
+            JsonValueKind.Object                          => ConvertJsonObject(element, reading, depth),
+            JsonValueKind.Array                           => ConvertJsonArray(element, reading, depth),
             JsonValueKind.String                          => new ToonString(GetString(element)),
             JsonValueKind.Number                          => ConvertJsonNumber(element),
             JsonValueKind.True                            => new ToonBoolean(true),
@@ -251,6 +281,19 @@ public static class ToonJsonConverter
         }
     }
 
+    /// <summary>A property name; one with an unpaired surrogate escape is a <see cref="JsonException"/>, as for strings.</summary>
+    private static string GetName(JsonProperty property)
+    {
+        try
+        {
+            return property.Name;
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new JsonException("A JSON property name has an unpaired surrogate escape, which is not valid text.", ex);
+        }
+    }
+
     /// <summary>
     ///     Converts a JSON number with the same rules as the TOON decoder: the exact value when it fits in a
     ///     <see cref="decimal"/> (so large integers and decimals are not rounded through <see cref="double"/>),
@@ -270,7 +313,8 @@ public static class ToonJsonConverter
     ///     The <see cref="JsonElement"/> representing the JSON object to convert.
     ///     Must be of type <see cref="JsonValueKind.Object"/>.
     /// </param>
-    /// <param name="strict">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>).</param>
+    /// <param name="reading">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>), and the depth limit.</param>
+    /// <param name="depth">The depth of the object.</param>
     /// <returns>
     ///     A <see cref="ToonObject"/> containing the converted TOON key-value pairs from the JSON object.
     /// </returns>
@@ -282,23 +326,25 @@ public static class ToonJsonConverter
     ///     to a corresponding TOON value using <see cref="ConvertJsonElementToToonValue"/>, and adds it
     ///     to the resulting <see cref="ToonObject"/>.
     /// </remarks>
-    private static ToonObject ConvertJsonObject(JsonElement element, bool strict)
+    private static ToonObject ConvertJsonObject(JsonElement element, Reading reading, int depth)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var toonObject = new ToonObject();
 
         foreach (var property in element.EnumerateObject())
         {
-            var value = ConvertJsonElementToToonValue(property.Value, strict);
+            var name = GetName(property);
+            var value = ConvertJsonElementToToonValue(property.Value, reading, depth + 1);
 
             // Duplicate keys are an error in strict mode, as in TOON and YAML, instead of silently dropping a value
-            if (!toonObject.Properties.TryAdd(property.Name, value))
+            if (!toonObject.Properties.TryAdd(name, value))
             {
-                if (strict)
+                if (reading.Strict)
                 {
-                    throw new JsonException($"Duplicate key \"{ShownKey(property.Name)}\" in a JSON object");
+                    throw new JsonException($"Duplicate key \"{ShownKey(name)}\" in a JSON object");
                 }
 
-                toonObject.Properties[property.Name] = value;
+                toonObject.Properties[name] = value;
             }
         }
 
@@ -312,7 +358,8 @@ public static class ToonJsonConverter
     ///     The <see cref="JsonElement"/> representing the JSON array to convert.
     ///     Must be of type <see cref="JsonValueKind.Array"/>.
     /// </param>
-    /// <param name="strict">Whether duplicate keys are an error (<see cref="ToonOptions.StrictMode"/>).</param>
+    /// <param name="reading">Whether duplicate keys are an error, and the depth limit.</param>
+    /// <param name="depth">The depth of the array.</param>
     /// <returns>
     ///     A <see cref="ToonArray"/> containing the converted TOON values from the JSON array.
     /// </returns>
@@ -324,13 +371,14 @@ public static class ToonJsonConverter
     ///     to a corresponding TOON value using <see cref="ConvertJsonElementToToonValue"/>, and
     ///     adds it to the resulting <see cref="ToonArray"/>.
     /// </remarks>
-    private static ToonArray ConvertJsonArray(JsonElement element, bool strict)
+    private static ToonArray ConvertJsonArray(JsonElement element, Reading reading, int depth)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var items = new List<ToonValue>();
 
         foreach (var item in element.EnumerateArray())
         {
-            items.Add(ConvertJsonElementToToonValue(item, strict));
+            items.Add(ConvertJsonElementToToonValue(item, reading, depth + 1));
         }
 
         return new ToonArray(items);
@@ -367,7 +415,7 @@ public static class ToonJsonConverter
     {
         switch (value)
         {
-            case ToonNull:
+            case null or ToonNull: // null: put into ToonArray.Items by code
                 writer.WriteNullValue();
                 break;
 

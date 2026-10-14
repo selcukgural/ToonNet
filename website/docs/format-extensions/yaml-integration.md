@@ -158,14 +158,18 @@ foreach (var service in services.Properties)
 - Duplicate keys in a mapping throw a `YamlException`, also keys that differ only in their tag (`a` and `!!str a`).
 - Merge keys (`<<: *base`) are not expanded; `<<` stays an ordinary key.
 - Quoted and block scalars (and scalars tagged `!!str`) are strings (`"42"` stays a string), unless an explicit
-  core-schema tag says otherwise (`!!int "42"` is 42; a value that does not fit its tag is a `YamlException`). Plain scalars are
+  core-schema tag says otherwise (`!!int "42"` is 42; a value that does not fit its tag, such as `!!int 1.5` or
+  `!!null foo`, is a `YamlException`). Plain scalars are
   typed by the YAML 1.2 core schema: `true`/`false` (lowercase, capitalized or uppercase), `null`/`~`/empty, integers
   (`42`, `+5`, `007` is 7, `0xFF` is 255, `0o17` is 15) and floats (`1.5`, `.5`, `1e3`), exact when they fit in a
   `decimal`. Everything else is a string, including the YAML 1.1 booleans `yes`/`no`/`on`/`off` and `.inf`/`.nan`,
   which a TOON number cannot hold.
 - `ToonYamlConvert.ToYaml` quotes strings that YAML would otherwise read as another type (also `yes`/`no`/`on`/`off`,
   `2001-12-14`, `12:30:00`, `0b101`, `1_000`, `<<`, `=` and text that starts with a byte order mark, for YAML 1.1
-  readers), so conversions round-trip, and accepts `ToonOptions` for parsing the TOON input.
+  readers), so conversions round-trip, and accepts `ToonOptions` for parsing the TOON input. Strings with a carriage
+  return or a YAML 1.1 line break (NEL, U+2028, U+2029) are double-quoted, so they keep those characters. Values nested
+  deeper than 200 levels (the most `MaxDepth` allows without extended limits) throw a `YamlException`, and the YAML
+  ends with a line feed.
 - Anchors and aliases are expanded into copies; comments are not preserved.
 
 ## Use Cases

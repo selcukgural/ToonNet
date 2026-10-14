@@ -28,14 +28,20 @@ public static partial class ToonYamlConverter
     ///     Aliases are expanded into independent copies during conversion, so nested anchors can grow
     ///     exponentially ("billion laughs"). Inputs exceeding this budget are rejected with a <see cref="YamlException"/>.
     /// </remarks>
-    public const int MaxAliasExpansionNodes = 100_000;
+    public static readonly int MaxAliasExpansionNodes = 100_000;
 
     /// <summary>
     ///     The characters aliases may copy in all (scalars an alias repeats, also inside the collections it repeats), or
     ///     ten times the length of the YAML when that is more; beyond it, reading throws a <c>YamlException</c>, so a small
     ///     document cannot expand into gigabytes.
     /// </summary>
-    public const int MaxAliasExpansionChars = 1_000_000;
+    public static readonly int MaxAliasExpansionChars = 1_000_000;
+
+    /// <summary>
+    ///     The nesting depth <see cref="ToYaml(ToonValue)"/> writes: the most <see cref="ToonOptions.MaxDepth"/> allows
+    ///     without extended limits (YamlDotNet writes recursively, and runs out of stack at about a thousand levels).
+    /// </summary>
+    private const int MaxWriteDepth = 200;
 
     /// <summary>
     ///     The serializer used by <see cref="ToYaml(ToonValue)"/>; it keeps no state between calls. It quotes strings a
@@ -43,6 +49,7 @@ public static partial class ToonYamlConverter
     ///     booleans (yes/no/on/off), so YAML 1.1 readers read them as strings too.
     /// </summary>
     private static readonly ISerializer Serializer = new SerializerBuilder().WithIndentedSequences()
+                                                                            .WithMaximumRecursion(MaxWriteDepth + 2) // levels 0 to MaxWriteDepth, and the scalars
                                                                             .WithQuotingNecessaryStrings()
                                                                             .WithEventEmitter(next => new QuoteRetypedStringsEmitter(next))
                                                                             .Build();
@@ -159,6 +166,7 @@ public static partial class ToonYamlConverter
     /// <exception cref="ArgumentNullException">
     ///     Thrown when the <paramref name="value"/> parameter is null.
     /// </exception>
+    /// <exception cref="YamlException">Thrown when the value is nested deeper than 200 levels (the root collection is at level 0).</exception>
     /// <remarks>
     ///     This method uses the YamlDotNet library to serialize the provided TOON value into a YAML string.
     ///     The TOON value is first converted to a plain .NET object using <see cref="ConvertToonValueToObject"/>.
@@ -176,7 +184,16 @@ public static partial class ToonYamlConverter
         ArgumentNullException.ThrowIfNull(value);
 
         var obj = ConvertToonValueToObject(value);
-        return Serializer.Serialize(obj);
+
+        try
+        {
+            return Serializer.Serialize(obj);
+        }
+        catch (MaximumRecursionLevelReachedException)
+        {
+            // As reading reports it, with the root collection at depth 0
+            throw new YamlException($"Maximum nesting depth of {MaxWriteDepth} exceeded");
+        }
     }
 
     /// <summary>
@@ -188,13 +205,19 @@ public static partial class ToonYamlConverter
         public override void Emit(ScalarEventInfo eventInfo, IEmitter emitter)
         {
             if (eventInfo.Source.Value is string text && (ConvertPlainScalar(text) is not ToonString || IsYaml11Boolean(text) || IsYaml11Typed(text) ||
-                                                          IsYaml11Special(text)))
+                                                          IsYaml11Special(text) || HasOtherLineBreaks(text)))
             {
                 eventInfo.Style = ScalarStyle.DoubleQuoted;
             }
 
             base.Emit(eventInfo, emitter);
         }
+
+        /// <summary>
+        ///     Carriage returns and the line breaks of YAML 1.1 (NEL, LS, PS): in a block or plain scalar readers turn them
+        ///     into line feeds (or, in YAML 1.2, a line break into a space), so only escapes keep them.
+        /// </summary>
+        private static bool HasOtherLineBreaks(string text) => text.AsSpan().IndexOfAny("\r\u0085\u2028\u2029") >= 0;
 
         /// <summary>The YAML 1.1 booleans (and <c>y</c>/<c>n</c>), which YAML 1.1 readers would not read as strings.</summary>
         private static bool IsYaml11Boolean(string text) => text is "y" or "Y" or "n" or "N" or "yes" or "Yes" or "YES" or "no" or "No" or "NO" or
@@ -441,11 +464,13 @@ public static partial class ToonYamlConverter
                 case StringTag or "!":
                     return new ToonString(value);
                 case NullTag:
-                    return ToonNull.Instance;
+                    return ConvertPlainScalar(value) is ToonNull ? ToonNull.Instance : throw Retype(scalar, "!!null");
                 case BoolTag:
                     return ConvertPlainScalar(value) is ToonBoolean boolean ? boolean : throw Retype(scalar, "!!bool");
-                case IntTag or FloatTag:
-                    return ParseCoreNumber(value) ?? throw Retype(scalar, scalar.Tag.Value == IntTag ? "!!int" : "!!float");
+                case IntTag:
+                    return IsCoreInteger(value) && ParseCoreNumber(value) is { } integer ? integer : throw Retype(scalar, "!!int");
+                case FloatTag:
+                    return ParseCoreNumber(value) ?? throw Retype(scalar, "!!float");
             }
         }
 
@@ -482,6 +507,18 @@ public static partial class ToonYamlConverter
         }
 
         return ParseCoreNumber(value) ?? (ToonValue)new ToonString(value);
+    }
+
+    /// <summary>An integer of the YAML 1.2 core schema: <c>[-+]?[0-9]+</c>, <c>0o[0-7]+</c> or <c>0x[0-9a-fA-F]+</c> (digits checked when parsed).</summary>
+    private static bool IsCoreInteger(string text)
+    {
+        if (text.Length > 2 && text[0] == '0' && text[1] is 'x' or 'o')
+        {
+            return true;
+        }
+
+        var digits = text.AsSpan(text.Length > 0 && text[0] is '+' or '-' ? 1 : 0);
+        return digits.Length > 0 && !digits.ContainsAnyExceptInRange('0', '9');
     }
 
     /// <summary>
@@ -716,7 +753,7 @@ public static partial class ToonYamlConverter
     {
         return value switch
         {
-            ToonNull      => null,
+            null or ToonNull => null, // a null that code put into ToonArray.Items
             ToonBoolean b => b.Value,
             ToonNumber n  => ToYamlNumber(n),
             ToonString s  => s.Value,
@@ -754,6 +791,7 @@ public static partial class ToonYamlConverter
     /// </remarks>
     private static Dictionary<string, object?> ConvertToonObjectToDict(ToonObject obj)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var dict = new Dictionary<string, object?>();
 
         foreach (var (key, value) in obj.Properties)
@@ -779,6 +817,7 @@ public static partial class ToonYamlConverter
     /// </remarks>
     private static List<object?> ConvertToonArrayToList(ToonArray array)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var list = new List<object?>();
 
         foreach (var item in array.Items)
