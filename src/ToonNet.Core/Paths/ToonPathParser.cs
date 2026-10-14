@@ -35,6 +35,32 @@ internal sealed class ToonPathParser
         return parser.ParseRootQuery();
     }
 
+    /// <summary>
+    ///     Parses a filter expression on its own (<c>@.total &gt;= 0 &amp;&amp; @.status</c>), as the rules of a
+    ///     <c>ToonRuleSet</c> give it: what follows <c>?</c> in a filter selector, to the end of the text.
+    /// </summary>
+    public static PathExpression ParseExpression(string text, ToonPathOptions options)
+    {
+        var parser = new ToonPathParser(text, options);
+
+        if (text.Length > options.MaxLength)
+        {
+            throw new ToonPathException($"The expression is longer than {options.MaxLength} characters", text, options.MaxLength);
+        }
+
+        parser.SkipBlank();
+        var position = parser._position;
+        var expression = parser.RequireLogical(parser.ParseOr(), position);
+        parser.SkipBlank();
+
+        if (parser._position < text.Length)
+        {
+            throw parser.Error($"Unexpected '{text[parser._position]}'");
+        }
+
+        return expression;
+    }
+
     private Query ParseRootQuery()
     {
         if (!TryConsume('$'))

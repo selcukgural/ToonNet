@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ToonPathFunctions` (`AddPredicate`, `AddFunction`, `AddNodesPredicate`, `AddNodesFunction`) and passed in
   `ToonPathOptions.Functions`; `ToonPathOptions.StandardFunctionsOnly` allows only the functions of RFC 9535, for paths
   that must work with other JSONPath implementations.
+- **ToonNet.Core:** `ToonRuleSet` (namespace `ToonNet.Core.Validation`) checks documents against rules written with
+  paths and filter expressions, as Schematron does for XML: `Rule(path, assertion, message)` (the assertion must hold
+  for each selected value: `.Rule("$.orders[*]", "sum(@.lines[*].price) == @.total", "...")`), `Required`, `Forbidden`
+  (`$..password`) and `Unique` (`$.orders[*].id`), with error or warning severity. `Validate` gives each violation with
+  its normalized path, message (`{path}` and `{value}` placeholders) and value; `ThrowIfInvalid` throws
+  `ToonRuleException`. `ToonPrompt.DeserializeValidated<T>(answer, rules)` checks a model's answer before it is read,
+  so the exception's message can go back to the model.
 - **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
   creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.
 - **ToonNet.Core:** `ToonSerializer.Deserialize<T>(ToonDocumentReader)` (also with a `Type`, or a `ToonTypeInfo`

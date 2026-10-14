@@ -371,3 +371,37 @@ public sealed class ToonPathException : ToonException
     /// <summary>The 0-based position of the error in the path.</summary>
     public int Position { get; }
 }
+
+/// <summary>
+///     Exception thrown when a document breaks the rules of a <see cref="Validation.ToonRuleSet"/>
+///     (<see cref="Validation.ToonRuleResult.ThrowIfInvalid"/>).
+/// </summary>
+public sealed class ToonRuleException : ToonException
+{
+    /// <summary>Initializes a new instance of the ToonRuleException class.</summary>
+    /// <param name="violations">The violations of rules of severity <see cref="Validation.ToonRuleSeverity.Error"/>.</param>
+    public ToonRuleException(IReadOnlyList<Validation.ToonRuleViolation> violations)
+        : base(Describe(violations))
+    {
+        Violations = violations;
+    }
+
+    /// <summary>The violations.</summary>
+    public IReadOnlyList<Validation.ToonRuleViolation> Violations { get; }
+
+    /// <summary>One line: the number of violations, then the first ten of them.</summary>
+    private static string Describe(IReadOnlyList<Validation.ToonRuleViolation> violations)
+    {
+        ArgumentNullException.ThrowIfNull(violations);
+        var text = new System.Text.StringBuilder();
+        text.Append("The document breaks ").Append(violations.Count).Append(violations.Count == 1 ? " rule: " : " rules: ");
+        text.AppendJoin("; ", violations.Take(10));
+
+        if (violations.Count > 10)
+        {
+            text.Append("; ...");
+        }
+
+        return text.ToString();
+    }
+}

@@ -204,4 +204,19 @@ public class ToonPromptTests
         Assert.Equal("[N]:\n  -", ToonPrompt.DescribeShape<List<Empty>>());
         Assert.Equal("Items[N]:\n  -\nNested[N]:\n  - <SelfList>", ToonPrompt.DescribeShape<Holder>());
     }
+
+    [Fact]
+    public void DeserializeValidated_ChecksTheRules()
+    {
+        var rules = new ToonNet.Core.Validation.ToonRuleSet()
+            .Rule("$.Lines[*]", "@.Quantity > 0", "Quantity must be positive")
+            .Required("$.Customer", "Customer is missing");
+
+        var good = ToonPrompt.DeserializeValidated<Order>("```toon\nCustomer: Ada\nLines[1]{Sku,Quantity}:\n  a,2\n```", rules)!;
+        Assert.Equal("Ada", good.Customer);
+
+        var ex = Assert.Throws<ToonRuleException>(() =>
+            ToonPrompt.DeserializeValidated<Order>("Lines[2]{Sku,Quantity}:\n  a,0\n  b,1", rules));
+        Assert.Equal("The document breaks 2 rules: $['Lines'][0]: Quantity must be positive; $.Customer: Customer is missing", ex.Message);
+    }
 }

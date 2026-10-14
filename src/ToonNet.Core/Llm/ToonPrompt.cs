@@ -201,6 +201,57 @@ public static class ToonPrompt
         return ToonSerializer.Deserialize(Extract(modelOutput), typeInfo, Lenient(options));
     }
 
+    /// <summary>
+    ///     Reads the TOON of a model's answer leniently (see <see cref="Deserialize{T}(string, ToonSerializerOptions)"/>),
+    ///     checks it against rules, and deserializes it when it follows them. The exception's message lists what to fix,
+    ///     ready to send back to the model.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="modelOutput">The model's answer.</param>
+    /// <param name="rules">The rules the answer must follow.</param>
+    /// <param name="options">Optional deserialization options; strict mode is turned off.</param>
+    /// <returns>The deserialized value.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="modelOutput"/> or <paramref name="rules"/> is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the answer is not TOON even in non-strict mode.</exception>
+    /// <exception cref="ToonRuleException">Thrown when the answer breaks a rule of severity error.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when the answer does not fit <typeparamref name="T"/>.</exception>
+    [RequiresUnreferencedCode(ToonSerializer.ReflectionMessage)]
+    [RequiresDynamicCode(ToonSerializer.ReflectionMessage)]
+    public static T? DeserializeValidated<T>(string modelOutput, Validation.ToonRuleSet rules, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        var lenient = Lenient(options);
+        var root = ToonDocument.Parse(Extract(modelOutput), lenient.ToonOptions).Root;
+
+        rules.Validate(root).ThrowIfInvalid();
+        return ToonSerializer.DeserializeFromValue<T>(root, lenient);
+    }
+
+    /// <summary>
+    ///     Reads the TOON of a model's answer leniently, checks it against rules, and deserializes it with the type info of
+    ///     its type, without reflection; see <see cref="DeserializeValidated{T}(string, Validation.ToonRuleSet, ToonSerializerOptions)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="modelOutput">The model's answer.</param>
+    /// <param name="rules">The rules the answer must follow.</param>
+    /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
+    /// <param name="options">Optional deserialization options; strict mode is turned off.</param>
+    /// <returns>The deserialized value.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the answer is not TOON even in non-strict mode.</exception>
+    /// <exception cref="ToonRuleException">Thrown when the answer breaks a rule of severity error.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when the answer does not fit <typeparamref name="T"/>.</exception>
+    public static T? DeserializeValidated<T>(string modelOutput, Validation.ToonRuleSet rules, ToonTypeInfo<T> typeInfo,
+                                             ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        var lenient = Lenient(options);
+        var root = ToonDocument.Parse(Extract(modelOutput), lenient.ToonOptions).Root;
+
+        rules.Validate(root).ThrowIfInvalid();
+        return ToonSerializer.DeserializeFromValue(root, typeInfo, lenient);
+    }
+
     private static ToonSerializerOptions Lenient(ToonSerializerOptions? options)
     {
         options ??= ToonSerializerOptions.Default;

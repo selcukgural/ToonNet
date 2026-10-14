@@ -116,6 +116,17 @@ if (!promptText.Contains("# 1 more item") || answer is not { Products.Count: 1, 
     return 1;
 }
 
+// Rules and registered functions
+var rules = new ToonNet.Core.Validation.ToonRuleSet(new ToonPathOptions { Functions = new ToonPathFunctions().AddPredicate("is_sku", v => v is ToonString) })
+    .Rule("$.Products[*]", "@.Price > 0 && is_sku(@.Sku) && starts_with(@.Sku, 'A')", "bad product")
+    .Unique("$.Products[*].Sku", "repeated sku");
+
+if (rules.Validate(expected).Violations is not [{ Path: "$['Products'][1]" }])
+{
+    Console.WriteLine("FAILED: rules");
+    return 1;
+}
+
 // Paths, values and type infos on a parsed tree
 var tree = ToonDocument.Parse(expected).Root;
 var cheap = tree.Select("$.Products[?@.Price < 10 && match(@.Sku, 'A.')].Sku");
