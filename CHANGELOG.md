@@ -94,6 +94,20 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   following the serializer's names and forms); `Extract` takes the ```` ```toon ```` block out of an answer, and
   `Parse`/`Deserialize` read it in non-strict mode, so a miscounted length or a repeated key does not fail the answer.
 
+- **ToonNet.Core:** `[ToonInclude]` lets reading set a property through its non-public setter (reflection and generated
+  code); `ToonSerializerOptions.SerializeRuntimeTypes` writes objects as their runtime type (the behavior before 4.0),
+  also bound from configuration (`ToonNet:ToonSerializerOptions:SerializeRuntimeTypes`).
+- **ToonNet.Core:** `ToonObjectWriter.GetPropertyType` gives the declared type of a generated writer's property (for
+  code from the 4.0 generator).
+- **ToonNet.Extensions.Yaml:** `ToonYamlConverter.MaxAliasExpansionChars`, the characters YAML aliases may copy.
+
+### Changed
+- **All packages:** Packages are published with NuGet Trusted Publishing (a short-lived key per run instead of a stored
+  API key) and with a signed build provenance attestation per package (`gh attestation verify <package> --repo
+  selcukgural/ToonNet`). Builds on CI are deterministic, with repository-relative source paths in the embedded PDBs.
+- **ToonNet.SourceGenerators:** Generated files are named with a hash of the type's full name
+  (`App.User.1a2b3c4d.g.cs`).
+
 ### Security
 - **ToonNet.AspNetCore.Mvc:** The output formatter wrote the charset of the request's `Accept` header into the
   response's `Content-Type` as it was sent; it now writes the name of a supported encoding (UTF-8 or UTF-16), or no
@@ -190,6 +204,16 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   `Deserialize` method also reports `TOON009` and leaves that method out.
 - **ToonNet.AspNetCore:** A configured delimiter that is not a known name or one of the three characters (`pipes`, `;`)
   was cut to its first character; it fails at startup with the key and value in the message.
+
+### Documentation
+- New pages: [Security](https://selcukgural.github.io/ToonNet/docs/advanced/security) (safe defaults, limits, the
+  settings that loosen them), [Migrating to 4.0](https://selcukgural.github.io/ToonNet/docs/getting-started/migration-4)
+  and [ToonNet vs Toon.Format](https://selcukgural.github.io/ToonNet/docs/comparison) (output, measurements, how
+  ToonNet is built); querying, rules and validation, language models and editing pages for the 3.4 features.
+- The README is a short set of tested, real-world examples (serializing, prompts and answers, ASP.NET Core, JSON
+  conversion, queries, rules, configuration); the details are on the site.
+- Every page reflects the 4.0 defaults; samples that loosen limits say so. `SECURITY.md` describes how to report a
+  vulnerability privately.
 
 ## [3.3.0] - 2026-10-14
 
