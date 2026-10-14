@@ -26,6 +26,8 @@ internal sealed record TypeModel(
     bool HasTypeConverter,
     bool RegisterWithSerializer,
     TypeInfoProperty TypeInfoProperty,
+    bool EmitSerializeMethod,
+    bool EmitDeserializeMethod,
     int? FixedNamingPolicy,
     EquatableArray<PropertyModel> Properties,
     ConstructorModel? Constructor,

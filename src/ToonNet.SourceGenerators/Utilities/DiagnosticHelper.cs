@@ -64,6 +64,14 @@ internal static class DiagnosticHelper
                                                                           Category, DiagnosticSeverity.Error, true);
 
     /// <summary>
+    /// Warning: a member of the type is named like a generated static method (<c>Serialize</c>, <c>Deserialize</c>),
+    /// so that method is not generated.
+    /// </summary>
+    public static readonly DiagnosticDescriptor GeneratedMethodNameTaken = new("TOON009", "Generated method name taken",
+                                                                               "'{0}' has a member named '{1}', so the generated static {1} method is left out; use ToonSerializer with {0}.ToonTypeInfo instead",
+                                                                               Category, DiagnosticSeverity.Warning, true);
+
+    /// <summary>
     /// Looks up a descriptor by id (used when replaying diagnostics stored in the generator model).
     /// </summary>
     public static DiagnosticDescriptor Get(string id) => id switch
@@ -74,6 +82,7 @@ internal static class DiagnosticHelper
         "TOON006" => ReflectionFallback,
         "TOON007" => ReflectionFallbackNotAllowed,
         "TOON008" => InvalidPropertyName,
+        "TOON009" => GeneratedMethodNameTaken,
         _         => GenerationError
     };
 }

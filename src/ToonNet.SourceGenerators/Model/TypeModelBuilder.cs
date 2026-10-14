@@ -131,6 +131,8 @@ internal static class TypeModelBuilder
             HasTypeConverter: hasTypeConverter,
             RegisterWithSerializer: !hasTypeConverter && CanRegister(type, compilation),
             TypeInfoProperty: !hasTypeConverter && CanRegister(type, compilation) ? GetTypeInfoProperty(type, compilation) : TypeInfoProperty.None,
+            EmitSerializeMethod: !MethodNameTaken(type, "Serialize", diagnostics, location),
+            EmitDeserializeMethod: !MethodNameTaken(type, "Deserialize", diagnostics, location),
             FixedNamingPolicy: namingPolicy,
             Properties: new EquatableArray<PropertyModel>(propertyModels),
             Constructor: type.IsAbstract ? null : constructorModel,
@@ -140,7 +142,8 @@ internal static class TypeModelBuilder
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
     {
         return new TypeModel(false, null, default, Declaration(type), type.ToDisplayString(TypeNameFormat), type.ToDisplayString(TypeOfFormat),
-                             HintName(type), type.IsValueType, true, true, true, false, false, false, false, TypeInfoProperty.None, null, default, null,
+                             HintName(type), type.IsValueType, true, true, true, false, false, false, false, TypeInfoProperty.None, false, false, null,
+                             default, null,
                              new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()));
     }
 
@@ -204,6 +207,21 @@ internal static class TypeModelBuilder
         }
 
         return TypeInfoProperty.Emit;
+    }
+
+    /// <summary>
+    /// Whether a member that is not a method (a property, field, event or nested type) takes the name of a generated
+    /// static method, which would not compile; reports TOON009 then.
+    /// </summary>
+    private static bool MethodNameTaken(INamedTypeSymbol type, string name, List<DiagnosticInfo> diagnostics, Location? location)
+    {
+        if (type.GetMembers(name).All(member => member is IMethodSymbol) && type.GetTypeMembers(name).IsEmpty)
+        {
+            return false;
+        }
+
+        diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.GeneratedMethodNameTaken, location, type.Name, name));
+        return true;
     }
 
     private static bool IsGeneric(INamedTypeSymbol type)

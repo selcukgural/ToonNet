@@ -169,7 +169,8 @@ internal sealed class SourceEmitter
 
     #region Serialize
 
-    private void EmitSerialize()
+    /// <summary>The public static <c>Serialize</c> method, which returns a document.</summary>
+    private void EmitSerializeMethod()
     {
         var code = _code;
         var model = _model;
@@ -195,6 +196,17 @@ internal sealed class SourceEmitter
         code.AppendLine($"return new {Models}ToonDocument(__ToonSerializeValue(value, options, 0));");
         code.EndBlock();
         code.AppendLine();
+    }
+
+    private void EmitSerialize()
+    {
+        var code = _code;
+        var model = _model;
+
+        if (model.EmitSerializeMethod)
+        {
+            EmitSerializeMethod();
+        }
 
         code.AppendLine("/// <summary>Used by generated code; call <c>Serialize</c> instead.</summary>");
         code.AppendLine(HiddenAttribute);
@@ -234,7 +246,7 @@ internal sealed class SourceEmitter
             code.AppendLine();
             code.AppendLine($"// {property.Name}");
             code.BeginBlock(property.IsReadOnly ? "if (options.IncludeReadOnlyProperties)" : "");
-            code.AppendLine($"var {local} = value.{property.Name};");
+            code.AppendLine($"var {local} = value.{Identifier(property)};");
 
             if (property.ConverterTypeName != null)
             {
@@ -360,7 +372,7 @@ internal sealed class SourceEmitter
             code.AppendLine();
             code.AppendLine($"// {property.Name}");
             code.BeginBlock(property.IsReadOnly ? "if (options.IncludeReadOnlyProperties)" : "");
-            code.AppendLine($"var __v{i} = value.{property.Name};");
+            code.AppendLine($"var __v{i} = value.{Identifier(property)};");
             EmitWriteField(property, $"__v{i}");
             code.EndBlock();
         }
@@ -582,7 +594,7 @@ internal sealed class SourceEmitter
         {
             var property = model.Properties[i];
             var plan = property.Plan;
-            var access = $"value.{property.Name}";
+            var access = $"value.{Identifier(property)}";
 
             code.AppendLine();
             code.AppendLine($"// {property.Name}");
@@ -656,12 +668,12 @@ internal sealed class SourceEmitter
             {
                 if (plan.CanBeNull)
                 {
-                    code.AppendLine($"var __v{i} = value.{property.Name};");
+                    code.AppendLine($"var __v{i} = value.{Identifier(property)};");
                     code.AppendLine($"if (__v{i} is null) writer.WriteNull(); else {WritePrimitiveStatement(plan, NonNull(plan, $"__v{i}"))}");
                 }
                 else
                 {
-                    code.AppendLine(WritePrimitiveStatement(plan, $"value.{property.Name}"));
+                    code.AppendLine(WritePrimitiveStatement(plan, $"value.{Identifier(property)}"));
                 }
             }
             else
@@ -728,7 +740,7 @@ internal sealed class SourceEmitter
         foreach (var property in model.Properties)
         {
             var plan = property.Plan;
-            var access = $"value.{property.Name}";
+            var access = $"value.{Identifier(property)}";
 
             code.BeginBlock(property.IsReadOnly ? "if (options.IncludeReadOnlyProperties)" : "");
 
@@ -807,7 +819,7 @@ internal sealed class SourceEmitter
 
         for (var i = 0; i < properties.Length; i++)
         {
-            code.AppendLine($"{i} => value.{properties[i].Name},");
+            code.AppendLine($"{i} => value.{Identifier(properties[i])},");
         }
 
         code.AppendLine("_ => throw new global::System.ArgumentOutOfRangeException(nameof(index))");
@@ -834,12 +846,12 @@ internal sealed class SourceEmitter
 
             if (plan.CanBeNull)
             {
-                code.AppendLine($"var __v{i} = value.{property.Name};");
+                code.AppendLine($"var __v{i} = value.{Identifier(property)};");
                 code.AppendLine($"if (__v{i} is null) writer.WriteNull(); else {WritePrimitiveStatement(plan, NonNull(plan, $"__v{i}"))}");
             }
             else
             {
-                code.AppendLine(WritePrimitiveStatement(plan, $"value.{property.Name}"));
+                code.AppendLine(WritePrimitiveStatement(plan, $"value.{Identifier(property)}"));
             }
 
             code.AppendLine("return;");
@@ -1239,7 +1251,8 @@ internal sealed class SourceEmitter
 
     #region Deserialize
 
-    private void EmitDeserialize(ConstructorModel constructor)
+    /// <summary>The public static <c>Deserialize</c> method, which reads a document.</summary>
+    private void EmitDeserializeMethod()
     {
         var code = _code;
         var model = _model;
@@ -1265,6 +1278,17 @@ internal sealed class SourceEmitter
         code.AppendLine("return __ToonDeserializeValue(doc.Root, options, 0);");
         code.EndBlock();
         code.AppendLine();
+    }
+
+    private void EmitDeserialize(ConstructorModel constructor)
+    {
+        var code = _code;
+        var model = _model;
+
+        if (model.EmitDeserializeMethod)
+        {
+            EmitDeserializeMethod();
+        }
 
         code.AppendLine("/// <summary>Used by generated code; call <c>Deserialize</c> instead.</summary>");
         code.AppendLine(HiddenAttribute);
@@ -1344,7 +1368,7 @@ internal sealed class SourceEmitter
 
         var initializers = model.Properties.Select((p, i) => (Property: p, Index: i))
                                 .Where(p => p.Property.Write == WriteKind.Initializer)
-                                .Select(p => $"{p.Property.Name} = __h{p.Index} ? __p{p.Index} : default!")
+                                .Select(p => $"{Identifier(p.Property)} = __h{p.Index} ? __p{p.Index} : default!")
                                 .ToList();
 
         var creation = $"new {model.FullyQualifiedName}({string.Join(", ", arguments)})";
@@ -1375,7 +1399,7 @@ internal sealed class SourceEmitter
             switch (property.Write)
             {
                 case WriteKind.Assign:
-                    code.AppendLine($"if (__h{i}) __result.{property.Name} = __p{i};");
+                    code.AppendLine($"if (__h{i}) __result.{Identifier(property)} = __p{i};");
                     break;
                 case WriteKind.Accessor:
                     var reference = property.SetterOwnerIsValueType ? "ref " : "";
@@ -1707,6 +1731,10 @@ internal sealed class SourceEmitter
                              ? "public override global::System.Type[] InlineTypes { get; } = global::System.Array.Empty<global::System.Type>();"
                              : $"public override global::System.Type[] InlineTypes {{ get; }} = new global::System.Type[] {{ {string.Join(", ", types.Select(t => $"typeof({t})"))} }};");
     }
+
+    /// <summary>The property name as an identifier: a keyword escaped with <c>@</c> (<c>value.@class</c>).</summary>
+    private static string Identifier(PropertyModel property) =>
+        SyntaxFacts.IsReservedKeyword(SyntaxFacts.GetKeywordKind(property.Name)) ? "@" + property.Name : property.Name;
 
     private static string ConverterField(PropertyModel property) => $"__ToonConverter_{property.Name}";
 

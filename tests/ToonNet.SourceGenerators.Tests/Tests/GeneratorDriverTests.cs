@@ -40,6 +40,48 @@ public class GeneratorDriverTests
     private static List<Diagnostic> LastCompilationWarnings = [];
 
     [Fact]
+    public void KeywordPropertyNames_Compile()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Keywords
+            {
+                public int @class { get; set; }
+                public string? @event { get; set; }
+                public System.Collections.Generic.List<int> @int { get; set; } = new();
+            }
+            [ToonSerializable] public partial record Positional(int @class, string @namespace);
+            """);
+
+        Assert.Empty(errors);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void MembersNamedLikeGeneratedMethods_LeaveThemOut_WithToon009()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Settings
+            {
+                public bool Serialize { get; set; }
+                public string Deserialize = "";
+                public int Value { get; set; }
+            }
+            public static class Use
+            {
+                public static object Info => Settings.ToonTypeInfo;
+            }
+            """);
+
+        Assert.Empty(errors);
+        Assert.Equal(2, diagnostics.Count(d => d.Id == "TOON009"));
+        Assert.DoesNotContain("static global::ToonNet.Core.Models.ToonDocument Serialize(", LastGeneratedSources.Single());
+    }
+
+    [Fact]
     public void ToonTypeInfoProperty_IsGenerated_UnlessAMemberTakesTheName()
     {
         var (_, errors, _) = Run("""
