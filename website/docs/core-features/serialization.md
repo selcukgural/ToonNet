@@ -355,13 +355,12 @@ string toon = ToonSerializer.Serialize(company);
 Name: TechCorp
 Departments[1]:
   - Name: Engineering
-    Employees[1]:
-      - Name: Alice
-        Position: Senior Engineer
-        Skills:
-          "C#": 9
-          Python: 7
+    Employees[1]{Name,Position,Skills{"C#",Python}}:
+      Alice,Senior Engineer,9,7
 ```
+
+The employees have the same shape, so they are written as a table; the `Skills` dictionary becomes a nested field group
+(`Skills{"C#",Python}`) whose values fill the last two cells of each row.
 
 ## Async Serialization
 
@@ -644,7 +643,8 @@ await ToonSerializer.SerializeToStreamAsync(largeObject, fileStream);
 await ToonSerializer.SerializeStreamAsync(GetItemsAsync(), "items.toon");
 ```
 
-`SerializeToStreamAsync` still builds the whole TOON string in memory before writing it.
+`SerializeToStreamAsync` still holds the whole TOON text in memory before writing it (in pooled buffers, not a
+string, encoded to UTF-8 in chunks).
 
 ## Thread-Safety
 

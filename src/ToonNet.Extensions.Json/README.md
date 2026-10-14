@@ -108,6 +108,7 @@ string toon = ToonConvert.FromJson(jsonString, options);  // ToonOptions
 // TOON string → JSON string
 string json = ToonConvert.ToJson(toonString);
 string json = ToonConvert.ToJson(toonString, writerOptions);  // JsonWriterOptions
+string json = ToonConvert.ToJson(toonString, writerOptions, toonOptions);  // ToonOptions for parsing the TOON input
 ```
 
 ### Document Conversion (Low-level)
@@ -247,8 +248,9 @@ var roundtrip = JsonSerializer.Deserialize<object>(roundtripJson);
 JSON numbers are converted with the TOON number rules: the exact value is kept when it fits in a `decimal`
 (so `12345678901234567890` and `1299.99` round-trip unchanged), smaller or larger magnitudes use the nearest
 `double`, and a number that is not finite as a `double` (e.g. `1e400`) is kept as a string. As TOON spec §2
-requires, numbers are written in canonical form, so `35.00` becomes `35` and `1.0` becomes `1` (same value). `ToonJsonConverter.FromJson(string)` uses
-`JsonDocument.Parse` with its default maximum depth of 64.
+requires, numbers are written in canonical form, so `35.00` becomes `35` and `1.0` becomes `1` (same value). `ToonJsonConverter.FromJson(string)` limits
+the nesting to the `MaxDepth` of the `ToonOptions` (default 100, the root at depth 0) and accepts comments and trailing
+commas, as in `appsettings.json` files.
 
 See [Roundtrip Guarantees](https://github.com/selcukgural/ToonNet/blob/master/docs/API-GUIDE.md#understanding-roundtrip-behavior) for details.
 

@@ -30,6 +30,9 @@ that TOON spec §3 requires implementations to document.
 | lists of uniform objects | array, tabular form | Nested objects of the same shape become nested field groups: `orders[2]{id,customer{name,country}}:` (spec §9.3) |
 | other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the runtime type is used |
 | `ToonValue` | as is | Useful for dynamic content |
+| `ToonDocument`, `JsonElement`, `JsonDocument`, `JsonNode` | the value they hold | A `ToonDocument` is written as its root and JSON values as the TOON value of their JSON (numbers in canonical form); reading creates them from the TOON value |
+| `Tuple<T1, …>` | object | `Item1`, `Item2`, … (properties) |
+| `ValueTuple` (`(int, string)`) | object without properties | Its elements are fields, which are not written or read, so it is written as an empty object, as System.Text.Json writes `{}`; use a record or class instead |
 
 Reading into `object` produces `Dictionary<string, object?>`, `List<object?>`, `string`, `bool`, `long` (integers),
 `decimal` (other exact numbers) or `double`.
@@ -250,7 +253,7 @@ obj.Properties.Clear();
 int count = obj.Properties.Count;
 ```
 
-Assigning `null` through the indexer is ignored; assign `ToonNull.Instance` to store a TOON `null`.
+Assigning `null` through the indexer stores `ToonNull.Instance` (a TOON `null`); use `Properties.Remove` to remove a key.
 
 ## ToonArray
 

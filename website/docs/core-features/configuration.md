@@ -34,6 +34,7 @@ var options = new ToonSerializerOptions
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Transform property names |
+| `PropertyNameCaseInsensitive` | `bool` | `false` | Match keys to property names ignoring case when reading |
 | `IgnoreNullValues` | `bool` | `false` | Skip null properties during serialization |
 | `IncludeReadOnlyProperties` | `bool` | `true` | Serialize get-only properties |
 | `MaxDepth` | `int` | `100` | Maximum object nesting while serializing/deserializing (1–200, or up to 1000 with `AllowExtendedLimits`) |
@@ -135,8 +136,8 @@ last_name: Smith
 age: 30
 ```
 
-`SnakeCase` inserts `_` before every upper-case letter, so acronyms are split letter by letter (`HTTPCode` becomes
-`h_t_t_p_code`); use `[ToonProperty("http_code")]` for such names.
+`SnakeCase` keeps runs of upper-case letters together: `HTTPCode` becomes `http_code`, `UserID` becomes `user_id` and
+`MyURLValue` becomes `my_url_value`. Use `[ToonProperty]` for any other spelling.
 
 #### LowerCase
 
@@ -225,8 +226,8 @@ Bio: Engineer
 
 ## Property Name Matching
 
-Deserialization matches keys to property names **case-sensitively**, after applying the naming policy (or the
-`[ToonProperty]` name). There is no case-insensitive option.
+By default, deserialization matches keys to property names **case-sensitively**, after applying the naming policy (or
+the `[ToonProperty]` name).
 
 ```csharp
 string toonInput = """
@@ -239,6 +240,11 @@ Person person = ToonSerializer.Deserialize<Person>(toonInput);
 ```
 
 Keys without a matching property are ignored.
+
+Set `PropertyNameCaseInsensitive = true` to match keys ignoring case (`age` then fills `Age`). An exact match is
+preferred, properties whose names differ only in case still need an exact match, and the last matching key wins.
+Types are then read with reflection; the `ToonTypeInfo` overloads do not support the option. See
+[Deserialization](deserialization#key-matching-is-case-sensitive-by-default).
 
 ## IncludeReadOnlyProperties
 

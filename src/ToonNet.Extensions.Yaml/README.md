@@ -106,6 +106,7 @@ string toon = ToonYamlConvert.FromYaml(yamlString, options);  // ToonOptions
 
 // TOON string → YAML string
 string yaml = ToonYamlConvert.ToYaml(toonString);
+string yaml = ToonYamlConvert.ToYaml(toonString, options);  // ToonOptions for parsing the TOON input
 ```
 
 ### Document Conversion (Low-level)
@@ -414,7 +415,7 @@ dotnet test --filter "FullyQualifiedName~ToonYamlConverter"
 
 - .NET 8.0 or later
 - ToonNet.Core
-- YamlDotNet 16.2.0+ (installed automatically)
+- YamlDotNet 18.1.0+ (installed automatically)
 
 ---
 

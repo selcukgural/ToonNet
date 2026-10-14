@@ -142,7 +142,7 @@ foreach (var service in services.Properties)
 | Method | Description |
 |--------|-------------|
 | `ToonYamlConvert.FromYaml(string, ToonOptions?)` | YAML string → TOON string |
-| `ToonYamlConvert.ToYaml(string)` | TOON string → YAML string |
+| `ToonYamlConvert.ToYaml(string, ToonOptions?)` | TOON string → YAML string |
 | `ToonYamlConverter.FromYaml(string)` | YAML string → ToonDocument |
 | `ToonYamlConverter.FromYaml(string, ToonOptions?)` | Same, with a custom `MaxDepth` |
 | `ToonYamlConverter.ToYaml(ToonDocument)` | ToonDocument → YAML string |

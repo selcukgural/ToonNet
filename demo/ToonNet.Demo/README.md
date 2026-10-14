@@ -331,7 +331,7 @@ var diagnoses = patient.Diagnoses
 | Sample | TOON Size | JSON Size | Models | Properties |
 |--------|-----------|-----------|--------|------------|
 | **E-Commerce** | 2.6 KB | 3.6 KB | 10 | 70+ |
-| **Healthcare** | 4.5 KB | 6.2 KB | 12 | 80+ |
+| **Healthcare** | 3.7 KB | 6.2 KB | 12 | 80+ |
 
 Sizes are of the indented files in `Samples/` (the JSON uses camelCase keys, the TOON files PascalCase). The demo does
 not count tokens; token savings depend on the tokenizer and on the shape of the data.

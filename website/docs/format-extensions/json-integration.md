@@ -183,7 +183,7 @@ Console.WriteLine(prettyJson);
 | `ToonConvert.SerializeToJson<T>(T, JsonSerializerOptions?)` | .NET object → JSON (System.Text.Json) |
 | `ToonConvert.ParseJson<T>(string, ToonSerializerOptions?)` | JSON → TOON → .NET object |
 | `ToonConvert.FromJson(string, ToonOptions?)` | JSON string → TOON string |
-| `ToonConvert.ToJson(string, JsonWriterOptions?)` | TOON string → JSON string |
+| `ToonConvert.ToJson(string, JsonWriterOptions?, ToonOptions?)` | TOON string → JSON string |
 | `ToonJsonConverter.FromJson(string)` | JSON string → ToonDocument |
 | `ToonJsonConverter.FromJson(JsonElement)` | JsonElement → ToonDocument |
 | `ToonJsonConverter.ToJson(ToonDocument, JsonWriterOptions?)` | ToonDocument → JSON string |

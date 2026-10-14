@@ -283,7 +283,34 @@ await ToonSerializer.SerializeStreamAsync(
     },
     cancellationToken: cts.Token
 );
+
+// Read it back in the same mode: the default (blank-line) reader does not recognize "---"
+// and fails with a ToonParseException ("Missing colon after key")
+await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>(
+    "export.toon",
+    options: null,
+    ToonMultiDocumentReadOptions.ExplicitSeparator))
+{
+    Process(item);
+}
 ```
+
+### One Large Root Array
+
+A single document that is one large root array (`[200000]{id,name}:` followed by rows, as
+`ToonSerializer.Serialize(list)` writes it) can be read item by item, a batch of about 32 KB at a time:
+
+```csharp
+await using var stream = File.OpenRead("users.toon");
+
+await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(stream))
+{
+    ProcessUser(user);
+}
+```
+
+The root must be an array: an array under a key (`users[200000]{id,name}:`) is an object and throws a
+`ToonSerializationException`. Errors and line numbers are those of reading the whole document.
 
 ### Use Cases
 
@@ -322,6 +349,19 @@ ValueTask SerializeStreamAsync<T>(
 // Incremental deserialization
 IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
     string filePath,
+    ToonSerializerOptions? options = null,
+    CancellationToken cancellationToken = default);
+
+// Same, with the separator mode the file was written with (also for a StreamReader)
+IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+    string filePath,
+    ToonSerializerOptions? options,
+    ToonMultiDocumentReadOptions multiDocumentOptions,
+    CancellationToken cancellationToken = default);
+
+// The items of one root array (also with a ToonTypeInfo<T> for trimming and NativeAOT)
+IAsyncEnumerable<T?> DeserializeAsyncEnumerable<T>(
+    Stream utf8Stream,
     ToonSerializerOptions? options = null,
     CancellationToken cancellationToken = default);
 ```

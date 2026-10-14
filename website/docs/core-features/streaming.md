@@ -55,7 +55,7 @@ When the document is one large root array (an export of rows, a log written as a
 with `DeserializeAsyncEnumerable`, without holding the document in memory:
 
 ```csharp
-await using var stream = File.OpenRead("users.toon");   // users[200000]{id,name,...}: or [200000]{...}: rows
+await using var stream = File.OpenRead("users.toon");   // [200000]{id,name,...}: followed by the rows
 
 await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(stream))
 {
@@ -64,6 +64,8 @@ await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(strea
 ```
 
 - The root must be an array: a tabular array (`[N]{fields}:`), an expanded list (`[N]:` with `- ` items) or an inline
+  array. An array under a key (`users[N]{fields}:`) is an object with one property, not a root array, and throws a
+  `ToonSerializationException` ("Expected an array but got Object"); `ToonSerializer.Serialize(list)` writes a root
   array. Rows and list items are read in batches of about 32 KB of text, so memory stays flat however long the array
   is; on 200,000 rows it is also a little faster than reading the whole document, which keeps the decoded text and the
   list (47 MB here) in memory.

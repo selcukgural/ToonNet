@@ -101,12 +101,15 @@ await ToonSerializer.SerializeToStreamAsync(data, stream);
 ### 4. Use the Source Generator for Hot Paths
 
 `[ToonSerializable]` with [`ToonNet.SourceGenerators`](source-generators) converts supported property types
-without the reflection-based metadata path (other types, and options with converters, fall back to
-`ToonSerializer`). The generated code produces the same TOON as `ToonSerializer`.
+without the reflection-based metadata path (other types, and types that a converter in the options applies to, use
+the reflection-based path). The generated code produces the same TOON as `ToonSerializer`.
 
 `ToonSerializer` writes objects straight to text and reads them straight from it either way; with generated code the
 property access, key encoding and matching, and primitive conversions are compiled in, which makes it faster than
-the reflection-based path (about 10-30% for lists of 10,000 objects in the repository's benchmarks).
+the reflection-based path. In the repository's benchmarks on lists of 10,000 objects
+([RESULTS.md](https://github.com/selcukgural/ToonNet/blob/master/benchmark/ToonNet.Comparison/RESULTS.md)),
+serializing with generated code takes 8–41% less time and deserializing up to 12% less (about the same for flat
+records).
 
 ## Performance Comparison
 

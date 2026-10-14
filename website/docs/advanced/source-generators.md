@@ -187,6 +187,8 @@ public partial class User
 | `TOON005` | Warning | The type has no public constructor; only `Serialize` is generated |
 | `TOON006` | Warning | A property or constructor parameter is converted with reflection; the message says why |
 | `TOON007` | Error | Same as `TOON006`, on a type with `AllowReflectionFallback = false` |
+| `TOON008` | Error | A `[ToonProperty]` name contains an unpaired surrogate, which TOON cannot represent |
+| `TOON009` | Warning | A member of the type is named `Serialize` or `Deserialize`, so that generated static method is left out; use `ToonSerializer` with `ToonTypeInfo` instead |
 
 ## Viewing generated code
 

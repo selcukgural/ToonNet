@@ -281,7 +281,9 @@ Event evt = ToonSerializer.Deserialize<Event>(toonInput);
 ```
 
 Dates are parsed with the invariant culture, and `DateTimeKind` is preserved: a `Z` suffix gives `Utc`, no suffix
-gives `Unspecified`. `ToonSerializer` writes dates in the round-trip `O` format.
+gives `Unspecified`, and an offset gives `Local` (converted to the local time zone; use `DateTimeOffset` to keep the
+offset). `ToonSerializer` writes dates in the round-trip `O` form without trailing zeros in the fraction
+(`2026-06-15T09:00:00`, `2026-06-15T09:00:00Z`, `2026-01-24T17:00:00+00:00`), quoted because they contain `:`.
 
 ## Deserialization Options
 
@@ -297,11 +299,25 @@ var options = new ToonSerializerOptions
 Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
 ```
 
-### Key Matching Is Case-Sensitive
+### Key Matching Is Case-Sensitive by Default
 
-Keys must match the property name exactly after the naming policy (or the `[ToonProperty]` name) is applied. There is
-no case-insensitive option: with the default policy, `name: Alice` does not set `Name`, and the property keeps its
-default value.
+Keys must match the property name exactly after the naming policy (or the `[ToonProperty]` name) is applied: with the
+default options, `name: Alice` does not set `Name`, and the property keeps its default value.
+
+Documents from other producers and LLMs often differ in case. Set `PropertyNameCaseInsensitive` to match keys to
+property and constructor parameter names ignoring case:
+
+```csharp
+var options = new ToonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+Person person = ToonSerializer.Deserialize<Person>("name: Alice\nAGE: 30", options);
+// person.Name = "Alice", person.Age = 30
+```
+
+A key that matches exactly is preferred; properties whose names differ only in case (`Id` and `ID`) still need an
+exact match, and when several keys fill the same property the last one wins. With this option types are read with
+reflection rather than generated code, and the overloads that take a `ToonTypeInfo` throw `NotSupportedException`.
+Writing is not affected.
 
 ### Property Naming Policy
 
@@ -573,8 +589,9 @@ catch (ToonSerializationException ex)
 }
 ```
 
-Both derive from `ToonException`. Exceeding `ToonSerializerOptions.MaxDepth` while converting also throws
-`ToonParseException` (with line and column 0).
+Both derive from `ToonException`. Text nested deeper than `ToonOptions.MaxDepth` is a `ToonParseException` (with the
+line and column); exceeding `ToonSerializerOptions.MaxDepth` while converting is a `ToonSerializationException` (with the
+path).
 
 ## Common Issues
 
@@ -587,7 +604,7 @@ Both derive from `ToonException`. Exceeding `ToonSerializerOptions.MaxDepth` whi
 ```csharp
 // Wrong: trying to deserialize string to int
 string toonInput = "Age: NotANumber";
-// Throws ToonSerializationException: 'NotANumber' is not a number (Path: $.Age)
+// Throws ToonSerializationException: "The string is not a number" (Path: $.Age, Target Type: Int32)
 
 // Correct:
 string toonInput = "Age: 30";
