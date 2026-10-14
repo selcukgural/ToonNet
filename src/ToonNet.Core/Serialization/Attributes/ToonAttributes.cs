@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ToonNet.Core.Serialization.Attributes;
 
 /// <summary>
@@ -79,11 +81,13 @@ public sealed class ToonPropertyOrderAttribute(int order) : Attribute
 /// enabling custom serialization and deserialization logic.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Class | AttributeTargets.Struct)]
-public sealed class ToonConverterAttribute(Type converterType) : Attribute
+public sealed class ToonConverterAttribute([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type converterType)
+    : Attribute
 {
     /// <summary>
     /// Gets the type of the custom converter specified for the property or type.
     /// </summary>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public Type ConverterType { get; } = converterType ?? throw new ArgumentNullException(nameof(converterType));
 }
 

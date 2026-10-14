@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -25,6 +26,8 @@ public sealed class ToonInputFormatter : TextInputFormatter
     ///     up to <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> bytes.
     /// </summary>
     /// <param name="options">Options for deserialization.</param>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonInputFormatter(ToonSerializerOptions options) : this(options, ToonFormatterDefaults.MaxRequestBodySize) { }
 
     /// <summary>
@@ -36,6 +39,8 @@ public sealed class ToonInputFormatter : TextInputFormatter
     ///     limits an action with <c>[RequestSizeLimit]</c> or <c>[DisableRequestSizeLimit]</c>.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxRequestBodySize"/> is not positive.</exception>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonInputFormatter(ToonSerializerOptions options, long maxRequestBodySize)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -63,6 +68,8 @@ public sealed class ToonInputFormatter : TextInputFormatter
     /// <exception cref="BadHttpRequestException">
     /// Thrown with status code 413 when the request body exceeds the configured size limit.
     /// </exception>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = AotMessages.AnnotatedConstructor)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = AotMessages.AnnotatedConstructor)]
     public override async Task<InputFormatterResult> ReadRequestBodyAsync(InputFormatterContext context, Encoding encoding)
     {
         ArgumentNullException.ThrowIfNull(context);

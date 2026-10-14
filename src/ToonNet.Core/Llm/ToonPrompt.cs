@@ -243,6 +243,7 @@ public static class ToonPrompt
     /// <exception cref="ToonParseException">Thrown when the answer is not TOON even in non-strict mode.</exception>
     /// <exception cref="ToonRuleException">Thrown when the answer breaks a rule of severity error.</exception>
     /// <exception cref="ToonSerializationException">Thrown when the answer does not fit <typeparamref name="T"/>.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when a rule's path goes beyond the steps or the time its options allow.</exception>
     [RequiresUnreferencedCode(ToonSerializer.ReflectionMessage)]
     [RequiresDynamicCode(ToonSerializer.ReflectionMessage)]
     public static T? DeserializeValidated<T>(string modelOutput, Validation.ToonRuleSet rules, ToonSerializerOptions? options = null)
@@ -269,6 +270,7 @@ public static class ToonPrompt
     /// <exception cref="ToonParseException">Thrown when the answer is not TOON even in non-strict mode.</exception>
     /// <exception cref="ToonRuleException">Thrown when the answer breaks a rule of severity error.</exception>
     /// <exception cref="ToonSerializationException">Thrown when the answer does not fit <typeparamref name="T"/>.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when a rule's path goes beyond the steps or the time its options allow.</exception>
     public static T? DeserializeValidated<T>(string modelOutput, Validation.ToonRuleSet rules, ToonTypeInfo<T> typeInfo,
                                              ToonSerializerOptions? options = null)
     {

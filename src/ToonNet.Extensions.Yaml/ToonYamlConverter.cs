@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using ToonNet.Core;
 using ToonNet.Core.Models;
@@ -48,11 +49,19 @@ public static partial class ToonYamlConverter
     ///     YAML reader would otherwise resolve to another type ("42", "true", "null", "0x1F", ""), including the YAML 1.1
     ///     booleans (yes/no/on/off), so YAML 1.1 readers read them as strings too.
     /// </summary>
-    private static readonly ISerializer Serializer = new SerializerBuilder().WithIndentedSequences()
-                                                                            .WithMaximumRecursion(MaxWriteDepth + 2) // levels 0 to MaxWriteDepth, and the scalars
-                                                                            .WithQuotingNecessaryStrings()
-                                                                            .WithEventEmitter(next => new QuoteRetypedStringsEmitter(next))
-                                                                            .Build();
+    private static ISerializer? _serializer;
+
+    /// <summary>The serializer, built when first needed (YamlDotNet's builder uses reflection; see <see cref="ToYaml(ToonValue)"/>).</summary>
+    [RequiresDynamicCode(YamlWriteMessage)]
+    private static ISerializer Serializer() =>
+        _serializer ??= new SerializerBuilder().WithIndentedSequences()
+                                               .WithMaximumRecursion(MaxWriteDepth + 2) // levels 0 to MaxWriteDepth, and the scalars
+                                               .WithQuotingNecessaryStrings()
+                                               .WithEventEmitter(next => new QuoteRetypedStringsEmitter(next))
+                                               .Build();
+
+    internal const string YamlWriteMessage =
+        "YamlDotNet writes YAML with a reflection-based serializer, which NativeAOT cannot compile ahead of time. Reading YAML (FromYaml) works under NativeAOT.";
 
     /// <summary>
     ///     Converts a YAML string to a TOON document.
@@ -147,6 +156,7 @@ public static partial class ToonYamlConverter
     /// <remarks>
     ///     This method serializes the root value of the provided <see cref="ToonDocument"/> into a YAML string.
     /// </remarks>
+    [RequiresDynamicCode(YamlWriteMessage)]
     public static string ToYaml(ToonDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -179,6 +189,7 @@ public static partial class ToonYamlConverter
     ///     Console.WriteLine(yamlString);
     ///     </code>
     /// </example>
+    [RequiresDynamicCode(YamlWriteMessage)]
     public static string ToYaml(ToonValue value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -187,7 +198,7 @@ public static partial class ToonYamlConverter
 
         try
         {
-            return Serializer.Serialize(obj);
+            return Serializer().Serialize(obj);
         }
         catch (MaximumRecursionLevelReachedException)
         {
@@ -374,9 +385,16 @@ public static partial class ToonYamlConverter
     ///     <see cref="ToonOptions.AllowExtendedLimits"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when the options are invalid.</exception>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "The context names ToonOptions, whose members the DynamicDependency keeps; its Validate does not use the context.")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ToonOptions))]
     private static void EnsureValid(ToonOptions options)
     {
-        var error = ((IValidatableObject)options).Validate(new ValidationContext(options)).FirstOrDefault();
+#if NET10_0_OR_GREATER
+        var context = new ValidationContext(options, nameof(ToonOptions), serviceProvider: null, items: null); // with a name: no reflection
+#else
+        var context = new ValidationContext(options);
+#endif
+        var error = ((IValidatableObject)options).Validate(context).FirstOrDefault();
 
         if (error != null)
         {

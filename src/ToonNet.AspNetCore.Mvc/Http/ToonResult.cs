@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -28,6 +29,8 @@ public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResul
     /// <summary>
     /// An <see cref="IResult"/> that writes TOON encoded content.
     /// </summary>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonResult(object? value, ToonSerializerOptions? options = null) : this(value, options, null)
     {
     }
@@ -38,6 +41,8 @@ public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResul
     /// <param name="value">The value to serialize.</param>
     /// <param name="options">Serializer options; the application's <c>IOptions&lt;ToonSerializerOptions&gt;</c> when null.</param>
     /// <param name="statusCode">The response status code; the response's current status code (200 by default) when null.</param>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonResult(object? value, ToonSerializerOptions? options, int? statusCode)
     {
         _value = value;
@@ -73,6 +78,8 @@ public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResul
     /// <returns>
     /// A <see cref="Task"/> that represents the asynchronous operate completion.
     /// </returns>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = AotMessages.AnnotatedConstructor)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = AotMessages.AnnotatedConstructor)]
     public async Task ExecuteAsync(HttpContext httpContext)
     {
         ArgumentNullException.ThrowIfNull(httpContext);

@@ -1,4 +1,7 @@
- using Microsoft.Extensions.Configuration;
+ using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -94,14 +97,18 @@ public static class ServiceCollectionExtensions
     /// </summary>
     private static IServiceCollection AddServices(IServiceCollection services)
     {
+        // The options check themselves (IValidatableObject; their setters check ranges), so no reflection over
+        // data annotations is needed, which trimming and NativeAOT cannot follow
         if (!services.Any(d => d.ServiceType == typeof(IValidateOptions<ToonOptions>)))
         {
-            services.AddOptions<ToonOptions>().ValidateDataAnnotations().ValidateOnStart();
+            services.AddSingleton<IValidateOptions<ToonOptions>, SelfValidatingOptions<ToonOptions>>();
+            services.AddOptions<ToonOptions>().ValidateOnStart();
         }
 
         if (!services.Any(d => d.ServiceType == typeof(IValidateOptions<ToonSerializerOptions>)))
         {
-            services.AddOptions<ToonSerializerOptions>().ValidateDataAnnotations().ValidateOnStart();
+            services.AddSingleton<IValidateOptions<ToonSerializerOptions>, SelfValidatingOptions<ToonSerializerOptions>>();
+            services.AddOptions<ToonSerializerOptions>().ValidateOnStart();
         }
 
         LinkToonOptions(services);
@@ -127,6 +134,27 @@ public static class ServiceCollectionExtensions
         services.Insert(0, ServiceDescriptor.Singleton<IConfigureOptions<ToonSerializerOptions>, ToonOptionsLink>());
     }
 
+    /// <summary>Runs <see cref="IValidatableObject.Validate"/> of the options when they are created.</summary>
+    private sealed class SelfValidatingOptions<TOptions> : IValidateOptions<TOptions> where TOptions : class, IValidatableObject
+    {
+        [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "The options are ToonOptions or ToonSerializerOptions, whose members the DynamicDependency keeps; their Validate does not use the context.")]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ToonOptions))]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ToonSerializerOptions))]
+        public ValidateOptionsResult Validate(string? name, TOptions options)
+        {
+#if NET10_0_OR_GREATER
+            var context = new ValidationContext(options, typeof(TOptions).Name, serviceProvider: null, items: null); // with a name: no reflection
+#else
+            var context = new ValidationContext(options);
+#endif
+            var errors = options.Validate(context)
+                                .Select(result => $"{typeof(TOptions).Name}: {result.ErrorMessage}")
+                                .ToList();
+
+            return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+        }
+    }
+
     private sealed class ToonOptionsLink(IOptions<ToonOptions> toonOptions) : IConfigureOptions<ToonSerializerOptions>
     {
         public void Configure(ToonSerializerOptions options) => options.ToonOptions = toonOptions.Value;
@@ -144,21 +172,21 @@ public static class ServiceCollectionExtensions
             return;
         }
 
-        var allowExtendedLimits = section.GetValue<bool?>(nameof(ToonOptions.AllowExtendedLimits));
+        var allowExtendedLimits = GetBoolean(section, nameof(ToonOptions.AllowExtendedLimits));
 
         if (allowExtendedLimits.HasValue)
         {
             options.AllowExtendedLimits = allowExtendedLimits.Value;
         }
 
-        var indentSize = section.GetValue<int?>(nameof(ToonOptions.IndentSize));
+        var indentSize = GetInt32(section, nameof(ToonOptions.IndentSize));
         if (indentSize.HasValue)
         {
             options.IndentSize = indentSize.Value;
         }
 
         // Accepts the character itself (",", "|", a literal tab) or the names "comma", "tab" and "pipe"
-        var delimiterString = section.GetValue<string?>(nameof(ToonOptions.Delimiter));
+        var delimiterString = section[nameof(ToonOptions.Delimiter)];
         if (!string.IsNullOrEmpty(delimiterString))
         {
             // Anything else (a misspelled name, several characters) fails at startup instead of keeping its first character
@@ -173,13 +201,13 @@ public static class ServiceCollectionExtensions
             };
         }
 
-        var strictMode = section.GetValue<bool?>(nameof(ToonOptions.StrictMode));
+        var strictMode = GetBoolean(section, nameof(ToonOptions.StrictMode));
         if (strictMode.HasValue)
         {
             options.StrictMode = strictMode.Value;
         }
 
-        var maxDepth = section.GetValue<int?>(nameof(ToonOptions.MaxDepth));
+        var maxDepth = GetInt32(section, nameof(ToonOptions.MaxDepth));
         if (maxDepth.HasValue)
         {
             options.MaxDepth = maxDepth.Value;
@@ -198,38 +226,38 @@ public static class ServiceCollectionExtensions
             return;
         }
 
-        var allowExtendedLimits = section.GetValue<bool?>(nameof(ToonSerializerOptions.AllowExtendedLimits));
+        var allowExtendedLimits = GetBoolean(section, nameof(ToonSerializerOptions.AllowExtendedLimits));
 
         if (allowExtendedLimits.HasValue)
         {
             options.AllowExtendedLimits = allowExtendedLimits.Value;
         }
 
-        var ignoreNullValues = section.GetValue<bool?>(nameof(ToonSerializerOptions.IgnoreNullValues));
+        var ignoreNullValues = GetBoolean(section, nameof(ToonSerializerOptions.IgnoreNullValues));
         if (ignoreNullValues.HasValue)
         {
             options.IgnoreNullValues = ignoreNullValues.Value;
         }
 
-        var includeReadOnlyProperties = section.GetValue<bool?>(nameof(ToonSerializerOptions.IncludeReadOnlyProperties));
+        var includeReadOnlyProperties = GetBoolean(section, nameof(ToonSerializerOptions.IncludeReadOnlyProperties));
         if (includeReadOnlyProperties.HasValue)
         {
             options.IncludeReadOnlyProperties = includeReadOnlyProperties.Value;
         }
 
-        var serializeRuntimeTypes = section.GetValue<bool?>(nameof(ToonSerializerOptions.SerializeRuntimeTypes));
+        var serializeRuntimeTypes = GetBoolean(section, nameof(ToonSerializerOptions.SerializeRuntimeTypes));
         if (serializeRuntimeTypes.HasValue)
         {
             options.SerializeRuntimeTypes = serializeRuntimeTypes.Value;
         }
 
-        var maxDepth = section.GetValue<int?>(nameof(ToonSerializerOptions.MaxDepth));
+        var maxDepth = GetInt32(section, nameof(ToonSerializerOptions.MaxDepth));
         if (maxDepth.HasValue)
         {
             options.MaxDepth = maxDepth.Value;
         }
 
-        var namingPolicy = section.GetValue<string?>(nameof(ToonSerializerOptions.PropertyNamingPolicy));
+        var namingPolicy = section[nameof(ToonSerializerOptions.PropertyNamingPolicy)];
         if (!string.IsNullOrWhiteSpace(namingPolicy))
         {
             // A misspelled policy fails at startup instead of silently keeping the default
@@ -240,19 +268,19 @@ public static class ServiceCollectionExtensions
                     $"Expected one of: {string.Join(", ", Enum.GetNames<PropertyNamingPolicy>())}.");
         }
 
-        var caseInsensitive = section.GetValue<bool?>(nameof(ToonSerializerOptions.PropertyNameCaseInsensitive));
+        var caseInsensitive = GetBoolean(section, nameof(ToonSerializerOptions.PropertyNameCaseInsensitive));
         if (caseInsensitive.HasValue)
         {
             options.PropertyNameCaseInsensitive = caseInsensitive.Value;
         }
 
-        var respectRequired = section.GetValue<bool?>(nameof(ToonSerializerOptions.RespectRequiredMembers));
+        var respectRequired = GetBoolean(section, nameof(ToonSerializerOptions.RespectRequiredMembers));
         if (respectRequired.HasValue)
         {
             options.RespectRequiredMembers = respectRequired.Value;
         }
 
-        var unmapped = section.GetValue<string?>(nameof(ToonSerializerOptions.UnmappedMemberHandling));
+        var unmapped = section[nameof(ToonSerializerOptions.UnmappedMemberHandling)];
         if (!string.IsNullOrWhiteSpace(unmapped))
         {
             options.UnmappedMemberHandling = TryParseName<ToonUnmappedMemberHandling>(unmapped, out var handling)
@@ -283,4 +311,27 @@ public static class ServiceCollectionExtensions
         value = default;
         return false;
     }
+
+    /// <summary>A boolean setting (<c>true</c>/<c>false</c> in any case), or null when it is not set.</summary>
+    private static bool? GetBoolean(IConfigurationSection section, string key)
+    {
+        var text = section[key];
+
+        return string.IsNullOrWhiteSpace(text) ? null
+            : bool.TryParse(text.Trim(), out var value) ? value
+            : throw InvalidValue(section, key, text, "true or false");
+    }
+
+    /// <summary>An integer setting, or null when it is not set.</summary>
+    private static int? GetInt32(IConfigurationSection section, string key)
+    {
+        var text = section[key];
+
+        return string.IsNullOrWhiteSpace(text) ? null
+            : int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value
+            : throw InvalidValue(section, key, text, "an integer");
+    }
+
+    private static InvalidOperationException InvalidValue(IConfigurationSection section, string key, string text, string expected) =>
+        new($"Invalid {section.Path}:{key} value '{text}'. Expected {expected}.");
 }

@@ -17,6 +17,7 @@
         <Description>ASP.NET Core MVC integration for ToonNet. Provides input/output formatters for TOON format support in MVC controllers and Web APIs.</Description>
         <PackageTags>toon;aspnetcore;mvc;formatter;web-api;controller</PackageTags>
         <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
+        <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
 
     <ItemGroup>

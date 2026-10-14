@@ -10,7 +10,7 @@
 [![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
 [Documentation](https://selcukgural.github.io/ToonNet/) • [Migrating to 4.0](https://selcukgural.github.io/ToonNet/docs/getting-started/migration-4) •
-[Samples](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo/Samples) • [Changelog](CHANGELOG.md)
+[Samples](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo/Samples) • [Changelog](https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md)
 
 [TOON](https://github.com/toon-format/spec) writes uniform data as tables, with each field name once:
 
@@ -232,7 +232,7 @@ Shop:
 
 The [documentation](https://selcukgural.github.io/ToonNet/) covers every feature in detail: serialization options,
 the type system, streaming, the reader and writer, querying, rules, language models, ASP.NET Core, JSON and YAML,
-source generators and performance. Report security problems as [SECURITY.md](SECURITY.md) describes; contributions
-are welcome ([CONTRIBUTING.md](CONTRIBUTING.md)).
+source generators and performance. Report security problems as [SECURITY.md](https://github.com/selcukgural/ToonNet/blob/master/SECURITY.md) describes; contributions
+are welcome ([CONTRIBUTING.md](https://github.com/selcukgural/ToonNet/blob/master/CONTRIBUTING.md)).
 
 MIT License.

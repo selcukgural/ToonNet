@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.Primitives;
@@ -24,6 +25,8 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
     /// A formatter that outputs TOON encoded content for ASP.NET Core MVC responses.
     /// </summary>
     /// <param name="options">Configuration options for TOON serialization.</param>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonOutputFormatter(ToonSerializerOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -103,6 +106,8 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
     /// <param name="context">The context containing the object to serialize and HTTP response details.</param>
     /// <param name="selectedEncoding">The character encoding used for the serialized response body.</param>
     /// <returns>A task that represents the asynchronous operation of writing the response body.</returns>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = AotMessages.AnnotatedConstructor)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = AotMessages.AnnotatedConstructor)]
     public override async Task WriteResponseBodyAsync(OutputFormatterWriteContext context, Encoding selectedEncoding)
     {
         ArgumentNullException.ThrowIfNull(context);

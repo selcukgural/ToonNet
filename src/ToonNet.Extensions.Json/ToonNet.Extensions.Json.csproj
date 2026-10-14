@@ -18,6 +18,7 @@
     <Description>Bidirectional JSON ↔ TOON conversion with System.Text.Json. Includes ToonConvert high-level API and ToonJsonConverter engine. Seamless interoperability for JSON-based systems.</Description>
     <PackageTags>toon;json;serialization;converter;system-text-json;interop</PackageTags>
     <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>

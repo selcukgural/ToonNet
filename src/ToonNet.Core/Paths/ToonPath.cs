@@ -138,6 +138,7 @@ public sealed class ToonPath
     /// <param name="root">The value <c>$</c> stands for, such as <see cref="ToonDocument.Root"/>.</param>
     /// <returns>The selected values; empty when there are none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is null.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time its <see cref="ToonPathOptions"/> allow.</exception>
     public IReadOnlyList<ToonValue> Select(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -161,6 +162,7 @@ public sealed class ToonPath
     /// <returns>The selected values, as <see cref="Select"/> gives them for the parsed document.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="toon"/> is null.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time its <see cref="ToonPathOptions"/> allow.</exception>
     /// <remarks>
     ///     The whole text is read and checked. Segments with one selector are evaluated over the text; a segment with
     ///     several selectors, a negative slice step or a descendant segment builds the value it applies to. A filter that
@@ -181,6 +183,7 @@ public sealed class ToonPath
     /// <param name="options">Parsing options; defaults when null.</param>
     /// <returns>The selected values.</returns>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time its <see cref="ToonPathOptions"/> allow.</exception>
     public IReadOnlyList<ToonValue> SelectFrom(ReadOnlySpan<byte> utf8Toon, ToonOptions? options = null)
     {
         using var text = Encoding.ToonTextEncoding.Decode(utf8Toon);
@@ -245,6 +248,7 @@ public sealed class ToonPath
     /// <param name="root">The value <c>$</c> stands for.</param>
     /// <returns>The selected values and their normalized paths.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is null.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time its <see cref="ToonPathOptions"/> allow.</exception>
     public IReadOnlyList<ToonPathMatch> SelectMatches(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -265,6 +269,7 @@ public sealed class ToonPath
     /// <returns>The value, or null when the path selects none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the path selects more than one value.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time its <see cref="ToonPathOptions"/> allow.</exception>
     public ToonValue? SelectSingle(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -395,6 +400,7 @@ public sealed class ToonPath
     /// <returns>The number of values removed; a value the path selects more than once (<c>[0,0]</c>) counts once.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the path selects the root itself.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time its <see cref="ToonPathOptions"/> allow.</exception>
     public int RemoveAll(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);

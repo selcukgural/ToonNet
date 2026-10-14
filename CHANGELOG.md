@@ -28,6 +28,8 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   throw `NotSupportedException` for it (rebuild with the current generator).
 
 ### Added
+- **ToonNet.SourceGenerators:** Diagnostic `TOON011` (error) when the project references a `ToonNet.Core` older than
+  the generator or of another major version; no code is generated then, instead of code that fails to compile.
 - **ToonNet.Core:** Navigating and converting `ToonValue` trees like `JsonNode`: indexers on every value
   (`doc.Root["users"]![0]["name"]`, which throw `InvalidOperationException` on a value of the wrong kind), `AsObject`,
   `AsArray`, `GetValue<T>` and `TryGetValue<T>` (primitives, with the serializer's parsing rules), `Deserialize<T>`
@@ -102,6 +104,17 @@ Defaults that let documents and responses do more than the code meant, now as Sy
 - **ToonNet.Extensions.Yaml:** `ToonYamlConverter.MaxAliasExpansionChars`, the characters YAML aliases may copy.
 
 ### Changed
+- **ToonNet.Extensions.Json, ToonNet.Extensions.Yaml, ToonNet.AspNetCore, ToonNet.AspNetCore.Mvc:** Annotated for
+  trimming and NativeAOT (`IsAotCompatible`). Members that use reflection carry `[RequiresUnreferencedCode]` and
+  `[RequiresDynamicCode]`, so trimmed and AOT apps get a warning where they call them: `ToonConvert.DeserializeFromJson`,
+  `SerializeToJson` and `ParseJson`, `ToYaml` (YamlDotNet's serializer), and in ASP.NET Core MVC `AddToonFormatters`, the
+  formatters, `ReadFromToonAsync` without a type info, `ToonResult` and `Results.Extensions.Toon`. `AddToonNet` reads
+  configuration and validates the options without reflection, and `ToonNet.AspNetCore` no longer depends on
+  `Microsoft.Extensions.Configuration.Binder` and `Microsoft.Extensions.Options.DataAnnotations`.
+- **ToonNet.AspNetCore.Mvc:** `ToonFormatterDefaults.MaxRequestBodySize` is a `static readonly` field instead of a
+  constant.
+- **ToonNet.Core:** `ToonConverterAttribute` keeps the public parameterless constructor of the converter type when
+  trimming (`[DynamicallyAccessedMembers]`).
 - **ToonNet.Extensions.Yaml:** `ToonYamlConverter.MaxAliasExpansionNodes` and `MaxAliasExpansionChars` are
   `static readonly` fields instead of constants, so a later release can change them without recompiling callers.
 - **All packages:** Packages are published with NuGet Trusted Publishing (a short-lived key per run instead of a stored

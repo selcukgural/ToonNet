@@ -1,3 +1,7 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using ToonNet.AspNetCore.DependencyInjection;
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 using ToonNet.Core.Paths;
@@ -167,6 +171,32 @@ if (paged.P is not { Item: 1 } || held != "Sizes[1]{Width,Height}:\n  1,2")
 {
     Console.WriteLine("FAILED: generic init members or declared array types");
     Console.WriteLine(held);
+    return 1;
+}
+
+// The other packages' members without reflection: JSON both ways, YAML reading, options and configuration from AddToonNet
+var fromJson = ToonNet.Extensions.Json.ToonConvert.FromJson("""{"a":[1,2],"b":{"c":"x"}}""");
+var backToJson = ToonNet.Extensions.Json.ToonConvert.ToJson(fromJson);
+var fromYaml = ToonNet.Extensions.Yaml.ToonYamlConvert.FromYaml("a:\n  - 1\n  - 2\nb:\n  c: x\n");
+
+var configuration = new ConfigurationBuilder()
+                    .AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["ToonNet:ToonOptions:IndentSize"] = "4",
+                        ["ToonNet:ToonSerializerOptions:PropertyNamingPolicy"] = "camelCase",
+                        ["ToonNet:ToonSerializerOptions:IgnoreNullValues"] = "true"
+                    })
+                    .Build();
+using var provider = new ServiceCollection().AddToonNet(configuration).BuildServiceProvider();
+var serializerOptions = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+
+if (fromJson != "a[2]: 1,2\nb:\n  c: x" || backToJson != """{"a":[1,2],"b":{"c":"x"}}""" || fromYaml != fromJson ||
+    serializerOptions is not { PropertyNamingPolicy: PropertyNamingPolicy.CamelCase, IgnoreNullValues: true, ToonOptions.IndentSize: 4 })
+{
+    Console.WriteLine("FAILED: JSON, YAML or AddToonNet");
+    Console.WriteLine(fromJson);
+    Console.WriteLine(backToJson);
+    Console.WriteLine(fromYaml);
     return 1;
 }
 

@@ -201,6 +201,7 @@ public static partial class ToonSerializer
     /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted (its path in the document is in the error).</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of <see cref="ToonSerializerOptions.PathOptions"/>.</exception>
     /// <remarks>
     ///     The whole document is read and checked; a filter that only compares members reads just those members of each
     ///     child, and only the selected values are converted. See <see cref="ToonPath.SelectFrom(string, ToonOptions)"/>.
@@ -226,6 +227,7 @@ public static partial class ToonSerializer
     /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of <see cref="ToonSerializerOptions.PathOptions"/>.</exception>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
     public static List<T?> DeserializeAll<T>(ReadOnlySpan<byte> utf8Toon, string path, ToonSerializerOptions? options = null)
@@ -249,6 +251,7 @@ public static partial class ToonSerializer
     /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of <see cref="ToonSerializerOptions.PathOptions"/>.</exception>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
     public static async ValueTask<List<T?>> DeserializeAllAsync<T>(Stream utf8Toon, string path, ToonSerializerOptions? options = null,
@@ -276,6 +279,7 @@ public static partial class ToonSerializer
     /// <exception cref="NotSupportedException">Thrown when generated code cannot create <typeparamref name="T"/>, or the options need a newer generator.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of <see cref="ToonSerializerOptions.PathOptions"/>.</exception>
     public static List<T?> DeserializeAll<T>(string toon, string path, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(toon);
@@ -297,6 +301,7 @@ public static partial class ToonSerializer
     /// <exception cref="NotSupportedException">Thrown when generated code cannot create <typeparamref name="T"/>, or the options need a newer generator.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of <see cref="ToonSerializerOptions.PathOptions"/>.</exception>
     public static List<T?> DeserializeAll<T>(ReadOnlySpan<byte> utf8Toon, string path, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
     {
         var compiled = ToonPath.Parse(path, options?.PathOptions);
@@ -320,6 +325,7 @@ public static partial class ToonSerializer
     /// <exception cref="NotSupportedException">Thrown when generated code cannot create <typeparamref name="T"/>, or the options need a newer generator.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of <see cref="ToonSerializerOptions.PathOptions"/>.</exception>
     public static async ValueTask<List<T?>> DeserializeAllAsync<T>(Stream utf8Toon, string path, ToonTypeInfo<T> typeInfo,
                                                                   ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
     {

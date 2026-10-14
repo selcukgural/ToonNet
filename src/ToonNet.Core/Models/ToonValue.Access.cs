@@ -139,12 +139,14 @@ public abstract partial class ToonValue
     /// <param name="path">A JSONPath (RFC 9535); see <see cref="ToonPath"/>.</param>
     /// <returns>The selected values, in document order; empty when there are none.</returns>
     /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of the default <see cref="ToonPathOptions"/>.</exception>
     public IReadOnlyList<ToonValue> Select(string path) => ToonPath.Parse(path).Select(this);
 
     /// <summary>Selects the values a path leads to with their normalized paths (<c>$['orders'][2]</c>), with this value as the root <c>$</c>.</summary>
     /// <param name="path">A JSONPath (RFC 9535); see <see cref="ToonPath"/>.</param>
     /// <returns>The selected values and where they are, in document order.</returns>
     /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of the default <see cref="ToonPathOptions"/>.</exception>
     public IReadOnlyList<ToonPathMatch> SelectMatches(string path) => ToonPath.Parse(path).SelectMatches(this);
 
     /// <summary>Selects the one value a path leads to, with this value as the root <c>$</c>.</summary>
@@ -152,6 +154,7 @@ public abstract partial class ToonValue
     /// <returns>The value, or null when the path selects none.</returns>
     /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the path selects more than one value.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of the default <see cref="ToonPathOptions"/>.</exception>
     public ToonValue? SelectSingle(string path) => ToonPath.Parse(path).SelectSingle(this);
 
     /// <summary>
@@ -169,6 +172,7 @@ public abstract partial class ToonValue
     /// <returns>The number of values removed.</returns>
     /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the path selects the root itself.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the evaluation goes beyond the steps or the time of the default <see cref="ToonPathOptions"/>.</exception>
     public int RemoveAll(string path) => ToonPath.Parse(path).RemoveAll(this);
 
     /// <summary>

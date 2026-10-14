@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -44,6 +45,8 @@ public static class ToonHttpRequestExtensions
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
     /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, CancellationToken cancellationToken = default) =>
         ReadFromToonAsync<T>(request, options: null, cancellationToken);
 
@@ -59,6 +62,8 @@ public static class ToonHttpRequestExtensions
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
     /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, ToonSerializerOptions? options, CancellationToken cancellationToken = default) =>
         ReadAsync(request, options, static (stream, o, ct) => ToonSerializer.DeserializeAsync<T>(stream, o, ct),
                   static (text, o) => ToonSerializer.Deserialize<T>(text, o), cancellationToken);
@@ -99,6 +104,8 @@ public static class ToonHttpRequestExtensions
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
     /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <paramref name="type"/>.</exception>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static async ValueTask<object?> ReadFromToonAsync(this HttpRequest request, Type type, ToonSerializerOptions? options = null,
                                                              CancellationToken cancellationToken = default)
     {

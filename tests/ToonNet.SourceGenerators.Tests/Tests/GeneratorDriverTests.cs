@@ -39,6 +39,57 @@ public class GeneratorDriverTests
 
     private static List<Diagnostic> LastCompilationWarnings = [];
 
+    [Theory]
+    [InlineData("older major", true)]
+    [InlineData("next major", true)]
+    [InlineData("same minor, later patch", false)]
+    [InlineData("later minor", false)]
+    public void ACoreOfAnotherVersion_IsReported_InsteadOfErrorsInGeneratedCode(string kind, bool mismatch)
+    {
+        // An assembly named ToonNet.Core with the attribute, as another version of the package would be
+        var generator = typeof(Generator::ToonNet.SourceGenerators.ToonSerializableGenerator).Assembly.GetName().Version!;
+        var coreVersion = kind switch
+        {
+            "older major" => $"{generator.Major - 1}.9.0",
+            "next major" => $"{generator.Major + 1}.0.0",
+            "same minor, later patch" => $"{generator.Major}.{generator.Minor}.{generator.Build + 1}",
+            _ => $"{generator.Major}.{generator.Minor + 1}.0"
+        };
+        var version = coreVersion + ".0";
+        var core = CSharpCompilation.Create("ToonNet.Core",
+                                            [CSharpSyntaxTree.ParseText($$"""
+                                                [assembly: System.Reflection.AssemblyVersion("{{version}}")]
+                                                namespace ToonNet.Core.Serialization.Attributes { public sealed class ToonSerializableAttribute : System.Attribute { } }
+                                                """)],
+                                            [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
+                                            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var image = new MemoryStream();
+        Assert.True(core.Emit(image).Success);
+
+        var compilation = CSharpCompilation.Create("Snippet",
+                                                   [CSharpSyntaxTree.ParseText("[ToonNet.Core.Serialization.Attributes.ToonSerializable] public partial class A { public int X { get; set; } }")],
+                                                   [MetadataReference.CreateFromFile(typeof(object).Assembly.Location), MetadataReference.CreateFromImage(image.ToArray())],
+                                                   new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var driver = CSharpGeneratorDriver.Create(new Generator::ToonNet.SourceGenerators.ToonSerializableGenerator())
+                                          .RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
+
+        if (mismatch)
+        {
+            var diagnostic = Assert.Single(diagnostics, d => d.Id == "TOON011");
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Equal($"ToonNet.SourceGenerators {generator.Major}.{generator.Minor}.{generator.Build} needs ToonNet.Core {generator.Major}.{generator.Minor}.{generator.Build} " +
+                         $"or a later {generator.Major}.x version, but the project references ToonNet.Core {coreVersion}; " +
+                         "reference the same version of both packages", diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture));
+            Assert.Empty(driver.GetRunResult().GeneratedTrees); // no generated code full of errors
+        }
+        else
+        {
+            Assert.DoesNotContain(diagnostics, d => d.Id == "TOON011");
+            Assert.NotEmpty(driver.GetRunResult().GeneratedTrees);
+        }
+    }
+
     [Fact]
     public void KeywordPropertyNames_Compile()
     {
