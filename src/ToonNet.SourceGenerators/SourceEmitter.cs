@@ -485,7 +485,9 @@ internal sealed class SourceEmitter
         var first = $"__first{_variable++}";
         var item = $"__item{_variable++}";
 
-        code.BeginBlock($"if (global::System.Linq.Enumerable.TryGetNonEnumeratedCount({value}, out var {count}))");
+        // Only the collection types generated code knows: another runtime type (a derived type, one with a converter,
+        // a string declared as IEnumerable<char>) goes to the serializer, which knows its rules
+        code.BeginBlock($"if (({KnownCollectionCondition(property.Plan, value)}) && global::System.Linq.Enumerable.TryGetNonEnumeratedCount({value}, out var {count}))");
         code.AppendLine(StartLine);
         code.AppendLine("writer.EnterValue(depth + 1);");
         code.BeginBlock($"if ({count} == 0)");
@@ -1499,6 +1501,10 @@ internal sealed class SourceEmitter
         code.BeginBlock($"private static {Models}ToonValue __ToonWrite{id}({plan.ValueTypeName} value, {Options} options, int depth)");
         code.AppendLine($"{Helpers}.CheckSerializationDepth(options, depth);");
 
+        // Another runtime type than the ones generated code knows (a derived type, one with a converter) goes to the
+        // reflection-based serializer, which writes the runtime type
+        code.AppendLine($"if (!({KnownCollectionCondition(plan, "value")})) return {Helpers}.SerializeWithReflection<{plan.ValueTypeName}>(value, options, depth);");
+
         if (plan.Kind == ValueKind.Dictionary)
         {
             var key = plan.Key!.Inline == PrimitiveKind.String ? "__entry.Key" : $"{Helpers}.FormatKey(__entry.Key)";
@@ -1527,6 +1533,29 @@ internal sealed class SourceEmitter
 
         code.EndBlock();
     }
+
+    /// <summary>
+    /// The concrete collection types generated code writes itself for a collection or dictionary plan: whatever the
+    /// declared type (an interface, a class that may be derived from), other runtime types go to the serializer.
+    /// </summary>
+    private static IEnumerable<string> KnownCollectionTypes(ValuePlan plan)
+    {
+        var element = plan.Element!.TypeName;
+
+        if (plan.Kind == ValueKind.Dictionary)
+        {
+            yield return $"global::System.Collections.Generic.Dictionary<{plan.Key!.ValueTypeName}, {element}>";
+            yield break;
+        }
+
+        yield return $"global::System.Collections.Generic.List<{element}>";
+        yield return $"{element}[]";
+        yield return $"global::System.Collections.Generic.HashSet<{element}>";
+    }
+
+    /// <summary>Whether the runtime type of <paramref name="value"/> is one of <see cref="KnownCollectionTypes"/>.</summary>
+    private static string KnownCollectionCondition(ValuePlan plan, string value) =>
+        string.Join(" || ", KnownCollectionTypes(plan).Select(type => $"{value}.GetType() == typeof({type})"));
 
     /// <summary>The item count of <c>value</c> when it is known without enumerating (to size the result), else 0.</summary>
     private const string CountExpression =
@@ -1636,6 +1665,15 @@ internal sealed class SourceEmitter
             if (!types.Contains(plan.ValueTypeName))
             {
                 types.Add(plan.ValueTypeName);
+            }
+
+            // The concrete types it writes itself, whatever the declared type
+            if (plan.Kind is ValueKind.Array or ValueKind.List or ValueKind.Set or ValueKind.Dictionary)
+            {
+                foreach (var known in KnownCollectionTypes(plan).Where(known => !types.Contains(known)))
+                {
+                    types.Add(known);
+                }
             }
 
             if (plan.Element != null)
