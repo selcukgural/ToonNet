@@ -69,7 +69,8 @@ public static partial class ToonSerializer
                    type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte) ||
                    type == typeof(sbyte) || type == typeof(ushort) || type == typeof(uint) || type == typeof(ulong) ||
                    type == typeof(double) || type == typeof(float) || type == typeof(decimal) ||
-                   type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(Guid);
+                   type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(Guid) ||
+                   type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan);
         }
     }
 
@@ -244,6 +245,25 @@ public static partial class ToonSerializer
         {
             Span<char> text = stackalloc char[36];
             Unsafe.As<T, Guid>(ref value).TryFormat(text, out var length, "D");
+            writer.WriteString(text[..length]);
+        }
+        // The formats of TrySerializePrimitive, without the string and ToonString it creates
+        else if (typeof(T) == typeof(DateOnly))
+        {
+            Span<char> text = stackalloc char[16];
+            Unsafe.As<T, DateOnly>(ref value).TryFormat(text, out var length, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+            writer.WriteString(text[..length]);
+        }
+        else if (typeof(T) == typeof(TimeOnly))
+        {
+            Span<char> text = stackalloc char[24];
+            Unsafe.As<T, TimeOnly>(ref value).TryFormat(text, out var length, "HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture);
+            writer.WriteString(text[..length].TrimEnd('.'));
+        }
+        else if (typeof(T) == typeof(TimeSpan))
+        {
+            Span<char> text = stackalloc char[32];
+            Unsafe.As<T, TimeSpan>(ref value).TryFormat(text, out var length, "c", CultureInfo.InvariantCulture);
             writer.WriteString(text[..length]);
         }
         else

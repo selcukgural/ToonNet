@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 
@@ -874,6 +875,13 @@ public static partial class ToonSerializer
         {
             EnterValue(depth);
 
+            // Arrays and lists of primitives are written from their typed items, without boxing each one
+            if (!_hasConverters && !_generatedOnly && PrimitiveListWriter.For(enumerable.GetType()) is { } primitives)
+            {
+                primitives.Write(_writer, key, enumerable, position);
+                return;
+            }
+
             var items = new PooledItems(enumerable);
 
             try
@@ -961,6 +969,110 @@ public static partial class ToonSerializer
             finally
             {
                 items.Dispose();
+            }
+        }
+
+        /// <summary>Writes a <c>T[]</c> or <c>List&lt;T&gt;</c> of typed primitives (or their nullable forms) as an inline array.</summary>
+        private abstract class PrimitiveListWriter
+        {
+            private static readonly ConcurrentDictionary<Type, PrimitiveListWriter?> Writers = new();
+
+            public abstract void Write(ToonWriter writer, string? key, IEnumerable items, ToonArrayPosition position);
+
+            /// <summary>The writer for exactly <c>T[]</c> or <c>List&lt;T&gt;</c> of a typed primitive, or null.</summary>
+            [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ReflectionJustification)]
+            [UnconditionalSuppressMessage("Trimming", "IL2055", Justification = ReflectionJustification)]
+            public static PrimitiveListWriter? For(Type type) => Writers.GetOrAdd(type, static t =>
+            {
+                var element = t.IsArray && t.GetArrayRank() == 1 ? t.GetElementType()
+                    : t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>) ? t.GetGenericArguments()[0]
+                    : null;
+
+                if (element == null || !PrimitiveAccessor.IsTypedPrimitive(Nullable.GetUnderlyingType(element) ?? element))
+                {
+                    return null;
+                }
+
+                // Nullable items are unwrapped, so their values are not boxed either
+                var writer = Nullable.GetUnderlyingType(element) is { } underlying
+                    ? typeof(NullablePrimitiveListWriter<>).MakeGenericType(underlying)
+                    : typeof(PrimitiveListWriter<>).MakeGenericType(element);
+
+                return (PrimitiveListWriter)Activator.CreateInstance(writer)!;
+            });
+        }
+
+        private sealed class PrimitiveListWriter<T> : PrimitiveListWriter
+        {
+            public override void Write(ToonWriter writer, string? key, IEnumerable items, ToonArrayPosition position)
+            {
+                ReadOnlySpan<T> span = items is T[] array ? array : CollectionsMarshal.AsSpan((List<T>)items);
+
+                if (span.IsEmpty)
+                {
+                    ToonDomWriter.WriteEmptyArray(writer, key, position);
+                    return;
+                }
+
+                writer.EnterNesting();
+                writer.WriteArrayHeader(key, span.Length);
+                writer.Write(": ");
+
+                for (var i = 0; i < span.Length; i++)
+                {
+                    if (i > 0)
+                    {
+                        writer.WriteDelimiter();
+                    }
+
+                    if (default(T) == null && span[i] is null)
+                    {
+                        writer.WriteNull();
+                    }
+                    else
+                    {
+                        WriteTypedText(writer, span[i]);
+                    }
+                }
+
+                writer.ExitNesting();
+            }
+        }
+
+        private sealed class NullablePrimitiveListWriter<T> : PrimitiveListWriter where T : struct
+        {
+            public override void Write(ToonWriter writer, string? key, IEnumerable items, ToonArrayPosition position)
+            {
+                ReadOnlySpan<T?> span = items is T?[] array ? array : CollectionsMarshal.AsSpan((List<T?>)items);
+
+                if (span.IsEmpty)
+                {
+                    ToonDomWriter.WriteEmptyArray(writer, key, position);
+                    return;
+                }
+
+                writer.EnterNesting();
+                writer.WriteArrayHeader(key, span.Length);
+                writer.Write(": ");
+
+                for (var i = 0; i < span.Length; i++)
+                {
+                    if (i > 0)
+                    {
+                        writer.WriteDelimiter();
+                    }
+
+                    if (span[i] is { } item)
+                    {
+                        WriteTypedText(writer, item);
+                    }
+                    else
+                    {
+                        writer.WriteNull();
+                    }
+                }
+
+                writer.ExitNesting();
             }
         }
 
