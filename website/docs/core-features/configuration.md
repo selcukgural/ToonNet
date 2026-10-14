@@ -245,7 +245,7 @@ Keys without a matching property are ignored.
 
 Set `PropertyNameCaseInsensitive = true` to match keys ignoring case (`age` then fills `Age`). An exact match is
 preferred, properties whose names differ only in case still need an exact match, and the last matching key wins.
-Types are then read with reflection; the `ToonTypeInfo` overloads do not support the option. See
+Generated code and the `ToonTypeInfo` overloads apply it too. See
 [Deserialization](deserialization#key-matching-is-case-sensitive-by-default).
 
 ## Strict Reading
@@ -264,8 +264,8 @@ Both throw a `ToonSerializationException` with the path, for example
 `The key 'Nmae' matches no property or constructor parameter (path: $.Nmae, target type: Account)` or
 `The required property 'Name' is missing (path: $, target type: Account)`. Keys of read-only properties count as
 matched, so what `ToonSerializer` writes reads back; a key with the value `null` counts as present; `required`
-properties are not checked when the constructor used for reading has `[SetsRequiredMembers]`. Types are then read with
-reflection; the `ToonTypeInfo` overloads do not support these options.
+properties are not checked when the constructor used for reading has `[SetsRequiredMembers]`. Generated code and the
+`ToonTypeInfo` overloads apply these options too (code generated before ToonNet 3.3 leaves them to reflection).
 
 ## IncludeReadOnlyProperties
 

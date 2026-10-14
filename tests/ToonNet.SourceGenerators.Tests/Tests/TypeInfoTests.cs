@@ -171,7 +171,7 @@ public partial class TypeInfoTests
     }
 
     [Fact]
-    public void CaseInsensitiveReading_UsesReflection_AndIsNotSupportedWithATypeInfo()
+    public void CaseInsensitiveReading_IsSupportedWithATypeInfo()
     {
         var options = new ToonSerializerOptions { PropertyNameCaseInsensitive = true };
 
@@ -181,14 +181,15 @@ public partial class TypeInfoTests
         var fromTree = WriterRow.Deserialize(ToonDocument.Parse("id: 6\nname: y"), options);
         Assert.Equal((6, "y"), (fromTree.Id, fromTree.Name));
 
-        Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("Id: 1", WriterRow.ToonTypeInfo, options));
+        var viaTypeInfo = ToonSerializer.Deserialize("id: 7\nNAME: z", WriterRow.ToonTypeInfo, options)!;
+        Assert.Equal((7, "z"), (viaTypeInfo.Id, viaTypeInfo.Name));
         Assert.Equal(ToonSerializer.Serialize(row), ToonSerializer.Serialize(row, WriterRow.ToonTypeInfo, options)); // writing is not affected
     }
 
     [Fact]
-    public void StrictMemberOptions_UseReflection_AndAreNotSupportedWithATypeInfo()
+    public void StrictMemberOptions_AreSupportedWithATypeInfo()
     {
-        // Generated code checks neither: off by default, so a missing required property and an unknown key are skipped
+        // Off by default, so a missing required property and an unknown key are skipped
         Assert.Null(ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2")!.Name);
 
         foreach (var options in new[]
@@ -201,9 +202,9 @@ public partial class TypeInfoTests
 
             Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<RequiredRow>(toon, options));
             Assert.Throws<ToonSerializationException>(() => RequiredRow.Deserialize(ToonDocument.Parse(toon), options));
-            Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize(toon, RequiredRow.ToonTypeInfo, options));
+            Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize(toon, RequiredRow.ToonTypeInfo, options));
 
-            var row = ToonSerializer.Deserialize<RequiredRow>("Name: a\nAge: 1", options)!;
+            var row = ToonSerializer.Deserialize("Name: a\nAge: 1", RequiredRow.ToonTypeInfo, options)!;
             Assert.Equal(("a", 1), (row.Name, row.Age));
         }
     }

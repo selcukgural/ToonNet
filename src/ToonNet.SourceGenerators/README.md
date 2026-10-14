@@ -20,7 +20,8 @@ public static T Deserialize(ToonDocument doc, ToonSerializerOptions? options = n
 The generated code follows the same rules as the reflection-based `ToonSerializer` and produces the same TOON:
 the same properties in the same order, the same constructor selection, `[ToonProperty]`, `[ToonIgnore]`,
 `[ToonPropertyOrder]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`,
-`PropertyNamingPolicy` and `Converters` options.
+`PropertyNamingPolicy`, `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers` and
+`Converters` options.
 
 **What is generated and what is not:**
 

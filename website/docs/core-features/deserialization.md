@@ -315,9 +315,9 @@ Person person = ToonSerializer.Deserialize<Person>("name: Alice\nAGE: 30", optio
 ```
 
 A key that matches exactly is preferred; properties whose names differ only in case (`Id` and `ID`) still need an
-exact match, and when several keys fill the same property the last one wins. With this option types are read with
-reflection rather than generated code, and the overloads that take a `ToonTypeInfo` throw `NotSupportedException`.
-Writing is not affected.
+exact match, and when several keys fill the same property the last one wins. Generated code applies the option too, so
+the overloads that take a `ToonTypeInfo` support it (code generated before ToonNet 3.3 leaves it to reflection; rebuild
+with the current generator). Writing is not affected.
 
 ### Unknown Keys and Required Properties
 

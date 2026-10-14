@@ -54,8 +54,8 @@ produce the same TOON for the same object:
   base-class properties first, then declaration order);
 - the same constructor (a `[ToonConstructor]` one, otherwise the public parameterless one, otherwise the public one with
   the most parameters), with parameters bound to keys by property name;
-- `[ToonProperty]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`, `PropertyNamingPolicy`
-  and `Converters` options.
+- `[ToonProperty]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`, `PropertyNamingPolicy`,
+  `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers` and `Converters` options.
 
 ### What is generated
 

@@ -52,8 +52,9 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     match, and when several keys fill the same property the last one wins. The default value is false.
     /// </summary>
     /// <remarks>
-    ///     With this option types are read with reflection rather than generated code, and the overloads that take a
-    ///     <see cref="ToonTypeInfo"/> do not support it. Writing is not affected.
+    ///     Generated code applies this option like the reflection-based serializer, so the overloads that take a
+    ///     <see cref="ToonTypeInfo"/> support it (code generated before ToonNet 3.3 leaves it to reflection, and those
+    ///     overloads then throw <see cref="NotSupportedException"/>). Writing is not affected.
     /// </remarks>
     public bool PropertyNameCaseInsensitive { get; set; }
 
@@ -61,8 +62,8 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     Gets or sets what reading does with a key that matches no property or constructor parameter of the type:
     ///     <see cref="ToonUnmappedMemberHandling.Skip"/> (the default) ignores it, <see cref="ToonUnmappedMemberHandling.Disallow"/>
     ///     throws a <see cref="ToonSerializationException"/>. Keys of read-only properties count as matched, so
-    ///     documents written by <see cref="ToonSerializer"/> read back. Types are then read with reflection; the
-    ///     <c>ToonTypeInfo</c> overloads do not support <see cref="ToonUnmappedMemberHandling.Disallow"/>.
+    ///     documents written by <see cref="ToonSerializer"/> read back. Generated code applies it too, as for
+    ///     <see cref="PropertyNameCaseInsensitive"/>.
     /// </summary>
     public ToonUnmappedMemberHandling UnmappedMemberHandling { get; set; }
 
@@ -70,13 +71,13 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     Gets or sets whether reading requires a key for every property declared with the C# <c>required</c> modifier,
     ///     throwing a <see cref="ToonSerializationException"/> when one is missing, as System.Text.Json does. Not
     ///     checked when the constructor used for reading has <c>[SetsRequiredMembers]</c>. The default value is false.
-    ///     Types are then read with reflection; the <c>ToonTypeInfo</c> overloads do not support it.
+    ///     Generated code applies it too, as for <see cref="PropertyNameCaseInsensitive"/>.
     /// </summary>
     public bool RespectRequiredMembers { get; set; }
 
     /// <summary>
-    ///     Whether generated code may read with these options: it matches keys exactly and checks neither unmapped
-    ///     keys nor required properties.
+    ///     Whether code generated before ToonNet 3.3 may read with these options: it matches keys exactly and checks
+    ///     neither unmapped keys nor required properties.
     /// </summary>
     internal bool AllowsGeneratedReading =>
         !PropertyNameCaseInsensitive && UnmappedMemberHandling == ToonUnmappedMemberHandling.Skip && !RespectRequiredMembers;

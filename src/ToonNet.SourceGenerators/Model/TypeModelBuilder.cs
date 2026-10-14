@@ -373,7 +373,8 @@ internal static class TypeModelBuilder
             IsReadOnly: setter == null,
             Write: write,
             SetterOwner: write == WriteKind.Accessor ? setter!.ContainingType.ToDisplayString(TypeOfFormat) : null,
-            SetterOwnerIsValueType: setter?.ContainingType.IsValueType ?? false);
+            SetterOwnerIsValueType: setter?.ContainingType.IsValueType ?? false,
+            IsRequired: property.IsRequired);
     }
 
     /// <summary>The setter of the property, or of the property it overrides when the override only redefines the getter.</summary>

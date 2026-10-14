@@ -96,9 +96,36 @@ public static class ToonSourceGenerationHelpers
 
     /// <summary>
     ///     Whether the options need the reflection-based reader (case-insensitive keys, unmapped key errors, required
-    ///     properties), which generated code then defers to.
+    ///     properties), which code from older generators defers to.
     /// </summary>
     public static bool ReadsWithReflection(ToonSerializerOptions options) => !options.AllowsGeneratedReading;
+
+    /// <summary>
+    ///     Gets the value of a key as <see cref="ToonSerializer"/> does: the exact key, or with <paramref name="ignoreCase"/>
+    ///     (case-insensitive reading of a name that no other member name equals ignoring case) the last key that equals
+    ///     the name ignoring case.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryGetProperty(ToonObject obj, string name, bool ignoreCase, out ToonValue value) =>
+        ignoreCase ? ToonSerializer.TryGetKeyIgnoringCase(obj, name, out value) : obj.Properties.TryGetValue(name, out value!);
+
+    /// <summary>
+    ///     The error <see cref="ToonSerializer"/> reports for a key that matches no member of <typeparamref name="T"/> with
+    ///     <see cref="ToonUnmappedMemberHandling.Disallow"/>.
+    /// </summary>
+    /// <param name="key">The key.</param>
+    /// <param name="value">The object value.</param>
+    public static ToonSerializationException UnmappedKeyError<T>(string key, ToonValue value) =>
+        ToonSerializer.UnmappedKeyErrorForGeneratedCode(key, typeof(T), value);
+
+    /// <summary>
+    ///     The error <see cref="ToonSerializer"/> reports for a required property of <typeparamref name="T"/> without a key
+    ///     with <see cref="ToonSerializerOptions.RespectRequiredMembers"/>.
+    /// </summary>
+    /// <param name="name">The serialized name of the property.</param>
+    /// <param name="value">The object value.</param>
+    public static ToonSerializationException MissingRequiredError<T>(string name, ToonValue value) =>
+        ToonSerializer.MissingRequiredErrorForGeneratedCode(name, typeof(T), value);
 
     /// <summary>
     ///     Deserializes a value with the reflection-based serializer, continuing at the given depth.

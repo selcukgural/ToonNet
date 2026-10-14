@@ -69,8 +69,8 @@ public static partial class ToonSerializer
         }
 
         // Generated code reads objects; other values are reported by the checks below
-        if (generatedAllowed && value is ToonObject && options.AllowsGeneratedReading &&
-            GetGeneratedSerializer(targetType, options) is { Deserialize: { } generated })
+        if (generatedAllowed && value is ToonObject && GetGeneratedSerializer(targetType, options) is { Deserialize: { } generated } serializer &&
+            serializer.ReadsWith(options))
         {
             return generated(value, options, depth);
         }
@@ -1027,21 +1027,18 @@ public static partial class ToonSerializer
     #region Objects
 
     /// <summary>
-    ///     Deserializes an object, using the constructor selected for the type (binding parameters by name, as for
-    ///     positional records) and then setting the remaining writable properties. Unknown keys are ignored.
-    /// </summary>
-    /// <summary>
     ///     The value of a name's key: the exact key, or with case-insensitive reading (<paramref name="caseInsensitive"/>
     ///     holds the names that may match so) the last key that equals the name ignoring case, as direct reading sets a
     ///     property for each such key in order.
     /// </summary>
-    private static bool TryGetKey(ToonObject obj, string name, HashSet<string>? caseInsensitive, out ToonValue value)
-    {
-        if (caseInsensitive == null || !caseInsensitive.Contains(name))
-        {
-            return obj.Properties.TryGetValue(name, out value!);
-        }
+    private static bool TryGetKey(ToonObject obj, string name, HashSet<string>? caseInsensitive, out ToonValue value) =>
+        caseInsensitive != null && caseInsensitive.Contains(name)
+            ? TryGetKeyIgnoringCase(obj, name, out value)
+            : obj.Properties.TryGetValue(name, out value!);
 
+    /// <summary>The value of the last key that equals the name ignoring case.</summary>
+    internal static bool TryGetKeyIgnoringCase(ToonObject obj, string name, out ToonValue value)
+    {
         var found = false;
         value = null!;
 
@@ -1122,6 +1119,21 @@ public static partial class ToonSerializer
         return false;
     }
 
+    /// <summary>The error for a key that matches no member, with unmapped keys disallowed.</summary>
+    private static ToonSerializationException UnmappedKeyError(string key, Type targetType, ToonValue value, SerializerState state)
+    {
+        state.Push(key);
+        return Error($"The key '{key}' matches no property or constructor parameter", targetType, value, state);
+    }
+
+    /// <summary>The error for a required property without a key, with required members respected.</summary>
+    private static ToonSerializationException MissingRequiredError(string name, Type targetType, ToonValue value, SerializerState state) =>
+        Error($"The required property '{name}' is missing", targetType, value, state);
+
+    /// <summary>
+    ///     Deserializes an object, using the constructor selected for the type (binding parameters by name, as for
+    ///     positional records) and then setting the remaining writable properties. Unknown keys are ignored.
+    /// </summary>
     private static object DeserializeObject(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, SerializerState state)
     {
         if (value is not ToonObject obj)
@@ -1152,8 +1164,7 @@ public static partial class ToonSerializer
             {
                 if (!IsMappedKey(metadata, options, key))
                 {
-                    state.Push(key);
-                    throw Error($"The key '{key}' matches no property or constructor parameter", targetType, value, state);
+                    throw UnmappedKeyError(key, targetType, value, state);
                 }
             }
         }
@@ -1166,7 +1177,7 @@ public static partial class ToonSerializer
 
                 if (!TryGetKey(obj, name, caseInsensitive, out _))
                 {
-                    throw Error($"The required property '{name}' is missing", targetType, value, state);
+                    throw MissingRequiredError(name, targetType, value, state);
                 }
             }
         }

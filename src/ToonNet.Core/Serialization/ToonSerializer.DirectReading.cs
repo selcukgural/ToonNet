@@ -302,6 +302,17 @@ public static partial class ToonSerializer
         ///     type) through its underlying type, as <see cref="DeserializeValue"/> checks; such values are read from their
         ///     tree.
         /// </summary>
+        /// <summary>Whether generated code (if the type has any) may read the type with the options.</summary>
+        private bool GeneratedCodeReads(Type type)
+        {
+            if (_converterCheck != null && !_converterCheck.AllowsGeneratedCode(type))
+            {
+                return false;
+            }
+
+            return _options.AllowsGeneratedReading || FindGeneratedSerializer(type)?.ReadsWith(_options) != false;
+        }
+
         private bool IsConverted(Type type)
         {
             if (!_hasConverters)
@@ -379,11 +390,10 @@ public static partial class ToonSerializer
                 return ReadGeneratedValue(value, GetGeneratedOnlyReadTypeInfo(targetType), depth);
             }
 
-            // Generated code does not consult converters: with converters, it reads only types where none applies
-            // Generated code matches keys exactly and checks neither unmapped keys nor required properties: with those
-            // options, types are read with reflection
-            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode && _options.AllowsGeneratedReading &&
-                                                   (_converterCheck == null || _converterCheck.AllowsGeneratedCode(Nullable.GetUnderlyingType(targetType) ?? targetType)));
+            // Generated code does not consult converters: with converters, it reads only types where none applies.
+            // Code from older generators matches keys exactly and checks neither unmapped keys nor required properties:
+            // with those options, such types are read with reflection
+            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode && GeneratedCodeReads(Nullable.GetUnderlyingType(targetType) ?? targetType));
 
             if (propertyConverter != null || info.Kind == ReadKind.Tree || IsConverted(targetType))
             {
@@ -434,6 +444,11 @@ public static partial class ToonSerializer
         {
             if (info.Kind == ReadKind.Generated && value.NodeKind == ToonNodeKind.Object)
             {
+                if (!_options.AllowsGeneratedReading && !info.Reader!.AppliesReadingOptions)
+                {
+                    throw new DirectReadFallbackException(); // code from an older generator
+                }
+
                 return info.Reader!.ReadOf(Reader, new ToonReaderValue(value), depth);
             }
 

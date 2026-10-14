@@ -55,7 +55,8 @@ public abstract class ToonTypeInfo
         return new ToonTypeInfo<List<T>>(
             (list, options, depth) => SerializeItems(list, list?.Count ?? 0, elementInfo, options, depth),
             elementInfo.Deserialize == null ? null : (value, options, depth) => DeserializeItems(value, elementInfo, options, depth)!,
-            elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)!);
+            elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)!,
+            elementInfo.AppliesReadingOptions);
     }
 
     /// <summary>Creates the type info of an array of values with <paramref name="elementInfo"/>.</summary>
@@ -67,7 +68,8 @@ public abstract class ToonTypeInfo
         return new ToonTypeInfo<T[]>(
             (array, options, depth) => SerializeItems(array, array?.Length ?? 0, elementInfo, options, depth),
             elementInfo.Deserialize == null ? null : (value, options, depth) => DeserializeItems(value, elementInfo, options, depth)?.ToArray()!,
-            elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)?.ToArray()!);
+            elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)?.ToArray()!,
+            elementInfo.AppliesReadingOptions);
     }
 
     /// <summary>
@@ -82,7 +84,8 @@ public abstract class ToonTypeInfo
         return new ToonTypeInfo<Dictionary<string, TValue>>(
             (dictionary, options, depth) => SerializeEntries(dictionary, valueInfo, options, depth),
             valueInfo.Deserialize == null ? null : (value, options, depth) => DeserializeEntries(value, valueInfo, options, depth)!,
-            valueInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadEntries(reader, value, valueInfo, depth)!);
+            valueInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadEntries(reader, value, valueInfo, depth)!,
+            valueInfo.AppliesReadingOptions);
     }
 
     #region Composed conversions
@@ -245,11 +248,12 @@ public sealed class ToonTypeInfo<T> : ToonTypeInfo
     internal static ToonTypeInfo<T>? Generated;
 
     internal ToonTypeInfo(Func<T, ToonSerializerOptions, int, ToonValue> serialize, Func<ToonValue, ToonSerializerOptions, int, T>? deserialize,
-                          ReadMethod? read)
+                          ReadMethod? read, bool appliesReadingOptions)
     {
         Serialize = serialize;
         Deserialize = deserialize;
         Read = read;
+        AppliesReadingOptions = appliesReadingOptions;
     }
 
     /// <inheritdoc />
@@ -263,4 +267,10 @@ public sealed class ToonTypeInfo<T> : ToonTypeInfo
 
     /// <summary>Reads a value straight from text; null when the type cannot be created.</summary>
     internal ReadMethod? Read { get; }
+
+    /// <summary>
+    ///     Whether the generated code applies case-insensitive reading, unmapped key errors and required properties (code
+    ///     from older generators leaves them to reflection).
+    /// </summary>
+    internal bool AppliesReadingOptions { get; }
 }

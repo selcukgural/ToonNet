@@ -53,6 +53,7 @@ internal enum TypeInfoProperty
 /// <param name="Plan">How the value is converted.</param>
 /// <param name="Write">How the generated <c>Deserialize</c> assigns the property.</param>
 /// <param name="SetterOwner">For <see cref="WriteKind.Accessor"/>: the type that declares the setter.</param>
+/// <param name="IsRequired">Whether the property has the C# <c>required</c> modifier.</param>
 internal sealed record PropertyModel(
     string Name,
     string TypeName,
@@ -63,7 +64,8 @@ internal sealed record PropertyModel(
     bool IsReadOnly,
     WriteKind Write,
     string? SetterOwner,
-    bool SetterOwnerIsValueType);
+    bool SetterOwnerIsValueType,
+    bool IsRequired);
 
 /// <summary>The constructor used by the generated <c>Deserialize</c> method.</summary>
 internal sealed record ConstructorModel(EquatableArray<ParameterModel> Parameters, bool SetsRequiredMembers);

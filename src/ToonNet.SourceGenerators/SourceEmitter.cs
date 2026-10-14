@@ -35,6 +35,9 @@ internal sealed class SourceEmitter
     private readonly List<(int Id, ValuePlan Plan)> _textReaders = [];
     private int _variable;
 
+    /// <summary>Whether the code calls <c>__ToonIsMapped</c>, which is then emitted once.</summary>
+    private bool _isMappedUsed;
+
     private SourceEmitter(TypeModel model) => _model = model;
 
     public static string Emit(TypeModel model) => new SourceEmitter(model).Run();
@@ -90,6 +93,11 @@ internal sealed class SourceEmitter
             }
 
             EmitAccessors();
+
+            if (_isMappedUsed)
+            {
+                EmitIsMapped(_model.Constructor);
+            }
         }
 
         EmitHelperMethods();
@@ -1002,11 +1010,22 @@ internal sealed class SourceEmitter
             }
         }
 
+        var policyArgument = model.FixedNamingPolicy != null || slots.All(slot => slot.Names.Distinct().Count() == 1) ? "" : ", __policy";
+        var unambiguous = UnambiguousNames(constructor);
+        var matchesIgnoringCase = Enumerable.Range(0, 4).Any(policy => slots.Any(slot => unambiguous[policy].Contains(slot.Names[policy])));
+
+        code.AppendLine("var __ci = options.PropertyNameCaseInsensitive;");
+        code.AppendLine($"var __disallow = options.UnmappedMemberHandling == {Serialization}ToonUnmappedMemberHandling.Disallow;");
         code.AppendLine("var __fields = reader.BeginObject(in value);");
         code.BeginBlock("while (reader.NextProperty(ref __fields, out var __key, out var __v))");
-        code.BeginBlock(model.FixedNamingPolicy != null || slots.All(slot => slot.Names.Distinct().Count() == 1)
-                            ? "switch (__ToonSlot(__key))"
-                            : "switch (__ToonSlot(__key, __policy))");
+        code.AppendLine($"var __slot = __ToonSlot(__key{policyArgument});");
+
+        if (matchesIgnoringCase)
+        {
+            code.AppendLine($"if (__slot < 0 && __ci) __slot = __ToonSlotIgnoreCase(__key{policyArgument});");
+        }
+
+        code.BeginBlock("switch (__slot)");
 
         for (var s = 0; s < slots.Count; s++)
         {
@@ -1025,11 +1044,23 @@ internal sealed class SourceEmitter
 
         code.AppendLine("default:");
         code.IncrementIndent();
+        code.AppendLine($"if (__disallow && !{IsMappedCall(constructor, "__key")}) reader.Fallback(); // the tree reports the key");
         code.AppendLine("reader.Skip(in __v);");
         code.AppendLine("break;");
         code.DecrementIndent();
         code.EndBlock();
         code.EndBlock();
+
+        var required = RequiredProperties(constructor).Select(i => model.Properties[i].Write != WriteKind.None
+                                                                       ? $"__h{i}"
+                                                                       : $"__ha{constructor.Parameters.Items.IndexOf(constructor.Parameters.First(p => p.PropertyIndex == i))}")
+                                                      .ToList();
+
+        if (required.Count != 0)
+        {
+            code.AppendLine($"if (options.RespectRequiredMembers && !({string.Join(" && ", required)})) reader.Fallback(); // the tree reports the property");
+        }
+
         code.AppendLine();
 
         EmitConstruction(arguments);
@@ -1039,6 +1070,12 @@ internal sealed class SourceEmitter
         code.EndBlock();
 
         EmitSlotLookup(slots);
+
+        if (matchesIgnoringCase)
+        {
+            EmitSlotLookupIgnoringCase(slots, unambiguous, policyArgument.Length != 0);
+        }
+
         EmitObjectReaderClass();
     }
 
@@ -1050,6 +1087,7 @@ internal sealed class SourceEmitter
         code.AppendLine();
         code.BeginBlock($"private sealed class __ToonObjectReader : {Serialization}ToonObjectReader<{type}>");
         code.AppendLine($"public override {type} Read({Reader} reader, in {ReaderValue} value, int depth) => __ToonReadObject(reader, in value, depth);");
+        code.AppendLine("public override bool AppliesReadingOptions => true;");
         code.EndBlock();
     }
 
@@ -1103,6 +1141,155 @@ internal sealed class SourceEmitter
         }
 
         return [property.Names[0], property.Names[1], property.Names[2], property.Names[3]];
+    }
+
+    /// <summary>
+    /// The key of every member under each naming policy, as ToonSerializer matches unmapped keys: every property
+    /// (read-only ones too) and the constructor parameters without a property.
+    /// </summary>
+    private List<string>[] MemberNames(ConstructorModel constructor)
+    {
+        var names = new List<string>[4];
+
+        for (var policy = 0; policy < 4; policy++)
+        {
+            names[policy] = [.. _model.Properties.Select(p => PolicyNames(p)[policy])];
+            names[policy].AddRange(constructor.Parameters.Where(p => p.PropertyIndex < 0).Select(p => p.Name));
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Per naming policy, the member names no other member name equals ignoring case: only these match keys ignoring
+    /// case with <c>PropertyNameCaseInsensitive</c>, as in ToonSerializer.
+    /// </summary>
+    private HashSet<string>[] UnambiguousNames(ConstructorModel constructor) =>
+        [.. MemberNames(constructor).Select(names => new HashSet<string>(names.GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
+                                                                              .Where(group => group.Distinct(StringComparer.Ordinal).Count() == 1)
+                                                                              .Select(group => group.Key),
+                                                                         StringComparer.Ordinal))];
+
+    /// <summary>Whether the key with the given names per policy may match ignoring case: <c>__ci</c>, <c>false</c> or a condition on the policy.</summary>
+    private string IgnoreCase(string[] names, HashSet<string>[] unambiguous)
+    {
+        var matches = Enumerable.Range(0, 4).Select(policy => unambiguous[policy].Contains(names[policy])).ToArray();
+
+        if (matches.All(m => m))
+        {
+            return "__ci";
+        }
+
+        if (!matches.Any(m => m) || _model.FixedNamingPolicy != null)
+        {
+            return "false";
+        }
+
+        var policyType = Serialization + "PropertyNamingPolicy";
+        return $"(__ci && __policy switch {{ {policyType}.CamelCase => {Bool(matches[1])}, {policyType}.SnakeCase => {Bool(matches[2])}, " +
+               $"{policyType}.LowerCase => {Bool(matches[3])}, _ => {Bool(matches[0])} }})";
+
+        static string Bool(bool value) => value ? "true" : "false";
+    }
+
+    /// <summary>The indexes of the required properties ToonSerializer checks with <c>RespectRequiredMembers</c>.</summary>
+    private List<int> RequiredProperties(ConstructorModel constructor) =>
+        constructor.SetsRequiredMembers ? [] : [.. _model.Properties.Select((p, i) => (p, i)).Where(p => p.p.IsRequired).Select(p => p.i)];
+
+    /// <summary>A call of <c>__ToonIsMapped</c> for a key, emitting the method on first use.</summary>
+    private string IsMappedCall(ConstructorModel constructor, string key)
+    {
+        _isMappedUsed = true;
+        return IsMappedByPolicy(MemberNames(constructor)) ? $"__ToonIsMapped({key}, __policy, __ci)" : $"__ToonIsMapped({key}, __ci)";
+    }
+
+    private bool IsMappedByPolicy(List<string>[] names) => _model.FixedNamingPolicy == null && names.Any(n => !n.SequenceEqual(names[0]));
+
+    /// <summary>Emits <c>__ToonIsMapped</c>: whether a key names a member, matched as ToonSerializer matches keys.</summary>
+    private void EmitIsMapped(ConstructorModel constructor)
+    {
+        var code = _code;
+        var names = MemberNames(constructor);
+        var unambiguous = UnambiguousNames(constructor);
+        var byPolicy = IsMappedByPolicy(names);
+
+        string Match(int policy)
+        {
+            var exact = names[policy].Count == 0 ? "false" : $"key is {string.Join(" or ", names[policy].Distinct().Select(Literal))}";
+            var ignoringCase = unambiguous[policy].Select(name => $"string.Equals(key, {Literal(name)}, global::System.StringComparison.OrdinalIgnoreCase)").ToList();
+            return ignoringCase.Count == 0 ? exact : $"{exact} || (ignoreCase && ({string.Join(" || ", ignoringCase)}))";
+        }
+
+        code.AppendLine();
+
+        if (!byPolicy)
+        {
+            code.AppendLine($"private static bool __ToonIsMapped(string key, bool ignoreCase) => {Match(0)};");
+            return;
+        }
+
+        var policyType = Serialization + "PropertyNamingPolicy";
+
+        code.AppendLine($"private static bool __ToonIsMapped(string key, {policyType} policy, bool ignoreCase) => policy switch");
+        code.AppendLine("{");
+        code.IncrementIndent();
+        code.AppendLine($"{policyType}.CamelCase => {Match(1)},");
+        code.AppendLine($"{policyType}.SnakeCase => {Match(2)},");
+        code.AppendLine($"{policyType}.LowerCase => {Match(3)},");
+        code.AppendLine($"_ => {Match(0)}");
+        code.DecrementIndent();
+        code.AppendLine("};");
+    }
+
+    /// <summary>
+    /// Emits <c>__ToonSlotIgnoreCase</c>: the slot of a key that equals an unambiguous slot name ignoring case, or -1
+    /// (asked only when no name matches exactly).
+    /// </summary>
+    private void EmitSlotLookupIgnoringCase(List<ReadSlot> slots, HashSet<string>[] unambiguous, bool byPolicy)
+    {
+        var code = _code;
+
+        string Switch(int policy)
+        {
+            // A policy under which keys are shared never reaches the lookup (the tree reads such objects)
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            if (slots.Any(slot => !seen.Add(slot.Names[policy])))
+            {
+                return "-1";
+            }
+
+            // Names equal ignoring case only at the same length
+            var arms = slots.Select((slot, index) => (Name: slot.Names[policy], Index: index))
+                            .Where(slot => unambiguous[policy].Contains(slot.Name))
+                            .GroupBy(slot => slot.Name.Length)
+                            .Select(group => $"{group.Key} => " +
+                                             string.Concat(group.Select(slot => $"string.Equals(key, {Literal(slot.Name)}, global::System.StringComparison.OrdinalIgnoreCase) ? {slot.Index} : ")) +
+                                             "-1")
+                            .ToList();
+
+            return arms.Count == 0 ? "-1" : $"key.Length switch {{ {string.Join(", ", arms.Append("_ => -1"))} }}";
+        }
+
+        code.AppendLine();
+
+        if (!byPolicy)
+        {
+            code.AppendLine($"private static int __ToonSlotIgnoreCase(string key) => {Switch(0)};");
+            return;
+        }
+
+        var policyType = Serialization + "PropertyNamingPolicy";
+
+        code.AppendLine($"private static int __ToonSlotIgnoreCase(string key, {policyType} policy) => policy switch");
+        code.AppendLine("{");
+        code.IncrementIndent();
+        code.AppendLine($"{policyType}.CamelCase => {Switch(1)},");
+        code.AppendLine($"{policyType}.SnakeCase => {Switch(2)},");
+        code.AppendLine($"{policyType}.LowerCase => {Switch(3)},");
+        code.AppendLine($"_ => {Switch(0)}");
+        code.DecrementIndent();
+        code.AppendLine("};");
     }
 
     /// <summary>A condition that is true for the naming policies under which two slots share a key, or null.</summary>
@@ -1304,9 +1491,37 @@ internal sealed class SourceEmitter
             return;
         }
 
-        code.AppendLine("// Converters, options generated code does not apply, null and non-object values are handled (or reported) by ToonSerializer.");
-        code.AppendLine($"if (options.Converters.Count != 0 || {Helpers}.ReadsWithReflection(options) || value is not {Models}ToonObject __obj) return {reflection};");
+        code.AppendLine("// Converters, null and non-object values are handled (or reported) by ToonSerializer.");
+        code.AppendLine($"if (options.Converters.Count != 0 || value is not {Models}ToonObject __obj) return {reflection};");
         EmitPolicyLocal();
+        code.AppendLine("var __ci = options.PropertyNameCaseInsensitive;");
+
+        var unambiguous = UnambiguousNames(constructor);
+        var type = model.FullyQualifiedName;
+
+        // Checked before any value is read, in the order of ToonSerializer
+        code.BeginBlock($"if (options.UnmappedMemberHandling == {Serialization}ToonUnmappedMemberHandling.Disallow)");
+        code.BeginBlock("foreach (var __e in __obj.Properties)");
+        code.AppendLine($"if (!{IsMappedCall(constructor, "__e.Key")}) throw {Helpers}.UnmappedKeyError<{type}>(__e.Key, value);");
+        code.EndBlock();
+        code.EndBlock();
+
+        var required = RequiredProperties(constructor);
+
+        if (required.Count != 0)
+        {
+            code.BeginBlock("if (options.RespectRequiredMembers)");
+
+            foreach (var i in required)
+            {
+                var property = model.Properties[i];
+                var name = NameExpression(property);
+                code.AppendLine($"if (!{Helpers}.TryGetProperty(__obj, {name}, {IgnoreCase(PolicyNames(property), unambiguous)}, out _)) " +
+                                $"throw {Helpers}.MissingRequiredError<{type}>({name}, value);");
+            }
+
+            code.EndBlock();
+        }
 
         var arguments = new List<string>();
 
@@ -1315,13 +1530,14 @@ internal sealed class SourceEmitter
             var parameter = constructor.Parameters[j];
             var bound = parameter.PropertyIndex >= 0 ? model.Properties[parameter.PropertyIndex] : null;
             var key = bound != null ? NameExpression(bound) : Literal(parameter.Name);
+            var ignoreCase = IgnoreCase(bound != null ? PolicyNames(bound) : [parameter.Name, parameter.Name, parameter.Name, parameter.Name], unambiguous);
             var read = bound?.ConverterTypeName != null
                 ? $"({parameter.TypeName}){ConverterField(bound)}.Read(__ta{j}, typeof({bound.TypeOfName}), options)"
                 : ReadExpression(parameter.Plan, $"__ta{j}", "depth + 1");
 
             code.AppendLine();
             code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue};");
-            code.AppendLine($"if (__obj.Properties.TryGetValue({key}, out var __ta{j})) __a{j} = {read};");
+            code.AppendLine($"if ({Helpers}.TryGetProperty(__obj, {key}, {ignoreCase}, out var __ta{j})) __a{j} = {read};");
             arguments.Add($"__a{j}");
         }
 
@@ -1341,7 +1557,7 @@ internal sealed class SourceEmitter
             code.AppendLine();
             code.AppendLine($"{property.TypeName} __p{i} = default!;");
             code.AppendLine($"var __h{i} = false;");
-            code.BeginBlock($"if (__obj.Properties.TryGetValue({NameExpression(property)}, out var __t{i}))");
+            code.BeginBlock($"if ({Helpers}.TryGetProperty(__obj, {NameExpression(property)}, {IgnoreCase(PolicyNames(property), unambiguous)}, out var __t{i}))");
             code.AppendLine($"__p{i} = {read};");
             code.AppendLine($"__h{i} = true;");
             code.EndBlock();

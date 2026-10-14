@@ -297,11 +297,11 @@ public static partial class ToonSerializer
     /// </summary>
     private static T? DeserializeText<T>(ToonText text, ToonTypeInfo<T> typeInfo, ToonSerializerOptions options)
     {
-        if (!options.AllowsGeneratedReading)
+        if (!options.AllowsGeneratedReading && !typeInfo.AppliesReadingOptions)
         {
             throw new NotSupportedException(
-                "Reading with a ToonTypeInfo does not support PropertyNameCaseInsensitive, UnmappedMemberHandling.Disallow or " +
-                "RespectRequiredMembers, which need the reflection-based serializer; use the overloads without a type info.");
+                $"The generated code of {typeof(T).Name} is from an older ToonNet.SourceGenerators that does not apply PropertyNameCaseInsensitive, " +
+                "UnmappedMemberHandling.Disallow or RespectRequiredMembers; rebuild with the current generator, or use the overloads without a type info.");
         }
 
         var deserialize = typeInfo.Deserialize ?? throw new NotSupportedException(

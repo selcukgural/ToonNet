@@ -133,6 +133,13 @@ public abstract class ToonObjectReader
 {
     private protected ToonObjectReader() { }
 
+    /// <summary>
+    ///     Whether the generated code applies <see cref="ToonSerializerOptions.PropertyNameCaseInsensitive"/>,
+    ///     <see cref="ToonSerializerOptions.UnmappedMemberHandling"/> and <see cref="ToonSerializerOptions.RespectRequiredMembers"/>
+    ///     itself; false for code from older generators, which the serializer then does not use with those options.
+    /// </summary>
+    public virtual bool AppliesReadingOptions => false;
+
     internal abstract object? ReadOf(ToonReader reader, in ToonReaderValue value, int depth);
 }
 

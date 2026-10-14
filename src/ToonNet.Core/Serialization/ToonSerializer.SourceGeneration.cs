@@ -27,6 +27,9 @@ public static partial class ToonSerializer
 
         /// <summary>Null when the type has no constructor generated code can use.</summary>
         public Func<ToonValue, ToonSerializerOptions, int, object?>? Deserialize { get; } = deserialize;
+
+        /// <summary>Whether the generated code may read with the options (code from older generators ignores some).</summary>
+        public bool ReadsWith(ToonSerializerOptions options) => options.AllowsGeneratedReading || Reader?.AppliesReadingOptions == true;
     }
 
     private static readonly ConcurrentDictionary<Type, GeneratedSerializer> RegisteredGeneratedSerializers = new();
@@ -53,7 +56,8 @@ public static partial class ToonSerializer
         ToonTypeInfo<T>.Generated = new ToonTypeInfo<T>(
             serialize,
             deserialize,
-            deserialize == null ? null : reader != null ? reader.Read : (ToonReader r, in ToonReaderValue v, int depth) => deserialize(r.BuildTree(in v), r.Options, depth));
+            deserialize == null ? null : reader != null ? reader.Read : (ToonReader r, in ToonReaderValue v, int depth) => deserialize(r.BuildTree(in v), r.Options, depth),
+            reader?.AppliesReadingOptions == true);
     }
 
     /// <summary>
@@ -222,6 +226,12 @@ public static partial class ToonSerializer
     }
 
     internal static string FormatDictionaryKeyForGeneratedCode(object key) => FormatDictionaryKey(key);
+
+    internal static ToonSerializationException UnmappedKeyErrorForGeneratedCode(string key, Type targetType, ToonValue value) =>
+        UnmappedKeyError(key, targetType, value, new SerializerState());
+
+    internal static ToonSerializationException MissingRequiredErrorForGeneratedCode(string name, Type targetType, ToonValue value) =>
+        MissingRequiredError(name, targetType, value, SerializerState.Root);
 
     internal static ToonValue SerializeForGeneratedCode(object? value, Type type, ToonSerializerOptions options, int depth)
     {

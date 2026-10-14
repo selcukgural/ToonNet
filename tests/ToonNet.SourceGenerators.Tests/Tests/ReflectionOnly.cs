@@ -19,6 +19,9 @@ internal static class ReflectionOnly
             AllowExtendedLimits = options.AllowExtendedLimits,
             MaxDepth = options.MaxDepth,
             IncludeReadOnlyProperties = options.IncludeReadOnlyProperties,
+            PropertyNameCaseInsensitive = options.PropertyNameCaseInsensitive,
+            UnmappedMemberHandling = options.UnmappedMemberHandling,
+            RespectRequiredMembers = options.RespectRequiredMembers,
             UseGeneratedCode = false
         };
 
