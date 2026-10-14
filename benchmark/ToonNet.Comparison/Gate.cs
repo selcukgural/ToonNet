@@ -6,11 +6,11 @@ using ToonNet.Core.Serialization;
 namespace ToonNet.Comparison;
 
 /// <summary>
-///     The performance gate of CI: <c>gate --report file</c> measures every scenario, <c>gate --compare base head</c>
+///     A quick local performance check: <c>gate --report file</c> measures every scenario, <c>gate --compare base head</c>
 ///     fails when the head is slower or allocates more than the base, both measured on the same machine.
 /// </summary>
 /// <remarks>
-///     Times on shared CI machines vary from run to run, so a scenario's time is measured as a ratio to System.Text.Json
+///     Times vary from run to run, so a scenario's time is measured as a ratio to System.Text.Json
 ///     doing the same work, interleaved in the same process: both are affected alike by the machine. Run it with
 ///     <c>DOTNET_TieredCompilation=0</c>, so the code is compiled once, fully optimized, instead of at varying times. Allocated bytes per
 ///     operation are exact; the smallest of several rounds is kept, so a pool that had to allocate once does not count.

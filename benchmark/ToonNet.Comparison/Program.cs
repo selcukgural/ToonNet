@@ -11,7 +11,7 @@ if (args.Length > 0 && args[0] == "parity")
     return Parity.Report(args.Length > 1 ? int.Parse(args[1]) : 20_000) ? 0 : 1;
 }
 
-// `gate --report <file>` and `gate --compare <base> <head>`: the performance gate of CI
+// `gate --report <file>` and `gate --compare <base> <head>`: a quick local performance check
 if (args.Length > 0 && args[0] == "gate")
 {
     return Gate.Run(args);

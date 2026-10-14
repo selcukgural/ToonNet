@@ -121,15 +121,14 @@ dotnet run -c Release --project benchmark/ToonNet.Comparison -- parity
 dotnet run -c Release --project benchmark/ToonNet.Comparison -- --filter "*"
 ```
 
-CI runs a performance gate on every pull request and push: it measures 80 scenarios (serializing and deserializing
-four data shapes with generated code, reflection, type infos, UTF-8 and converters) on the base commit and on yours,
-on the same machine, and fails when a scenario gets more than 15% slower relative to System.Text.Json doing the same
-work, or allocates more than 3% more. To compare locally (`main.json` measured on the base):
+For a quick check of performance work without the full benchmark run, the gate mode measures 80 scenarios (time as a
+ratio to System.Text.Json doing the same work, and allocated bytes per operation) and compares two builds, for example
+the base commit and yours:
 
 ```bash
 dotnet build -c Release benchmark/ToonNet.Comparison -o /tmp/gate
 DOTNET_TieredCompilation=0 dotnet /tmp/gate/ToonNet.Comparison.dll gate --report mine.json
-dotnet /tmp/gate/ToonNet.Comparison.dll gate --compare main.json mine.json
+dotnet /tmp/gate/ToonNet.Comparison.dll gate --compare base.json mine.json
 ```
 
 CI also publishes `tests/ToonNet.AotSmokeTest` with NativeAOT and fails on any trimming or AOT warning; to check

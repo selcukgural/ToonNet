@@ -14,10 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoded text and a 47 MB list, and it is slightly faster. Errors and their line numbers are those of reading the whole
   document (checked against every decode fixture with batches of one item); the declared length is checked when the
   array ends.
-- **CI:** A performance gate. Every pull request and push measures 80 scenarios on the base commit and the head, on the
-  same machine (time as a ratio to System.Text.Json doing the same work, interleaved in one process, and exact
-  allocated bytes per operation), and fails on more than 15% slowdown or 3% more allocation
-  (`dotnet run --project benchmark/ToonNet.Comparison -- gate`).
+- **Benchmarks:** A gate mode in `benchmark/ToonNet.Comparison` for quick local checks: `gate --report` measures 80
+  scenarios (time as a ratio to System.Text.Json doing the same work, interleaved in one process, and exact allocated
+  bytes per operation) and `gate --compare` reports more than 15% slowdown or 3% more allocation between two builds.
 
 ## [3.1.0] - 2026-10-14
 
