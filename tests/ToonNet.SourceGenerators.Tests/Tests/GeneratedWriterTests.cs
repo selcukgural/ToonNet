@@ -314,6 +314,24 @@ public class GeneratedWriterTests
     }
 
     [Fact]
+    public void DictionariesAsNestedFieldGroups_MatchTheTree()
+    {
+        static ScoredRow Row(int id, params (string Key, int Value)[] scores) =>
+            new() { Id = id, Scores = scores.ToDictionary(s => s.Key, s => s.Value), ByCode = new Dictionary<int, BoxSize> { [id] = Size(id, id) } };
+
+        var rows = new List<ScoredRow> { Row(1, ("math", 1), ("art", 2)), Row(1, ("art", 3), ("math", 4)) };
+        AssertSameText(rows);
+        AssertSameText(new List<ScoredRow> { Row(1, ("math", 1)), Row(2, ("art", 2)) });
+        AssertSameText(new List<ScoredRow> { Row(1), Row(1) });
+
+        var treeShapes = ToonSerializer.DirectWriteTreeShapes;
+        var text = ToonSerializer.Serialize(rows);
+        Assert.StartsWith("[2]{Id,Scores{math,art},ByCode{\"1\"{Width,Height}}}:", text);
+        Assert.Equal(text, ToonSerializer.Serialize(rows, ToonTypeInfo.CreateList(ScoredRow.ToonTypeInfo)));
+        Assert.Equal(treeShapes, ToonSerializer.DirectWriteTreeShapes); // planned, not through the tree
+    }
+
+    [Fact]
     public void NestedObjects_MatchTheTree()
     {
         AssertSameText(Tree(), WriterNode.Serialize);
@@ -358,4 +376,12 @@ public class GeneratedWriterTests
         Assert.Equal("Id: 1\nID: 2", ToonSerializer.Serialize(new CaseClash()));
         Assert.Equal("id: 2", ToonSerializer.Serialize(new CaseClash(), new ToonSerializerOptions { PropertyNamingPolicy = PropertyNamingPolicy.CamelCase }));
     }
+}
+
+[ToonSerializable]
+public partial class ScoredRow
+{
+    public int Id { get; set; }
+    public Dictionary<string, int> Scores { get; set; } = [];
+    public Dictionary<int, BoxSize> ByCode { get; set; } = [];
 }

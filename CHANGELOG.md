@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   converters of the options themselves (they handed the whole value to reflection). The generated `Serialize` and
   `Deserialize` methods apply them the same way.
 
+### Changed
+- **ToonNet.Core:** Dictionaries in tabular arrays and keyed tabular objects (as rows, nested field groups or keyed
+  values) are written straight to text; they went through the `ToonValue` tree. The text is the same. In a quick
+  measurement, 10,000 rows with a three-entry dictionary each serialize about 3x faster with reflection and 1.4x
+  faster with generated code.
+
 ### Fixed
 - **ToonNet.SourceGenerators:** A converter registered for a nullable value type only (`CanConvert(typeof(int?))`)
   was ignored for properties of that type when `ToonSerializer` used generated code; such properties now go through

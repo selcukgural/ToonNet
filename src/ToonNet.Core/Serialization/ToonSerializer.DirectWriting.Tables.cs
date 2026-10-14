@@ -7,7 +7,8 @@ namespace ToonNet.Core.Serialization;
 
 // Nested field groups (spec §9.3) and keyed tabular objects (§9.5) of typed objects, written without building the
 // tree: a plan of the columns is derived from the objects, the same columns the encoder finds in the tree. Shapes the
-// plan cannot decide (converters, ToonValue values, dictionaries as groups, objects of different types) go to the tree.
+// plan cannot decide (converters, ToonValue values, dictionaries with custom comparers, objects of different types) go to
+// the tree.
 public static partial class ToonSerializer
 {
     private sealed partial class DirectWriter
@@ -38,12 +39,27 @@ public static partial class ToonSerializer
             public int GroupDepth;
         }
 
-        /// <summary>Where a column's values come from: a property of the objects at its level.</summary>
+        /// <summary>Where a column's values come from: a property (or dictionary entry) of the objects at its level.</summary>
         /// <param name="Property">The index of the property.</param>
         /// <param name="Metadata">The property, for objects with reflection metadata.</param>
         /// <param name="Writer">The generated writer of the objects, for objects with generated code.</param>
         /// <param name="ReadAsObject">For a cell: write the value read as an object rather than the typed property.</param>
-        private readonly record struct PlanColumn(int Property, PropertyMetadata? Metadata, ToonObjectWriter? Writer, bool ReadAsObject);
+        /// <param name="Entries">The entry reader, for dictionaries (the column is the entry with <paramref name="Key"/>).</param>
+        /// <param name="Key">The key of the entry, for dictionaries.</param>
+        private readonly record struct PlanColumn(int Property, PropertyMetadata? Metadata, ToonObjectWriter? Writer, bool ReadAsObject,
+                                                  DictionaryEntryReader? Entries = null, object? Key = null)
+        {
+            /// <summary>The value of the column in an object of its level.</summary>
+            public object? ValueOf(object item)
+            {
+                if (Entries != null)
+                {
+                    return Entries.TryGetValue(item, Key!, out var value) ? value : null;
+                }
+
+                return Metadata is { } property ? property.Getter(item) : Writer!.GetValueOf(item, Property);
+            }
+        }
 
         /// <summary>Plans the tabular form for collection items (all objects of one type).</summary>
         private PlanResult PlanRows(PooledItems items, DirectKind[] kinds, DirectTypeInfo?[] infos, out TablePlan plan)
@@ -53,7 +69,7 @@ public static partial class ToonSerializer
 
             for (var i = 0; i < items.Count; i++)
             {
-                if (kinds[i] != kinds[0] || kinds[i] is not (DirectKind.Object or DirectKind.Generated) || items[i]!.GetType() != type)
+                if (kinds[i] != kinds[0] || kinds[i] is not (DirectKind.Object or DirectKind.Generated or DirectKind.Dictionary) || items[i]!.GetType() != type)
                 {
                     return kinds[i] is DirectKind.Null or DirectKind.Primitive or DirectKind.Collection ? PlanResult.NotTabular : PlanResult.Unknown;
                 }
@@ -174,7 +190,8 @@ public static partial class ToonSerializer
                         return PlanResult.NotTabular;
                     }
 
-                    if (entryKind is not (DirectKind.Object or DirectKind.Generated) || (valueType != null && entryValue.GetType() != valueType))
+                    if (entryKind is not (DirectKind.Object or DirectKind.Generated or DirectKind.Dictionary) ||
+                        (valueType != null && entryValue.GetType() != valueType))
                     {
                         return PlanResult.Unknown;
                     }
@@ -237,7 +254,16 @@ public static partial class ToonSerializer
         {
             var first = plan.Columns.Count;
 
-            if (kind == DirectKind.Object)
+            if (kind == DirectKind.Dictionary)
+            {
+                var result = AddEntryColumns(plan, objects, info.Entries!, level, ref rented);
+
+                if (result != PlanResult.Tabular)
+                {
+                    return result;
+                }
+            }
+            else if (kind == DirectKind.Object)
             {
                 var metadata = info.Metadata!;
                 var names = GetDistinctPropertyNames(metadata, _options);
@@ -388,6 +414,96 @@ public static partial class ToonSerializer
             return plan.Columns.Count > first ? PlanResult.Tabular : PlanResult.NotTabular;
         }
 
+        /// <summary>
+        ///     Adds a column per entry of <paramref name="dictionaries"/> (all of one type): they qualify when they write
+        ///     the same key names, in the order of the first one, as the encoder finds the key sets equal in the tree.
+        /// </summary>
+        /// <remarks>
+        ///     Dictionary types here format distinct keys to distinct names, so equal name sets mean equal keys, and each
+        ///     dictionary finds the entry of a key of the first one, whatever its comparer.
+        /// </remarks>
+        private PlanResult AddEntryColumns(TablePlan plan, ReadOnlySpan<object?> dictionaries, DictionaryEntryReader entries, int level,
+                                           ref object?[]? rented)
+        {
+            // A converter may leave entries out of the tree
+            if (_hasConverters)
+            {
+                return PlanResult.Unknown;
+            }
+
+            var keys = new List<KeyValuePair<object, string>>();
+            var names = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var (rawKey, value) in entries.Read(dictionaries[0]!))
+            {
+                if (value != null || !_ignoreNulls)
+                {
+                    var name = FormatDictionaryKey(rawKey);
+                    keys.Add(new KeyValuePair<object, string>(rawKey, name));
+                    names.Add(name);
+                }
+            }
+
+            // An empty object rules the tabular form out, and so do key sets that differ
+            if (keys.Count == 0)
+            {
+                return PlanResult.NotTabular;
+            }
+
+            foreach (var dictionary in dictionaries)
+            {
+                if (!entries.CanLookUp(dictionary!))
+                {
+                    return PlanResult.Unknown;
+                }
+
+                var count = 0;
+
+                foreach (var (rawKey, value) in entries.Read(dictionary!))
+                {
+                    if (value == null && _ignoreNulls)
+                    {
+                        continue;
+                    }
+
+                    if (!names.Contains(FormatDictionaryKey(rawKey)))
+                    {
+                        return PlanResult.NotTabular;
+                    }
+
+                    count++;
+                }
+
+                if (count != keys.Count)
+                {
+                    return PlanResult.NotTabular;
+                }
+            }
+
+            foreach (var (rawKey, name) in keys)
+            {
+                var values = (rented ??= ArrayPool<object?>.Shared.Rent(dictionaries.Length)).AsSpan(0, dictionaries.Length);
+
+                for (var i = 0; i < dictionaries.Length; i++)
+                {
+                    if (!entries.TryGetValue(dictionaries[i]!, rawKey, out values[i]) || (values[i] is null && _ignoreNulls))
+                    {
+                        return PlanResult.NotTabular; // the key sets differ
+                    }
+                }
+
+                // Entry values are written by their runtime type
+                var result = AddColumn(plan, name, values, typeof(object), new PlanColumn(-1, null, null, true, entries, rawKey), level);
+
+                if (result is PlanResult.NotTabular or PlanResult.Unknown)
+                {
+                    return result;
+                }
+            }
+
+            return PlanResult.Tabular;
+        }
+
         private static PlanResult AddCell(TablePlan plan, string name, PlanColumn source)
         {
             plan.Columns.Add(new ToonColumn(name, plan.Columns.Count + 1));
@@ -429,13 +545,13 @@ public static partial class ToonSerializer
                         break;
                     case DirectKind.Collection:
                         return PlanResult.NotTabular;
-                    case DirectKind.Object or DirectKind.Generated when childType == null || value!.GetType() == childType:
+                    case DirectKind.Object or DirectKind.Generated or DirectKind.Dictionary when childType == null || value!.GetType() == childType:
                         childType = value!.GetType();
                         childKind = kind;
                         childInfo = info;
                         break;
                     default:
-                        return PlanResult.Unknown; // converters, ToonValue values, dictionaries, objects of different types
+                        return PlanResult.Unknown; // converters, ToonValue values, objects of different types
                 }
             }
 
@@ -538,8 +654,7 @@ public static partial class ToonSerializer
 
                 if (columns[i].IsGroupAt(i))
                 {
-                    var child = source.Metadata is { } groupProperty ? groupProperty.Getter(item) : source.Writer!.GetValueOf(item, source.Property);
-                    first = WriteCells(child!, plan, i + 1, columns[i].End, first);
+                    first = WriteCells(source.ValueOf(item)!, plan, i + 1, columns[i].End, first);
                     continue;
                 }
 
@@ -564,7 +679,7 @@ public static partial class ToonSerializer
                     continue;
                 }
 
-                var value = source.Metadata is { } cellProperty ? cellProperty.Getter(item) : source.Writer!.GetValueOf(item, source.Property);
+                var value = source.ValueOf(item);
 
                 if (value is null)
                 {

@@ -244,6 +244,16 @@ public static partial class ToonSerializer
                 yield return (enumerator.Key, enumerator.Value);
             }
         }
+
+        public override bool CanLookUp(object dictionary) => true;
+
+        public override bool TryGetValue(object dictionary, object key, out object? value)
+        {
+            var entries = (IDictionary)dictionary;
+            var found = entries.Contains(key);
+            value = found ? entries[key] : null;
+            return found;
+        }
     }
 
     private static readonly ConcurrentDictionary<Type, DirectTypeInfo> ReflectionTypeInfos = new();

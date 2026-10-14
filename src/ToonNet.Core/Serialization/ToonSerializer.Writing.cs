@@ -286,6 +286,12 @@ public static partial class ToonSerializer
             count = 0;
             return false;
         }
+
+        /// <summary>Whether <see cref="TryGetValue"/> can look up the entries of the dictionary.</summary>
+        public abstract bool CanLookUp(object dictionary);
+
+        /// <summary>The value of a key, as the dictionary finds it (for one that <see cref="CanLookUp"/>).</summary>
+        public abstract bool TryGetValue(object dictionary, object key, out object? value);
     }
 
     private sealed class DictionaryEntryReader<TKey, TValue> : DictionaryEntryReader where TKey : notnull
@@ -382,6 +388,19 @@ public static partial class ToonSerializer
             {
                 yield return (key!, value);
             }
+        }
+
+        public override bool CanLookUp(object dictionary) => dictionary is IDictionary<TKey, TValue> or IReadOnlyDictionary<TKey, TValue>;
+
+        public override bool TryGetValue(object dictionary, object key, out object? value)
+        {
+            TValue typed;
+            var found = dictionary is IDictionary<TKey, TValue> writable
+                ? writable.TryGetValue((TKey)key, out typed!)
+                : ((IReadOnlyDictionary<TKey, TValue>)dictionary).TryGetValue((TKey)key, out typed!);
+
+            value = typed;
+            return found;
         }
     }
 

@@ -342,6 +342,66 @@ public class DirectWritingParityTests
         Assert.Equal(treeShapes, ToonSerializer.DirectWriteTreeShapes);
     }
 
+    public sealed class Scored
+    {
+        public int Id { get; set; }
+        public Dictionary<string, int?>? Scores { get; set; }
+    }
+
+    [Fact]
+    public void DictionariesAsNestedFieldGroups_MatchTheTree()
+    {
+        static Dictionary<string, int?> Scores(params (string Key, int? Value)[] entries) => entries.ToDictionary(e => e.Key, e => e.Value);
+        static List<Scored> Rows(params Dictionary<string, int?>?[] scores) => [.. scores.Select((s, i) => new Scored { Id = i, Scores = s })];
+
+        foreach (var options in OptionVariants())
+        {
+            AssertParity(Rows(Scores(("math", 1), ("art", 2)), Scores(("math", 3), ("art", 4))), options);
+            AssertParity(Rows(Scores(("math", 1), ("art", 2)), Scores(("art", 4), ("math", 3))), options); // key order differs
+            AssertParity(Rows(Scores(("math", 1)), Scores(("art", 4))), options);                           // key sets differ
+            AssertParity(Rows(Scores(("math", 1), ("art", 2)), Scores(("math", 3))), options);
+            AssertParity(Rows(Scores(("math", 1), ("art", null)), Scores(("math", 3), ("art", 4))), options);
+            AssertParity(Rows(Scores(("math", 1), ("art", null)), Scores(("math", 3), ("art", null))), options);
+            AssertParity(Rows(Scores(("math", null)), Scores(("math", null))), options);
+            AssertParity(Rows(Scores(), Scores()), options);
+            AssertParity(Rows(Scores(("math", 1)), null), options);
+            AssertParity(Rows(Scores(("needs quote", 1), ("a:b", 2), ("", 3)), Scores(("needs quote", 4), ("a:b", 5), ("", 6))), options);
+
+            // Rows of dictionaries, nested dictionaries, other key and value types
+            AssertParity(new List<Dictionary<string, int>> { new() { ["x"] = 1, ["y"] = 2 }, new() { ["y"] = 3, ["x"] = 4 } }, options);
+            AssertParity(new List<Dictionary<string, Dictionary<string, int>>>
+            {
+                new() { ["a"] = new() { ["x"] = 1 }, ["b"] = new() { ["x"] = 2, ["y"] = 3 } },
+                new() { ["a"] = new() { ["x"] = 4 }, ["b"] = new() { ["y"] = 5, ["x"] = 6 } }
+            }, options);
+            AssertParity(new List<object> { new { Id = 1, ById = new Dictionary<int, string> { [7] = "a", [8] = "b" } }, new { Id = 2, ById = new Dictionary<int, string> { [8] = "c", [7] = "d" } } },
+                         options);
+            AssertParity(new List<object> { new { Map = new Dictionary<Color, Address> { [Color.Red] = new() { City = "a" } } }, new { Map = new Dictionary<Color, Address> { [Color.Red] = new() { City = "b" } } } },
+                         options);
+            AssertParity(new List<object> { new { Map = new Dictionary<Guid, decimal> { [Guid.Empty] = 1.5m } }, new { Map = new Dictionary<Guid, decimal> { [Guid.Empty] = 2m } } },
+                         options);
+            AssertParity(new List<object> { new { Map = new Dictionary<string, List<int>> { ["a"] = [1] } }, new { Map = new Dictionary<string, List<int>> { ["a"] = [2] } } },
+                         options);
+            AssertParity(new List<object> { new { Map = new Dictionary<string, object?> { ["a"] = 1, ["b"] = "x" } }, new { Map = new Dictionary<string, object?> { ["a"] = new Address { City = "c" }, ["b"] = "y" } } },
+                         options);
+
+            // Keyed tabular objects whose values are dictionaries
+            AssertParity(new Dictionary<string, Dictionary<string, int>> { ["p"] = new() { ["x"] = 1, ["y"] = 2 }, ["q"] = new() { ["y"] = 3, ["x"] = 4 } }, options);
+            AssertParity(new { Map = new Dictionary<string, Dictionary<string, int>> { ["p"] = new() { ["x"] = 1 }, ["q"] = new() { ["z"] = 2 } } }, options);
+
+            // With a custom comparer too, the key names decide, as in the tree
+            var ignoringCase = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase) { ["MATH"] = 3 };
+            AssertParity(Rows(Scores(("math", 1)), ignoringCase), options);
+        }
+
+        // Shapes of one dictionary type are planned and written straight to text, not through the tree
+        var treeShapes = ToonSerializer.DirectWriteTreeShapes;
+        Assert.StartsWith("[2]{Id,Scores{math,art}}:", AssertParity(Rows(Scores(("math", 1), ("art", 2)), Scores(("art", 4), ("math", 3)))));
+        Assert.StartsWith("[2]{x,y}:", AssertParity(new List<Dictionary<string, int>> { new() { ["x"] = 1, ["y"] = 2 }, new() { ["y"] = 3, ["x"] = 4 } }));
+        Assert.StartsWith("[2:]{x,y}:", AssertParity(new Dictionary<string, Dictionary<string, int>> { ["p"] = new() { ["x"] = 1, ["y"] = 2 }, ["q"] = new() { ["y"] = 3, ["x"] = 4 } }));
+        Assert.Equal(treeShapes, ToonSerializer.DirectWriteTreeShapes);
+    }
+
     [Fact]
     public void RootValues_MatchTheTree()
     {
