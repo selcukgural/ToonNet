@@ -8,6 +8,24 @@ namespace ToonNet.Tests.Interop;
 /// </summary>
 public class ToonYamlConverterTests
 {
+    #region Numbers
+
+    [Theory]
+    [InlineData("scientific: 1.5e-10")]
+    [InlineData("big: 1e22")]
+    [InlineData("long: 12345678901234567890123")]
+    [InlineData("tiny: 0.0000001")]
+    [InlineData("plain: 1.50")]
+    public void NumbersInExponentForm_RoundTrip(string yaml)
+    {
+        var toon = ToonYamlConvert.FromYaml(yaml);
+        var back = ToonYamlConvert.ToYaml(toon);
+
+        Assert.Equal(toon, ToonYamlConvert.FromYaml(back));
+    }
+
+    #endregion
+
     #region Limit Tests
 
     [Fact]

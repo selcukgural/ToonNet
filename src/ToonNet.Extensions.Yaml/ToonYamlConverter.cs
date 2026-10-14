@@ -529,7 +529,8 @@ public static class ToonYamlConverter
     private static object ToYamlNumber(ToonNumber number)
     {
         return number.DecimalValue is { } exact
-            ? decimal.Parse(new ToonNumber(exact).ToString(), System.Globalization.CultureInfo.InvariantCulture)
+            // TOON writes numbers outside 1e-6..1e21 in exponent form
+            ? decimal.Parse(new ToonNumber(exact).ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture)
             : number.Value;
     }
 
