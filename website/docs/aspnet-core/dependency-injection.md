@@ -68,6 +68,12 @@ builder.Services.AddToonNet(
     });
 ```
 
+To configure only the serializer options:
+
+```csharp
+builder.Services.AddToonNet(options => options.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase);
+```
+
 Or bind them from configuration (section `ToonNet` by default, with `ToonOptions` and `ToonSerializerOptions`
 subsections):
 
@@ -75,8 +81,9 @@ subsections):
 builder.Services.AddToonNet(builder.Configuration);
 ```
 
-Invalid values (for example an odd `IndentSize` or a `MaxDepth` above 200 without `AllowExtendedLimits`) make the
-application fail at startup.
+Invalid values (for example a `MaxDepth` above 200 without `AllowExtendedLimits`, or an `IndentSize` outside 1–100) make
+the application fail at startup. Calling `AddToonNet` more than once is safe: the delegates add up and the services
+are registered once.
 
 ## Using Injected Services
 

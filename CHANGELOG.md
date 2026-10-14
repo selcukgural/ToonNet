@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them) are read straight from the text; before, one such object made the reflection-based reader read the whole
   document again through the tree. On 200,000 list items with one reordered object: 3.4x faster, half the allocation.
 
+### Fixed
+- **ToonNet.AspNetCore.Mvc:** An `Accept` value with a charset (`application/toon; charset=utf-16`, or even
+  `charset=utf-8`) is answered with TOON in that charset; before, MVC did not match it and answered with JSON.
+- **ToonNet.AspNetCore.Mvc:** Calling `AddToonFormatters` more than once no longer adds the formatters twice (the last
+  request body limit applies), and its options are validated at startup like those of `AddToonNet`.
+- **ToonNet.AspNetCore:** Calling `AddToonNet` more than once registers `ToonEncoder` and the options validation once.
+
 ### Added
 - **ToonNet.Core:** `SerializeAsync(Stream, value)` and `DeserializeAsync<T>(Stream)` in the shape of
   `JsonSerializer` (with `Type` and `ToonTypeInfo` overloads), next to `SerializeToStreamAsync` and
@@ -36,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoded text and a 47 MB list, and it is slightly faster. Errors and their line numbers are those of reading the whole
   document (checked against every decode fixture with batches of one item); the declared length is checked when the
   array ends.
+- **ToonNet.AspNetCore.Mvc:** `HttpRequest.ReadFromToonAsync<T>()` (with options, `Type` and `ToonTypeInfo` overloads)
+  and `HasToonContentType()` read TOON request bodies in Minimal APIs and middleware, like `ReadFromJsonAsync`; before,
+  only MVC controllers could read TOON. A blank body reads as the default value.
+- **ToonNet.AspNetCore:** `AddToonNet(Action<ToonSerializerOptions>)` for configuring only the serializer options.
 - **Benchmarks:** A gate mode in `benchmark/ToonNet.Comparison` for quick local checks: `gate --report` measures 80
   scenarios (time as a ratio to System.Text.Json doing the same work, interleaved in one process, and exact allocated
   bytes per operation) and `gate --compare` reports more than 15% slowdown or 3% more allocation between two builds.

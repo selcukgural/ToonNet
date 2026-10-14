@@ -1,5 +1,6 @@
  using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using ToonNet.Core;
 using ToonNet.Core.Encoding;
@@ -34,21 +35,10 @@ public static class ServiceCollectionExtensions
         var toonOptionsSection = rootSection.GetSection(nameof(ToonOptions));
         var serializerOptionsSection = rootSection.GetSection(nameof(ToonSerializerOptions));
 
-        services.AddOptions<ToonOptions>()
-                .Configure(options => ApplyToonOptionsFromConfiguration(options, toonOptionsSection))
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
+        services.AddOptions<ToonOptions>().Configure(options => ApplyToonOptionsFromConfiguration(options, toonOptionsSection));
+        services.AddOptions<ToonSerializerOptions>().Configure(options => ApplyToonSerializerOptionsFromConfiguration(options, serializerOptionsSection));
 
-        LinkToonOptions(services);
-
-        services.AddOptions<ToonSerializerOptions>()
-                .Configure(options => ApplyToonSerializerOptionsFromConfiguration(options, serializerOptionsSection))
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
-
-        services.AddSingleton(sp => new ToonEncoder(sp.GetRequiredService<IOptions<ToonOptions>>().Value));
-
-        return services;
+        return AddServices(services);
     }
 
     /// <summary>
@@ -63,19 +53,30 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddOptions<ToonOptions>().Configure(options => configureToonOptions?.Invoke(options)).ValidateDataAnnotations()
-                .ValidateOnStart();
+        if (configureToonOptions != null)
+        {
+            services.AddOptions<ToonOptions>().Configure(configureToonOptions);
+        }
 
-        LinkToonOptions(services);
+        if (configureSerializerOptions != null)
+        {
+            services.AddOptions<ToonSerializerOptions>().Configure(configureSerializerOptions);
+        }
 
-        services.AddOptions<ToonSerializerOptions>()
-                .Configure(options => configureSerializerOptions?.Invoke(options))
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
+        return AddServices(services);
+    }
 
-        services.AddSingleton(sp => new ToonEncoder(sp.GetRequiredService<IOptions<ToonOptions>>().Value));
-
-        return services;
+    /// <summary>
+    /// Registers ToonNet services and configures the serializer options, for example
+    /// <c>services.AddToonNet(o =&gt; o.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase)</c>.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureSerializerOptions">An action to configure serialization options.</param>
+    /// <returns>The same service collection to allow chaining.</returns>
+    public static IServiceCollection AddToonNet(this IServiceCollection services, Action<ToonSerializerOptions> configureSerializerOptions)
+    {
+        ArgumentNullException.ThrowIfNull(configureSerializerOptions);
+        return services.AddToonNet(configureToonOptions: null, configureSerializerOptions);
     }
 
     /// <summary>
@@ -86,6 +87,27 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddToonNet(this IServiceCollection services)
     {
         return services.AddToonNet(configureToonOptions: null, configureSerializerOptions: null);
+    }
+
+    /// <summary>
+    /// Registers the services and option validation once, however often <c>AddToonNet</c> is called.
+    /// </summary>
+    private static IServiceCollection AddServices(IServiceCollection services)
+    {
+        if (!services.Any(d => d.ServiceType == typeof(IValidateOptions<ToonOptions>)))
+        {
+            services.AddOptions<ToonOptions>().ValidateDataAnnotations().ValidateOnStart();
+        }
+
+        if (!services.Any(d => d.ServiceType == typeof(IValidateOptions<ToonSerializerOptions>)))
+        {
+            services.AddOptions<ToonSerializerOptions>().ValidateDataAnnotations().ValidateOnStart();
+        }
+
+        LinkToonOptions(services);
+        services.TryAddSingleton(sp => new ToonEncoder(sp.GetRequiredService<IOptions<ToonOptions>>().Value));
+
+        return services;
     }
 
     /// <summary>

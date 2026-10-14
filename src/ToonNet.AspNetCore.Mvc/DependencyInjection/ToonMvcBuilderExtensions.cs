@@ -23,7 +23,8 @@ public static class ToonMvcBuilderExtensions
     /// <remarks>
     /// The formatters use <c>IOptions&lt;ToonSerializerOptions&gt;</c> from dependency injection, so settings made with
     /// <c>AddToonNet</c> or <c>services.Configure&lt;ToonSerializerOptions&gt;</c> apply to them too.
-    /// Request bodies are limited to <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> bytes.
+    /// Request bodies are limited to <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> bytes. The options are
+    /// validated when the application starts. Calling this method more than once does not add the formatters twice.
     /// </remarks>
     public static IMvcBuilder AddToonFormatters(this IMvcBuilder builder, Action<ToonSerializerOptions>? configureOptions = null)
     {
@@ -44,13 +45,25 @@ public static class ToonMvcBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRequestBodySize);
 
+        var serializerOptions = builder.Services.AddOptions<ToonSerializerOptions>();
+
         if (configureOptions != null)
         {
-            builder.Services.Configure(configureOptions);
+            serializerOptions.Configure(configureOptions);
+        }
+
+        // Invalid options fail at startup, as with AddToonNet
+        if (!builder.Services.Any(d => d.ServiceType == typeof(IValidateOptions<ToonSerializerOptions>)))
+        {
+            serializerOptions.ValidateDataAnnotations().ValidateOnStart();
         }
 
         builder.Services.AddOptions<MvcOptions>().Configure<IOptions<ToonSerializerOptions>>((options, serializerOptions) =>
         {
+            // Calling this method again replaces the formatters (the last request body limit applies) instead of adding more
+            options.InputFormatters.RemoveType<ToonInputFormatter>();
+            options.OutputFormatters.RemoveType<ToonOutputFormatter>();
+
             options.InputFormatters.Add(new ToonInputFormatter(serializerOptions.Value, maxRequestBodySize));
             options.OutputFormatters.Add(new ToonOutputFormatter(serializerOptions.Value));
         });

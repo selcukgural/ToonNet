@@ -77,8 +77,9 @@ public IResult GetUser(int id)
 // Minimal API: extension method on Results.Extensions
 app.MapGet("/users/{id}", (int id) => Results.Extensions.Toon(GetUserFromDatabase(id)));
 
-// With a status code
-app.MapPost("/users", (User user) => Results.Extensions.Toon(Save(user), StatusCodes.Status201Created));
+// With a status code (reading the TOON body: see Input Formatters, Minimal APIs)
+app.MapPost("/users", async (HttpRequest request) =>
+    Results.Extensions.Toon(Save((await request.ReadFromToonAsync<User>())!), StatusCodes.Status201Created));
 ```
 
 `ToonResult` uses the options passed to it, otherwise the application's `IOptions<ToonSerializerOptions>`. The MVC
@@ -99,7 +100,8 @@ Accept: application/toon
 ```
 
 The output formatter produces `application/toon` and `text/toon` (the media types the input formatter accepts) and
-answers with the one the client asked for. It is added after the JSON formatter, so JSON stays the default for `Accept: */*` or a missing `Accept` header; use
+answers with the one the client asked for, also when the `Accept` value names a charset
+(`application/toon; charset=utf-16`); UTF-8 and UTF-16 are written. It is added after the JSON formatter, so JSON stays the default for `Accept: */*` or a missing `Accept` header; use
 `[Produces("application/toon")]` to always return TOON from an action.
 
 ## See Also

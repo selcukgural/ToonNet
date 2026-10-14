@@ -158,6 +158,31 @@ public sealed class ToonNetServiceCollectionExtensionsTests
                                      d.ImplementationType?.Name == "ToonOptionsLink");
     }
 
+    [Fact]
+    public void AddToonNet_CalledTwice_RegistersServicesAndValidationOnce()
+    {
+        var services = new ServiceCollection();
+        services.AddToonNet();
+        services.AddToonNet(o => o.MaxDepth = 7);
+
+        Assert.Single(services, d => d.ServiceType == typeof(ToonEncoder));
+        Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<ToonOptions>));
+        Assert.Single(services, d => d.ServiceType == typeof(IValidateOptions<ToonSerializerOptions>));
+
+        using var provider = services.BuildServiceProvider();
+        Assert.Equal(7, provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value.MaxDepth);
+    }
+
+    [Fact]
+    public void AddToonNet_WithSerializerDelegate_ValidatesTheOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddToonNet(o => o.MaxDepth = 500); // above 200 without AllowExtendedLimits
+
+        using var provider = services.BuildServiceProvider();
+        Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value);
+    }
+
     [Theory]
     [InlineData("SnakeCas")]
     [InlineData("7")]

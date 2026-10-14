@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Formatters;
+using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
 using ToonNet.AspNetCore.Mvc.Http;
 using ToonNet.Core.Serialization;
@@ -33,6 +34,49 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
 
         SupportedEncodings.Add(Encoding.UTF8);
         SupportedEncodings.Add(Encoding.Unicode);
+    }
+
+    /// <summary>
+    /// Returns whether the formatter can write the response, also for an <c>Accept</c> media type with a charset
+    /// (<c>application/toon; charset=utf-16</c>), which MVC does not match to a media type without one.
+    /// </summary>
+    /// <param name="context">The formatter context.</param>
+    /// <returns>Whether the response can be written as TOON.</returns>
+    public override bool CanWriteResult(OutputFormatterCanWriteContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (base.CanWriteResult(context))
+        {
+            return true;
+        }
+
+        if (!context.ContentType.HasValue)
+        {
+            return false;
+        }
+
+        var requested = new MediaType(context.ContentType);
+
+        if (!requested.Charset.HasValue || requested.HasWildcard)
+        {
+            return false;
+        }
+
+        foreach (var supported in SupportedMediaTypes)
+        {
+            var mediaType = new MediaType(supported);
+
+            if (mediaType.Type.Equals(requested.Type, StringComparison.OrdinalIgnoreCase) &&
+                mediaType.SubType.Equals(requested.SubType, StringComparison.OrdinalIgnoreCase))
+            {
+                // The charset picks the encoding (UTF-8 when it is not one of the supported encodings)
+                context.ContentType = new StringSegment($"{supported}; charset={requested.Charset}");
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

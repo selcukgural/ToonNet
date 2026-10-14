@@ -17,7 +17,8 @@ ToonNet.AspNetCore.Mvc provides **MVC input/output formatters** for serving and 
 - ✅ **Output Formatter** - Serve TOON in response body
 - ✅ **Content Negotiation** - `Accept: application/toon` and `Accept: text/toon` support
 - ✅ **Model Binding** - Automatic TOON → C# object conversion
-- ✅ **ToonResult** - Return TOON responses from actions
+- ✅ **ToonResult** - Return TOON responses from actions and Minimal APIs
+- ✅ **ReadFromToonAsync** - Read TOON request bodies in Minimal APIs
 
 **Perfect for:**
 - 🌐 **REST APIs** - Serve TOON alongside JSON
@@ -206,8 +207,9 @@ builder.Services.AddControllers()
 ```
 
 The limit is enforced by throwing `BadHttpRequestException` (status code 413). Kestrel and the developer exception page
-answer with `413`; on .NET 8, `UseExceptionHandler` answers with `500` unless your handler uses the exception's
-`StatusCode`.
+answer with `413`; `UseExceptionHandler` answers with `500` unless your handler uses the exception's `StatusCode` (on
+.NET 9 and later, `ExceptionHandlerOptions.StatusCodeSelector` can map it). The options are validated when the
+application starts, and calling `AddToonFormatters` again replaces the formatters (the last limit applies).
 
 Parsing enforces `ToonOptions.MaxDepth` (default 100). Bodies that are nested too deeply, are not valid TOON or do not
 match the model type produce a model-state error (`400 Bad Request` with `[ApiController]`) instead of an exception.
@@ -232,10 +234,10 @@ builder.Services.AddControllers(options =>
 
 TOON formatters register these media types:
 - `application/toon` (input and output)
-- `text/toon` (input only; `Accept: text/toon` is not served as TOON)
+- `text/toon` (input and output)
 
 Both formatters support UTF-8 and UTF-16 (`charset=utf-16`); the request charset is used for reading and the negotiated
-charset for writing.
+charset for writing, also when the `Accept` value names one (`Accept: application/toon; charset=utf-16`).
 
 ---
 
@@ -259,7 +261,7 @@ Serializes C# objects to TOON response bodies:
 
 ```csharp
 // Automatically registered with AddToonFormatters()
-// Handles Accept: application/toon
+// Handles Accept: application/toon and text/toon
 ```
 
 ### ToonResult
@@ -279,11 +281,32 @@ public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResul
 app.MapGet("/data", () => new ToonResult(data));
 app.MapGet("/data-custom", () => new ToonResult(data, customOptions));
 app.MapGet("/data-ext", () => Results.Extensions.Toon(data));  // same, via IResultExtensions
-app.MapPost("/items", (Item item) => Results.Extensions.Toon(item, StatusCodes.Status201Created));
+app.MapPost("/items", async (HttpRequest request) =>
+    Results.Extensions.Toon(await request.ReadFromToonAsync<Item>(), StatusCodes.Status201Created));
 
 // Without options, ToonResult uses IOptions<ToonSerializerOptions> from DI (AddToonNet) or the defaults.
 // A null value is written as `null` (an empty TOON body would mean an empty object).
 ```
+
+### ReadFromToonAsync
+
+Reads a TOON request body in Minimal APIs and middleware, like `ReadFromJsonAsync` (a minimal API parameter such as
+`(Item item)` is read as JSON):
+
+```csharp
+public static class ToonHttpRequestExtensions
+{
+    public static bool HasToonContentType(this HttpRequest request)
+    public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, CancellationToken cancellationToken = default)
+    public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, ToonSerializerOptions? options, CancellationToken cancellationToken = default)
+    public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, ToonTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
+    public static ValueTask<object?> ReadFromToonAsync(this HttpRequest request, Type type, ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
+}
+```
+
+It uses `IOptions<ToonSerializerOptions>` from DI unless options are passed. A request without a TOON content type
+throws `InvalidOperationException`, invalid TOON a `ToonException`; a blank body reads as the default value. The body
+size is limited by the server (`MaxRequestBodySize`, `[RequestSizeLimit]`), not by the formatter's 4 MB limit.
 
 ---
 

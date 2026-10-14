@@ -119,7 +119,12 @@ builder.Services.AddToonNet(toonOptions =>
     serializerOptions.IncludeReadOnlyProperties = false;
     serializerOptions.MaxDepth = 100;
 });
+
+// Only the serializer options
+builder.Services.AddToonNet(serializerOptions => serializerOptions.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase);
 ```
+
+Calling `AddToonNet` more than once is safe: the delegates add up, and the services and validation are registered once.
 
 ### Hybrid Approach (Configuration + Delegate)
 

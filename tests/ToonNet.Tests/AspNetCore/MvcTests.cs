@@ -6,6 +6,7 @@ using ToonNet.AspNetCore.DependencyInjection;
 using ToonNet.AspNetCore.Mvc.DependencyInjection;
 using ToonNet.AspNetCore.Mvc.Formatters;
 using ToonNet.AspNetCore.Mvc.Http;
+using ToonNet.Core;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.Tests.AspNetCore;
@@ -318,6 +319,159 @@ public class MvcTests
 
         var expected = nullValue ? "null" : ToonSerializer.Serialize(model);
         Assert.Equal(System.Text.Encoding.UTF8.GetBytes(expected), stream.ToArray());
+    }
+
+    [Theory]
+    [InlineData("application/toon; charset=utf-16", "application/toon; charset=utf-16")]
+    [InlineData("text/toon;charset=UTF-8", "text/toon; charset=UTF-8")]
+    [InlineData("application/toon; charset=iso-8859-1", "application/toon; charset=iso-8859-1")]
+    [InlineData("application/toon", "application/toon")]
+    [InlineData("application/json; charset=utf-8", null)]
+    [InlineData("application/*; charset=utf-8", null)]
+    public void ToonOutputFormatter_MatchesAcceptedMediaTypesWithACharset(string accepted, string? selected)
+    {
+        var formatter = new ToonOutputFormatter(new ToonSerializerOptions());
+        var context = new OutputFormatterWriteContext(new DefaultHttpContext(), (s, e) => new StreamWriter(s, e), typeof(TestModel), new TestModel())
+        {
+            ContentType = new Microsoft.Extensions.Primitives.StringSegment(accepted)
+        };
+
+        Assert.Equal(selected != null, formatter.CanWriteResult(context));
+
+        if (selected != null)
+        {
+            Assert.Equal(selected, context.ContentType.Value);
+        }
+    }
+
+    [Fact]
+    public async Task ToonOutputFormatter_RequestedCharset_SelectsTheEncoding()
+    {
+        var formatter = new ToonOutputFormatter(new ToonSerializerOptions());
+        var httpContext = new DefaultHttpContext();
+        var stream = new MemoryStream();
+        httpContext.Response.Body = stream;
+
+        var context = new OutputFormatterWriteContext(httpContext, (s, e) => new StreamWriter(s, e, leaveOpen: true), typeof(TestModel),
+                                                      new TestModel { Name = "Çağrı", Age = 1 })
+        {
+            ContentType = new Microsoft.Extensions.Primitives.StringSegment("application/toon; charset=utf-16")
+        };
+
+        Assert.True(formatter.CanWriteResult(context));
+        await formatter.WriteAsync(context);
+
+        Assert.Equal("application/toon; charset=utf-16", httpContext.Response.ContentType);
+        Assert.Contains("Name: Çağrı", System.Text.Encoding.Unicode.GetString(stream.ToArray()));
+    }
+
+    [Fact]
+    public async Task AddToonFormatters_CalledTwice_AddsTheFormattersOnce()
+    {
+        var services = new ServiceCollection();
+        services.AddMvc().AddToonFormatters().AddToonFormatters(o => o.MaxDepth = 9, maxRequestBodySize: 10);
+
+        await using var provider = services.BuildServiceProvider();
+        var mvcOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Mvc.MvcOptions>>().Value;
+        var input = Assert.Single(mvcOptions.InputFormatters.OfType<ToonInputFormatter>());
+        Assert.Single(mvcOptions.OutputFormatters.OfType<ToonOutputFormatter>());
+        Assert.Equal(9, provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ToonSerializerOptions>>().Value.MaxDepth);
+
+        // The last limit applies
+        await Assert.ThrowsAsync<BadHttpRequestException>(() => input.ReadAsync(CreateInputContext("Name: more than ten bytes"u8.ToArray(), ToonFormatterDefaults.MediaType)));
+    }
+
+    [Fact]
+    public async Task AddToonFormatters_InvalidOptions_FailValidation()
+    {
+        var services = new ServiceCollection();
+        services.AddMvc().AddToonFormatters(o => o.MaxDepth = 500); // above 200 without AllowExtendedLimits
+
+        await using var provider = services.BuildServiceProvider();
+        Assert.Throws<Microsoft.Extensions.Options.OptionsValidationException>(
+            () => provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ToonSerializerOptions>>().Value);
+    }
+
+    private static HttpRequest CreateRequest(byte[] body, string? contentType, Action<ToonSerializerOptions>? configure = null)
+    {
+        var services = new ServiceCollection();
+        services.AddToonNet(configureToonOptions: null, configure);
+
+        var httpContext = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+        httpContext.Request.Body = new MemoryStream(body);
+        httpContext.Request.ContentType = contentType;
+        return httpContext.Request;
+    }
+
+    [Theory]
+    [InlineData("application/toon")]
+    [InlineData("text/toon; charset=utf-8")]
+    [InlineData("application/toon; charset=\"utf-8\"")]
+    public async Task ReadFromToonAsync_ReadsUtf8Bodies(string contentType)
+    {
+        var model = await CreateRequest("Name: Çağrı\nAge: 5"u8.ToArray(), contentType).ReadFromToonAsync<TestModel>();
+
+        Assert.Equal("Çağrı", model!.Name);
+        Assert.Equal(5, model.Age);
+    }
+
+    [Fact]
+    public async Task ReadFromToonAsync_UsesTheApplicationOptions()
+    {
+        var request = CreateRequest("name: Camel\nage: 2"u8.ToArray(), "application/toon", o => o.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase);
+        Assert.Equal("Camel", (await request.ReadFromToonAsync<TestModel>())!.Name);
+
+        // Explicit options win
+        request = CreateRequest("Name: Pascal"u8.ToArray(), "application/toon", o => o.PropertyNamingPolicy = PropertyNamingPolicy.CamelCase);
+        Assert.Equal("Pascal", (await request.ReadFromToonAsync<TestModel>(new ToonSerializerOptions()))!.Name);
+    }
+
+    [Fact]
+    public async Task ReadFromToonAsync_DecodesOtherCharsetsStrictly()
+    {
+        var model = await CreateRequest(System.Text.Encoding.Unicode.GetBytes("Name: Ü\nAge: 6"), "application/toon; charset=utf-16").ReadFromToonAsync<TestModel>();
+        Assert.Equal("Ü", model!.Name);
+
+        // An unpaired surrogate is an error, not U+FFFD
+        var ex = await Assert.ThrowsAsync<ToonException>(() => CreateRequest([0x00, 0xD8, 0x41, 0x00], "application/toon; charset=utf-16").ReadFromToonAsync<TestModel>().AsTask());
+        Assert.Contains("not valid utf-16", ex.Message);
+        await Assert.ThrowsAsync<ToonParseException>(() => CreateRequest([0xFF, 0x41], "application/toon").ReadFromToonAsync<TestModel>().AsTask());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  \r\n")]
+    [InlineData("\t")]
+    public async Task ReadFromToonAsync_BlankBodies_ReadAsTheDefaultValue(string body)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+
+        Assert.Null(await CreateRequest(bytes, "application/toon").ReadFromToonAsync<TestModel>());
+        Assert.Equal(0, await CreateRequest(bytes, "application/toon").ReadFromToonAsync<int>());
+        Assert.Equal(0, await CreateRequest(bytes, "application/toon").ReadFromToonAsync(typeof(int)));
+        Assert.Null(await CreateRequest(bytes, "application/toon").ReadFromToonAsync(typeof(int?)));
+    }
+
+    [Theory]
+    [InlineData(null, "content type")]
+    [InlineData("application/json", "content type")]
+    [InlineData("application/toon; charset=no-such-charset", "charset")]
+    public async Task ReadFromToonAsync_OtherContentTypes_Throw(string? contentType, string message)
+    {
+        var request = CreateRequest("Name: x"u8.ToArray(), contentType);
+
+        Assert.Equal(message == "charset", request.HasToonContentType());
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => request.ReadFromToonAsync<TestModel>().AsTask());
+        Assert.Contains(message, ex.Message);
+    }
+
+    [Fact]
+    public void HasToonContentType()
+    {
+        Assert.True(CreateRequest([], "application/toon").HasToonContentType());
+        Assert.True(CreateRequest([], "TEXT/TOON; charset=utf-16").HasToonContentType());
+        Assert.False(CreateRequest([], "application/json").HasToonContentType());
+        Assert.False(CreateRequest([], null).HasToonContentType());
     }
 
     [Theory]
