@@ -116,7 +116,11 @@ internal static class TypeModelBuilder
             var plan = planBuilder.Build(property.Type, HasConverter(property) ? [] : reasons);
             ReportFallback(diagnostics, fallbackDescriptor, reasons, $"property '{property.Name}'", type, property.Locations, location);
 
-            return CreatePropertyModel(property, plan, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers);
+            var model = CreatePropertyModel(property, plan, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers);
+
+            // A property set in the object initializer gets a value even without a key, which would replace its own
+            // initializer (= true, = new()): such an object is left to the reflection-based reader, which keeps it
+            return model.Write == WriteKind.Initializer && allowFallback && HasInitializer(property) ? model with { KeepsInitializer = true } : model;
         }).ToImmutableArray();
 
         var hasTypeConverter = type.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute");
@@ -275,7 +279,9 @@ internal static class TypeModelBuilder
 
             foreach (var property in current.GetMembers().OfType<IPropertySymbol>())
             {
-                if (property.IsStatic || property.IsIndexer || property.GetMethod?.DeclaredAccessibility != Accessibility.Public ||
+                // A name C# cannot spell (from another language's assembly) is left out: it would go into generated code
+                if (!property.CanBeReferencedByName || !SyntaxFacts.IsValidIdentifier(property.Name) ||
+                    property.IsStatic || property.IsIndexer || property.GetMethod?.DeclaredAccessibility != Accessibility.Public ||
                     property.Type.IsRefLikeType || property.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer ||
                     property.ReturnsByRef || property.ReturnsByRefReadonly || !seen.Add(property.Name))
                 {
@@ -338,8 +344,10 @@ internal static class TypeModelBuilder
             return null;
         }
 
-        // Reflection does not see the implicit parameterless constructor of a struct.
-        var all = type.InstanceConstructors.Where(c => !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0)).ToList();
+        // Reflection does not see the implicit parameterless constructor of a struct; a constructor with a ref struct
+        // parameter (Span<T>) cannot be called with values read from a document
+        var all = type.InstanceConstructors.Where(c => !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0) &&
+                                                       !c.Parameters.Any(p => p.Type.IsRefLikeType || p.RefKind != RefKind.None)).ToList();
         var constructors = all.Where(c => c.DeclaredAccessibility == Accessibility.Public).ToList();
 
         // [ToonConstructor] may mark a constructor of any accessibility (generated code is a member of the type)
@@ -404,6 +412,10 @@ internal static class TypeModelBuilder
             SetterOwnerIsValueType: setter?.ContainingType.IsValueType ?? false,
             IsRequired: property.IsRequired);
     }
+
+    /// <summary>Whether the property is declared with an initializer (<c>= value</c>) in source.</summary>
+    private static bool HasInitializer(IPropertySymbol property) =>
+        property.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax() is PropertyDeclarationSyntax { Initializer: not null });
 
     /// <summary>Whether the property, or one it overrides, is marked <c>[ToonInclude]</c>.</summary>
     private static bool IsIncluded(IPropertySymbol property)
@@ -495,7 +507,8 @@ internal static class TypeModelBuilder
             double d when double.IsNegativeInfinity(d) => "double.NegativeInfinity",
             double d => d.ToString("R", CultureInfo.InvariantCulture) + "D",
             decimal m => m.ToString(CultureInfo.InvariantCulture) + "M",
-            IFormattable number => $"({typeName})({number.ToString(null, CultureInfo.InvariantCulture)})",
+            DateTime dateTime => $"new global::System.DateTime({dateTime.Ticks.ToString(CultureInfo.InvariantCulture)}L)", // [DateTimeConstant]
+            IFormattable number when number.GetType().IsPrimitive => $"({typeName})({number.ToString(null, CultureInfo.InvariantCulture)})",
             _ => "default!"
         };
     }
@@ -516,10 +529,16 @@ internal static class TypeModelBuilder
             _ => "class"
         };
 
-        var typeParameters = type.TypeParameters.Length > 0 ? "<" + string.Join(", ", type.TypeParameters.Select(t => t.Name)) + ">" : "";
+        var typeParameters = type.TypeParameters.Length > 0 ? "<" + string.Join(", ", type.TypeParameters.Select(t => EscapeKeyword(t.Name))) + ">" : "";
 
-        return $"partial {keyword} {type.Name}{typeParameters}";
+        return $"partial {keyword} {EscapeKeyword(type.Name)}{typeParameters}";
     }
+
+    /// <summary>A name as C# writes it: a keyword with '@' (<c>@class</c>, <c>@in</c>).</summary>
+    private static string EscapeKeyword(string name) =>
+        SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None || SyntaxFacts.GetContextualKeywordKind(name) is SyntaxKind.RecordKeyword
+            ? "@" + name
+            : name;
 
     private static EquatableArray<string> ContainingDeclarations(INamedTypeSymbol type)
     {
@@ -533,16 +552,32 @@ internal static class TypeModelBuilder
         return new EquatableArray<string>(declarations.ToImmutableArray());
     }
 
+    /// <summary>
+    ///     The file name of a type's generated code: its readable name, and a hash of its exact name, because hint names
+    ///     must be unique ignoring case and the readable part maps several characters to '_' (<c>Url</c> and <c>URL</c>,
+    ///     <c>G&lt;T&gt;</c> and <c>G_T_</c> would collide, and the compiler would drop the code of every type).
+    /// </summary>
     private static string HintName(INamedTypeSymbol type)
     {
         var name = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted));
-        var builder = new StringBuilder(name.Length);
+        var builder = new StringBuilder(name.Length + 16);
 
         foreach (var c in name)
         {
             builder.Append(char.IsLetterOrDigit(c) || c is '.' or '_' ? c : '_');
         }
 
-        return builder.Append(".g.cs").ToString();
+        // FNV-1a over the metadata name (with arity and containing types): stable across runs and machines
+        var exact = type.ContainingNamespace is { IsGlobalNamespace: false } ns ? ns.ToDisplayString() + "." + MetadataName(type) : MetadataName(type);
+        var hash = 2166136261u;
+
+        foreach (var c in exact)
+        {
+            hash = (hash ^ c) * 16777619u;
+        }
+
+        return builder.Append('.').Append(hash.ToString("x8", CultureInfo.InvariantCulture)).Append(".g.cs").ToString();
+
+        static string MetadataName(INamedTypeSymbol t) => t.ContainingType is { } outer ? MetadataName(outer) + "+" + t.MetadataName : t.MetadataName;
     }
 }

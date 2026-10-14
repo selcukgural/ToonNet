@@ -1,4 +1,5 @@
 using System.Globalization;
+using ToonNet.Core;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
@@ -134,6 +135,24 @@ public partial class Envelope
     public object? Anything { get; set; }
 }
 
+[ToonSerializable]
+public partial class Policy
+{
+    public required string Name { get; init; }
+
+    public required bool RequireMfa { get; init; } = true;
+
+    public required List<string> Tags { get; init; } = ["keep"];
+}
+
+[ToonSerializable]
+public partial class Measured
+{
+    public float X { get; set; }
+
+    public List<float> L { get; set; } = [];
+}
+
 /// <summary>Generated code gives the text and the objects of the reflection-based serializer, feature by feature.</summary>
 public class GeneratedParityTests
 {
@@ -241,6 +260,52 @@ public class GeneratedParityTests
         var runtime = new ToonSerializerOptions { SerializeRuntimeTypes = true };
         Assert.Contains("PasswordHash: secret-hash", ToonSerializer.Serialize(envelope, runtime));
         Assert.Equal(ToonSerializer.Serialize(envelope, ReflectionOnly.Options(runtime)), ToonSerializer.Serialize(envelope, runtime));
+    }
+
+    [Fact]
+    public void MissingRequiredMembers_KeepTheirInitializers_WhenNotRequired()
+    {
+        var lenient = new ToonSerializerOptions { RespectRequiredMembers = false };
+
+        foreach (var policy in new[]
+                 {
+                     ToonSerializer.Deserialize<Policy>("Name: p", lenient)!, ToonSerializer.Deserialize<Policy>("Name: p", ReflectionOnly.Options(lenient))!,
+                     ToonSerializer.Deserialize("Name: p", Policy.ToonTypeInfo, lenient)!, Policy.Deserialize(ToonNet.Core.Models.ToonDocument.Parse("Name: p"), lenient)
+                 })
+        {
+            Assert.True(policy.RequireMfa);
+            Assert.Equal(["keep"], policy.Tags);
+        }
+
+        // With the default options they are required
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Policy>("Name: p"));
+        Assert.False(ToonSerializer.Deserialize<Policy>("Name: p\nRequireMfa: false\nTags[0]:")!.RequireMfa);
+    }
+
+    [Fact]
+    public void FloatsBeyondTheirRange_AreErrors_InGeneratedCode()
+    {
+        foreach (var toon in new[] { "X: 1e39", "L[1]: 1e39" })
+        {
+            Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Measured>(toon));
+            Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Measured>(toon, ReflectionOnly.Options()));
+            Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize(toon, Measured.ToonTypeInfo));
+        }
+
+        Assert.Equal(3.5f, ToonSerializer.Deserialize<Measured>("X: 3.5")!.X);
+    }
+
+    [Fact]
+    public void GeneratedCode_CannotBeRegisteredForATypeOfAnotherModule()
+    {
+        // A delegate from this assembly for a type of the framework
+        Assert.Throws<InvalidOperationException>(() => ToonNet.Core.Serialization.ToonSourceGenerationHelpers.Register<Dictionary<string, string>>(
+            (_, _, _) => new ToonNet.Core.Models.ToonObject(), null));
+        Assert.Equal("a: b", ToonSerializer.Serialize(new Dictionary<string, string> { ["a"] = "b" }));
+
+        // A second registration of a type does not replace the first
+        ToonNet.Core.Serialization.ToonSourceGenerationHelpers.Register<Measured>((_, _, _) => new ToonNet.Core.Models.ToonString("hijacked"), null);
+        Assert.Equal("X: 1\nL: []", ToonSerializer.Serialize(new Measured { X = 1 }));
     }
 
     [Fact]

@@ -169,6 +169,18 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   decoded. `charset=utf-7` made `ReadFromToonAsync` fail with a 500 error instead of `InvalidOperationException`.
 - **ToonNet.Core:** A constructor parameter of a nullable enum type with a default value (`Permission? p =
   Permission.Write`) threw `InvalidCastException` when the document left it out.
+- **ToonNet.SourceGenerators:** Generated code read an object whose document left out a `required` or `init` property
+  with an initializer (`= true`, `= new()`) with the property's default instead (with `RespectRequiredMembers` off, or
+  for init-only properties of generic types): such objects are now read by the reflection-based reader, which keeps the
+  initializer, as reflection always did. A number beyond the range of `float` became an infinity in generated code; it
+  is an error, as with reflection. Two types whose names differ only in case or in symbols (`Url` and `URL`, `G<T>`
+  and `G_T_`) made the generator drop the code of every type (CS8785); generated files now have unique names.
+- **ToonNet.SourceGenerators:** Type and type parameter names that are keywords (`@class`, `Outer<@in>`), constructor
+  parameters with a `[DateTimeConstant]` default, and constructors with a ref struct parameter gave code that did not
+  compile; properties of referenced assemblies whose names C# cannot spell are left out. Bidirectional control
+  characters in names are escaped in generated string literals.
+- **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
+  so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that
   did not compile; it reports `TOON010` instead. A method with the parameters of a generated `Serialize` or
   `Deserialize` method also reports `TOON009` and leaves that method out.

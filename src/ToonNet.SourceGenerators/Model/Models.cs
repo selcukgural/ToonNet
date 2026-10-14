@@ -65,7 +65,8 @@ internal sealed record PropertyModel(
     WriteKind Write,
     string? SetterOwner,
     bool SetterOwnerIsValueType,
-    bool IsRequired);
+    bool IsRequired,
+    bool KeepsInitializer = false);
 
 /// <summary>The constructor used by the generated <c>Deserialize</c> method.</summary>
 internal sealed record ConstructorModel(EquatableArray<ParameterModel> Parameters, bool SetsRequiredMembers);

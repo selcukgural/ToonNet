@@ -1138,6 +1138,11 @@ internal sealed class SourceEmitter
             code.AppendLine($"if (options.RespectRequiredMembers && !({string.Join(" && ", required)})) reader.Fallback(); // the tree reports the property");
         }
 
+        if (KeptInitializers() is { } kept)
+        {
+            code.AppendLine($"if (!({kept})) reader.Fallback(); // a missing key keeps the property's initializer (the tree leaves it to reflection)");
+        }
+
         code.AppendLine();
 
         EmitConstruction(arguments);
@@ -1650,6 +1655,12 @@ internal sealed class SourceEmitter
         code.AppendLine();
         code.AppendLine("__at = null;");
 
+        if (KeptInitializers() is { } kept)
+        {
+            // The object initializer would replace the initializer of a property without a key
+            code.AppendLine($"if (!({kept})) return {Helpers}.DeserializeWithReflection<{model.FullyQualifiedName}>(value, options, depth);");
+        }
+
         EmitConstruction(arguments);
 
         code.AppendLine();
@@ -1657,6 +1668,16 @@ internal sealed class SourceEmitter
         code.EndBlock();
         EmitPathFilter("__at != null", "__at");
         code.EndBlock();
+    }
+
+    /// <summary>
+    ///     The condition that every property set in the object initializer with an initializer of its own has a key, or
+    ///     null when there are none.
+    /// </summary>
+    private string? KeptInitializers()
+    {
+        var flags = _model.Properties.Select((p, i) => (p, i)).Where(t => t.p.KeepsInitializer).Select(t => $"__h{t.i}").ToList();
+        return flags.Count == 0 ? null : string.Join(" && ", flags);
     }
 
     /// <summary>
@@ -1751,7 +1772,8 @@ internal sealed class SourceEmitter
                     PrimitiveKind.Integer or PrimitiveKind.UInt64 =>
                         ($"{exactNumber} && {d} == decimal.Truncate({d}) && {d} >= {type}.MinValue && {d} <= {type}.MaxValue", $"({type}){d}"),
                     PrimitiveKind.Decimal => (exactNumber, d),
-                    PrimitiveKind.Single => ($"{toon} is {Models}ToonNumber __n{n}", $"(float)__n{n}.Value"),
+                    // A double beyond float's range would become an infinity: the slow path rejects it, as reflection does
+                    PrimitiveKind.Single => ($"{toon} is {Models}ToonNumber __n{n} && float.IsFinite((float)__n{n}.Value)", $"(float)__n{n}.Value"),
                     _ => ($"{toon} is {Models}ToonNumber __n{n}", $"__n{n}.Value")
                 };
 
@@ -2057,7 +2079,31 @@ internal sealed class SourceEmitter
                $"{policyType}.LowerCase => {Literal(names[3])}, _ => {Literal(names[0])} }})";
     }
 
-    private static string Literal(string value) => SymbolDisplay.FormatLiteral(value, true);
+    /// <summary>
+    ///     A C# string literal; bidirectional controls are escaped too, so the generated file shows what the string holds
+    ///     (they can make source read differently from what it does).
+    /// </summary>
+    private static string Literal(string value)
+    {
+        var literal = SymbolDisplay.FormatLiteral(value, true);
+
+        if (literal.IndexOfAny(BidiControls) < 0)
+        {
+            return literal;
+        }
+
+        var text = new System.Text.StringBuilder(literal.Length + 16);
+
+        foreach (var c in literal)
+        {
+            text.Append(Array.IndexOf(BidiControls, c) >= 0 ? "\\u" + ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture) : c.ToString());
+        }
+
+        return text.ToString();
+    }
+
+    private static readonly char[] BidiControls =
+        [(char)0x061C, (char)0x200E, (char)0x200F, (char)0x202A, (char)0x202B, (char)0x202C, (char)0x202D, (char)0x202E, (char)0x2066, (char)0x2067, (char)0x2068, (char)0x2069];
 
     private string Accessibility() => _model.PublicMethods ? "public" : "internal";
 

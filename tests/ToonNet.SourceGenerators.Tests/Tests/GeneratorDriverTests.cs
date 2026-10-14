@@ -162,6 +162,95 @@ public class GeneratorDriverTests
     }
 
     [Fact]
+    public void TypesWhoseNamesDifferOnlyInCaseOrSymbols_AllGetCode()
+    {
+        var (diagnostics, errors, generated) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App
+            {
+                [ToonSerializable] public partial class Url { public int A { get; set; } }
+                [ToonSerializable] public partial class URL { public int B { get; set; } }
+                [ToonSerializable] public partial class G<T> { public int C { get; set; } }
+                [ToonSerializable] public partial class G_T_ { public int D { get; set; } }
+                [ToonSerializable] public partial class Other { public int E { get; set; } }
+                public static class Use { public static object[] All => [Url.Serialize(new()), URL.Serialize(new()), G_T_.Serialize(new()), Other.Serialize(new())]; }
+            }
+            namespace App.@event { [ToonSerializable] public partial class X { public int F { get; set; } } }
+            namespace App._event { [ToonSerializable] public partial class X { public int G { get; set; } } }
+            """);
+
+        Assert.Empty(errors);
+        Assert.DoesNotContain(diagnostics, d => d.Severity >= DiagnosticSeverity.Warning);
+        Assert.Equal(7, generated.Length);
+        Assert.Equal(7, generated.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void KeywordTypeNames_DateTimeDefaults_AndRefStructConstructors_Compile()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using System;
+            using System.Runtime.CompilerServices;
+            using System.Runtime.InteropServices;
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class @class { public int A { get; set; } }
+            public partial class Outer<@in> { [ToonSerializable] public partial class Inner { public int B { get; set; } } }
+            [ToonSerializable] public partial class Dated
+            {
+                public Dated([Optional, DateTimeConstant(638000000000000000)] DateTime when) => When = when;
+                public DateTime When { get; }
+            }
+            [ToonSerializable] public partial struct Spanned
+            {
+                public Spanned(Span<int> s) { X = s.Length; }
+                public int X { get; set; }
+            }
+            """);
+
+        Assert.Empty(errors);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(LastGeneratedSources, s => s.Contains("new global::System.DateTime(638000000000000000L)"));
+    }
+
+    [Fact]
+    public void BidirectionalControlsInNames_AreEscapedInGeneratedLiterals()
+    {
+        var (_, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Labeled
+            {
+                [ToonProperty("a\u202Eb")] public int A { get; set; }
+            }
+            """);
+
+        Assert.Empty(errors);
+        var source = Assert.Single(LastGeneratedSources);
+        Assert.DoesNotContain('\u202E', source);
+        Assert.Contains("\\u202E", source);
+    }
+
+    [Fact]
+    public void ToonInclude_LetsGeneratedCodeUseANonPublicSetter()
+    {
+        var (_, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Account
+            {
+                public bool IsAdmin { get; private set; }
+                [ToonInclude] public int Logins { get; private set; }
+            }
+            """);
+
+        Assert.Empty(errors);
+        var source = Assert.Single(LastGeneratedSources);
+        Assert.Contains(".Logins = ", source);
+        Assert.DoesNotContain(".IsAdmin = ", source);
+    }
+
+    [Fact]
     public void ToonTypeInfoProperty_IsGenerated_UnlessAMemberTakesTheName()
     {
         var (_, errors, _) = Run("""

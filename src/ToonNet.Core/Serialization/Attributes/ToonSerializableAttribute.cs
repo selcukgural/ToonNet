@@ -100,8 +100,12 @@ public sealed class ToonSerializableAttribute : Attribute
     /// </summary>
     /// <remarks>
     ///     Default: <c>true</c>, and each such property is reported as warning <c>TOON006</c>. Set to <c>false</c> to turn
-    ///     these into error <c>TOON007</c>, so the type is guaranteed to be converted without reflection when the options
-    ///     contain no converters.
+    ///     these into error <c>TOON007</c>, so the type's properties are converted without reflection when the options
+    ///     contain no converters. Some values still reach the reflection-based serializer at run time: an object written
+    ///     as its runtime type (<see cref="ToonSerializerOptions.SerializeRuntimeTypes"/>), a collection of a type the
+    ///     generator does not know (a property declared as <c>IList&lt;T&gt;</c> holding a custom list), and a document
+    ///     value of the wrong kind (a string where an object is expected), which it reports as an error. Under trimming or
+    ///     native AOT these fail instead.
     /// </remarks>
     public bool AllowReflectionFallback { get; init; } = true;
 }
