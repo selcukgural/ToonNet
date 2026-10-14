@@ -197,7 +197,9 @@ public class ToonSerializerEdgeTypeTests
         var parameterized = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<ThrowingRecord>("Name: x"));
 
         Assert.IsType<InvalidOperationException>(parameterless.InnerException);
-        Assert.Contains("The constructor of ThrowingConstructor threw: boom", parameterless.Message);
+        Assert.Contains("The constructor of ThrowingConstructor threw", parameterless.Message);
+        Assert.DoesNotContain("boom", parameterless.Message); // the constructor's text can reach clients through error responses
+        Assert.Equal("boom", parameterless.InnerException!.Message);
         Assert.IsType<ArgumentException>(parameterized.InnerException);
         Assert.Contains("The constructor of ThrowingRecord threw", parameterized.Message);
     }

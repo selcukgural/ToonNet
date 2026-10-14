@@ -74,6 +74,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   following the serializer's names and forms); `Extract` takes the ```` ```toon ```` block out of an answer, and
   `Parse`/`Deserialize` read it in non-strict mode, so a miscounted length or a repeated key does not fail the answer.
 
+### Security
+- **ToonNet.AspNetCore.Mvc:** The output formatter wrote the charset of the request's `Accept` header into the
+  response's `Content-Type` as it was sent; it now writes the name of a supported encoding (UTF-8 or UTF-16), or no
+  charset, so a client cannot change the content type of a response that a cache then serves to others.
+- **ToonNet.AspNetCore.Mvc:** `ReadFromToonAsync` limits bodies to `ToonFormatterDefaults.MaxRequestBodySize` (4 MB,
+  as the MVC formatter does) and rejects larger ones with `413 Payload Too Large`; an endpoint with a size limit of its
+  own (`[RequestSizeLimit]`, `.WithRequestSizeLimit(...)`, `[DisableRequestSizeLimit]`) keeps the server's limit.
+  Before, only the server limited it (30 MB by default in Kestrel).
+- **ToonNet.Core:** The message of a conversion error no longer includes the message of an exception thrown by the
+  target type's constructor, which reached clients through model-state errors; it names the exception's type, and the
+  exception stays the inner exception.
+- **ToonNet.Extensions.Yaml:** Reading YAML limits the characters aliases copy (1,000,000, or ten times the length of
+  the document), not only the nodes, so a small document cannot expand into a huge string. Long hexadecimal and octal
+  scalars are strings without being parsed digit by digit (which took quadratic time), and writing quotes long strings
+  that start with a digit without the pattern that typed them (which could take quadratic time).
+- **ToonNet.Extensions.Yaml:** Keys that differ only in their tag (`a` and `!!str a`) are duplicate keys, as in TOON,
+  instead of the second replacing the first. `ToYaml` quotes `<<`, `=` and text starting with a byte order mark, which
+  YAML 1.1 readers would read as a merge key, a value key or without the mark. Tag errors no longer repeat the value.
+
 ### Fixed
 - **ToonNet.Core:** A number read into an enum wrapped around its underlying type (`300` into a `byte` enum gave 44,
   `-1` gave 255, `4294967297` into an `int` enum gave 1); it is checked like a number of that type, and the error names

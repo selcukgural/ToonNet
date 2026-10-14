@@ -1265,7 +1265,9 @@ public static partial class ToonSerializer
         catch (Exception ex) when (ex is not ToonException)
         {
             var inner = ex is TargetInvocationException { InnerException: { } thrown } ? thrown : ex;
-            throw Error($"The constructor of {targetType.Name} threw: {inner.Message}", targetType, value, state, inner);
+            // Not the exception's message: the constructor's text (paths, settings, the values it checked) would reach
+            // clients through error responses; the exception stays the inner exception, for the application's logs
+            throw Error($"The constructor of {targetType.Name} threw {inner.GetType().Name}", targetType, value, state, inner);
         }
 
         for (var p = 0; p < metadata.Properties.Length; p++)

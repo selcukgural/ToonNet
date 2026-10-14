@@ -721,4 +721,97 @@ public class ToonYamlConverterTests
     }
 
     #endregion
+
+    #region Untrusted input
+
+    private static void AssertFast(Action action, int milliseconds = 2_000)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        action();
+        Assert.True(watch.ElapsedMilliseconds < milliseconds, $"took {watch.ElapsedMilliseconds} ms");
+    }
+
+    [Theory]
+    [InlineData("0x", 'f', 1_000_000)]
+    [InlineData("0o", '7', 1_000_000)]
+    public void LongHexadecimalAndOctalScalars_AreStrings_InLinearTime(string prefix, char digit, int count)
+    {
+        var text = prefix + new string(digit, count);
+
+        AssertFast(() => Assert.Equal(text, ToonYamlConverter.FromYaml("a: " + text).Root["a"]!.GetValue<string>()));
+        AssertFast(() => Assert.Equal(text, ToonYamlConverter.FromYaml(ToonYamlConvert.ToYaml("a: " + text)).Root["a"]!.GetValue<string>()));
+
+        // Leading zeros do not count against the size, and the largest values still fit
+        Assert.Equal(255m, ToonYamlConverter.FromYaml("a: 0x" + new string('0', 100) + "ff").Root["a"]!.GetValue<decimal>());
+        Assert.Equal(decimal.MaxValue, ToonYamlConverter.FromYaml("a: 0xffffffffffffffffffffffff").Root["a"]!.GetValue<decimal>());
+    }
+
+    [Fact]
+    public void AliasesOfLongScalars_CannotExpandBeyondTheCharacterBudget()
+    {
+        var yaml = new System.Text.StringBuilder("s: &a ").Append('A', 10_000).Append("\nl:\n");
+
+        for (var i = 0; i < 99_000; i++)
+        {
+            yaml.Append("  - *a\n");
+        }
+
+        var ex = Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml.ToString()));
+        Assert.Contains("characters", ex.Message);
+
+        // Within ten times the length of the document, aliases expand
+        var small = "s: &a " + new string('A', 1_000) + "\nl:\n" + string.Concat(Enumerable.Repeat("  - *a\n", 50));
+        Assert.Equal(50, ToonYamlConverter.FromYaml(small).Root["l"]!.AsArray().Count);
+    }
+
+    [Theory]
+    [InlineData(100_000, "_")]
+    [InlineData(100_000, "0_")]
+    public void LongDigitStrings_AreQuoted_InLinearTime(int count, string unit)
+    {
+        var text = "1" + string.Concat(Enumerable.Repeat(unit, count)) + "x";
+        var document = new ToonDocument(new ToonObject { ["a"] = new ToonString(text) });
+
+        string yaml = "";
+        AssertFast(() => yaml = ToonYamlConverter.ToYaml(document));
+        Assert.StartsWith("a: \"1", yaml);
+        Assert.Equal(text, ToonYamlConverter.FromYaml(yaml).Root["a"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("<<")]
+    [InlineData("=")]
+    [InlineData("\uFEFFid")]
+    public void KeysAndValuesYaml11ReadersWouldChange_AreQuoted(string text)
+    {
+        var document = new ToonDocument(new ToonObject { [text] = new ToonObject { ["x"] = new ToonString(text) } });
+
+        var yaml = ToonYamlConverter.ToYaml(document);
+
+        Assert.StartsWith("\"", yaml);
+        var back = ToonYamlConverter.FromYaml(yaml).Root;
+        Assert.Equal(text, Assert.Single(back.AsObject().Properties).Key);
+        Assert.Equal(text, back[text]!["x"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("a: 1\n!!str a: 2")]
+    [InlineData("!!str a: 1\na: 2")]
+    [InlineData("? !!str a\n: 1\na: 2")]
+    public void KeysThatDifferOnlyInTheirTag_AreDuplicates(string yaml)
+    {
+        var ex = Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml));
+        Assert.Contains("Duplicate key", ex.Message);
+    }
+
+    [Fact]
+    public void TagErrors_DoNotRepeatTheValue()
+    {
+        var ex = Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml("a: !!bool jane@example.com"));
+
+        Assert.Contains("!!bool", ex.Message);
+        Assert.DoesNotContain("jane", ex.ToString());
+    }
+
+    #endregion
 }

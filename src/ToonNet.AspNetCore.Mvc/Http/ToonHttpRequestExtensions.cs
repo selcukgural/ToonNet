@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
@@ -15,8 +16,10 @@ namespace ToonNet.AspNetCore.Mvc.Http;
 /// </summary>
 /// <remarks>
 /// The request must have a TOON content type (<c>application/toon</c> or <c>text/toon</c>); a charset other than UTF-8
-/// is decoded strictly. The size of the body is limited by the server (<c>MaxRequestBodySize</c>, or
-/// <c>[RequestSizeLimit]</c> on the endpoint). A body with only whitespace reads as the default value, because an empty
+/// is decoded strictly. A body larger than <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> (4 MB, the limit of
+/// the MVC formatter) is rejected with <c>413 Payload Too Large</c>, unless the endpoint sets its own limit
+/// (<c>[RequestSizeLimit]</c>, <c>.WithRequestSizeLimit(...)</c> or <c>[DisableRequestSizeLimit]</c>), which the server
+/// then enforces. A body with only whitespace reads as the default value, because an empty
 /// TOON document would read as an empty object. Invalid TOON throws a <see cref="ToonException"/>.
 /// </remarks>
 public static class ToonHttpRequestExtensions
@@ -36,6 +39,7 @@ public static class ToonHttpRequestExtensions
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The value, or the default value when the document is <c>null</c> or the body is blank.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
+    /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
     public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, CancellationToken cancellationToken = default) =>
         ReadFromToonAsync<T>(request, options: null, cancellationToken);
@@ -47,6 +51,7 @@ public static class ToonHttpRequestExtensions
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The value, or the default value when the document is <c>null</c> or the body is blank.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
+    /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
     public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, ToonSerializerOptions? options, CancellationToken cancellationToken = default) =>
         ReadAsync(request, options, static (stream, o, ct) => ToonSerializer.DeserializeAsync<T>(stream, o, ct),
@@ -62,6 +67,7 @@ public static class ToonHttpRequestExtensions
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The value, or the default value when the document is <c>null</c> or the body is blank.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
+    /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="NotSupportedException">Thrown when the generated code is from an older generator that does not apply the options.</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
     public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, ToonTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
@@ -79,6 +85,7 @@ public static class ToonHttpRequestExtensions
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The value, or the default value of <paramref name="type"/> when the document is <c>null</c> or the body is blank.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
+    /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <paramref name="type"/>.</exception>
     public static async ValueTask<object?> ReadFromToonAsync(this HttpRequest request, Type type, ToonSerializerOptions? options = null,
                                                              CancellationToken cancellationToken = default)
@@ -106,8 +113,19 @@ public static class ToonHttpRequestExtensions
 
         options ??= request.HttpContext.RequestServices?.GetService<IOptions<ToonSerializerOptions>>()?.Value ?? ToonSerializerOptions.Default;
 
-        // The server limits the size; the wrapper notes whether the body has more than whitespace
-        var body = new LimitedReadStream(request.Body, long.MaxValue, static () => new InvalidOperationException());
+        // An endpoint with a size limit of its own is limited by the server; others by the limit of the MVC formatter,
+        // because the text and the tree of a TOON body take many times its size in memory
+        var limit = request.HttpContext.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>() != null
+            ? long.MaxValue
+            : ToonFormatterDefaults.MaxRequestBodySize;
+
+        if (request.ContentLength > limit)
+        {
+            throw PayloadTooLarge(limit);
+        }
+
+        // The wrapper enforces the limit and notes whether the body has more than whitespace
+        var body = new LimitedReadStream(request.Body, limit, () => PayloadTooLarge(limit));
         T? value;
 
         // UTF-8 bodies are checked for content as they are read; others once decoded
@@ -138,6 +156,9 @@ public static class ToonHttpRequestExtensions
 
         return HasContent() ? value : default;
     }
+
+    private static BadHttpRequestException PayloadTooLarge(long limit) =>
+        new($"The TOON request body exceeds the maximum allowed size of {limit} bytes.", StatusCodes.Status413PayloadTooLarge);
 
     /// <summary>The encoding of a request with a TOON content type (UTF-8 when it has no charset).</summary>
     /// <param name="request">The request.</param>

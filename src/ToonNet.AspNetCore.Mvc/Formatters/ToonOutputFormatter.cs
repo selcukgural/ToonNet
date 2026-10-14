@@ -70,13 +70,30 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
             if (mediaType.Type.Equals(requested.Type, StringComparison.OrdinalIgnoreCase) &&
                 mediaType.SubType.Equals(requested.SubType, StringComparison.OrdinalIgnoreCase))
             {
-                // The charset picks the encoding (UTF-8 when it is not one of the supported encodings)
-                context.ContentType = new StringSegment($"{supported}; charset={requested.Charset}");
+                // The charset picks one of the supported encodings, by its own name: the requested text is never copied
+                // into the response header (a value such as "utf-8,text/html" would change the content type). Any other
+                // charset gets the media type alone, which MVC writes in UTF-8.
+                var encoding = SupportedEncoding(requested.Charset.Value);
+                context.ContentType = new StringSegment(encoding == null ? supported : $"{supported}; charset={encoding.WebName}");
                 return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>The supported encoding a charset names, or null.</summary>
+    private Encoding? SupportedEncoding(string? charset)
+    {
+        foreach (var encoding in SupportedEncodings)
+        {
+            if (string.Equals(encoding.WebName, charset, StringComparison.OrdinalIgnoreCase))
+            {
+                return encoding;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
