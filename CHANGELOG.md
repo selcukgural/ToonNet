@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **ToonNet.Core:** Navigating and converting `ToonValue` trees like `JsonNode`: indexers on every value
+  (`doc.Root["users"]![0]["name"]`, which throw `InvalidOperationException` on a value of the wrong kind), `AsObject`,
+  `AsArray`, `GetValue<T>` and `TryGetValue<T>` (primitives, with the serializer's parsing rules), `Deserialize<T>`
+  (with options or a `ToonTypeInfo`), `DeepClone` and `ToonValue.DeepEquals` (object keys in any order, numbers by
+  value). `ToonSerializer.DeserializeFromValue` has an overload that takes a `ToonTypeInfo`, without reflection.
+
 ## [3.3.0] - 2026-10-14
 
 > All packages move to 3.3.0. Rebuild with the 3.3 generator: generated code now applies `PropertyNameCaseInsensitive`,

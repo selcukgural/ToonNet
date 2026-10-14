@@ -51,6 +51,8 @@ public partial class TypeInfoTests
 
             var reference = ToonSerializer.Deserialize<T>(expected, options);
             Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(read, options));
+            Assert.Equal(ToonSerializer.Serialize(reference, options),
+                         ToonSerializer.Serialize(ToonDocument.Parse(expected, options.ToonOptions).Root.Deserialize(typeInfo, options), options));
             Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(ToonSerializer.Deserialize(utf8, typeInfo, options), options));
             Assert.Equal(ToonSerializer.Serialize(reference, options),
                          ToonSerializer.Serialize(ToonSerializer.Deserialize(expected.AsSpan(), typeInfo, options), options));
