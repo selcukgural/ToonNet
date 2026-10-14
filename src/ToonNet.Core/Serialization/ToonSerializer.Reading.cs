@@ -140,6 +140,20 @@ public static partial class ToonSerializer
     ///     The message names the path and the type but not the value, which may be personal data and ends up in logs and
     ///     (through model state) in HTTP responses; the value is available as <see cref="ToonSerializationException.Value"/>.
     /// </remarks>
+    /// <summary>
+    ///     The error for an exception of a constructor: not its message, because the constructor's text (paths, settings,
+    ///     the values it checked) would reach clients through error responses; the exception stays the inner exception,
+    ///     for the application's logs.
+    /// </summary>
+    internal static ToonSerializationException ConstructorError(Type targetType, Exception exception) =>
+        ConstructorError(targetType, exception, null, SerializerState.Root);
+
+    private static ToonSerializationException ConstructorError(Type targetType, Exception exception, ToonValue? value, SerializerState state)
+    {
+        var inner = exception is TargetInvocationException { InnerException: { } thrown } ? thrown : exception;
+        return Error($"The constructor of {targetType.Name} threw {inner.GetType().Name}", targetType, value, state, inner);
+    }
+
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
     {
         return ToonSerializationException.AtPath(message, state.Path, targetType, namesTargetType: true, value, inner);
@@ -1282,10 +1296,7 @@ public static partial class ToonSerializer
         }
         catch (Exception ex) when (ex is not ToonException)
         {
-            var inner = ex is TargetInvocationException { InnerException: { } thrown } ? thrown : ex;
-            // Not the exception's message: the constructor's text (paths, settings, the values it checked) would reach
-            // clients through error responses; the exception stays the inner exception, for the application's logs
-            throw Error($"The constructor of {targetType.Name} threw {inner.GetType().Name}", targetType, value, state, inner);
+            throw ConstructorError(targetType, ex, value, state);
         }
 
         for (var p = 0; p < metadata.Properties.Length; p++)

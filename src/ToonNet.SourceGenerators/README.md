@@ -209,6 +209,7 @@ Converters of the options are applied without reflection too.
 ## 📋 Requirements
 
 - .NET 8.0 or later (the generated code uses `[UnsafeAccessor]` for `init`-only setters and `[ToonInclude]` non-public setters)
+- C# 10 or later (the default of .NET 6 and later; generated files use file-scoped namespaces)
 - ToonNet.Core of the same release (generated code uses its hidden writer and reader APIs)
 
 ---

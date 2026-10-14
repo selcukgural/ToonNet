@@ -11,7 +11,7 @@ namespace ToonNet.SourceGenerators.Tests.Tests;
 public class GeneratorDriverTests
 {
     private static (IReadOnlyList<Diagnostic> GeneratorDiagnostics, IReadOnlyList<Diagnostic> CompilationErrors, string[] GeneratedFiles)
-        Run(string source)
+        Run(string source, bool allowUnsafe = false)
     {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
                          .Split(Path.PathSeparator)
@@ -22,7 +22,7 @@ public class GeneratorDriverTests
                                                    [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.CSharp12))],
                                                    references,
                                                    new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
-                                                                                nullableContextOptions: NullableContextOptions.Enable));
+                                                                                nullableContextOptions: NullableContextOptions.Enable, allowUnsafe: allowUnsafe));
 
         var driver = CSharpGeneratorDriver.Create(new Generator::ToonNet.SourceGenerators.ToonSerializableGenerator())
                                           .RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
@@ -248,6 +248,43 @@ public class GeneratorDriverTests
         var source = Assert.Single(LastGeneratedSources);
         Assert.Contains(".Logins = ", source);
         Assert.DoesNotContain(".IsAdmin = ", source);
+    }
+
+    [Fact]
+    public void DynamicMembers_UnreadRequiredMembers_PointerAndRefReadonlyConstructors_Compile()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class D1 { public dynamic? Value { get; set; } public System.Collections.Generic.List<dynamic> Items { get; set; } = new(); }
+            [ToonSerializable] public partial class RI { [ToonIgnore] public required string Secret { get; set; } public required int Field; public int X { get; set; } }
+            public class RB { public required int Q; }
+            [ToonSerializable] public partial class RD : RB { public int Y { get; set; } }
+            [ToonSerializable] public unsafe partial class P1 { public P1() { } public P1(int* p) { } public int A { get; set; } }
+            [ToonSerializable] public partial class RR { public RR(ref readonly int x, in int y) { X = x + y; } public int X { get; } }
+            """, allowUnsafe: true);
+
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "gen-d1.cs"), string.Join("\n//////\n", LastGeneratedSources));
+        Assert.Empty(errors);
+        Assert.DoesNotContain(LastCompilationWarnings, w => w.Id is "CS9192" or "CS9193");
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void DerivedTypesWithoutATypeInfo_CannotUseTheBaseTypes()
+    {
+        var (_, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Base { public int A { get; set; } }
+            [ToonSerializable] public partial class GD<T> : Base { public int Extra { get; set; } = 2; }
+            public static class Use { public static object Info => GD<int>.ToonTypeInfo; }
+            """);
+
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "gen-gd.cs"), string.Join("\n//////\n", LastGeneratedSources));
+        var error = Assert.Single(errors);
+        Assert.Equal("CS0619", error.Id);
+        Assert.Contains("has no ToonTypeInfo of its own", error.GetMessage());
     }
 
     [Fact]

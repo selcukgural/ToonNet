@@ -211,6 +211,70 @@ public partial class Measured
     public List<float> L { get; set; } = [];
 }
 
+[ToonSerializable]
+public partial class Throwing
+{
+    public Throwing(int x)
+    {
+        if (x < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(x), "secret path /etc/x");
+        }
+
+        X = x;
+    }
+
+    public int X { get; }
+}
+
+[ToonSerializable]
+public partial class NullableHolder
+{
+    public int? N { get; set; }
+}
+
+[ToonSerializable]
+public partial class Chain
+{
+    public int V { get; set; }
+    public Chain? Next { get; set; }
+}
+
+public class LegsBase
+{
+    public virtual int Legs { get; set; } = 4;
+
+    [ToonInclude]
+    public int Private { get; private set; } = 2;
+}
+
+[ToonSerializable]
+public partial class LegsGetOnly : LegsBase
+{
+    public override int Legs => base.Legs;
+}
+
+public class HiddenBase
+{
+    public int Hidden { get; set; } = 1;
+    public string Name { get; set; } = "n";
+}
+
+[ToonSerializable]
+public partial class Hiding : HiddenBase
+{
+    public new string Hidden { get; set; } = "h";
+}
+
+[ToonSerializable]
+public partial class CtorBody
+{
+    public CtorBody() => Name = "ctor";
+
+    public required string Name { get; set; }
+    public int X { get; set; }
+}
+
 /// <summary>Generated code gives the text and the objects of the reflection-based serializer, feature by feature.</summary>
 public class GeneratedParityTests
 {
@@ -396,6 +460,68 @@ public class GeneratedParityTests
         {
             Assert.Equal((3, 4, "in"), (point.X, point.Y, point.Via));
         }
+    }
+
+    [Fact]
+    public void ConstructorExceptions_AreSerializationErrors_WithoutTheirMessage()
+    {
+        foreach (var read in new Func<Throwing?>[]
+                 {
+                     () => ToonSerializer.Deserialize<Throwing>("X: -1"), () => ToonSerializer.Deserialize<Throwing>("X: -1", ReflectionOnly.Options()),
+                     () => ToonSerializer.Deserialize("X: -1", Throwing.ToonTypeInfo), () => Throwing.Deserialize(ToonNet.Core.Models.ToonDocument.Parse("X: -1"))
+                 })
+        {
+            var ex = Assert.Throws<ToonSerializationException>(read);
+            Assert.Contains("The constructor of Throwing threw ArgumentOutOfRangeException", ex.Message);
+            Assert.DoesNotContain("secret", ex.Message);
+            Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
+        }
+    }
+
+    [Fact]
+    public void NullValues_DoNotCountTowardsTheDepth()
+    {
+        const string toon = "V: 1\nNext:\n  V: 2\n  Next: null";
+        var options = new ToonSerializerOptions { MaxDepth = 1 };
+
+        Assert.Equal(2, ToonSerializer.Deserialize<Chain>(toon, options)!.Next!.V);
+        Assert.Equal(2, ToonSerializer.Deserialize<Chain>(toon, ReflectionOnly.Options(options))!.Next!.V);
+        Assert.Equal(2, ToonSerializer.Deserialize(toon, Chain.ToonTypeInfo, options)!.Next!.V);
+        Assert.Equal(toon, ToonSerializer.Serialize(new Chain { V = 1, Next = new Chain { V = 2 } }, options));
+    }
+
+    [Fact]
+    public void Overrides_BaseSetters_AndHiddenProperties_ReadAlike()
+    {
+        foreach (var options in new[] { new ToonSerializerOptions(), ReflectionOnly.Options() })
+        {
+            var legs = ToonSerializer.Deserialize<LegsGetOnly>("Legs: 2\nPrivate: 7", options)!;
+            Assert.Equal((2, 7), (legs.Legs, legs.Private));
+
+            var hiding = new Hiding();
+            Assert.Equal("Name: n\nHidden: h", ToonSerializer.Serialize(hiding, options));
+            Assert.Equal("x", ToonSerializer.Deserialize<Hiding>("Name: n\nHidden: x", options)!.Hidden);
+        }
+    }
+
+    [Fact]
+    public void MissingRequiredMembers_KeepWhatTheConstructorSet_WhenNotRequired()
+    {
+        var lenient = new ToonSerializerOptions { RespectRequiredMembers = false };
+
+        Assert.Equal("ctor", ToonSerializer.Deserialize<CtorBody>("X: 1", lenient)!.Name);
+        Assert.Equal("ctor", ToonSerializer.Deserialize<CtorBody>("X: 1", ReflectionOnly.Options(lenient))!.Name);
+        Assert.Equal("ctor", ToonSerializer.Deserialize("X: 1", CtorBody.ToonTypeInfo, lenient)!.Name);
+    }
+
+    [Fact]
+    public void NullableValueErrors_NameTheUnderlyingType()
+    {
+        var generated = Assert.Throws<ToonSerializationException>(() => NullableHolder.Deserialize(ToonNet.Core.Models.ToonDocument.Parse("N: abc")));
+        var reflected = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<NullableHolder>("N: abc", ReflectionOnly.Options()));
+
+        Assert.Contains("target type: Int32", generated.Message);
+        Assert.Equal(reflected.Message, generated.Message);
     }
 
     [Fact]

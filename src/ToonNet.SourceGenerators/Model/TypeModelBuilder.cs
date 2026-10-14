@@ -104,24 +104,30 @@ internal static class TypeModelBuilder
             var reasons = new List<string>();
             var reportedWithProperty = index >= 0 && (HasConverter(properties[index]) ||
                                                       SymbolEqualityComparer.Default.Equals(parameter.Type, properties[index].Type));
-            var plan = planBuilder.Build(parameter.Type, reportedWithProperty ? [] : reasons);
+            var plan = planBuilder.Build(Typed(parameter.Type, compilation), reportedWithProperty ? [] : reasons);
             ReportFallback(diagnostics, fallbackDescriptor, reasons, $"constructor parameter '{parameter.Name}'", type, parameter.Locations, location);
 
-            parameterModels.Add(new ParameterModel(parameter.Name, parameter.Type.ToDisplayString(TypeNameFormat), index, FormatDefaultValue(parameter), plan));
+            parameterModels.Add(new ParameterModel(parameter.Name, Typed(parameter.Type, compilation).ToDisplayString(TypeNameFormat), index,
+                                                   FormatDefaultValue(parameter), plan,
+                                                   PassIn: parameter.RefKind is RefKind.In or RefKind.RefReadOnlyParameter));
         }
 
         var propertyModels = properties.Select((property, index) =>
         {
             var reasons = new List<string>();
-            var plan = planBuilder.Build(property.Type, HasConverter(property) ? [] : reasons);
+            var plan = planBuilder.Build(Typed(property.Type, compilation), HasConverter(property) ? [] : reasons);
             ReportFallback(diagnostics, fallbackDescriptor, reasons, $"property '{property.Name}'", type, property.Locations, location);
 
             var model = CreatePropertyModel(property, plan, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers);
 
-            // A property set in the object initializer gets a value even without a key, which would replace its own
-            // initializer (= true, = new()): such an object is left to the reflection-based reader, which keeps it
-            return model.Write == WriteKind.Initializer && allowFallback && HasInitializer(property) ? model with { KeepsInitializer = true } : model;
+            // A property set in the object initializer gets a value even without a key, which would replace what the
+            // object had (an initializer, a value set by the constructor): such an object is left to the
+            // reflection-based reader, which leaves the property as it was
+            return model.Write == WriteKind.Initializer && allowFallback ? model with { KeepsInitializer = true } : model;
         }).ToImmutableArray();
+
+        var unsetRequiredHasInitializer = false;
+        var unsetRequired = setsRequiredMembers ? [] : UnsetRequiredMembers(type, properties, out unsetRequiredHasInitializer);
 
         var hasTypeConverter = type.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute");
         var namingPolicy = attribute.NamedArguments.FirstOrDefault(a => a.Key == "NamingPolicy").Value.Value as int?;
@@ -147,14 +153,54 @@ internal static class TypeModelBuilder
             CheckRuntimeType: !type.IsValueType && !type.IsSealed,
             HasTypeConverter: hasTypeConverter,
             RegisterWithSerializer: !hasTypeConverter && CanRegister(type, compilation),
-            TypeInfoProperty: !hasTypeConverter && CanRegister(type, compilation) ? GetTypeInfoProperty(type, compilation) : TypeInfoProperty.None,
+            TypeInfoProperty: !hasTypeConverter && CanRegister(type, compilation) ? GetTypeInfoProperty(type, compilation)
+                : type.GetMembers("ToonTypeInfo").IsEmpty && GetTypeInfoProperty(type, compilation) == TypeInfoProperty.EmitNew ? TypeInfoProperty.Hide
+                : TypeInfoProperty.None,
             EmitSerializeMethod: !MethodNameTaken(type, "Serialize", type, compilation, diagnostics, location),
             EmitDeserializeMethod: !MethodNameTaken(type, "Deserialize", compilation.GetTypeByMetadataName("ToonNet.Core.Models.ToonDocument"), compilation,
                                                     diagnostics, location),
             FixedNamingPolicy: namingPolicy,
             Properties: new EquatableArray<PropertyModel>(propertyModels),
             Constructor: type.IsAbstract ? null : constructorModel,
-            Diagnostics: new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()));
+            Diagnostics: new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()),
+            UnsetRequired: new EquatableArray<string>(unsetRequired.ToImmutableArray()),
+            UnsetRequiredHasInitializer: unsetRequiredHasInitializer && allowFallback);
+    }
+
+    /// <summary>
+    ///     The <c>required</c> members generated code does not read (fields, ignored properties, properties without a
+    ///     public getter), which the object initializer must still set: to their default, as reflection leaves them.
+    /// </summary>
+    private static List<string> UnsetRequiredMembers(INamedTypeSymbol type, List<IPropertySymbol> properties, out bool hasInitializer)
+    {
+        var read = new HashSet<string>(properties.Select(p => p.Name), StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var unset = new List<string>();
+        hasInitializer = false;
+
+        for (var current = type; current != null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers())
+            {
+                var required = member switch
+                {
+                    IPropertySymbol { IsRequired: true } property => !read.Contains(property.Name),
+                    IFieldSymbol { IsRequired: true } => true,
+                    _ => false
+                };
+
+                if (!required || !seen.Add(member.Name))
+                {
+                    continue;
+                }
+
+                unset.Add(EscapeKeyword(member.Name));
+                hasInitializer |= member.DeclaringSyntaxReferences.Any(r => r.GetSyntax() is PropertyDeclarationSyntax { Initializer: not null } or
+                                                                                VariableDeclaratorSyntax { Initializer: not null });
+            }
+        }
+
+        return unset;
     }
 
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
@@ -347,7 +393,8 @@ internal static class TypeModelBuilder
         // Reflection does not see the implicit parameterless constructor of a struct; a constructor with a ref struct
         // parameter (Span<T>) cannot be called with values read from a document
         var all = type.InstanceConstructors.Where(c => !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0) &&
-                                                       !c.Parameters.Any(p => p.Type.IsRefLikeType || p.RefKind is RefKind.Ref or RefKind.Out)).ToList();
+                                                       !c.Parameters.Any(p => p.Type.IsRefLikeType || p.RefKind is RefKind.Ref or RefKind.Out ||
+                                                                             p.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer)).ToList();
         var constructors = all.Where(c => c.DeclaredAccessibility == Accessibility.Public).ToList();
 
         // [ToonConstructor] may mark a constructor of any accessibility (generated code is a member of the type)
@@ -374,7 +421,7 @@ internal static class TypeModelBuilder
     private static PropertyModel CreatePropertyModel(IPropertySymbol property, ValuePlan plan, INamedTypeSymbol type, Compilation compilation,
                                                      bool canUseUnsafeAccessor, bool boundToConstructor, bool setsRequiredMembers)
     {
-        var propertyType = property.Type;
+        var propertyType = Typed(property.Type, compilation);
 
         var attributeName = FindAttribute(property, "ToonPropertyAttribute") is { ConstructorArguments.Length: > 0 } nameAttribute
             ? nameAttribute.ConstructorArguments[0].Value as string
@@ -413,9 +460,9 @@ internal static class TypeModelBuilder
             IsRequired: property.IsRequired);
     }
 
-    /// <summary>Whether the property is declared with an initializer (<c>= value</c>) in source.</summary>
-    private static bool HasInitializer(IPropertySymbol property) =>
-        property.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax() is PropertyDeclarationSyntax { Initializer: not null });
+    /// <summary><c>dynamic</c> as <c>object</c>, which it is at run time (<c>typeof(dynamic)</c> does not compile).</summary>
+    private static ITypeSymbol Typed(ITypeSymbol type, Compilation compilation) =>
+        type.TypeKind == TypeKind.Dynamic ? compilation.ObjectType.WithNullableAnnotation(type.NullableAnnotation) : type;
 
     /// <summary>Whether the property, or one it overrides, is marked <c>[ToonInclude]</c>.</summary>
     private static bool IsIncluded(IPropertySymbol property)

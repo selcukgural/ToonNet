@@ -202,7 +202,37 @@ public static partial class ToonSerializer
     ///     marked <see cref="ToonIncludeAttribute"/>; null otherwise.
     /// </summary>
     internal static MethodInfo? SettableFromDocuments(PropertyInfo property) =>
-        property.SetMethod is { } setter && (setter.IsPublic || Attribute.IsDefined(property, typeof(ToonIncludeAttribute), inherit: true)) ? setter : null;
+        FindSetter(property) is { } setter && (setter.IsPublic || Attribute.IsDefined(property, typeof(ToonIncludeAttribute), inherit: true)) ? setter : null;
+
+    /// <summary>
+    ///     The setter of a property, as the generator finds it: the property's own (a private one of a base class
+    ///     included, which a <see cref="PropertyInfo"/> of the derived type does not show), or that of the property it
+    ///     overrides when the override only redefines the getter.
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+    private static MethodInfo? FindSetter(PropertyInfo property)
+    {
+        const BindingFlags declared = BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+        for (var current = property; current != null;)
+        {
+            var own = current.DeclaringType!.GetProperties(declared).FirstOrDefault(p => p.Name == current.Name) ?? current;
+
+            if (own.GetSetMethod(nonPublic: true) is { } setter)
+            {
+                return setter;
+            }
+
+            // An override that only redefines the getter: the setter of the overridden property
+            var getter = own.GetGetMethod(nonPublic: true);
+            var baseGetter = getter?.GetBaseDefinition();
+            current = baseGetter != null && baseGetter != getter
+                ? baseGetter.DeclaringType!.GetProperties(declared).FirstOrDefault(p => p.Name == current.Name)
+                : null;
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Retrieves cached type metadata for a specified type, or generates and stores it if not already cached.
@@ -238,6 +268,13 @@ public static partial class ToonSerializer
                 declared = t.GetInterfaces().SelectMany(i => i.GetProperties(BindingFlags.Public | BindingFlags.Instance)).Concat(declared)
                             .Where(p => names.Add(p.Name)).ToList();
             }
+            else
+            {
+                // A property hidden with `new` is listed with the one that hides it: keep the most derived, as the
+                // generator does (both would be written under one name)
+                declared = declared.GroupBy(p => p.Name, StringComparer.Ordinal)
+                                   .Select(g => g.MaxBy(p => InheritanceDepth(p.DeclaringType!))!).ToList();
+            }
 
             foreach (var prop in declared)
             {
@@ -251,7 +288,7 @@ public static partial class ToonSerializer
                 {
                     Property = prop,
                     Getter = CompileGetter(prop),
-                    Setter = SettableFromDocuments(prop) is not null ? CompileSetter(prop) : null,
+                    Setter = SettableFromDocuments(prop) is { } setter ? CompileSetter(prop, setter) : null,
                     AttributeName = prop.GetCustomAttribute<ToonPropertyAttribute>()?.Name,
                     Converter = CreateAttributeConverter(prop.GetCustomAttribute<ToonConverterAttribute>()),
                     Primitive = PrimitiveAccessor.Create(prop),
@@ -385,17 +422,18 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     For structs the setter writes into the boxed instance (via unbox), so the assignment is not lost on a copy.
     /// </remarks>
-    private static Action<object, object?> CompileSetter(PropertyInfo property)
+    private static Action<object, object?> CompileSetter(PropertyInfo property, MethodInfo setter)
     {
         var instance = Expression.Parameter(typeof(object), "instance");
         var value = Expression.Parameter(typeof(object), "value");
-        var declaringType = property.DeclaringType!;
+        var declaringType = setter.DeclaringType!;
 
         Expression target = declaringType.IsValueType
             ? Expression.Unbox(instance, declaringType)
             : Expression.Convert(instance, declaringType);
 
-        var assign = Expression.Assign(Expression.Property(target, property), Expression.Convert(value, property.PropertyType));
+        // The setter found for the property, which can be a base class's (private, or of an overridden property)
+        var assign = Expression.Call(target, setter, Expression.Convert(value, property.PropertyType));
 
         return Expression.Lambda<Action<object, object?>>(assign, instance, value).Compile();
     }

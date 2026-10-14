@@ -348,7 +348,7 @@ public static partial class ToonSerializer
             return (T)result!;
         }
 
-        throw Error($"Cannot convert {value.ValueType} to {(underlyingType ?? targetType).Name}", targetType, value, state);
+        throw Error($"Cannot convert {value.ValueType} to {(underlyingType ?? targetType).Name}", underlyingType ?? targetType, value, state);
     }
 
     internal static string FormatDictionaryKeyForGeneratedCode(object key) => FormatDictionaryKey(key);

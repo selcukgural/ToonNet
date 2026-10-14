@@ -197,6 +197,19 @@ Defaults that let documents and responses do more than the code meant, now as Sy
 - **ToonNet.Core, ToonNet.SourceGenerators:** Constructors with `in` parameters are used by reflection (it failed to
   convert the values) and by generated code; `[ToonInclude]` on a property is found on its overrides by reflection too.
   The duplicate-key error of `ToonConvert.FromJson` escapes and shortens the key.
+- **ToonNet.SourceGenerators:** An exception thrown by a constructor while generated code reads escaped as it was (with
+  its message); it is a `ToonSerializationException` naming the exception's type, as with reflection. A `null` (or
+  another primitive) where an object goes counted against `MaxDepth` in generated readers, which rejected documents
+  that reflection and generated writers accept. `dynamic` members, `required` members that generated code does not
+  read (`[ToonIgnore]`, fields, a getter that is not public) and constructors with `ref readonly` or pointer
+  parameters gave code that did not compile. A derived type without a `ToonTypeInfo` of its own (generic, not public,
+  or with a `[ToonConverter]`) silently used its base type's, which converts only the base type's properties; using
+  it is now a compile error with the reason. A member set in the object initializer without a key in the document
+  (`required` with `RespectRequiredMembers = false`, or init-only in a generic type) lost the value its constructor
+  gave it; such objects are read by reflection, as with initializers.
+- **ToonNet.Core:** Reflection reads like generated code: a getter-only override uses the setter of the property it
+  overrides, `[ToonInclude]` on a private setter of a base class is honored, and a property hidden with `new` is
+  written and read once, as the derived type's. Errors for nullable value types name the underlying type.
 - **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
   so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that

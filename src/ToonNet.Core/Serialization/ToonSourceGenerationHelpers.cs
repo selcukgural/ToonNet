@@ -183,6 +183,13 @@ public static class ToonSourceGenerationHelpers
     }
 
     /// <summary>
+    ///     The error for an exception thrown by the constructor of <typeparamref name="T"/> while reading, as
+    ///     <see cref="ToonSerializer"/> reports it: the exception's type, and the exception as the inner one.
+    /// </summary>
+    public static ToonSerializationException ConstructorError<T>(Exception exception) =>
+        ToonSerializer.ConstructorError(typeof(T), exception);
+
+    /// <summary>
     ///     Throws when <paramref name="depth"/> exceeds <see cref="ToonSerializerOptions.MaxDepth"/> or the stack is
     ///     nearly exhausted.
     /// </summary>
