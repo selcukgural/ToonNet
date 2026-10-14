@@ -88,4 +88,23 @@ public class ToonMergePatchTests
 
         Assert.Equal("b:\n  c: 1", ToonSerializer.Serialize(ToonMergePatch.Apply(target, target)));
     }
+    [Fact]
+    public void Create_ANullValue_RemovesTheMember()
+    {
+        // A merge patch cannot set null (RFC 7386 §1): applying the patch removes the member
+        var patch = ToonMergePatch.Create(Json("""{"a":1}"""), Json("""{"a":null}"""));
+
+        Assert.True(ToonValue.DeepEquals(Json("""{"a":null}"""), patch));
+        Assert.True(ToonValue.DeepEquals(Json("{}"), ToonMergePatch.Apply(Json("""{"a":1}"""), patch)));
+    }
+
+    [Fact]
+    public void Apply_PatchInsideTheTarget()
+    {
+        var target = Json("""{"p":{"a":1,"b":null},"a":0}""");
+
+        var result = ToonMergePatch.Apply(target, target["p"]!);
+
+        Assert.True(ToonValue.DeepEquals(Json("""{"p":{"a":1,"b":null},"a":1}"""), result));
+    }
 }

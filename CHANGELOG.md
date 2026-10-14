@@ -39,8 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths and filter expressions, as Schematron does for XML: `Rule(path, assertion, message)` (the assertion must hold
   for each selected value: `.Rule("$.orders[*]", "sum(@.lines[*].price) == @.total", "...")`), `Required`, `Forbidden`
   (`$..password`) and `Unique` (`$.orders[*].id`), with error or warning severity. `Validate` gives each violation with
-  its normalized path, message (`{path}` and `{value}` placeholders) and value, up to `MaxViolations` (1,000);
-  `ThrowIfInvalid` throws `ToonRuleException`. `ToonPrompt.DeserializeValidated<T>(answer, rules)` checks a model's answer before it is read,
+  its normalized path, message (`{path}` and `{value}` placeholders) and value, up to `MaxViolations` errors and as
+  many warnings (warnings beyond the limit are dropped without hiding errors); `ThrowIfInvalid` throws
+  `ToonRuleException`. `ToonPrompt.DeserializeValidated<T>(answer, rules)` checks a model's answer before it is read,
   so the exception's message can go back to the model.
 - **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
   creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.

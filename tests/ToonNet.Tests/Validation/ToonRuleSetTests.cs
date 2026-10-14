@@ -82,8 +82,9 @@ public class ToonRuleSetTests
         Assert.Equal(2, result.Warnings.Count());
         result.ThrowIfInvalid();
 
-        Assert.True(rules.Validate("a: 1").IsValid); // no orders: the assertions have nothing to check
-        Assert.Empty(rules.Validate("a: 1").Violations);
+        var empty = rules.Validate("a: 1"); // no orders: the assertions have nothing to check
+        Assert.True(empty.IsValid);
+        Assert.Empty(empty.Violations);
     }
 
     [Fact]
@@ -180,10 +181,51 @@ public class ToonRuleSetTests
     }
 
     [Fact]
-    public void ExceptionMessage_CountsViolations()
+    public void ExceptionMessage_OneViolation_AndMoreThanTen()
     {
-        var ex = Assert.Throws<ToonRuleException>(() => new ToonRuleSet().Rule("$.*", "@ > 5", "bad").Validate("a: 1\nb: 2").ThrowIfInvalid());
+        var one = Assert.Throws<ToonRuleException>(() => new ToonRuleSet().Rule("$.*", "@ > 5", "bad").Validate("a: 1").ThrowIfInvalid());
+        Assert.Equal("The document has 1 rule violation: $['a']: bad", one.Message);
 
-        Assert.StartsWith("The document has 2 rule violations: ", ex.Message);
+        var toon = string.Join('\n', Enumerable.Range(0, 12).Select(i => $"k{i}: 1"));
+        var many = Assert.Throws<ToonRuleException>(() => new ToonRuleSet().Rule("$.*", "@ > 5", "bad").Validate(toon).ThrowIfInvalid());
+        Assert.Equal(12, many.Violations.Count);
+        Assert.EndsWith("$['k9']: bad; ...", many.Message);
+    }
+
+    [Fact]
+    public void Warnings_DoNotHideErrors()
+    {
+        // Warnings fill their own limit; the error after them is still found
+        var rules = new ToonRuleSet { MaxViolations = 1 }
+            .Rule("$.a[*]", "@ > 5", "small", ToonRuleSeverity.Warning)
+            .Rule("$.a[*]", "@ > 10", "too small");
+
+        var result = rules.Validate("a[3]: 1,2,3");
+
+        Assert.False(result.IsValid);
+        Assert.True(result.IsTruncated);
+        Assert.Equal(["small", "too small"], result.Violations.Select(v => v.Message));
+        Assert.Throws<ToonRuleException>(result.ThrowIfInvalid);
+    }
+
+    [Theory]
+    [InlineData("Required")]
+    [InlineData("Forbidden")]
+    [InlineData("Unique")]
+    public void MaxViolations_StopsEveryKindOfRule(string kind)
+    {
+        var rules = new ToonRuleSet { MaxViolations = 2 };
+        _ = kind switch
+        {
+            "Required" => rules.Required("$.x", "1").Required("$.y", "2").Required("$.z", "3"),
+            "Forbidden" => rules.Forbidden("$.a[*]", "f"),
+            _ => rules.Unique("$.a[*]", "u")
+        };
+
+        var result = rules.Validate("a[4]: 1,1,1,1");
+
+        Assert.Equal(2, result.Violations.Count);
+        Assert.True(result.IsTruncated);
+        Assert.False(result.IsValid);
     }
 }

@@ -6,26 +6,24 @@ public class KeyCacheTests
 {
     /// <summary>
     ///     The keys repeated in every item of a list are shared strings in every process: the cache's hash is not
-    ///     randomized, and two keys that want the same slot both stay cached.
+    ///     randomized, and two keys that want the same first slot ("Acd" and "Ada" under FNV-1a) both stay cached.
     /// </summary>
-    [Fact]
-    public void RepeatedKeys_AreSharedStrings()
+    [Theory]
+    [InlineData("Acd", "Ada")]
+    [InlineData("Id", "Name")]
+    public void RepeatedKeys_AreSharedStrings(string first, string second)
     {
-        string[] keys = ["Id", "Customer", "Name", "Email", "ShipTo", "City", "ZipCode", "Total", "Paid", "CreatedAt", "Tags", "Notes", "Status"];
-        var item = string.Join("\n", keys.Select((k, i) => (i == 0 ? "  - " : "    ") + k + ": " + i));
+        // The cache is used from 64 lines on
+        var item = $"  - {first}: 1\n    {second}: 2";
         var toon = "items[100]:\n" + string.Join("\n", Enumerable.Repeat(item, 100));
 
         var items = ToonDocument.Parse(toon).Root["items"]!.AsArray().Items;
-        var first = items[0].AsObject().Properties.Keys;
+        var keys = items[0].AsObject().Properties.Keys;
 
         foreach (var other in items.Skip(1))
         {
-            var otherKeys = other.AsObject().Properties.Keys;
-
-            for (var i = 0; i < keys.Length; i++)
-            {
-                Assert.Same(first[i], otherKeys[i]);
-            }
+            Assert.Same(keys[0], other.AsObject().Properties.Keys[0]);
+            Assert.Same(keys[1], other.AsObject().Properties.Keys[1]);
         }
     }
 }

@@ -451,6 +451,9 @@ internal static class ToonPathEvaluator
     {
         work.Spend();
 
+        // Expressions nest as deep as the path does (up to ToonPathOptions.MaxNesting): fail safely on a small stack
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+
         switch (expression)
         {
             case OrExpression or:
@@ -502,6 +505,8 @@ internal static class ToonPathEvaluator
     /// <summary>Evaluates an expression of ValueType; null is Nothing (§2.4.1).</summary>
     private static ToonValue? Evaluate(PathExpression expression, ToonValue root, ToonValue current, EvaluationBudget work)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+
         switch (expression)
         {
             case LiteralExpression literal:

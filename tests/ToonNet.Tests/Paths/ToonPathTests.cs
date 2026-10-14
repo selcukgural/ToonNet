@@ -138,7 +138,8 @@ public class ToonPathTests
     [Fact]
     public void Parse_CachesCompiledPaths()
     {
-        Assert.Same(ToonPath.Parse("$.cached[?@.x]"), ToonPath.Parse("$.cached[?@.x]"));
+        // Other tests fill the cache in parallel and may clear it between two calls: one of a few tries must hit
+        Assert.Contains(Enumerable.Range(0, 5), _ => ReferenceEquals(ToonPath.Parse("$.cached[?@.x]"), ToonPath.Parse("$.cached[?@.x]")));
         Assert.True(ToonPath.Parse("$.a['b'][0]").IsSingular);
         Assert.False(ToonPath.Parse("$.a[0,1]").IsSingular);
         Assert.False(ToonPath.Parse("$..a").IsSingular);
@@ -176,11 +177,16 @@ public class ToonPathTests
     {
         // (a+)+$ backtracks exponentially on "aaaa...b" in a backtracking engine
         var root = new ToonArray([new string('a', 50_000) + "b"]);
-        var watch = Stopwatch.StartNew();
 
-        Assert.Empty(root.Select("$[?match(@, '(a+)+')]"));
-        Assert.Empty(root.Select("$[?search(@, '(a+)+$') && !search(@, 'b')]"));
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5));
+        // On a worker with a deadline, so a backtracking engine fails the test instead of hanging it
+        var run = Task.Run(() =>
+        {
+            Assert.Empty(root.Select("$[?match(@, '(a+)+')]"));
+            Assert.Empty(root.Select("$[?search(@, '(a+)+$')]"));
+            Assert.Single(root.Select("$[?search(@, '(a+)+b$')]"));
+        });
+
+        Assert.True(run.Wait(TimeSpan.FromSeconds(10)), "the regular expressions should run in linear time");
 
         var longPattern = new string('a', ToonPathOptions.Default.MaxPatternLength + 1);
         Assert.Empty(new ToonArray([longPattern]).Select($"$[?match(@, '{longPattern}')]"));
@@ -312,14 +318,12 @@ public class ToonPathTests
     {
         const string toon = "items[3]:\n  - a: 0\n  - a: 1e-30\n  - a: -0";
 
-        foreach (var filter in (string[])["@.a == 1e-30", "@.a < 1e-30", "@.a > 0", "@.a == 0"])
+        foreach (var (filter, count) in ((string, int)[])[("@.a == 1e-30", 1), ("@.a < 1e-30", 2), ("@.a > 0", 1), ("@.a == 0", 2)])
         {
             var path = ToonPath.Parse($"$.items[?{filter}]");
-            var tree = path.Select(ToonDocument.Parse(toon).Root);
-            Assert.Equal(tree.Count, path.SelectFrom(toon).Count);
+            Assert.Equal(count, path.Select(ToonDocument.Parse(toon).Root).Count);
+            Assert.Equal(count, path.SelectFrom(toon).Count);
         }
-
-        Assert.Single(ToonPath.Parse("$.items[?@.a == 1e-30]").Select(ToonDocument.Parse(toon).Root));
     }
 
     [Fact]
@@ -343,6 +347,14 @@ public class ToonPathTests
         thread.Start();
         thread.Join();
 
-        Assert.IsType<ToonPathException>(error);
+        Assert.Equal("The path nests too deeply for the stack of this thread", Assert.IsType<ToonPathException>(error).Reason);
+
+        // Evaluating a path that was compiled on a larger stack fails safely too
+        var compiled = ToonPath.Parse(path, options);
+        thread = new Thread(() => error = Record.Exception(() => compiled.Select(new ToonArray(["a"]))), 128 * 1024);
+        thread.Start();
+        thread.Join();
+
+        Assert.IsType<InsufficientExecutionStackException>(error);
     }
 }

@@ -91,7 +91,7 @@ public class ToonPathFunctionTests
         Assert.Equal(["Pro Laptop", "pro cable"], Names("$.products[?max(@.lines[*].qty) == 2].name"));
         Assert.Equal(["Mouse"], Names("$.products[?avg(@.lines[*].price) == 10].name"));
         Assert.Empty(Names("$.products[?sum(@.lines[*].price) == 4]"));    // 'x' is not a number: no value
-        Assert.Equal(2, Names("$[?sum(@.users[*].missing) == 0]").Length); // the sum of nothing is 0 (for both members)
+        Assert.Equal(6, Names("$.users[?sum(@.missing[*]) == 0]").Length);  // the sum of nothing is 0
         Assert.Empty(Names("$[?avg(@.users[*].missing) == 0]"));
 
         var exact = ToonPath.Parse("$[?sum(@[*]) == 0.3]").Select(ToonDocument.Parse("values[3]: 0.1,0.1,0.1").Root);
@@ -135,7 +135,13 @@ public class ToonPathFunctionTests
         Assert.Single(ToonPath.Parse("$.users[?same(@.name, 'bob')]", options).Select(root));
         Assert.Single(ToonPath.Parse("$.users[?double_it(@.score) == 20]", options).Select(root));
         Assert.Single(ToonPath.Parse("$.users[?concat(@.name, '!') == 'Ada!']", options).Select(root));
-        Assert.Equal(2, ToonPath.Parse("$.products[?all_positive(@.lines[*].qty)]", options).Select(root).Count - 1);
+        // pro cable has quantities 1 and 2: positive; with a 0 for Mouse, only the laptop and the cable remain
+        Assert.Equal(["Pro Laptop", "Mouse", "pro cable"],
+                     ToonPath.Parse("$.products[?all_positive(@.lines[*].qty)].name", options).Select(root).Select(v => v.GetValue<string>()));
+        Assert.Equal(1, Users.Split("      5,10").Length - 1);
+        var withZero = ToonDocument.Parse(Users.Replace("      5,10", "      0,10")).Root;
+        Assert.Equal(["Pro Laptop", "pro cable"],
+                     ToonPath.Parse("$.products[?all_positive(@.lines[*].qty)].name", options).Select(withZero).Select(v => v.GetValue<string>()));
         Assert.Single(ToonPath.Parse("$.products[?total(@.lines[*].qty) == 5]", options).Select(root));
 
         // Over text, and through the serializer's options

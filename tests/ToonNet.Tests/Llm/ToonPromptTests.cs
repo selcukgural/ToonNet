@@ -219,4 +219,59 @@ public class ToonPromptTests
             ToonPrompt.DeserializeValidated<Order>("Lines[2]{Sku,Quantity}:\n  a,0\n  b,1", rules));
         Assert.Equal("The document has 2 rule violations: $['Lines'][0]: Quantity must be positive; $.Customer: Customer is missing", ex.Message);
     }
+    [Theory]
+    [InlineData("```\nnot this\n```\n```toon\na: 1\n```", "a: 1")]          // the toon block wins over an earlier unmarked one
+    [InlineData("``toon\na: 1\n``", "``toon\na: 1\n``")]                     // two backticks are not a fence
+    [InlineData("```to`on\na: 1", "```to`on\na: 1")]                           // a backtick in the info string: not a fence
+    public void Extract_FenceRules(string answer, string expected)
+    {
+        Assert.Equal(expected, ToonPrompt.Extract(answer));
+    }
+
+    public enum Mode
+    {
+        On,
+        Off
+    }
+
+    public sealed class AllPlaceholders
+    {
+        public bool Flag { get; set; }
+        public DateOnly Day { get; set; }
+        public TimeOnly At { get; set; }
+        public TimeSpan Wait { get; set; }
+        public Uri? Link { get; set; }
+        public object? Anything { get; set; }
+        public Guid Id { get; set; }
+        public Mode? Mode { get; set; }
+        public int ReadOnly => 1;
+    }
+
+    public sealed record Positional(int Id, string Name)
+    {
+        public int Computed => Id * 2;
+    }
+
+    [Fact]
+    public void DescribeShape_EveryPlaceholder_AndReadOnlyProperties()
+    {
+        Assert.Equal("""
+                     Flag: <boolean>
+                     Day: <date>
+                     At: <time>
+                     Wait: <duration>
+                     Link: <uri|null>
+                     Anything: <any|null>
+                     Id: <uuid>
+                     Mode: <On|Off|null>
+                     ReadOnly: <integer>
+                     """, ToonPrompt.DescribeShape<AllPlaceholders>());
+
+        var noReadOnly = new ToonSerializerOptions { IncludeReadOnlyProperties = false };
+        Assert.DoesNotContain("ReadOnly", ToonPrompt.DescribeShape<AllPlaceholders>(noReadOnly));
+
+        // Constructor parameters are kept, computed properties are not
+        Assert.Equal("Id: <integer>\nName: <string>", ToonPrompt.DescribeShape<Positional>(noReadOnly));
+        Assert.Equal("Id: <integer>\nName: <string>\nComputed: <integer>", ToonPrompt.DescribeShape<Positional>());
+    }
 }

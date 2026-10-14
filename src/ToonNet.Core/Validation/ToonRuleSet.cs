@@ -55,8 +55,10 @@ public sealed class ToonRuleSet
     private int _maxViolations = 1000;
 
     /// <summary>
-    ///     The most violations a validation collects (default 1,000); validation stops there and
-    ///     <see cref="ToonRuleResult.IsTruncated"/> is true, so a document with many bad values cannot make a huge result.
+    ///     The most errors, and separately the most warnings, a validation collects (default 1,000 each), so a document with
+    ///     many bad values cannot make a huge result. Validation stops at the last error allowed; warnings beyond the limit
+    ///     are dropped while the rules go on, so they cannot hide errors. <see cref="ToonRuleResult.IsTruncated"/> tells
+    ///     that violations were left out.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is less than 1.</exception>
     public int MaxViolations
@@ -160,6 +162,8 @@ public sealed class ToonRuleSet
         var work = new EvaluationBudget(root, Options);
         var violations = new List<ToonRuleViolation>();
         var max = _maxViolations;
+        int errors = 0, warnings = 0;
+        var droppedWarnings = false;
 
         foreach (var rule in _rules)
         {
@@ -212,13 +216,28 @@ public sealed class ToonRuleSet
             }
         }
 
-        return new ToonRuleResult(violations, truncated: false);
+        return new ToonRuleResult(violations, truncated: droppedWarnings);
 
-        // Collects a violation; false when that was the last one allowed
+        // Collects a violation; false when that was the last error allowed (warnings beyond the limit are dropped)
         bool Add(ToonRuleViolation violation)
         {
+            if (violation.Severity == ToonRuleSeverity.Warning)
+            {
+                if (warnings < max)
+                {
+                    violations.Add(violation);
+                    warnings++;
+                }
+                else
+                {
+                    droppedWarnings = true;
+                }
+
+                return true;
+            }
+
             violations.Add(violation);
-            return violations.Count < max;
+            return ++errors < max;
         }
     }
 

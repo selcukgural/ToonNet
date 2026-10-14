@@ -324,14 +324,26 @@ public class AsyncEnumerableTests
         Assert.Throws<ToonPathException>(() => ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(), "pages"));
     }
 
+    /// <summary>The invalid root arrays, without content after them (in an envelope that is a sibling).</summary>
+    public static TheoryData<string> InvalidArrays()
+    {
+        var data = new TheoryData<string>();
+
+        foreach (var root in InvalidDocuments)
+        {
+            if (root.StartsWith('[') && !root.Contains("extra"))
+            {
+                data.Add(root);
+            }
+        }
+
+        return data;
+    }
+
     [Theory]
-    [MemberData(nameof(InvalidDocuments))]
+    [MemberData(nameof(InvalidArrays))]
     public async Task NestedErrors_MatchDeserializeAt(string root)
     {
-        if (!root.StartsWith('[') || root.Contains("extra"))
-        {
-            return; // not an array, or content after it (a sibling in an envelope)
-        }
 
         var text = Envelope(root);
         var whole = Record.Exception(() => ToonSerializer.DeserializeAt<List<object?>>(text, "$.data.rows"));
@@ -410,6 +422,50 @@ public class AsyncEnumerableTests
         var streamed = await Assert.ThrowsAsync<ToonParseException>(() => ReadAll(
             ToonSerializer.DeserializeAsyncEnumerableAt<object>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.orders")));
         Assert.Equal(whole.Message, streamed.Message);
+    }
+
+    [Fact]
+    public async Task At_InvalidUtf8_IsAParseError()
+    {
+        var bytes = "data:\n  rows[1]{Id}:\n    "u8.ToArray().Concat(new byte[] { 0xC3, 0x28 }).ToArray();
+
+        var ex = await Assert.ThrowsAsync<ToonParseException>(() => ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(bytes), "$.data.rows")));
+        Assert.Contains("not valid UTF-8", ex.Message);
+    }
+
+    [Fact]
+    public async Task At_QuotedKeysWithEscapes()
+    {
+        const string text = "\"a\\\"b\":\n  \"r:s\"[1]{Id}:\n    7";
+
+        var items = await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$['a\"b']['r:s']"));
+        Assert.Equal(7, Assert.Single(items)!.Id);
+    }
+
+    [Fact]
+    public async Task At_SkipsLinesBeforeTheArray_WithoutCheckingThem()
+    {
+        // A badly indented sibling is an error for DeserializeAt, which reads it; the stream only follows keys
+        const string text = "other:\n   bad: 1\ndata:\n  rows[1]{Id}:\n    3";
+
+        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeAt<List<Item>>(text, "$.data.rows"));
+        Assert.Equal(3, Assert.Single(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.rows")))!.Id);
+    }
+
+    [Fact]
+    public async Task At_Cancellation_StopsReading()
+    {
+        var text = "data:\n  rows[1000]{Id}:\n" + string.Join('\n', Enumerable.Range(0, 1000).Select(i => $"    {i}"));
+        using var cancellation = new CancellationTokenSource();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var _ in ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new TrickleStream(Text.Encoding.UTF8.GetBytes(text), 64), "$.data.rows",
+                                                                                      cancellationToken: cancellation.Token))
+            {
+                cancellation.Cancel();
+            }
+        });
     }
 
     #endregion
