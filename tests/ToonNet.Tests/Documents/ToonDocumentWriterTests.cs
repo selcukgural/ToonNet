@@ -329,7 +329,7 @@ public class ToonDocumentWriterTests
     }
 
     [Fact]
-    public void Depth_IsLimitedByTheOptions()
+    public void Depth_IsLimitedByTheOptions_AndLeavesTheWriterFaulted()
     {
         using var writer = new ToonDocumentWriter(new StringWriter(), new ToonOptions { MaxDepth = 2 });
         writer.WriteStartObject();
@@ -337,6 +337,28 @@ public class ToonDocumentWriterTests
         writer.WriteStartObject("b");
 
         Assert.Throws<ToonEncodingException>(() => writer.WriteStartObject("c"));
+
+        // Part of the failed write is in the text, so the writer refuses to go on
+        Assert.Throws<InvalidOperationException>(() => writer.WriteNumber("d", 1));
+    }
+
+    [Fact]
+    public void InvalidStrings_AreRejectedBeforeAnythingIsWritten()
+    {
+        var text = Write(w =>
+        {
+            w.WriteStartObject();
+            Assert.Throws<ToonEncodingException>(() => w.WriteString("a", "x\uD800"));
+            Assert.Throws<ToonEncodingException>(() => w.WriteNumber("b\uDC00", 1));
+            w.WriteNumber("c", 1);
+            w.WriteStartArray("d", 1);
+            Assert.Throws<ToonEncodingException>(() => w.WriteStringValue("\uD800".AsSpan()));
+            w.WriteStringValue("ok");
+            w.WriteEndArray();
+            w.WriteEndObject();
+        });
+
+        Assert.Equal("c: 1\nd[1]: ok", text);
     }
 
     [Fact]

@@ -96,6 +96,9 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     private bool _rootStarted;
     private bool _disposed;
 
+    /// <summary>Set when a write failed after part of it was written; the text is then incomplete.</summary>
+    private bool _faulted;
+
     /// <summary>Creates a writer that writes UTF-8 to a buffer writer, such as a <c>PipeWriter</c>.</summary>
     /// <param name="utf8Destination">The destination; the writer does not flush or complete it.</param>
     /// <param name="options">Indentation, delimiter and depth limit; defaults when null.</param>
@@ -180,7 +183,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
         var childDepth = StartField(propertyName);
         _writer.WriteKey(propertyName);
         _writer.Write(':');
-        _writer.EnterNesting();
+        EnterNesting();
         _frames.Add(new Frame { Kind = Kind.Object, Depth = childDepth, Levels = 1 });
     }
 
@@ -198,7 +201,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
                 break;
             case Kind.ListItemObject when frame.Count == 0:
                 // An empty object item is a bare hyphen (§10)
-                _writer.CheckEmptyNesting();
+                Guard(static writer => writer.CheckEmptyNesting(), _writer);
                 _writer.Write('-');
                 break;
             case Kind.ListItemObject:
@@ -311,6 +314,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(key);
         CheckNotDisposed();
+        CheckText(key);
         ref var frame = ref Top;
 
         if (frame.Kind != Kind.KeyedTable)
@@ -370,6 +374,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
             return;
         }
 
+        CheckText(value);
         StartValue();
         _writer.WriteString(value);
     }
@@ -379,6 +384,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     /// <exception cref="ToonEncodingException">Thrown when the string has an unpaired surrogate.</exception>
     public void WriteStringValue(ReadOnlySpan<char> value)
     {
+        CheckText(value);
         StartValue();
         _writer.WriteString(value);
     }
@@ -455,6 +461,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     /// <exception cref="ToonEncodingException">Thrown when the string has an unpaired surrogate.</exception>
     public void WriteString(string propertyName, string? value)
     {
+        CheckText(value);
         StartPrimitiveField(propertyName);
 
         if (value is null)
@@ -473,6 +480,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     /// <exception cref="ToonEncodingException">Thrown when the string has an unpaired surrogate.</exception>
     public void WriteString(string propertyName, ReadOnlySpan<char> value)
     {
+        CheckText(value);
         StartPrimitiveField(propertyName);
         _writer.WriteString(value);
     }
@@ -559,7 +567,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
         if (_frames.Count == 0)
         {
             StartRoot();
-            _tree.WriteRoot(value);
+            Guard(static state => state.Tree.WriteRoot(state.Value), (Tree: _tree, Value: value));
             return;
         }
 
@@ -568,7 +576,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
         if (frame.Kind == Kind.List)
         {
             StartListItem(ref frame);
-            _tree.WriteListItem(value, frame.Depth);
+            Guard(static state => state.Tree.WriteListItem(state.Value, state.Depth), (Tree: _tree, Value: value, frame.Depth));
             return;
         }
 
@@ -592,7 +600,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(value);
         var childDepth = StartField(propertyName);
-        _tree.WriteField(propertyName, value, childDepth);
+        Guard(static state => state.Tree.WriteField(state.Name, state.Value, state.ChildDepth), (Tree: _tree, Name: propertyName, Value: value, ChildDepth: childDepth));
     }
 
     #endregion
@@ -603,7 +611,8 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     /// <exception cref="IOException">Thrown when writing to the destination fails.</exception>
     public void Flush()
     {
-        CheckNotDisposed();
+        // Also after a failed write: the text written so far goes to the destination
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (_buffer.Length == 0)
         {
@@ -633,7 +642,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     /// <exception cref="IOException">Thrown when writing to the destination fails.</exception>
     public async ValueTask FlushAsync(CancellationToken cancellationToken = default)
     {
-        CheckNotDisposed();
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (_buffer.Length == 0)
         {
@@ -713,7 +722,58 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
         }
     }
 
-    private void CheckNotDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+    private void CheckNotDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (_faulted)
+        {
+            throw new InvalidOperationException("A previous write failed part way, so the text is incomplete; write the document again with a new writer.");
+        }
+    }
+
+    /// <summary>
+    ///     Rejects a string with an unpaired surrogate before anything of the value (or its key) is written, so a failed
+    ///     write leaves the text as it was.
+    /// </summary>
+    private static void CheckText(ReadOnlySpan<char> text)
+    {
+        var index = text.IndexOfAnyInRange('\uD800', '\uDFFF');
+
+        if (index < 0)
+        {
+            return;
+        }
+
+        for (var i = index; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                i++;
+            }
+            else if (char.IsSurrogate(text[i]))
+            {
+                throw new ToonEncodingException($"A string contains an unpaired surrogate (U+{(int)text[i]:X4}), which TOON cannot represent");
+            }
+        }
+    }
+
+    /// <summary>Enters a nesting level; a failure (the depth limit) leaves the writer faulted, as the header is written.</summary>
+    private void EnterNesting() => Guard(static writer => writer.EnterNesting(), _writer);
+
+    /// <summary>Runs a step that may fail after writing part of its text; a failure leaves the writer faulted.</summary>
+    private void Guard<TState>(Action<TState> step, TState state)
+    {
+        try
+        {
+            step(state);
+        }
+        catch
+        {
+            _faulted = true;
+            throw;
+        }
+    }
 
     private void StartRoot()
     {
@@ -730,6 +790,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(propertyName);
         CheckNotDisposed();
+        CheckText(propertyName);
 
         if (_frames.Count == 0)
         {
@@ -752,7 +813,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
                 if (frame.Count == 0)
                 {
                     _writer.Write("- ");
-                    _writer.EnterNesting();
+                    EnterNesting();
                 }
                 else
                 {
@@ -947,18 +1008,20 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
 
         if (length == 0)
         {
-            ToonDomWriter.WriteEmptyArray(writer, key, position switch
+            var arrayPosition = position switch
             {
                 Position.Root => ToonArrayPosition.Root,
                 Position.Field => ToonArrayPosition.Field,
                 _ => ToonArrayPosition.ListItem
-            });
+            };
+
+            Guard(static state => ToonDomWriter.WriteEmptyArray(state.Writer, state.Key, state.Position), (Writer: writer, Key: key, Position: arrayPosition));
 
             _frames.Add(new Frame { Kind = kind, FieldCount = fields.Length });
             return;
         }
 
-        writer.EnterNesting();
+        EnterNesting();
 
         switch (kind)
         {
@@ -985,7 +1048,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
                 writer.WriteFieldList(fields);
 
                 // Rows are objects one level below the array
-                writer.EnterNesting();
+                EnterNesting();
                 _frames.Add(new Frame { Kind = kind, Depth = childDepth, Length = length, FieldCount = fields.Length, Levels = 2 });
                 break;
         }
