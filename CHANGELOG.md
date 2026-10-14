@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-10-15
+
+> All packages move to 4.0.0; rebuild with the 4.0 generator (`TOON011` reports a `ToonNet.Core` of another version).
+> Safe defaults as in System.Text.Json: reading sets only public setters (or `[ToonInclude]`), objects are written as
+> their declared type, and `required` members are enforced; see the
+> [migration guide](https://selcukgural.github.io/ToonNet/docs/getting-started/migration-4). New: JSONPath queries over
+> trees and straight over text (`ToonPath`, `DeserializeAt`, `DeserializeAll`, `DeserializeAsyncEnumerableAt`), business
+> rules (`ToonRuleSet`), helpers for language models (`ToonPrompt`), JSON Merge Patch, and `JsonNode`-like navigation of
+> `ToonValue` trees. Every package is annotated for trimming and NativeAOT. Measured on 10,000 items, ToonNet writes
+> 19–27x and reads 4.4–8.3x faster than Toon.Format, at the speed of System.Text.Json when writing.
+
 ### Breaking changes
 Defaults that let documents and responses do more than the code meant, now as System.Text.Json has them:
 
@@ -1664,7 +1675,8 @@ Each release includes:
 
 ---
 
-[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/selcukgural/ToonNet/compare/v3.3.0...v4.0.0
 [3.3.0]: https://github.com/selcukgural/ToonNet/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/selcukgural/ToonNet/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/selcukgural/ToonNet/compare/v3.0.0...v3.1.0
