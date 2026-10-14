@@ -9,23 +9,30 @@ namespace ToonNet.Core.Paths;
 /// </summary>
 internal sealed class ToonPathParser
 {
-    /// <summary>The deepest nesting of parentheses, function calls and filters, so a path cannot exhaust the stack.</summary>
-    internal const int MaxNesting = 64;
-
     /// <summary>The largest index and slice bound, and the smallest negated (I-JSON integers, §2.1).</summary>
     private const long MaxInteger = (1L << 53) - 1;
 
     private readonly string _text;
+    private readonly ToonPathLimits _limits;
     private int _position;
     private int _nesting;
 
-    private ToonPathParser(string text) => _text = text;
-
-    public static Query Parse(string text)
+    private ToonPathParser(string text, ToonPathLimits limits)
     {
-        var parser = new ToonPathParser(text);
-        var query = parser.ParseRootQuery();
-        return query;
+        _text = text;
+        _limits = limits;
+    }
+
+    public static Query Parse(string text, ToonPathLimits limits)
+    {
+        var parser = new ToonPathParser(text, limits);
+
+        if (text.Length > limits.MaxLength)
+        {
+            throw new ToonPathException($"The path is longer than {limits.MaxLength} characters", text, limits.MaxLength);
+        }
+
+        return parser.ParseRootQuery();
     }
 
     private Query ParseRootQuery()
@@ -670,7 +677,7 @@ internal sealed class ToonPathParser
             return new FunctionExpression(function, arguments.ToArray())
             {
                 HasLiteralRegex = true,
-                LiteralRegex = pattern is ToonString text ? ToonPathRegex.Get(text.Value, function == FunctionKind.Match) : null
+                LiteralRegex = pattern is ToonString text ? ToonPathRegex.Get(text.Value, function == FunctionKind.Match, _limits.MaxPatternLength) : null
             };
         }
 
@@ -727,9 +734,9 @@ internal sealed class ToonPathParser
 
     private void Enter()
     {
-        if (++_nesting > MaxNesting)
+        if (++_nesting > _limits.MaxNesting)
         {
-            throw Error($"The path nests more than {MaxNesting} levels");
+            throw Error($"The path nests more than {_limits.MaxNesting} levels");
         }
     }
 

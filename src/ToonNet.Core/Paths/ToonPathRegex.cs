@@ -11,9 +11,6 @@ namespace ToonNet.Core.Paths;
 /// </summary>
 internal static class ToonPathRegex
 {
-    /// <summary>Longer patterns are treated as invalid, which bounds the cost of compiling one.</summary>
-    internal const int MaxPatternLength = 1024;
-
     private const int MaxCacheSize = 256;
 
     /// <summary>I-Regexp's '.': any character but CR and LF, a surrogate pair being one character.</summary>
@@ -24,8 +21,14 @@ internal static class ToonPathRegex
     /// <summary>The compiled pattern, or null when it is not a valid I-Regexp.</summary>
     /// <param name="pattern">The I-Regexp pattern.</param>
     /// <param name="full">Whether the whole string must match (<c>match()</c>) rather than a substring (<c>search()</c>).</param>
-    public static Regex? Get(string pattern, bool full)
+    /// <param name="maxLength">Longer patterns are not valid, which bounds the cost of compiling one.</param>
+    public static Regex? Get(string pattern, bool full, int maxLength)
     {
+        if (pattern.Length > maxLength)
+        {
+            return null;
+        }
+
         if (Cache.TryGetValue((pattern, full), out var regex))
         {
             return regex;
@@ -44,7 +47,7 @@ internal static class ToonPathRegex
 
     private static Regex? Compile(string pattern, bool full)
     {
-        if (pattern.Length > MaxPatternLength || Translate(pattern) is not { } translated)
+        if (Translate(pattern) is not { } translated)
         {
             return null;
         }

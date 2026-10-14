@@ -228,6 +228,8 @@ internal sealed class ToonPathTextEvaluator
 
                 while (parser.NextProperty(ref cursor, out var key, out var member))
                 {
+                    walker.Work.Spend();
+
                     if (selector.Kind == SelectorKind.Name && key != selector.Name)
                     {
                         parser.Skip(member);
@@ -266,6 +268,7 @@ internal sealed class ToonPathTextEvaluator
 
                 for (var i = 0; parser.NextItem(ref cursor, out var item); i++)
                 {
+                    walker.Work.Spend();
                     var selected = selector.Kind switch
                     {
                         SelectorKind.Index => i == position,

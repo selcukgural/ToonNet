@@ -113,12 +113,41 @@ To read the items of an array inside a document from a stream as they arrive, se
 
 ## Paths From Untrusted Input
 
-Regular expressions run on .NET's non-backtracking engine, patterns are limited to 1,024 characters, and nesting
-(parentheses, filters, function calls) to 64 levels, so a path cannot hang a query on a pattern or exhaust the stack.
+Regular expressions run on .NET's non-backtracking engine (linear time), and `ToonPathLimits` bound everything else.
 Each descendant segment (`..`) visits the whole subtree, so nested ones multiply the work (`$..*..*..*..*` on a small,
-deep document would visit billions of values): an evaluation takes at most a million steps plus 16 per value of the
-document, and throws `InvalidOperationException` beyond that. If clients send paths (for example to filter an API
-response), prefer a fixed set, or reject paths with more than one `..`.
+deep document would visit billions of values); the step budget and the timeout stop such queries.
+
+| Limit | Default | Beyond it |
+|-------|---------|-----------|
+| `MaxLength` | 4,096 characters | `ToonPathException` when compiling |
+| `MaxNesting` | 64 levels of filters, parentheses, function calls | `ToonPathException` when compiling |
+| `MaxPatternLength` | 1,024 characters | the pattern is not valid: `match()`/`search()` are false |
+| `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document | `InvalidOperationException` when evaluating |
+| `Timeout` | 10 seconds (`Timeout.InfiniteTimeSpan` turns it off) | `TimeoutException` when evaluating |
+
+The defaults suit paths written in code. For paths that clients send (for example to filter an API response), set
+stricter limits, on a compiled path or on the serializer options:
+
+```csharp
+var limits = new ToonPathLimits
+{
+    MaxLength = 256,
+    MaxNesting = 8,
+    MaxSteps = 100_000,
+    MaxStepsPerValue = 4,
+    Timeout = TimeSpan.FromMilliseconds(200)
+};
+
+var path = ToonPath.Parse(filterFromClient, limits);      // the limits stay with the compiled path
+var rows = path.SelectFrom(toon);
+
+var options = new ToonSerializerOptions { PathLimits = limits };
+var orders = ToonSerializer.DeserializeAll<Order>(toon, filterFromClient, options);
+```
+
+`ToonSerializerOptions.PathLimits` applies to `DeserializeAt`, `DeserializeAll` and `DeserializeAsyncEnumerableAt`; the
+methods of `ToonValue` that take path text (`Select`, `SetValue`, ...) use the defaults. Paths with the default limits
+are compiled once and cached (up to 512 characters); paths with other limits are compiled on each `Parse`.
 
 ## See Also
 

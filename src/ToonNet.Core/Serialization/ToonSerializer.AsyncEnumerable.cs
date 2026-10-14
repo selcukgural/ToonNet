@@ -110,7 +110,7 @@ public static partial class ToonSerializer
                                                                       CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(utf8Stream);
-        var compiled = SingularPath(path);
+        var compiled = SingularPath(path, options);
         options ??= ToonSerializerOptions.Default;
 
         // Non-strict mode lets a repeated key replace an earlier one and indentation vary, which only the parser follows
@@ -142,7 +142,7 @@ public static partial class ToonSerializer
                                                                       ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(utf8Stream);
-        var compiled = SingularPath(path);
+        var compiled = SingularPath(path, options);
         options = CheckTypeInfo(itemTypeInfo, options);
         var listInfo = ToonTypeInfo.CreateList(itemTypeInfo);
 
@@ -158,7 +158,7 @@ public static partial class ToonSerializer
     internal static IAsyncEnumerable<T?> DeserializeAsyncEnumerableAt<T>(Stream utf8Stream, string path, ToonSerializerOptions options, int batchCharacters,
                                                                         CancellationToken cancellationToken = default) =>
         ReadRootItems(utf8Stream, options, text => (List<T?>?)DeserializeText(text, typeof(List<T?>), options), batchCharacters, cancellationToken,
-                      MemberNames(SingularPath(path)) is { Length: > 0 } names ? names : null);
+                      MemberNames(SingularPath(path, options)) is { Length: > 0 } names ? names : null);
 
     /// <summary>The member names of a path made only of them (none for <c>$</c>), or null for other paths.</summary>
     private static string[]? MemberNames(ToonPath path)

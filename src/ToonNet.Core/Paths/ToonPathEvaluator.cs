@@ -6,33 +6,43 @@ using ToonNet.Core.Models;
 namespace ToonNet.Core.Paths;
 
 /// <summary>
-///     The work one evaluation may do: a base amount, plus 16 steps per value of the document. A path from untrusted input
-///     cannot make a query run away: each descendant segment (<c>..</c>) multiplies the values it visits by the depth of
-///     the document, so <c>$..*..*..*..*</c> on a small, deep document would otherwise visit billions of values.
+///     The work one evaluation may do (<see cref="ToonPathLimits.MaxSteps"/>, plus
+///     <see cref="ToonPathLimits.MaxStepsPerValue"/> per value of the document), so a path from untrusted input cannot make a
+///     query run away: each descendant segment (<c>..</c>) multiplies the values it visits by the depth of the document,
+///     so <c>$..*..*..*..*</c> on a small, deep document would otherwise visit billions of values.
 /// </summary>
 internal sealed class EvaluationBudget
 {
-    /// <summary>The steps every evaluation may take, whatever the size of the document.</summary>
-    internal const long BaseSteps = 1_000_000;
-
-    /// <summary>The steps per value of the document that an evaluation may take beyond <see cref="BaseSteps"/>.</summary>
-    internal const long StepsPerValue = 16;
+    /// <summary>The steps between two looks at the clock.</summary>
+    private const int StepsPerClockCheck = 1024;
 
     private long _remaining;
     private ToonValue? _root;
+    private readonly long _deadline;
+    private int _untilClockCheck = StepsPerClockCheck;
 
-    /// <summary>A budget for a tree: the values are counted when the base amount is used up.</summary>
-    public EvaluationBudget(ToonValue root)
+    /// <summary>A budget for a tree: its values are counted when <see cref="ToonPathLimits.MaxSteps"/> is used up.</summary>
+    public EvaluationBudget(ToonValue root, ToonPathLimits limits) : this(limits)
     {
-        _remaining = BaseSteps;
-        _root = root;
+        _remaining = limits.MaxSteps;
+        _root = limits.MaxStepsPerValue > 0 ? root : null;
     }
 
     /// <summary>A budget for a document of <paramref name="length"/> characters (each value takes at least one).</summary>
-    public EvaluationBudget(int length)
+    public EvaluationBudget(int length, ToonPathLimits limits) : this(limits)
     {
-        _remaining = BaseSteps + StepsPerValue * length;
+        _remaining = limits.MaxSteps + (long)limits.MaxStepsPerValue * length;
     }
+
+    private EvaluationBudget(ToonPathLimits limits)
+    {
+        Limits = limits;
+        _deadline = limits.Timeout == Timeout.InfiniteTimeSpan
+            ? long.MaxValue
+            : Environment.TickCount64 + (long)Math.Ceiling(limits.Timeout.TotalMilliseconds);
+    }
+
+    public ToonPathLimits Limits { get; }
 
     public void Spend(int steps = 1)
     {
@@ -40,13 +50,23 @@ internal sealed class EvaluationBudget
         {
             Extend();
         }
+
+        if ((_untilClockCheck -= steps) <= 0)
+        {
+            _untilClockCheck = StepsPerClockCheck;
+
+            if (Environment.TickCount64 > _deadline)
+            {
+                throw new TimeoutException($"The path took longer than its timeout of {Limits.Timeout} (see ToonPathLimits).");
+            }
+        }
     }
 
     private void Extend()
     {
         if (_root != null)
         {
-            _remaining += StepsPerValue * CountValues(_root);
+            _remaining += Limits.MaxStepsPerValue * CountValues(_root);
             _root = null;
 
             if (_remaining >= 0)
@@ -56,7 +76,7 @@ internal sealed class EvaluationBudget
         }
 
         throw new InvalidOperationException(
-            "The path does too much work for the size of the document; nested descendant segments (..) multiply the values a query visits.");
+            "The path does too much work for the size of the document (see ToonPathLimits); nested descendant segments (..) multiply the values a query visits.");
     }
 
     private static long CountValues(ToonValue root)
@@ -492,7 +512,7 @@ internal static class ToonPathEvaluator
         var full = function.Function == FunctionKind.Match;
         var regex = function.HasLiteralRegex
             ? function.LiteralRegex
-            : Evaluate(function.Arguments[1], root, current, work) is ToonString pattern ? ToonPathRegex.Get(pattern.Value, full) : null;
+            : Evaluate(function.Arguments[1], root, current, work) is ToonString pattern ? ToonPathRegex.Get(pattern.Value, full, work.Limits.MaxPatternLength) : null;
 
         return regex != null && regex.IsMatch(text.Value);
     }

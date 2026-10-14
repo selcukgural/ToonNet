@@ -18,11 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selectors per bracket and filters with `length()`, `count()`, `match()`, `search()` and `value()`
   (`$.orders[?@.total > 100 && @.paid == true].id`). It passes all 715 cases of the JSONPath Compliance Test Suite.
   On a tree: `Select`, `SelectSingle`, `SelectMatches` (with normalized paths such as `$['orders'][2]`), `SetValue`
-  (creates missing objects and arrays on the way) and `RemoveAll`. Paths are compiled once and cached; regular
-  expressions run in linear time, nesting is limited, and an evaluation takes at most a million steps plus 16 per value
-  of the document (then throws `InvalidOperationException`), so paths from untrusted input cannot hang a query on a
-  pattern, exhaust the stack, or multiply the work with nested `..` segments. Invalid paths throw `ToonPathException`
-  with the position of the error.
+  (creates missing objects and arrays on the way) and `RemoveAll`. Paths are compiled once and cached, and invalid ones
+  throw `ToonPathException` with the position of the error. Regular expressions run in linear time, and
+  `ToonPathLimits` bound the length (4,096 characters) and nesting (64) of a path, the length of a pattern (1,024), and
+  the work (a million steps plus 16 per value of the document) and time (10 seconds) of an evaluation, so paths from
+  untrusted input cannot hang a query, exhaust the stack, or multiply the work with nested `..` segments. Stricter limits
+  go to `ToonPath.Parse(path, limits)` or `ToonSerializerOptions.PathLimits`.
 - **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
   creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.
 - **ToonNet.Core:** `ToonSerializer.Deserialize<T>(ToonDocumentReader)` (also with a `Type`, or a `ToonTypeInfo`

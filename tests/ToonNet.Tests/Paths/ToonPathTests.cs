@@ -149,7 +149,7 @@ public class ToonPathTests
     {
         var deep = "$[?" + new string('(', 100) + "@" + new string(')', 100) + "]";
 
-        Assert.Equal($"The path nests more than {ToonPathParser.MaxNesting} levels", Assert.Throws<ToonPathException>(() => ToonPath.Parse(deep)).Reason);
+        Assert.Equal($"The path nests more than {ToonPathLimits.Default.MaxNesting} levels", Assert.Throws<ToonPathException>(() => ToonPath.Parse(deep)).Reason);
 
         var filters = "$" + string.Concat(Enumerable.Repeat("[?@", 100)) + new string(']', 100);
         Assert.Throws<ToonPathException>(() => ToonPath.Parse(filters));
@@ -182,7 +182,7 @@ public class ToonPathTests
         Assert.Empty(root.Select("$[?search(@, '(a+)+$') && !search(@, 'b')]"));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5));
 
-        var longPattern = new string('a', ToonPathRegex.MaxPatternLength + 1);
+        var longPattern = new string('a', ToonPathLimits.Default.MaxPatternLength + 1);
         Assert.Empty(new ToonArray([longPattern]).Select($"$[?match(@, '{longPattern}')]"));
     }
 
@@ -223,5 +223,67 @@ public class ToonPathTests
         var ex = Assert.Throws<ToonPathException>(() => ToonPath.Parse(path + "."));
         Assert.Equal(path + ".", ex.Path);
         Assert.True(ex.Message.Length < 300);
+    }
+
+    [Fact]
+    public void Limits_LengthNestingAndPatterns()
+    {
+        var limits = new ToonPathLimits { MaxLength = 20, MaxNesting = 3, MaxPatternLength = 3 };
+
+        Assert.Equal("The path is longer than 20 characters",
+                     Assert.Throws<ToonPathException>(() => ToonPath.Parse("$.aaaaaaaaaaaaaaaaaaaaaaaaa", limits)).Reason);
+        Assert.Throws<ToonPathException>(() => ToonPath.Parse("$" + string.Concat(Enumerable.Repeat(".a", 2100))));
+        Assert.Throws<ToonPathException>(() => ToonPath.Parse("$[?((@.a))]", limits));
+        Assert.False(ToonPath.TryParse("$[?((@.a))]", limits, out _));
+        Assert.True(ToonPath.TryParse("$[?(@.a)]", limits, out var path));
+        Assert.Same(limits, path.Limits);
+        Assert.NotSame(path, ToonPath.Parse("$[?(@.a)]", limits)); // paths with other limits are not cached
+        Assert.Same(ToonPathLimits.Default, ToonPath.Parse("$.a").Limits);
+
+        // A longer pattern is not valid: the function is false
+        var words = new ToonArray(["abcd", "ab"]);
+        Assert.Empty(ToonPath.Parse("$[?match(@, 'abcd')]", limits).Select(words));
+        Assert.Single(ToonPath.Parse("$[?match(@, 'ab')]", limits).Select(words));
+        Assert.Single(ToonPath.Parse("$[?match(@, 'abcd')]").Select(words));
+    }
+
+    [Fact]
+    public void Limits_Steps()
+    {
+        var rows = "rows[1000]{a}:\n" + string.Join('\n', Enumerable.Range(0, 1000).Select(i => $"  {i}"));
+        var tight = new ToonPathLimits { MaxSteps = 100, MaxStepsPerValue = 0 };
+        var path = ToonPath.Parse("$.rows[?@.a > 5]", tight);
+
+        Assert.Throws<InvalidOperationException>(() => path.Select(ToonDocument.Parse(rows).Root));
+        Assert.Throws<InvalidOperationException>(() => path.SelectFrom(rows));
+        Assert.Equal(994, ToonPath.Parse("$.rows[?@.a > 5]").SelectFrom(rows).Count);
+
+        // The serializer's path methods take the limits from the options
+        var options = new ToonSerializerOptions { PathLimits = tight };
+        Assert.Throws<InvalidOperationException>(() => ToonSerializer.DeserializeAll<int>(rows, "$.rows[*].a", options));
+        Assert.Equal(1000, ToonSerializer.DeserializeAll<int>(rows, "$.rows[*].a").Count);
+        Assert.Throws<ToonPathException>(() => ToonSerializer.DeserializeAt<int>(rows, "$.rows[0].a",
+                                                                                new ToonSerializerOptions { PathLimits = new ToonPathLimits { MaxLength = 5 } }));
+    }
+
+    [Fact]
+    public void Limits_Timeout()
+    {
+        // Within the step budget (no per-value limit), but slower than the timeout
+        var deep = string.Concat(Enumerable.Range(0, 60).Select(i => new string(' ', i * 2) + "a:\n")) + new string(' ', 120) + "b: 1";
+        var limits = new ToonPathLimits { MaxSteps = long.MaxValue / 2, Timeout = TimeSpan.FromMilliseconds(50) };
+        var path = ToonPath.Parse("$..*..*..*..*..*..*..*", limits);
+        var watch = Stopwatch.StartNew();
+
+        var ex = Assert.Throws<TimeoutException>(() => path.Select(ToonDocument.Parse(deep).Root));
+        Assert.StartsWith("The path took longer than its timeout of 00:00:00.0500000", ex.Message);
+        Assert.Throws<TimeoutException>(() => path.SelectFrom(deep));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), watch.Elapsed.ToString());
+
+        Assert.Equal(TimeSpan.FromSeconds(10), ToonPathLimits.Default.Timeout);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ToonPathLimits { Timeout = TimeSpan.Zero });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ToonPathLimits { MaxSteps = 0 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ToonPathLimits { MaxNesting = 1000 });
+        Assert.Equal(Timeout.InfiniteTimeSpan, new ToonPathLimits { Timeout = Timeout.InfiniteTimeSpan }.Timeout);
     }
 }
