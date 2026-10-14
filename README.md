@@ -222,7 +222,7 @@ Shop:
 
 - **Exact:** TOON spec v4.4 with all 564 official fixtures; byte-identical output to the official
   [Toon.Format](https://www.nuget.org/packages/Toon.Format) library; every digit of `decimal`, `long` and `ulong` kept.
-- **Fast:** 8–27x faster than Toon.Format when writing and 2.4–7x when reading, with a fraction of the memory, close
+- **Fast:** 8–27x faster than Toon.Format when writing and 2.4–8x when reading, with a fraction of the memory, close
   to System.Text.Json ([measurements](https://selcukgural.github.io/ToonNet/docs/comparison)).
 - **Safe by default:** strict parsing, depth and size limits, only public setters set from documents, objects
   written as their declared type, no values in error messages ([security](https://selcukgural.github.io/ToonNet/docs/advanced/security)).
