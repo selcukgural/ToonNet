@@ -45,6 +45,16 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>The lines of the document being parsed, in an array rented from <see cref="ArrayPool{T}.Shared"/>.</summary>
     private Line[] _lines = [];
 
+    /// <summary>Whether <see cref="_lines"/> was rented from the pool (a table that outgrew its first array was not).</summary>
+    private bool _linesPooled;
+
+    /// <summary>
+    ///     The most lines the first line table holds: larger documents grow the table, outside the pool, so the pool does
+    ///     not keep large arrays and the first allocation does not follow the line breaks of the input (which may be only
+    ///     line breaks).
+    /// </summary>
+    private const int MaxInitialLines = 64 * 1024;
+
     /// <summary>The number of lines in <see cref="_lines"/> (the rented array may be longer).</summary>
     private int _lineCount;
     private int _position;
@@ -174,7 +184,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _ = _options.ValidatedMaxDepth;
 
         _input = input;
-        _lines = ArrayPool<Line>.Shared.Rent(input.Span.Count('\n') + 1);
+        _lines = ArrayPool<Line>.Shared.Rent(Math.Min(input.Span.Count('\n') + 1, MaxInitialLines));
+        _linesPooled = true;
         _position = 0;
         _depth = 0;
         _headerSpans = 0;
@@ -200,7 +211,12 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>Returns the line table to the pool and drops the reference to the input.</summary>
     internal void ReleaseDocument()
     {
-        ArrayPool<Line>.Shared.Return(_lines);
+        if (_linesPooled)
+        {
+            ArrayPool<Line>.Shared.Return(_lines);
+            _linesPooled = false;
+        }
+
         _lines = [];
         _lineCount = 0;
         _input = default;
@@ -292,13 +308,43 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
             if (first < 0 || text[first] != '#')
             {
-                lines[count++] = CreateLine(input, start, text.Length, number);
+                var line = CreateLine(input, start, text.Length, number);
+
+                if (line.IsBlank && count > 0 && lines[count - 1].IsBlank)
+                {
+                    // Consecutive blank lines are one entry (errors name the last, the one before the next content)
+                    lines[count - 1] = line;
+                }
+                else
+                {
+                    if (count == lines.Length)
+                    {
+                        lines = GrowLines(count);
+                    }
+
+                    lines[count++] = line;
+                }
             }
 
             start = end + 1;
         }
 
         _lineCount = count;
+    }
+
+    /// <summary>Doubles the line table (outside the pool) and returns the new array.</summary>
+    private Line[] GrowLines(int count)
+    {
+        var larger = new Line[(int)Math.Min((long)count * 2, Array.MaxLength)];
+        _lines.AsSpan(0, count).CopyTo(larger);
+
+        if (_linesPooled)
+        {
+            ArrayPool<Line>.Shared.Return(_lines);
+            _linesPooled = false;
+        }
+
+        return _lines = larger;
     }
 
     /// <summary>
@@ -1073,7 +1119,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                     cursor.Form = ArrayForm.Tabular;
                     cursor.TabularFields = header.Fields;
                     cursor.LeafCount = header.LeafCount;
-                    cursor.CapacityHint = ExpectedItemCapacity(header);
+                    cursor.CapacityHint = CountRows(header.Length, cursor.Depth);
                     cursor.MayJump = !_options.StrictMode;
                 }
                 else if (header.InlineLength > 0)
@@ -1085,7 +1131,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 else
                 {
                     cursor.Form = ArrayForm.List;
-                    cursor.CapacityHint = ExpectedItemCapacity(header);
+                    cursor.CapacityHint = Math.Min(header.Length, ListCapacityHint);
                     cursor.MayJump = !_options.StrictMode;
                 }
 
@@ -1264,10 +1310,39 @@ internal sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    ///     The declared length of an array, bounded by the lines left, which is the most a list or tabular body can hold;
-    ///     a header such as <c>[2000000000]:</c> does not reserve memory for items that are not there.
+    ///     The capacity reserved for the items of a list: its items can span several lines, so their number is not known
+    ///     without reading them, and a declared length (which the document controls) never reserves more than this.
     /// </summary>
-    private int ExpectedItemCapacity(in Header header) => Math.Min(header.Length, _lineCount - _position);
+    private const int ListCapacityHint = 16;
+
+    /// <summary>
+    ///     The number of rows of a tabular array: the lines that follow at the row depth (or deeper, non-strict mode),
+    ///     at most the declared length. Rows are single lines, so this is exact and reserves nothing for rows that are
+    ///     not there, however large the declared length or deep the nesting.
+    /// </summary>
+    private int CountRows(int declaredLength, int rowDepth)
+    {
+        var count = 0;
+
+        for (var i = _position; i < _lineCount && count < declaredLength; i++)
+        {
+            ref readonly var line = ref _lines[i];
+
+            if (line.IsBlank)
+            {
+                continue;
+            }
+
+            if (line.Depth < rowDepth)
+            {
+                break;
+            }
+
+            count++;
+        }
+
+        return count;
+    }
 
     /// <summary>
     ///     Decides what a list item line at <paramref name="itemDepth"/> holds (spec §9.4, §10).
@@ -1928,17 +2003,55 @@ internal sealed class ToonParser(ToonOptions? options = null)
     private static void CheckDuplicateFields(List<FieldEntry> entries, int start, in Line line)
     {
         var span = CollectionsMarshal.AsSpan(entries);
+        var count = 0;
 
         for (var a = start; a < span.Length; a = span[a].End)
         {
-            for (var b = span[a].End; b < span.Length; b = span[b].End)
+            count++;
+        }
+
+        if (count <= LinearKeyCheckLimit)
+        {
+            for (var a = start; a < span.Length; a = span[a].End)
             {
-                if (string.Equals(span[a].Name, span[b].Name))
+                for (var b = span[a].End; b < span.Length; b = span[b].End)
                 {
-                    throw new ToonParseException($"Duplicate field '{span[a].Name}' in field list", line.Number, line.Indent + 1);
+                    if (string.Equals(span[a].Name, span[b].Name))
+                    {
+                        throw DuplicateField(span[a].Name, line);
+                    }
                 }
             }
+
+            return;
         }
+
+        // Long field lists: count the names, then report the first one that is repeated, as the pairwise check does
+        var occurrences = new Dictionary<string, int>(count, StringComparer.Ordinal);
+        var repeated = false;
+
+        for (var a = start; a < span.Length; a = span[a].End)
+        {
+            ref var seen = ref CollectionsMarshal.GetValueRefOrAddDefault(occurrences, span[a].Name, out var exists);
+            seen++;
+            repeated |= exists;
+        }
+
+        if (!repeated)
+        {
+            return;
+        }
+
+        for (var a = start; a < span.Length; a = span[a].End)
+        {
+            if (occurrences[span[a].Name] > 1)
+            {
+                throw DuplicateField(span[a].Name, line);
+            }
+        }
+
+        static ToonParseException DuplicateField(string name, in Line line) =>
+            new($"Duplicate field '{name}' in field list", line.Number, line.Indent + 1);
     }
 
     #endregion

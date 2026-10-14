@@ -279,7 +279,7 @@ public static partial class ToonSerializer
         {
             new DirectWriter(buffer, options, generatedOnly: true).WriteRoot(value, typeof(T));
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Also reports errors exactly as the tree-based path does
             DirectWriteFallbacks++;
@@ -305,7 +305,7 @@ public static partial class ToonSerializer
             {
                 return DirectReader.ReadGenerated(text, typeInfo, options);
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 // Report the error exactly as the tree-based path does (or read what direct reading gave up on)
                 DirectReadFallbacks++;

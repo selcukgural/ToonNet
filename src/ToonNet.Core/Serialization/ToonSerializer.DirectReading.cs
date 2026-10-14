@@ -30,7 +30,7 @@ public static partial class ToonSerializer
         {
             return DirectReader.Read(toonString, type, options);
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Report the error exactly as the tree-based path does (or read what direct reading gave up on)
             DirectReadFallbacks++;

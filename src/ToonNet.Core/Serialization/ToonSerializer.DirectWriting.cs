@@ -40,7 +40,7 @@ public static partial class ToonSerializer
         {
             new DirectWriter(buffer, options).WriteRoot(value, type);
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Report the error (or, should direct writing fail where the tree-based path does not, write the text)
             // exactly as the tree-based path does

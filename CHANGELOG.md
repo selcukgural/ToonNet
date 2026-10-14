@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **ToonNet.Core:** Reading untrusted documents is hardened so that their cost stays in proportion to their size:
+  declared array lengths no longer reserve memory for items that are not there, runs of blank lines no longer grow the
+  parser's line table (whose large arrays no longer go back to the shared pool), duplicate checks of long field lists
+  take linear time, and buffers that held document text are cleared on error paths too. Upgrading is recommended for
+  services that read TOON from untrusted sources.
+
 ### Added
 - **ToonNet.Core:** `ToonSerializer.DeserializeAsyncEnumerable<T>(Stream)` (and an overload with a `ToonTypeInfo`) reads
   the items of a root array (tabular, list or inline) as they arrive, a batch of about 32 KB at a time, without holding

@@ -143,6 +143,15 @@ public static partial class ToonSerializer
         private ToonPooledText _text = new(Math.Min(batchCharacters, DefaultBatchCharacters) + 1024);
 
         private Form _form;
+
+        /// <summary>How far the buffered characters after <see cref="_charStart"/> were searched for a line feed.</summary>
+        private int _scanned;
+
+        /// <summary>Strict mode: an item followed a blank line, so the batch is read with that item (the parser reports it).</summary>
+        private bool _batchAfterLine;
+
+        /// <summary>The items of the last batch, to report counts of the whole array.</summary>
+        private int _lastBatchItems;
         private int _lineNumber;
         private int _headerLineNumber;
         private string _headerRest = "";
@@ -199,6 +208,16 @@ public static partial class ToonSerializer
 
             var line = error.Line == 1 ? _headerLineNumber : _textFirstLine + error.Line - 2;
             var message = error.Message.Split("\n  📍 Position:")[0];
+
+            // The batch declares its own count; the error names the counts of the whole array
+            const string mismatch = "Array length mismatch: expected ";
+
+            if (error.Line == 1 && _headerRest.Length > 0 && message.StartsWith(mismatch, StringComparison.Ordinal) &&
+                int.TryParse(message.AsSpan(message.LastIndexOf(' ') + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var got))
+            {
+                message = $"{mismatch}{_declaredLength}, got {_totalItems - _lastBatchItems + got}";
+            }
+
             return new ToonParseException(message, line, error.Column);
         }
 
@@ -209,8 +228,12 @@ public static partial class ToonSerializer
                 // Keep the characters not yet consumed (part of a line) at the start of the buffer
                 if (_charStart > 0)
                 {
-                    _chars.AsSpan(_charStart, _charEnd - _charStart).CopyTo(_chars);
-                    _charEnd -= _charStart;
+                    var remaining = _charEnd - _charStart;
+                    _chars.AsSpan(_charStart, remaining).CopyTo(_chars);
+
+                    // Clear what the move left behind, so no document text stays past the characters in use
+                    _chars.AsSpan(remaining, _charEnd - remaining).Clear();
+                    _charEnd = remaining;
                     _charStart = 0;
                 }
 
@@ -218,7 +241,7 @@ public static partial class ToonSerializer
                 {
                     var larger = ArrayPool<char>.Shared.Rent(_charEnd + read + 2);
                     _chars.AsSpan(0, _charEnd).CopyTo(larger);
-                    ReturnChars(_chars, _charEnd);
+                    ReturnChars(_chars, _chars.Length);
                     _chars = larger;
                 }
 
@@ -248,12 +271,17 @@ public static partial class ToonSerializer
             while (true)
             {
                 var buffered = _chars.AsSpan(_charStart, _charEnd - _charStart);
-                var newline = buffered.IndexOf('\n');
+
+                // A long line arrives in several reads: search only what was not searched yet
+                var newline = buffered[_scanned..].IndexOf('\n');
 
                 if (newline < 0)
                 {
+                    _scanned = buffered.Length;
                     return false;
                 }
+
+                newline += _scanned;
 
                 if (!Feed(buffered[..newline]))
                 {
@@ -261,6 +289,14 @@ public static partial class ToonSerializer
                 }
 
                 _charStart += newline + 1;
+                _scanned = 0;
+
+                if (_batchAfterLine)
+                {
+                    _batchAfterLine = false;
+                    MakeBatch();
+                    return true;
+                }
             }
         }
 
@@ -324,10 +360,15 @@ public static partial class ToonSerializer
 
                     if (spaces == _itemIndent)
                     {
-                        // A new item (row or list item); read the batch first when it is full and no blank line would end up
-                        // at its end (a blank line between items is an error in strict mode)
-                        if (_bodyItems > 0 && _body.Length >= batchCharacters && !_blankSinceItem)
+                        if (_blankSinceItem && options.StrictMode && _bodyItems + _totalItems > 0)
                         {
+                            // A blank line between items is an error in strict mode: read the batch with this item now, so
+                            // the parser reports it without waiting for the rest of the stream
+                            _batchAfterLine = true;
+                        }
+                        else if (_bodyItems > 0 && _body.Length >= batchCharacters)
+                        {
+                            // A new item (row or list item) and the batch is full: read it first
                             MakeBatch();
                             return false;
                         }
@@ -378,6 +419,11 @@ public static partial class ToonSerializer
             var digits = text[1..].IndexOfAnyExceptInRange('0', '9');
             var close = digits < 0 ? -1 : 1 + digits;
 
+            if (digits > 1 && text[1] == '0')
+            {
+                digits = -1; // a length with a leading zero is malformed (§6): the parser reports it
+            }
+
             // `[N` then an optional delimiter, then `]`; a keyed header (`[N:]`) is an object, not an array
             var bracketEnd = close >= 0 && close < text.Length && text[close] is '\t' or '|' ? close + 1 : close;
 
@@ -408,6 +454,8 @@ public static partial class ToonSerializer
         /// <summary>Makes the parser's batch: the header with the batch's count, then the batched lines.</summary>
         private void MakeBatch()
         {
+            // Clear the previous batch, which may be longer than this one
+            _text.Chars.AsSpan(0, _text.Length).Clear();
             _text.Length = 0;
 
             if (_form is Form.Block or Form.Tail && _headerRest.Length > 0)
@@ -429,6 +477,7 @@ public static partial class ToonSerializer
             _text.Length += _body.Length;
 
             _totalItems += _bodyItems;
+            _lastBatchItems = _bodyItems;
             _body.Chars.AsSpan(0, _body.Length).Clear();
             _body.Length = 0;
             _bodyItems = 0;

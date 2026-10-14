@@ -35,12 +35,14 @@ internal static class ToonTextEncoding
         {
             var status = Utf8.ToUtf16(utf8, text.Chars, out _, out var written, replaceInvalidSequences: false);
 
+            // Set even when the input is invalid, so the characters decoded before the error are cleared on disposal
+            text.Length = written;
+
             if (status != OperationStatus.Done)
             {
                 throw InvalidUtf8();
             }
 
-            text.Length = written;
             return text;
         }
         catch
@@ -173,7 +175,9 @@ internal static class ToonTextEncoding
         public void Fail()
         {
             ArrayPool<byte>.Shared.Return(Bytes, clearArray: true);
-            _text.Dispose();
+
+            // The decoder may have written part of a chunk past the text before it threw
+            _text.DisposeClearingAll();
         }
     }
 }

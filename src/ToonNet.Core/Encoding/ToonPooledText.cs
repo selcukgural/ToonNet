@@ -59,6 +59,18 @@ internal struct ToonPooledText : IDisposable
         Length = 0;
     }
 
+    /// <summary>Like <see cref="Dispose"/>, but clears the whole array (for when characters were written past the text).</summary>
+    public void DisposeClearingAll()
+    {
+        if (Chars is { Length: > 0 })
+        {
+            Return(Chars, Chars.Length);
+        }
+
+        Chars = [];
+        Length = 0;
+    }
+
     private static void Return(char[] chars, int length)
     {
         chars.AsSpan(0, length).Clear();

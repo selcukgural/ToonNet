@@ -193,7 +193,7 @@ public sealed class ToonDocumentReader : IDisposable
     }
 
     /// <summary>The 1-based line of the current property name or value.</summary>
-    public int LineNumber => _started && !_done ? _parser.LineOf(_value.LineIndex).Number : 0;
+    public int LineNumber => _started && !_done && _value.LineIndex >= 0 ? _parser.LineOf(_value.LineIndex).Number : 0;
 
     /// <summary>
     ///     The text of the current primitive token as it is in the document (a quoted string with its quotes and escapes).

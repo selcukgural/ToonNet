@@ -90,7 +90,9 @@ public class AsyncEnumerableTests
         "[2]:\n  - 1\n  - 2\nextra: 1",                             // content after the array
         "a: 1",                                                     // not an array
         "",                                                         // empty (an object)
-        "[2]: 1"                                                    // an inline array with a wrong count
+        "[2]: 1",                                                   // an inline array with a wrong count
+        "[02]:\n  - 1\n  - 2",                                       // a length with a leading zero
+        "[2]{a}:\n  1\n  b: 2"                                        // a line that is not a row (counts of the whole array)
     };
 
     [Theory]
@@ -109,6 +111,51 @@ public class AsyncEnumerableTests
             Assert.Equal(whole.GetType(), streamed.GetType());
             Assert.Equal(whole.Message, streamed.Message);
         }
+    }
+
+    /// <summary>Counts the bytes read, to see how much of the stream was read before an item or an error.</summary>
+    private sealed class CountingStream(byte[] data) : MemoryStream(data)
+    {
+        public long BytesRead { get; private set; }
+
+        public override int Read(Span<byte> buffer) => Count(base.Read(buffer));
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(Count(base.Read(buffer.Span)));
+
+        private int Count(int read)
+        {
+            BytesRead += read;
+            return read;
+        }
+    }
+
+    [Fact]
+    public async Task BlankLinesBetweenItems_DoNotHoldBackItems()
+    {
+        // Non-strict mode allows blank lines between items; batches are still cut, so items arrive early
+        var text = "[50000]:\n" + string.Concat(Enumerable.Range(0, 50_000).Select(i => $"  - {i}\n\n"));
+        var stream = new CountingStream(Text.Encoding.UTF8.GetBytes(text));
+        var options = new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } };
+
+        await foreach (var _ in ToonSerializer.DeserializeAsyncEnumerable<int>(stream, options))
+        {
+            break;
+        }
+
+        Assert.True(stream.BytesRead < stream.Length / 4, $"{stream.BytesRead} of {stream.Length} bytes read before the first item");
+    }
+
+    [Fact]
+    public async Task BlankLineBetweenItems_IsReportedWhereItIs_InStrictMode()
+    {
+        var text = "[50000]:\n  - 0\n\n" + string.Concat(Enumerable.Range(1, 49_999).Select(i => $"  - {i}\n"));
+        var stream = new CountingStream(Text.Encoding.UTF8.GetBytes(text));
+
+        var ex = await Assert.ThrowsAsync<ToonParseException>(() => ReadAll(ToonSerializer.DeserializeAsyncEnumerable<int>(stream)));
+
+        Assert.Equal(Assert.Throws<ToonParseException>(() => ToonSerializer.Deserialize<List<int>>(text)).Message, ex.Message);
+        Assert.True(stream.BytesRead < stream.Length / 4, $"{stream.BytesRead} of {stream.Length} bytes read before the error");
     }
 
     [Fact]
