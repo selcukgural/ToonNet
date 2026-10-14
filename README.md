@@ -357,6 +357,26 @@ ToonSerializer.Serialize(bufferWriter, myObject);              // any IBufferWri
 var fromBytes = ToonSerializer.Deserialize<MyClass>(utf8);     // ReadOnlySpan<byte>, ReadOnlySpan<char> or Stream
 ```
 
+### Reader and Writer
+
+`ToonDocumentWriter` and `ToonDocumentReader` write and read documents value by value, without a `ToonDocument` tree:
+
+```csharp
+using var writer = new ToonDocumentWriter(stream);
+writer.WriteStartObject();
+writer.WriteStartTable("users", 2, ["id", "name"]);
+writer.WriteNumberValue(1); writer.WriteStringValue("Ada");
+writer.WriteNumberValue(2); writer.WriteStringValue("Bob");
+writer.WriteEndArray();
+writer.WriteEndObject();
+
+using var reader = new ToonDocumentReader(utf8Bytes);
+while (reader.Read())
+{
+    if (reader.TokenType == ToonTokenType.PropertyName) Console.WriteLine(reader.GetPropertyName());
+}
+```
+
 ### Format Conversion (String-based)
 
 > **Note:** JSON conversion methods are in `ToonNet.Extensions.Json` package. Add `using ToonNet.Extensions.Json;`

@@ -187,6 +187,100 @@ public class SpecFixtureConformanceTests
         }
     }
 
+    /// <summary>
+    ///     ToonDocumentWriter writes the canonical layout: writing each encode fixture's data value by value, in the forms
+    ///     the encoder picks, must give exactly the encoder's text.
+    /// </summary>
+    [Fact]
+    public void DocumentWriter_WritesLikeTheEncoder_ForEveryEncodeFixture()
+    {
+        var written = 0;
+
+        foreach (var fixture in Cases.Value.Values.Where(c => c.Category == "encode"))
+        {
+            var test = fixture.Test;
+
+            if (test.TryGetProperty("shouldError", out var se) && se.GetBoolean())
+            {
+                continue;
+            }
+
+            var options = CreateOptions(test);
+            var value = FromJson(test.GetProperty("input"));
+            var expected = new ToonEncoder(options).Encode(new ToonDocument(value));
+
+            var text = new StringWriter();
+
+            using (var writer = new ToonDocumentWriter(text, options))
+            {
+                DocumentTreeWriter.WriteRoot(writer, value);
+                Assert.True(writer.IsComplete, test.GetProperty("name").GetString());
+            }
+
+            Assert.True(expected == text.ToString(), $"{test.GetProperty("name").GetString()}\nexpected:\n{expected}\nactual:\n{text}");
+            written++;
+        }
+
+        Assert.True(written > 100);
+    }
+
+    /// <summary>
+    ///     ToonDocumentReader yields the data model token by token: rebuilding each decode fixture from its tokens must give
+    ///     exactly what ToonDocument.Parse gives, and an invalid document the same error.
+    /// </summary>
+    [Fact]
+    public void DocumentReader_ReadsLikeParse_ForEveryDecodeFixture()
+    {
+        foreach (var fixture in Cases.Value.Values.Where(c => c.Category == "decode"))
+        {
+            var options = CreateOptions(fixture.Test);
+            var input = fixture.Test.GetProperty("input").GetString()!;
+
+            var expected = Describe(() => ToJson(ToonDocument.Parse(input, options).Root));
+
+            Assert.Equal(expected, Describe(() =>
+            {
+                using var reader = new ToonDocumentReader(input, options);
+                Assert.True(reader.Read());
+                var value = DocumentTreeReader.ReadValue(reader);
+                Assert.False(reader.Read());
+                return ToJson(value);
+            }));
+
+            // ReadValue on the root, and Skip on it, check the same document
+            Assert.Equal(expected, Describe(() =>
+            {
+                using var reader = new ToonDocumentReader(System.Text.Encoding.UTF8.GetBytes(input), options);
+                reader.Read();
+                var value = reader.ReadValue();
+                Assert.False(reader.Read());
+                return ToJson(value);
+            }));
+
+            var skipped = Describe(() =>
+            {
+                using var reader = new ToonDocumentReader(input, options);
+                reader.Read();
+                reader.Skip();
+                Assert.False(reader.Read());
+                return "ok";
+            });
+            Assert.Equal(expected.StartsWith("Toon", StringComparison.Ordinal) ? expected : "ok", skipped);
+        }
+
+        static string Describe(Func<string> read)
+        {
+            try
+            {
+                return read();
+            }
+            catch (ToonException ex)
+            {
+                return ex.GetType().Name + ": " + ex.Message;
+            }
+        }
+    }
+
     #region Execution
 
     /// <summary>Runs a fixture case and returns a failure description, or null when it conforms.</summary>

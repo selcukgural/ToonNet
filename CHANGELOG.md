@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than the previous NativeAOT path through `ToonDocument` and `ToonEncoder`. A value only reflection would handle (an
   object without generated code in a property typed `object`, a derived instance) makes the document go through the
   generated tree-based methods, with the same text; options with converters are not supported.
+- **ToonNet.Core:** `ToonDocumentWriter` and `ToonDocumentReader`, a forward-only writer and reader for TOON
+  documents that need no `ToonDocument` tree. The writer writes objects, inline primitive arrays, expanded lists,
+  tabular arrays and keyed tables value by value, in the encoder's layout (the same text for the same structure, checked
+  against every encode fixture), checks declared lengths, row widths and where each value may go, and writes UTF-8 to an
+  `IBufferWriter<byte>` or a `Stream`, or text to a `TextWriter`; flushing as it goes keeps memory flat for large
+  tables. The reader yields tokens in the data model (`StartObject`, `PropertyName`, `String`, `Number`, `StartArray`
+  with its declared length, ...; tabular rows and keyed entries are objects), with typed getters, `Skip` and
+  `ReadValue` (a subtree as a `ToonValue`), from a string, characters, UTF-8 bytes or a stream; it reports the errors
+  `ToonDocument.Parse` reports (checked against every decode fixture).
 
 ### Fixed
 - **ToonNet.SourceGenerators:** A `[ToonSerializable]` type derived from another `[ToonSerializable]` type no longer

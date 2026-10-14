@@ -296,6 +296,17 @@ internal sealed class ToonTextBuffer : IDisposable
     }
 
     /// <summary>Writes the characters to <paramref name="writer"/>, chunk by chunk.</summary>
+    public void WriteTo(TextWriter writer)
+    {
+        var chunkCount = ChunkCount;
+
+        for (var c = 0; c < chunkCount; c++)
+        {
+            writer.Write(ChunkAt(c));
+        }
+    }
+
+    /// <summary>Writes the characters to <paramref name="writer"/>, chunk by chunk.</summary>
     public async ValueTask WriteToAsync(TextWriter writer, CancellationToken cancellationToken)
     {
         if (_previous != null)
