@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (creates missing objects and arrays on the way) and `RemoveAll`. Paths are compiled once and cached; regular
   expressions run in linear time and nesting is limited, so paths from untrusted input cannot hang a query on a pattern
   or exhaust the stack. Invalid paths throw `ToonPathException` with the position of the error.
+- **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
+  creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.
 
 ## [3.3.0] - 2026-10-14
 
