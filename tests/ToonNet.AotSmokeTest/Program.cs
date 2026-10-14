@@ -157,6 +157,19 @@ if (ToonSerializer.Serialize(shapes, Shapes.ToonTypeInfo) != shapesText ||
     return 1;
 }
 
+// A generic type's init-only property with an initializer, without its key: read without reflection (no throw)
+var paged = ToonSerializer.Deserialize("P:\n  Item: 1", PageHolder.ToonTypeInfo)!;
+
+// A derived array held as its base array type is written as the base type, by generated code
+var held = ToonSerializer.Serialize(new Holder { Sizes = [new LabeledSize { Width = 1, Height = 2, Label = "secret" }] }, Holder.ToonTypeInfo);
+
+if (paged.P is not { Item: 1 } || held != "Sizes[1]{Width,Height}:\n  1,2")
+{
+    Console.WriteLine("FAILED: generic init members or declared array types");
+    Console.WriteLine(held);
+    return 1;
+}
+
 Console.WriteLine("OK");
 return 0;
 
@@ -227,4 +240,29 @@ public partial record Shapes(int Id, Point At, double Scale = 1.5)
     public HashSet<string> Labels { get; init; } = [];
     public int? Maybe { get; set; }
     public Coordinates Origin { get; init; }
+}
+
+[ToonSerializable]
+public partial class Page<T>
+{
+    public int Size { get; init; } = 20;
+    public int Item { get; set; } // a generic type: its init-only members are set in the object initializer
+}
+
+[ToonSerializable]
+public partial class PageHolder
+{
+    public Page<int>? P { get; set; }
+}
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public partial class LabeledSize : Size
+{
+    public string Label { get; set; } = "";
+}
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public partial class Holder
+{
+    public Size[] Sizes { get; set; } = [];
 }

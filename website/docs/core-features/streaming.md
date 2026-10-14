@@ -41,9 +41,9 @@ await ToonSerializer.SerializeDocumentsAsync(
 );
 ```
 
-The file methods (`SerializeDocumentsAsync` to a path, `SerializeCollectionToFileAsync`) write to a temporary file next
-to the target and replace the target with it at the end, so an item that fails or a cancelled export leaves the old file
-as it was.
+The file methods (`SerializeDocumentsAsync` to a path, `SerializeCollectionToFileAsync`) write the file in place as the
+items arrive: an item that fails, or a cancelled export, leaves the items written before it. Write to a new file and
+replace the old one yourself when the old content must survive a failure.
 
 ### Deserialize Incrementally
 

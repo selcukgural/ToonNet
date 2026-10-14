@@ -807,6 +807,12 @@ monitoring:
 
         Assert.Throws<JsonException>(() => ToonConvert.FromJson(json));
         Assert.Equal("a: 2", ToonConvert.FromJson(json, new ToonNet.Core.ToonOptions { StrictMode = false }));
+
+        // The key in the message is escaped and shortened: it cannot forge a log line
+        var forged = Assert.Throws<JsonException>(() => ToonConvert.FromJson("""{"x\n2026 ERROR forged": 1, "x\n2026 ERROR forged": 2}"""));
+        Assert.DoesNotContain('\n', forged.Message);
+        var longKey = new string('k', 10_000);
+        Assert.True(Assert.Throws<JsonException>(() => ToonConvert.FromJson($$"""{"{{longKey}}": 1, "{{longKey}}": 2}""")).Message.Length < 200);
     }
 
     [Fact]

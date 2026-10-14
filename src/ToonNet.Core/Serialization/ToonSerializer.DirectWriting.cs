@@ -489,7 +489,7 @@ public static partial class ToonSerializer
                 case DirectKind.Collection:
                     _writer.StartLine(0);
                     _writer.Nesting = -1; // the root array is at depth 0, like the root object
-                    WriteCollection(null, (IEnumerable)value!, 1, ToonArrayPosition.Root, 0);
+                    WriteCollection(null, (IEnumerable)value!, type, 1, ToonArrayPosition.Root, 0);
                     break;
                 default:
                     _tree.WriteRoot(ToTree(value, type, null, 0) ?? ToonNull.Instance);
@@ -771,7 +771,7 @@ public static partial class ToonSerializer
                     writer.ExitNesting();
                     break;
                 case DirectKind.Collection:
-                    WriteCollection(key, (IEnumerable)value!, childDepth, ToonArrayPosition.Field, depth);
+                    WriteCollection(key, (IEnumerable)value!, declaredType, childDepth, ToonArrayPosition.Field, depth);
                     break;
                 default:
                     _tree.WriteField(key, tree!, childDepth);
@@ -940,7 +940,7 @@ public static partial class ToonSerializer
         ///     Writes a collection like the encoder writes an array: empty, inline (all items primitive), tabular (uniform
         ///     objects with primitive values, not inside a list item) or as list items (spec §9).
         /// </summary>
-        private void WriteCollection(string? key, IEnumerable enumerable, int childDepth, ToonArrayPosition position, int depth)
+        private void WriteCollection(string? key, IEnumerable enumerable, Type declaredType, int childDepth, ToonArrayPosition position, int depth)
         {
             EnterValue(depth);
 
@@ -958,8 +958,8 @@ public static partial class ToonSerializer
 
             var items = new PooledItems(enumerable);
 
-            // The items are declared as the collection's item type
-            var itemType = GetElementType(enumerable.GetType()) ?? typeof(object);
+            // The items are declared as the item type of the collection's declared type
+            var itemType = ItemTypeOf(declaredType, enumerable.GetType(), _options);
 
             try
             {
@@ -1032,7 +1032,7 @@ public static partial class ToonSerializer
                     for (var i = 0; i < count; i++)
                     {
                         _writer.StartLine(childDepth);
-                        WriteListItem(items[i], kinds[i], infos[i], childDepth, depth + 1);
+                        WriteListItem(items[i], itemType, kinds[i], infos[i], childDepth, depth + 1);
                     }
 
                     _writer.ExitNesting();
@@ -1469,7 +1469,7 @@ public static partial class ToonSerializer
         /// <summary>
         ///     Writes a list item whose line has been started at <paramref name="depth"/> (spec §9.4, §10).
         /// </summary>
-        private void WriteListItem(object? item, DirectKind kind, DirectTypeInfo? info, int depth, int valueDepth)
+        private void WriteListItem(object? item, Type itemType, DirectKind kind, DirectTypeInfo? info, int depth, int valueDepth)
         {
             var writer = _writer;
 
@@ -1512,7 +1512,7 @@ public static partial class ToonSerializer
                 }
                 default:
                     writer.Write("- ");
-                    WriteCollection(null, (IEnumerable)item!, depth + 1, ToonArrayPosition.ListItem, valueDepth);
+                    WriteCollection(null, (IEnumerable)item!, itemType, depth + 1, ToonArrayPosition.ListItem, valueDepth);
                     break;
             }
         }

@@ -21,16 +21,20 @@ internal static class ToonErrorText
         }
 
         text.Append("['");
-        AppendEscaped(text, name, '\'');
-        return text.Append("']");
+        var cut = AppendEscaped(text, name, '\'');
+        text.Append('\'');
+
+        // Outside the quotes, so the mark does not read as part of the key
+        return (cut ? text.Append("...") : text).Append(']');
     }
 
     /// <summary>The text in double quotes, escaped and shortened: <c>"a\nb"</c>.</summary>
     public static string Quote(string value)
     {
         var text = new StringBuilder(Math.Min(value.Length, MaxLength) + 8).Append('"');
-        AppendEscaped(text, value, '"');
-        return text.Append('"').ToString();
+        var cut = AppendEscaped(text, value, '"');
+        text.Append('"');
+        return (cut ? text.Append("...") : text).ToString();
     }
 
     /// <summary>The text of a path from a caller (in an exception about it), with its control characters escaped.</summary>
@@ -72,7 +76,8 @@ internal static class ToonErrorText
         return true;
     }
 
-    private static void AppendEscaped(StringBuilder text, string value, char quote)
+    /// <returns>Whether the text was cut.</returns>
+    private static bool AppendEscaped(StringBuilder text, string value, char quote)
     {
         var length = value.Length;
 
@@ -87,19 +92,15 @@ internal static class ToonErrorText
             AppendChar(text, value[i], quote);
         }
 
-        if (length < value.Length)
-        {
-            text.Append("...");
-        }
+        return length < value.Length;
     }
 
     /// <summary>
-    ///     Control characters, line and paragraph separators, and the bidirectional controls that reorder how text is
-    ///     shown.
+    ///     Control characters (C0 and C1), line and paragraph separators, and format characters: the bidirectional
+    ///     controls that reorder how text is shown, zero-width characters and byte order marks.
     /// </summary>
     private static bool NeedsEscape(char c) =>
-        c < 0x20 || c is (char)0x7F or (char)0x85 or (char)0x2028 or (char)0x2029 or (char)0x200E or (char)0x200F or (char)0x061C or
-            (>= (char)0x202A and <= (char)0x202E) or (>= (char)0x2066 and <= (char)0x2069);
+        char.IsControl(c) || c is (char)0x2028 or (char)0x2029 || (c >= 0x80 && char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format);
 
     private static void AppendChar(StringBuilder text, char c, char? quote)
     {

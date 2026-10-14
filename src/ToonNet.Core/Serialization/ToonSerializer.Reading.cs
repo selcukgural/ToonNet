@@ -1265,7 +1265,7 @@ public static partial class ToonSerializer
             if (TryGetKey(obj, name, caseInsensitive, out var argumentValue))
             {
                 state.Push(name);
-                arguments[i] = DeserializeValue(argumentValue, parameter.ParameterType, options, depth + 1, state, property?.Converter);
+                arguments[i] = DeserializeValue(argumentValue, ObjectActivator.ValueTypeOf(parameter), options, depth + 1, state, property?.Converter);
                 state.Pop();
             }
             else

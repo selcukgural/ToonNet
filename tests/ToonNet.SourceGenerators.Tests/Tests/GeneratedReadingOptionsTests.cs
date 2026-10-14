@@ -251,7 +251,7 @@ public class GeneratedReadingOptionsTests
         Assert.Null(ToonSerializer.Deserialize<LegacyGenerated>("name: x")!.Name);
 
         var ex = Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("name: x", ToonTypeInfo.GetGenerated<LegacyGenerated>(), options));
-        Assert.Contains("older ToonNet.SourceGenerators", ex.Message);
+        Assert.Contains("ToonNet.SourceGenerators before 3.3", ex.Message);
 
         // It does not check required members either, which the default options do since 4.0
         Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("Name: y", ToonTypeInfo.GetGenerated<LegacyGenerated>()));

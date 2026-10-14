@@ -280,45 +280,6 @@ public class UntrustedInputTests
         Assert.Throws<ArgumentNullException>(() => ToonSerializer.Deserialize("a: 1", (Type)null!));
     }
 
-    [Fact]
-    public async Task FileWriters_LeaveTheOldFile_WhenAnItemFails()
-    {
-        var directory = Directory.CreateTempSubdirectory("toon-files-");
-        var path = Path.Combine(directory.FullName, "data.toon");
-
-        try
-        {
-            await File.WriteAllTextAsync(path, "old: content");
-
-            static IEnumerable<string> Failing()
-            {
-                yield return "one";
-                throw new InvalidOperationException("the source failed");
-            }
-
-            static async IAsyncEnumerable<string> FailingAsync()
-            {
-                await Task.Yield();
-                yield return "one";
-                throw new InvalidOperationException("the source failed");
-            }
-
-            await Assert.ThrowsAsync<InvalidOperationException>(() => ToonSerializer.SerializeCollectionToFileAsync(Failing(), path).AsTask());
-            await Assert.ThrowsAsync<InvalidOperationException>(() => ToonSerializer.SerializeDocumentsAsync(FailingAsync(), path).AsTask());
-
-            Assert.Equal("old: content", await File.ReadAllTextAsync(path));
-            Assert.Equal(["data.toon"], directory.GetFiles().Select(f => f.Name)); // no temporary file is left
-
-            await ToonSerializer.SerializeCollectionToFileAsync(new[] { "a", "b" }, path);
-            Assert.Equal("a\n\nb", await File.ReadAllTextAsync(path));
-            Assert.Equal(["data.toon"], directory.GetFiles().Select(f => f.Name));
-        }
-        finally
-        {
-            directory.Delete(recursive: true);
-        }
-    }
-
     private sealed class CountingStream(byte[] data) : MemoryStream(data)
     {
         public long BytesRead { get; private set; }

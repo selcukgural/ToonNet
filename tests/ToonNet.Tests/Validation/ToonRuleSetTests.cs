@@ -177,7 +177,7 @@ public class ToonRuleSetTests
         var result = new ToonRuleSet().Rule("$.s", "@ == 'x'", "{value}").Validate("s: " + text);
 
         var message = Assert.Single(result.Violations).Message;
-        Assert.Equal("\"" + new string('a', 63) + "...\"", message);
+        Assert.Equal("\"" + new string('a', 63) + "\"...", message);
     }
 
     [Theory]

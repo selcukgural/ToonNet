@@ -706,7 +706,7 @@ public static partial class ToonSerializer
                         seen[Array.IndexOf(properties, argument.Property)] = true;
                     }
 
-                    arguments[slot.Parameter] = ReadValue(fieldValue, argument.Parameter.ParameterType, argument.Property?.Converter, depth + 1);
+                    arguments[slot.Parameter] = ReadValue(fieldValue, ObjectActivator.ValueTypeOf(argument.Parameter), argument.Property?.Converter, depth + 1);
                     argumentRead[slot.Parameter] = true;
                 }
                 else

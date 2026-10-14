@@ -133,13 +133,13 @@ internal static class ToonTextEncoding
     /// <summary>The error for ill-formed UTF-8 input.</summary>
     public static ToonParseException InvalidUtf8() => new("The input is not valid UTF-8", 0, 0);
 
+    /// <summary>The most characters reserved before reading a stream (16 MB of text); longer text grows the buffer.</summary>
+    private const int MaxInitialCapacity = 8 * 1024 * 1024;
+
     /// <summary>
     ///     Decodes a stream read in chunks: bytes go through a pooled buffer, characters into a pooled buffer that grows
     ///     as needed. A sequence split across chunks is kept by the decoder until the next one.
     /// </summary>
-    /// <summary>The most characters reserved before reading a stream (16 MB of text); longer text grows the buffer.</summary>
-    private const int MaxInitialCapacity = 8 * 1024 * 1024;
-
     private struct Utf8StreamDecoder
     {
         private readonly System.Text.Decoder _decoder;

@@ -107,7 +107,7 @@ public static partial class ToonSerializer
 
             if (value is IEnumerable enumerable)
             {
-                return SerializeCollection(enumerable, options, depth, state);
+                return SerializeCollection(enumerable, declaredType, options, depth, state);
             }
 
             return SerializeObject(value, writtenType, options, depth, state);
@@ -124,10 +124,25 @@ public static partial class ToonSerializer
     ///     primitive, collection, dictionary or document); otherwise, or with
     ///     <see cref="ToonSerializerOptions.SerializeRuntimeTypes"/>, its runtime type.
     /// </summary>
+    /// <summary>
+    ///     The type the items of a collection are declared as: the item type of its declared type
+    ///     (<c>IEnumerable&lt;Summary&gt;</c> holding a <c>List&lt;Entity&gt;</c> declares <c>Summary</c>, as collections are
+    ///     covariant), or of its runtime type when the declared type has none (<c>object</c>, <c>IEnumerable</c>) or with
+    ///     <see cref="ToonSerializerOptions.SerializeRuntimeTypes"/>.
+    /// </summary>
+    internal static Type ItemTypeOf(Type declaredType, Type runtimeType, ToonSerializerOptions options) =>
+        (declaredType != runtimeType && !options.SerializeRuntimeTypes ? GetElementType(declaredType) : null) ?? GetElementType(runtimeType) ?? typeof(object);
+
     internal static Type WrittenType(Type declaredType, Type runtimeType, ToonSerializerOptions options) =>
         runtimeType == declaredType || options.SerializeRuntimeTypes ? runtimeType : NarrowedType(declaredType, runtimeType);
 
     private static readonly ConcurrentDictionary<(Type Declared, Type Runtime), Type> NarrowedTypes = new();
+
+    /// <summary>The value types <see cref="TrySerializePrimitive"/> writes as primitives.</summary>
+    private static bool IsWrittenAsPrimitive(Type type) =>
+        type.IsPrimitive || type.IsEnum || type == typeof(decimal) || type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
+        type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan) || type == typeof(Guid) || type == typeof(Half) ||
+        type == typeof(BigInteger) || type == typeof(Int128) || type == typeof(UInt128) || Nullable.GetUnderlyingType(type) != null;
 
     private static Type NarrowedType(Type declaredType, Type runtimeType)
     {
@@ -139,7 +154,10 @@ public static partial class ToonSerializer
         return NarrowedTypes.GetOrAdd((declaredType, runtimeType), static key =>
         {
             var (declared, runtime) = key;
-            var writtenAsObject = runtime.IsClass && runtime != typeof(string) && runtime != typeof(Uri) && !typeof(IEnumerable).IsAssignableFrom(runtime) &&
+            // A struct is narrowed only to an interface (a boxed struct held as IThing), never when it is written as a
+            // primitive (an int held as IComparable)
+            var writtenAsObject = (runtime.IsClass || (runtime.IsValueType && declared.IsInterface && !IsWrittenAsPrimitive(runtime))) &&
+                                  runtime != typeof(string) && runtime != typeof(Uri) && !typeof(IEnumerable).IsAssignableFrom(runtime) &&
                                   !typeof(ToonValue).IsAssignableFrom(runtime) && !ToonJsonInterop.IsDocumentType(runtime);
 
             // An asynchronous sequence keeps its runtime type, which the writer rejects with a clear error
@@ -203,7 +221,7 @@ public static partial class ToonSerializer
     /// <summary>
     ///     Serializes a sequence as an array. Null items are always kept so that indexes are preserved.
     /// </summary>
-    private static ToonArray SerializeCollection(IEnumerable enumerable, ToonSerializerOptions options, int depth, SerializerState state)
+    private static ToonArray SerializeCollection(IEnumerable enumerable, Type declaredType, ToonSerializerOptions options, int depth, SerializerState state)
     {
         // A multidimensional array enumerates all its items in one sequence, which would lose its shape
         if (enumerable is Array { Rank: > 1 } multidimensional)
@@ -215,8 +233,8 @@ public static partial class ToonSerializer
         var array = new ToonArray(new List<ToonValue>(enumerable is ICollection collection ? collection.Count : 0));
         var index = 0;
 
-        // The items are declared as the collection's item type
-        var itemType = GetElementType(enumerable.GetType()) ?? typeof(object);
+        // The items are declared as the item type of the collection's declared type
+        var itemType = ItemTypeOf(declaredType, enumerable.GetType(), options);
 
         foreach (var item in enumerable)
         {

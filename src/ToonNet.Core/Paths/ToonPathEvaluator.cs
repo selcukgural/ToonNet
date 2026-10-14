@@ -29,9 +29,9 @@ internal sealed class EvaluationBudget
     }
 
     /// <summary>
-    ///     A budget for a document evaluated as text: its lines are counted when <see cref="ToonPathOptions.MaxSteps"/> is
-    ///     used up, a value per line (not a step per character, which a long string would turn into steps for the rest of
-    ///     the query).
+    ///     A budget for a document evaluated as text: its values are counted when <see cref="ToonPathOptions.MaxSteps"/> is
+    ///     used up, as for a tree: a value per line, and per item of inline arrays and cells of tables (not a step per
+    ///     character, which a long string would turn into steps for the rest of the query).
     /// </summary>
     public EvaluationBudget(Parsing.ToonText text, ToonPathOptions options) : this(options)
     {
@@ -196,7 +196,7 @@ internal sealed class EvaluationBudget
 
         if (_text is { } text)
         {
-            _remaining += Options.MaxStepsPerValue * (text.Span.Count('\n') + 1L);
+            _remaining += Options.MaxStepsPerValue * CountTextValues(text.Span);
             _text = null;
 
             if (_remaining >= 0)
@@ -208,6 +208,146 @@ internal sealed class EvaluationBudget
         throw new ToonPathLimitException(
             "The path does too much work for the size of the document (see ToonPathOptions.MaxSteps and MaxStepsPerValue): nested descendant segments (..), patterns and functions over long text, and paths of many values all spend steps.",
             isTimeout: false);
+    }
+
+    /// <summary>
+    ///     About the number of values of a document, without parsing it: a value per line, and per delimiter (outside
+    ///     quotes) of an inline array's line (<c>a[3]: 1,2,3</c>) and of the rows of a table (<c>a[2]{x,y}:</c>).
+    /// </summary>
+    internal static long CountTextValues(ReadOnlySpan<char> text)
+    {
+        long count = 0;
+        var tableIndent = -1; // the indentation of the open table's header, or -1
+        var tableDelimiter = ',';
+
+        while (!text.IsEmpty)
+        {
+            var end = text.IndexOf('\n');
+            var line = end < 0 ? text : text[..end];
+            text = end < 0 ? default : text[(end + 1)..];
+            count++;
+
+            var indent = line.IndexOfAnyExcept(' ');
+
+            if (indent < 0)
+            {
+                continue;
+            }
+
+            if (tableIndent >= 0 && indent > tableIndent)
+            {
+                count += CountDelimiters(line[indent..], tableDelimiter);
+                continue;
+            }
+
+            tableIndent = -1;
+
+            // A header `key[N<delimiter>]` followed by `:` and values (inline) or `{fields}:` (a table)
+            if (FindHeader(line, out var close, out var delimiter))
+            {
+                var rest = line[(close + 1)..];
+
+                if (rest.Length > 1 && rest[0] == ':')
+                {
+                    count += CountDelimiters(rest[1..], delimiter);
+                }
+                else if (rest.Length > 0 && rest[0] == '{')
+                {
+                    tableIndent = indent;
+                    tableDelimiter = delimiter;
+                }
+            }
+        }
+
+        return count;
+
+        // The ']' of the first `[digits]` outside quotes, and the delimiter it declares
+        static bool FindHeader(ReadOnlySpan<char> line, out int close, out char delimiter)
+        {
+            close = -1;
+            delimiter = ',';
+            var quoted = false;
+
+            for (var i = 0; i < line.Length; i++)
+            {
+                var c = line[i];
+
+                if (quoted)
+                {
+                    if (c == '\\')
+                    {
+                        i++;
+                    }
+                    else if (c == '"')
+                    {
+                        quoted = false;
+                    }
+                }
+                else if (c == '"')
+                {
+                    quoted = true;
+                }
+                else if (c == ':')
+                {
+                    return false; // the key ended without a header
+                }
+                else if (c == '[')
+                {
+                    var j = i + 1;
+
+                    while (j < line.Length && char.IsAsciiDigit(line[j]))
+                    {
+                        j++;
+                    }
+
+                    if (j < line.Length && line[j] is '\t' or '|')
+                    {
+                        delimiter = line[j++];
+                    }
+
+                    if (j > i + 1 && j < line.Length && line[j] == ']')
+                    {
+                        close = j;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        static long CountDelimiters(ReadOnlySpan<char> values, char delimiter)
+        {
+            long delimiters = 0;
+            var quoted = false;
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                var c = values[i];
+
+                if (quoted)
+                {
+                    if (c == '\\')
+                    {
+                        i++;
+                    }
+                    else if (c == '"')
+                    {
+                        quoted = false;
+                    }
+                }
+                else if (c == '"')
+                {
+                    quoted = true;
+                }
+                else if (c == delimiter)
+                {
+                    delimiters++;
+                }
+            }
+
+            return delimiters;
+        }
     }
 
     private static long CountValues(ToonValue root)

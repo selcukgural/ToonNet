@@ -581,30 +581,16 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
-    ///     Writes a file through a temporary file in the same directory, which replaces the file only when everything was
-    ///     written: an item that fails to serialize, or a canceled write, leaves the old file as it was.
+    ///     Writes a file in place (as before 4.0: a temporary file and a move would lose the file's permissions, owner and
+    ///     links). An item that fails to serialize leaves the items written before it.
     /// </summary>
     private static async ValueTask WriteFileAsync(string filePath, Func<FileStream, ValueTask> write, CancellationToken cancellationToken)
     {
-        var fullPath = Path.GetFullPath(filePath);
-        var temporary = Path.Combine(Path.GetDirectoryName(fullPath)!, "." + Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp");
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
 
-        try
+        await using (fileStream.ConfigureAwait(false))
         {
-            var fileStream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
-
-            await using (fileStream.ConfigureAwait(false))
-            {
-                await write(fileStream).ConfigureAwait(false);
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporary, fullPath, overwrite: true);
-        }
-        catch
-        {
-            File.Delete(temporary);
-            throw;
+            await write(fileStream).ConfigureAwait(false);
         }
     }
 

@@ -347,7 +347,7 @@ internal static class TypeModelBuilder
         // Reflection does not see the implicit parameterless constructor of a struct; a constructor with a ref struct
         // parameter (Span<T>) cannot be called with values read from a document
         var all = type.InstanceConstructors.Where(c => !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0) &&
-                                                       !c.Parameters.Any(p => p.Type.IsRefLikeType || p.RefKind != RefKind.None)).ToList();
+                                                       !c.Parameters.Any(p => p.Type.IsRefLikeType || p.RefKind is RefKind.Ref or RefKind.Out)).ToList();
         var constructors = all.Where(c => c.DeclaredAccessibility == Accessibility.Public).ToList();
 
         // [ToonConstructor] may mark a constructor of any accessibility (generated code is a member of the type)

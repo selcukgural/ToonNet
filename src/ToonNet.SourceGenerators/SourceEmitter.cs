@@ -1140,7 +1140,7 @@ internal sealed class SourceEmitter
 
         if (KeptInitializers() is { } kept)
         {
-            code.AppendLine($"if (!({kept})) reader.Fallback(); // a missing key keeps the property's initializer (the tree leaves it to reflection)");
+            code.AppendLine($"if (!({kept}) && {DynamicCode}) reader.Fallback(); // a missing key keeps the property's initializer (the tree leaves it to reflection)");
         }
 
         code.AppendLine();
@@ -1658,7 +1658,8 @@ internal sealed class SourceEmitter
         if (KeptInitializers() is { } kept)
         {
             // The object initializer would replace the initializer of a property without a key
-            code.AppendLine($"if (!({kept})) return {Helpers}.DeserializeWithReflection<{model.FullyQualifiedName}>(value, options, depth);");
+            // (Under native AOT, where reflection cannot create the object, the object initializer is used as before)
+            code.AppendLine($"if (!({kept}) && {DynamicCode}) return {Helpers}.DeserializeWithReflection<{model.FullyQualifiedName}>(value, options, depth);");
         }
 
         EmitConstruction(arguments);
@@ -1674,6 +1675,8 @@ internal sealed class SourceEmitter
     ///     The condition that every property set in the object initializer with an initializer of its own has a key, or
     ///     null when there are none.
     /// </summary>
+    private const string DynamicCode = "global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported";
+
     private string? KeptInitializers()
     {
         var flags = _model.Properties.Select((p, i) => (p, i)).Where(t => t.p.KeepsInitializer).Select(t => $"__h{t.i}").ToList();

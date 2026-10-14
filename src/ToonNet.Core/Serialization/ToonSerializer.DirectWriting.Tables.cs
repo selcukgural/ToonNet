@@ -239,11 +239,11 @@ public static partial class ToonSerializer
             }
         }
 
-        /// <summary>Adds an entry with a written value; returns false for a null value that is written (a primitive).</summary>
         /// <summary>Whether a value is written as a type other than its runtime type (its declared type).</summary>
         private bool Narrows(object? value, Type declaredType) =>
             value != null && value.GetType() != declaredType && WrittenType(declaredType, value.GetType(), _options) != value.GetType();
 
+        /// <summary>Adds an entry with a written value; returns false for a null value that is written (a primitive).</summary>
         private bool AddEntry(List<KeyValuePair<string, object>> entries, string key, object? value)
         {
             if (value != null)

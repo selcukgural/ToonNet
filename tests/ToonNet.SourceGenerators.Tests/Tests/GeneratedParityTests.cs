@@ -95,6 +95,64 @@ public interface IUserView
     string Name { get; }
 }
 
+public interface IAdminView : IUserView
+{
+    int Level { get; }
+}
+
+public class AdminEntity : IAdminView
+{
+    public string Name { get; set; } = "";
+    public int Level { get; set; } = 3;
+    public string Secret { get; set; } = "secret-admin";
+}
+
+public struct StructThing : IUserView
+{
+    public string Name { get; set; }
+    public string Secret { get; set; }
+}
+
+[ToonSerializable]
+public partial class Covariant
+{
+    public IEnumerable<UserSummary> Seq { get; set; } = [];
+    public IReadOnlyList<UserSummary> ReadOnly { get; set; } = [];
+    public UserSummary[] Arr { get; set; } = [];
+    public IAdminView? Admin { get; set; }
+    public IUserView? Thing { get; set; }
+}
+
+public class IncludedBase
+{
+    [ToonInclude]
+    public virtual int Level { get; protected set; }
+}
+
+[ToonSerializable]
+public partial class IncludedDerived : IncludedBase
+{
+    public override int Level { get => base.Level; protected set => base.Level = value; }
+}
+
+[ToonSerializable]
+public partial class InPoint
+{
+    [ToonConstructor]
+    public InPoint(in int x, in int y)
+    {
+        X = x;
+        Y = y;
+        Via = "in";
+    }
+
+    public InPoint() => Via = "default";
+
+    public int X { get; }
+    public int Y { get; }
+    public string Via { get; }
+}
+
 [ToonSerializable]
 public partial class UserSummary : IUserView
 {
@@ -306,6 +364,38 @@ public class GeneratedParityTests
         // A second registration of a type does not replace the first
         ToonNet.Core.Serialization.ToonSourceGenerationHelpers.Register<Measured>((_, _, _) => new ToonNet.Core.Models.ToonString("hijacked"), null);
         Assert.Equal("X: 1\nL: []", ToonSerializer.Serialize(new Measured { X = 1 }));
+    }
+
+    [Fact]
+    public void CovariantCollections_InterfacesAndStructs_AreWrittenAsTheirDeclaredTypes()
+    {
+        UserEntity[] entities = [new() { Name = "a" }, new() { Name = "b" }];
+        var value = new Covariant
+        {
+            Seq = new List<UserEntity>(entities), ReadOnly = entities, Arr = entities, Admin = new AdminEntity { Name = "n" },
+            Thing = new StructThing { Name = "s", Secret = "secret-struct" }
+        };
+
+        const string expected = "Seq[2]{Name}:\n  a\n  b\nReadOnly[2]{Name}:\n  a\n  b\nArr[2]{Name}:\n  a\n  b\nAdmin:\n  Name: n\n  Level: 3\nThing:\n  Name: s";
+
+        Assert.Equal(expected, ToonSerializer.Serialize(value));
+        Assert.Equal(expected, ToonSerializer.Serialize(value, ReflectionOnly.Options()));
+        Assert.Equal(expected, ToonSerializer.Serialize(value, Covariant.ToonTypeInfo));
+        Assert.Equal(expected, new ToonNet.Core.Encoding.ToonEncoder().Encode(Covariant.Serialize(value)));
+        Assert.Equal("[2]{Name}:\n  a\n  b", ToonSerializer.Serialize<IEnumerable<UserSummary>>(new List<UserEntity>(entities)));
+        Assert.DoesNotContain("secret", ToonSerializer.Serialize(new List<IUserView> { new StructThing { Name = "x", Secret = "secret" } }));
+    }
+
+    [Fact]
+    public void ToonInclude_OnAnOverriddenProperty_AndInParameters_ReadAlike()
+    {
+        Assert.Equal(9, ToonSerializer.Deserialize<IncludedDerived>("Level: 9")!.Level);
+        Assert.Equal(9, ToonSerializer.Deserialize<IncludedDerived>("Level: 9", ReflectionOnly.Options())!.Level);
+
+        foreach (var point in new[] { ToonSerializer.Deserialize<InPoint>("X: 3\nY: 4")!, ToonSerializer.Deserialize<InPoint>("X: 3\nY: 4", ReflectionOnly.Options())! })
+        {
+            Assert.Equal((3, 4, "in"), (point.X, point.Y, point.Via));
+        }
     }
 
     [Fact]

@@ -116,7 +116,7 @@ public static partial class ToonSerializer
                                                 metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name,
                                                                                                       StringComparison.OrdinalIgnoreCase)),
                                                 parameter.HasDefaultValue ? DefaultOf(parameter)
-                                                : parameter.ParameterType.IsValueType ? System.Activator.CreateInstance(parameter.ParameterType)
+                                                : ValueTypeOf(parameter).IsValueType ? System.Activator.CreateInstance(ValueTypeOf(parameter))
                                                 : null))
                                     .ToArray();
 
@@ -128,6 +128,10 @@ public static partial class ToonSerializer
             };
         }
 
+        /// <summary>The type of a parameter's values: the element type of an <c>in</c> parameter (<c>Int32&amp;</c>).</summary>
+        internal static Type ValueTypeOf(ParameterInfo parameter) =>
+            parameter.ParameterType.IsByRef ? parameter.ParameterType.GetElementType()! : parameter.ParameterType;
+
         /// <summary>
         ///     The default value of an optional parameter as the parameter's type: reflection gives an enum default of a
         ///     nullable enum parameter (<c>Perm? p = Perm.Write</c>) as its underlying number.
@@ -135,7 +139,7 @@ public static partial class ToonSerializer
         private static object? DefaultOf(ParameterInfo parameter)
         {
             var value = parameter.DefaultValue;
-            var target = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+            var target = Nullable.GetUnderlyingType(ValueTypeOf(parameter)) ?? ValueTypeOf(parameter);
 
             return value != null && target.IsEnum && value.GetType() != target ? Enum.ToObject(target, value) : value;
         }
@@ -198,7 +202,7 @@ public static partial class ToonSerializer
     ///     marked <see cref="ToonIncludeAttribute"/>; null otherwise.
     /// </summary>
     internal static MethodInfo? SettableFromDocuments(PropertyInfo property) =>
-        property.SetMethod is { } setter && (setter.IsPublic || property.IsDefined(typeof(ToonIncludeAttribute), inherit: true)) ? setter : null;
+        property.SetMethod is { } setter && (setter.IsPublic || Attribute.IsDefined(property, typeof(ToonIncludeAttribute), inherit: true)) ? setter : null;
 
     /// <summary>
     /// Retrieves cached type metadata for a specified type, or generates and stores it if not already cached.
@@ -224,7 +228,18 @@ public static partial class ToonSerializer
             var properties = new List<(PropertyMetadata Metadata, int Order, int Index)>();
             var index = 0;
 
-            foreach (var prop in t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            // An interface (a type values are written as) has the properties of the interfaces it extends too
+            IEnumerable<PropertyInfo> declared = t.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+            if (t.IsInterface)
+            {
+                var names = new HashSet<string>(StringComparer.Ordinal);
+                // The properties of the extended interfaces come first, as those of base classes do
+                declared = t.GetInterfaces().SelectMany(i => i.GetProperties(BindingFlags.Public | BindingFlags.Instance)).Concat(declared)
+                            .Where(p => names.Add(p.Name)).ToList();
+            }
+
+            foreach (var prop in declared)
             {
                 if (prop.GetIndexParameters().Length > 0 || prop.GetGetMethod() == null ||
                     prop.GetCustomAttribute<ToonIgnoreAttribute>() != null)

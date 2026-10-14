@@ -288,8 +288,9 @@ public static partial class ToonSerializer
         {
             throw new NotSupportedException(
                 $"The generated code of {typeof(T).Name} (or of a type it reaches) does not apply PropertyNameCaseInsensitive, " +
-                "UnmappedMemberHandling.Disallow or RespectRequiredMembers: it is from an older ToonNet.SourceGenerators (rebuild with the current " +
-                "one), or the type has a [ToonConverter] of its own; use the overloads without a type info.");
+                "UnmappedMemberHandling.Disallow or RespectRequiredMembers (true by default since ToonNet 4.0): it is from a ToonNet.SourceGenerators " +
+                "before 3.3 (rebuild with the current one), or the type has a [ToonConverter] of its own; use the overloads without a type info, " +
+                "or options with RespectRequiredMembers = false.");
         }
     }
 

@@ -135,6 +135,28 @@ public class ToonPathResourceTests
         LimitedQuickly(() => path.Select(ToonDocument.Parse(toon).Root));
     }
 
+    [Theory]
+    [InlineData(',')]
+    [InlineData('|')]
+    public void TextEvaluation_CountsTheItemsOfInlineArraysAndTheCellsOfTables(char delimiter)
+    {
+        var d = delimiter == ',' ? "" : delimiter.ToString();
+        var inline = $"a[100000{d}]: " + string.Join(delimiter, Enumerable.Range(0, 100_000));
+        var table = $"t[50000{d}]{{x{delimiter}y{delimiter}z}}:\n" + string.Join('\n', Enumerable.Range(0, 50_000).Select(i => $"  {i}{delimiter}{i}{delimiter}{i}"));
+        var filter = string.Join(" && ", Enumerable.Range(1, 8).Select(i => $"@ != {i}")) + " && search(@, '9')";
+
+        var inlinePath = ToonPath.Parse($"$.a[?{filter}]");
+        Assert.Equal(inlinePath.Select(ToonDocument.Parse(inline).Root).Count, inlinePath.SelectFrom(inline).Count);
+
+        var tablePath = ToonPath.Parse($"$.t[?{filter.Replace("@", "@.x")}].y");
+        Assert.Equal(tablePath.Select(ToonDocument.Parse(table).Root).Count, tablePath.SelectFrom(table).Count);
+
+        // Delimiters inside quotes and in plain strings are not values
+        Assert.Equal(1, EvaluationBudget.CountTextValues("a[1]: \"x,y,z\""));
+        Assert.Equal(1, EvaluationBudget.CountTextValues("pad: ,,,,,,,,"));
+        Assert.Equal(3, EvaluationBudget.CountTextValues("a[3]: 1,2,3")); // the line and its two delimiters
+    }
+
     [Fact]
     public void RemoveAll_AndMergePatch_RemoveManyMembers_InLinearTime()
     {
@@ -184,11 +206,15 @@ public class ToonPathResourceTests
         var longKey = new string('k', 1_000_000);
         var shortened = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Dictionary<string, int>>($"\"{longKey}\": x"));
         Assert.True(shortened.Message.Length < 300, $"{shortened.Message.Length} characters");
-        Assert.Contains("$['" + new string('k', 64) + "...']", shortened.Message);
+        Assert.Contains("$['" + new string('k', 64) + "'...]", shortened.Message);
 
-        // Bidirectional controls cannot reorder how a message reads
-        var bidi = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Dictionary<string, int>>("\"a\u202Eb\": x"));
-        Assert.Contains(@"a\u202Eb", bidi.Message);
+        // Bidirectional controls, C1 controls (the 8-bit terminal escape) and invisible characters are escaped
+        foreach (var (key, escaped) in new[] { ("a\u202Eb", @"a\u202Eb"), ("a\u009Bb", @"a\u009Bb"), ("a\u200Bb", @"a\u200Bb"), ("a\uFEFFb", @"a\uFEFFb") })
+        {
+            var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Dictionary<string, int>>($"\"{key}\": x"));
+            Assert.Contains(escaped, ex.Message);
+            Assert.DoesNotContain(key, ex.Message);
+        }
     }
 
     [Fact]

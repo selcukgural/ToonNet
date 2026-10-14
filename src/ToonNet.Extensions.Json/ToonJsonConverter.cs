@@ -295,7 +295,7 @@ public static class ToonJsonConverter
             {
                 if (strict)
                 {
-                    throw new JsonException($"Duplicate key '{property.Name}' in a JSON object");
+                    throw new JsonException($"Duplicate key \"{ShownKey(property.Name)}\" in a JSON object");
                 }
 
                 toonObject.Properties[property.Name] = value;
@@ -455,4 +455,15 @@ public static class ToonJsonConverter
     }
 
     #endregion
+
+    /// <summary>
+    ///     A key for an error message: escaped (control, format and non-ASCII characters as <c>\uXXXX</c>), so it cannot
+    ///     forge a log line, and cut to 64 characters, so a long key cannot make a huge message.
+    /// </summary>
+    private static string ShownKey(string key)
+    {
+        var cut = key.Length > 64 ? key[..(char.IsHighSurrogate(key[63]) ? 63 : 64)] : key;
+        var encoded = JsonEncodedText.Encode(cut).ToString();
+        return cut.Length < key.Length ? encoded + "..." : encoded;
+    }
 }
