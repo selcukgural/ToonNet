@@ -324,3 +324,29 @@ public sealed class ToonSerializationException : ToonException
         return ex;
     }
 }
+/// <summary>
+///     Exception thrown when a path (<see cref="Paths.ToonPath"/>) is not valid.
+/// </summary>
+public sealed class ToonPathException : ToonException
+{
+    /// <summary>Initializes a new instance of the ToonPathException class.</summary>
+    /// <param name="reason">What is wrong with the path.</param>
+    /// <param name="path">The path text.</param>
+    /// <param name="position">The 0-based position of the error in the path.</param>
+    public ToonPathException(string reason, string path, int position)
+        : base(WithDetails(reason, ("position", position.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("path", path)))
+    {
+        Reason = reason;
+        Path = path;
+        Position = position;
+    }
+
+    /// <summary>What is wrong with the path, without the details.</summary>
+    public string Reason { get; }
+
+    /// <summary>The path text.</summary>
+    public string Path { get; }
+
+    /// <summary>The 0-based position of the error in the path.</summary>
+    public int Position { get; }
+}

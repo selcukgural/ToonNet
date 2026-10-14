@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using ToonNet.Core.Paths;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.Core.Models;
@@ -110,6 +111,44 @@ public abstract partial class ToonValue
     /// <exception cref="ToonSerializationException">Thrown when the value cannot be converted to the target type.</exception>
     public T? Deserialize<T>(ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null) =>
         ToonSerializer.DeserializeFromValue(this, typeInfo, options);
+
+    /// <summary>
+    ///     Selects the values a path leads to, with this value as the root <c>$</c>: <c>root.Select("$.orders[?@.total &gt; 100]")</c>.
+    /// </summary>
+    /// <param name="path">A JSONPath (RFC 9535); see <see cref="ToonPath"/>.</param>
+    /// <returns>The selected values, in document order; empty when there are none.</returns>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    public IReadOnlyList<ToonValue> Select(string path) => ToonPath.Parse(path).Select(this);
+
+    /// <summary>Selects the values a path leads to with their normalized paths (<c>$['orders'][2]</c>), with this value as the root <c>$</c>.</summary>
+    /// <param name="path">A JSONPath (RFC 9535); see <see cref="ToonPath"/>.</param>
+    /// <returns>The selected values and where they are, in document order.</returns>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    public IReadOnlyList<ToonPathMatch> SelectMatches(string path) => ToonPath.Parse(path).SelectMatches(this);
+
+    /// <summary>Selects the one value a path leads to, with this value as the root <c>$</c>.</summary>
+    /// <param name="path">A JSONPath (RFC 9535); see <see cref="ToonPath"/>.</param>
+    /// <returns>The value, or null when the path selects none.</returns>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the path selects more than one value.</exception>
+    public ToonValue? SelectSingle(string path) => ToonPath.Parse(path).SelectSingle(this);
+
+    /// <summary>
+    ///     Sets the value at a path of member names and indexes (<c>$.meta.tags[0]</c>), with this value as the root
+    ///     <c>$</c>, creating missing objects and arrays on the way; see <see cref="ToonPath.SetValue"/>.
+    /// </summary>
+    /// <param name="path">A singular JSONPath.</param>
+    /// <param name="value">The value to set; null sets <see cref="ToonNull.Instance"/>.</param>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the path is not singular or does not fit the values on the way.</exception>
+    public void SetValue(string path, ToonValue? value) => ToonPath.Parse(path).SetValue(this, value);
+
+    /// <summary>Removes every value a path selects (<c>$.users[?@.active == false]</c>), with this value as the root <c>$</c>.</summary>
+    /// <param name="path">A JSONPath (RFC 9535); see <see cref="ToonPath"/>.</param>
+    /// <returns>The number of values removed.</returns>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the path selects the root itself.</exception>
+    public int RemoveAll(string path) => ToonPath.Parse(path).RemoveAll(this);
 
     /// <summary>
     ///     Creates a deep copy: objects and arrays are copied with all their contents, so changing the copy does not change

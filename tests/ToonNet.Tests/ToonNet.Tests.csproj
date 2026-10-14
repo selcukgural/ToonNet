@@ -27,6 +27,7 @@
     <ItemGroup>
         <None Include="SpecCompliance/Fixtures/**/*" CopyToOutputDirectory="PreserveNewest" />
         <None Include="SpecCompliance/KnownNonConformance.txt" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="Paths/Cts/cts.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

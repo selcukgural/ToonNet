@@ -90,6 +90,18 @@ if (!converted.Contains("A1,9.99,1x2") || convertedBack.Products[1].Size.Height 
     return 1;
 }
 
+// Paths, values and type infos on a parsed tree
+var tree = ToonDocument.Parse(expected).Root;
+var cheap = tree.Select("$.Products[?@.Price < 10 && match(@.Sku, 'A.')].Sku");
+tree.SetValue("$.Warehouses.oslo.Stock", 4);
+
+if (cheap is not [ToonString { Value: "A1" }] || tree["Warehouses"]!["oslo"]!["Stock"]!.GetValue<int>() != 4 ||
+    tree.Deserialize(Catalog.ToonTypeInfo)!.Warehouses["oslo"].Stock != 4 || !ToonValue.DeepEquals(tree, tree.DeepClone()))
+{
+    Console.WriteLine("FAILED: paths or tree access");
+    return 1;
+}
+
 Console.WriteLine("OK");
 return 0;
 

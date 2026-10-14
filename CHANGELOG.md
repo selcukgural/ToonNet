@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AsArray`, `GetValue<T>` and `TryGetValue<T>` (primitives, with the serializer's parsing rules), `Deserialize<T>`
   (with options or a `ToonTypeInfo`), `DeepClone` and `ToonValue.DeepEquals` (object keys in any order, numbers by
   value). `ToonSerializer.DeserializeFromValue` has an overload that takes a `ToonTypeInfo`, without reflection.
+- **ToonNet.Core:** `ToonPath` (namespace `ToonNet.Core.Paths`) selects values with JSONPath (RFC 9535), which works on
+  TOON as is since TOON has the data model of JSON: member names, indexes, wildcards, slices, descendants, several
+  selectors per bracket and filters with `length()`, `count()`, `match()`, `search()` and `value()`
+  (`$.orders[?@.total > 100 && @.paid == true].id`). It passes all 715 cases of the JSONPath Compliance Test Suite.
+  On a tree: `Select`, `SelectSingle`, `SelectMatches` (with normalized paths such as `$['orders'][2]`), `SetValue`
+  (creates missing objects and arrays on the way) and `RemoveAll`. Paths are compiled once and cached; regular
+  expressions run in linear time and nesting is limited, so paths from untrusted input cannot hang a query on a pattern
+  or exhaust the stack. Invalid paths throw `ToonPathException` with the position of the error.
 
 ## [3.3.0] - 2026-10-14
 
