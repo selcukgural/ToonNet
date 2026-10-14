@@ -988,6 +988,7 @@ public static partial class ToonSerializer
             /// <summary>The writer for exactly <c>T[]</c> or <c>List&lt;T&gt;</c> of a typed primitive, or null.</summary>
             [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ReflectionJustification)]
             [UnconditionalSuppressMessage("Trimming", "IL2055", Justification = ReflectionJustification)]
+            [UnconditionalSuppressMessage("Trimming", "IL2076", Justification = ReflectionJustification)]
             public static PrimitiveListWriter? For(Type type) => Writers.GetOrAdd(type, static t =>
             {
                 var element = t.IsArray && t.GetArrayRank() == 1 ? t.GetElementType()
