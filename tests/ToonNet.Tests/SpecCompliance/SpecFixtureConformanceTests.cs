@@ -3,6 +3,7 @@ using ToonNet.Core;
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 using ToonNet.Core.Parsing;
+using ToonNet.Core.Serialization;
 
 namespace ToonNet.Tests.SpecCompliance;
 
@@ -279,6 +280,57 @@ public class SpecFixtureConformanceTests
                 return ex.GetType().Name + ": " + ex.Message;
             }
         }
+    }
+
+    /// <summary>
+    ///     DeserializeAsyncEnumerable reads a root array a batch at a time; for every decode fixture it must give the items
+    ///     (or the error) reading the whole document gives, with batches of one item and of many, from a stream that
+    ///     splits lines and multi-byte sequences.
+    /// </summary>
+    [Fact]
+    public async Task AsyncEnumerable_ReadsLikeTheWholeDocument_ForEveryDecodeFixture()
+    {
+        foreach (var fixture in Cases.Value.Values.Where(c => c.Category == "decode"))
+        {
+            var options = new ToonSerializerOptions { ToonOptions = CreateOptions(fixture.Test) };
+            var input = fixture.Test.GetProperty("input").GetString()!;
+            var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+            var name = fixture.Test.GetProperty("name").GetString();
+
+            // A document that is only `null` has no items
+            var expected = Describe(() => Task.FromResult(ToonSerializer.Deserialize<List<object?>>(input, options) ?? []));
+
+            foreach (var batch in new[] { 1, 1 << 20 })
+            {
+                var actual = Describe(async () =>
+                {
+                    var items = new List<object?>();
+
+                    await foreach (var item in ToonSerializer.DeserializeAsyncEnumerable<object>(new TrickleStream(bytes, 2), options, batch))
+                    {
+                        items.Add(item);
+                    }
+
+                    return items;
+                });
+
+                Assert.True(expected == actual, $"{name} (batch {batch})\nexpected: {expected}\nactual:   {actual}");
+            }
+        }
+
+        static string Describe(Func<Task<List<object?>?>> read)
+        {
+            try
+            {
+                return JsonSerializer.Serialize(read().GetAwaiter().GetResult());
+            }
+            catch (ToonException ex)
+            {
+                return ex.GetType().Name + ": " + ex.Message;
+            }
+        }
+
+        await Task.CompletedTask;
     }
 
     #region Execution

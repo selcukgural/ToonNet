@@ -60,8 +60,17 @@ var list = ToonTypeInfo.CreateList(Catalog.ToonTypeInfo);
 var listText = ToonSerializer.Serialize(new List<Catalog> { catalog, readViaTypeInfo }, list);
 var listBack = ToonSerializer.Deserialize(listText, list)!;
 
+// The items of a root array, streamed
+var streamed = new List<Catalog?>();
+
+await foreach (var item in ToonSerializer.DeserializeAsyncEnumerable(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(listText)), Catalog.ToonTypeInfo))
+{
+    streamed.Add(item);
+}
+
 if (viaTypeInfo != expected || ToonSerializer.Serialize(readViaTypeInfo, Catalog.ToonTypeInfo) != expected ||
-    listBack.Count != 2 || ToonSerializer.Serialize(listBack[1], Catalog.ToonTypeInfo) != expected)
+    listBack.Count != 2 || ToonSerializer.Serialize(listBack[1], Catalog.ToonTypeInfo) != expected ||
+    streamed.Count != 2 || ToonSerializer.Serialize(streamed[1]!, Catalog.ToonTypeInfo) != expected)
 {
     Console.WriteLine("FAILED: the type info overloads differ from the expected text or do not round-trip");
     return 1;

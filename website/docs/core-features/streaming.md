@@ -49,6 +49,30 @@ await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_ex
 }
 ```
 
+## Reading the Items of One Large Array
+
+When the document is one large root array (an export of rows, a log written as a table), read its items as they arrive
+with `DeserializeAsyncEnumerable`, without holding the document in memory:
+
+```csharp
+await using var stream = File.OpenRead("users.toon");   // users[200000]{id,name,...}: or [200000]{...}: rows
+
+await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(stream))
+{
+    Process(user);
+}
+```
+
+- The root must be an array: a tabular array (`[N]{fields}:`), an expanded list (`[N]:` with `- ` items) or an inline
+  array. Rows and list items are read in batches of about 32 KB of text, so memory stays flat however long the array
+  is; on 200,000 rows it is also a little faster than reading the whole document, which keeps the decoded text and the
+  list (47 MB here) in memory.
+- Errors are those of reading the whole document, with the line in the whole document; items before an error have
+  been returned by then. In strict mode the declared length is checked when the array ends.
+- `DeserializeAsyncEnumerable(stream, MyType.ToonTypeInfo)` reads without reflection (trimming, NativeAOT).
+
+For a file of separate documents (one per item), use `SerializeStreamAsync` and `DeserializeStreamAsync` below.
+
 ## Advanced Configuration
 
 ### Separator Modes

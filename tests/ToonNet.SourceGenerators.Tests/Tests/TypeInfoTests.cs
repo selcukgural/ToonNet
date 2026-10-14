@@ -141,6 +141,24 @@ public partial class TypeInfoTests
     }
 
     [Fact]
+    public async Task AsyncEnumerable_ReadsTheItemsOfARootArray()
+    {
+        var rows = Enumerable.Range(0, 500).Select(i => new WriterRow { Id = i, Name = $"n{i}", Mood = Mood.Calm }).ToList();
+        var bytes = Encoding.UTF8.GetBytes(ToonSerializer.Serialize(rows));
+        var read = new List<WriterRow?>();
+
+        var fallbacks = ToonSerializer.DirectReadFallbacks;
+
+        await foreach (var row in ToonSerializer.DeserializeAsyncEnumerable(new MemoryStream(bytes), WriterRow.ToonTypeInfo))
+        {
+            read.Add(row);
+        }
+
+        Assert.Equal(fallbacks, ToonSerializer.DirectReadFallbacks);
+        Assert.Equal(ToonSerializer.Serialize(rows), ToonSerializer.Serialize(read));
+    }
+
+    [Fact]
     public void GetGenerated_ReturnsTheGeneratedTypeInfo()
     {
         Assert.Same(ParcelDepot.ToonTypeInfo, ToonTypeInfo.GetGenerated<ParcelDepot>());

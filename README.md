@@ -477,6 +477,15 @@ await ToonSerializer.SerializeStreamAsync(
 );
 ```
 
+One large root array (an export written as a table) can be read item by item, without loading the document:
+
+```csharp
+await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(File.OpenRead("users.toon")))
+{
+    ProcessUser(user);
+}
+```
+
 **Use Cases:**
 - **Database exports** - Stream millions of records without OOM
 - **ETL pipelines** - Process large files incrementally

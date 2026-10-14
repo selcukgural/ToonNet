@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **ToonNet.Core:** `ToonSerializer.DeserializeAsyncEnumerable<T>(Stream)` (and an overload with a `ToonTypeInfo`) reads
+  the items of a root array (tabular, list or inline) as they arrive, a batch of about 32 KB at a time, without holding
+  the document in memory: on 200,000 rows the live memory stays flat where reading the whole document keeps the
+  decoded text and a 47 MB list, and it is slightly faster. Errors and their line numbers are those of reading the whole
+  document (checked against every decode fixture with batches of one item); the declared length is checked when the
+  array ends.
 - **CI:** A performance gate. Every pull request and push measures 80 scenarios on the base commit and the head, on the
   same machine (time as a ratio to System.Text.Json doing the same work, interleaved in one process, and exact
   allocated bytes per operation), and fails on more than 15% slowdown or 3% more allocation
