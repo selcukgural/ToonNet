@@ -70,9 +70,14 @@ internal static class ToonColumns
         return properties.TryGetValue(key, out var value) ? value : null;
     }
 
-    private static bool AddColumns(List<ToonColumn> columns, IReadOnlyList<ToonValue> objects)
+    /// <summary>Deeper groups of columns are not made: the values are written nested, where the depth limit applies.</summary>
+    private const int MaxGroupDepth = 200;
+
+    private static bool AddColumns(List<ToonColumn> columns, IReadOnlyList<ToonValue> objects, int depth = 0)
     {
-        if (objects[0] is not ToonObject { Properties.Count: > 0 } first)
+        // A tree built in code can be cyclic or deeper than any parsed document; it fails the depth check of the writer
+        if (depth > MaxGroupDepth || !System.Runtime.CompilerServices.RuntimeHelpers.TryEnsureSufficientExecutionStack() ||
+            objects[0] is not ToonObject { Properties.Count: > 0 } first)
         {
             return false;
         }
@@ -126,7 +131,7 @@ internal static class ToonColumns
                     groupValues[i] = ValueOf((ToonObject)objects[i], key, k)!;
                 }
 
-                if (!AddColumns(columns, groupValues))
+                if (!AddColumns(columns, groupValues, depth + 1))
                 {
                     return false;
                 }

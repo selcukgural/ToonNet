@@ -602,7 +602,7 @@ public static partial class ToonSerializer
                 return toonValue;
             }
 
-            if (ToonJsonInterop.TryToToon(value, out var documentValue))
+            if (ToonJsonInterop.TryToToon(value, _options.MaxDepth, out var documentValue))
             {
                 return documentValue;
             }

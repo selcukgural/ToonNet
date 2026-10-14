@@ -265,34 +265,34 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(filePath);
 
-        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
-
-        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        var writer = new StreamWriter(fileStream, ToonTextEncoding.Utf8NoBom);
-        await using var writerDisposal = writer.ConfigureAwait(false);
-
-        var isFirst = true;
-        options ??= ToonSerializerOptions.Default;
-        using var buffer = new ToonTextBuffer();
-
-        foreach (var value in values)
+        await WriteFileAsync(filePath, async fileStream =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var writer = new StreamWriter(fileStream, ToonTextEncoding.Utf8NoBom);
+            await using var writerDisposal = writer.ConfigureAwait(false);
 
-            // Add a blank line separator between objects (but not before the first)
-            if (!isFirst)
+            var isFirst = true;
+            options ??= ToonSerializerOptions.Default;
+            using var buffer = new ToonTextBuffer();
+
+            foreach (var value in values)
             {
-                await writer.WriteAsync(BlankLineDocumentSeparator.AsMemory(), cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Add a blank line separator between objects (but not before the first)
+                if (!isFirst)
+                {
+                    await writer.WriteAsync(BlankLineDocumentSeparator.AsMemory(), cancellationToken).ConfigureAwait(false);
+                }
+
+                // Each item is encoded into the same pooled buffer instead of a string per item
+                buffer.Clear();
+                SerializeTo(buffer, value, typeof(T), options);
+                EnsureSeparableByBlankLines(buffer.Length, typeof(T));
+                await buffer.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
+
+                isFirst = false;
             }
-
-            // Each item is encoded into the same pooled buffer instead of a string per item
-            buffer.Clear();
-            SerializeTo(buffer, value, typeof(T), options);
-            EnsureSeparableByBlankLines(buffer.Length, typeof(T));
-            await buffer.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
-
-            isFirst = false;
-        }
+        }, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -387,10 +387,8 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(filePath);
 
-        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
-
-        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        await SerializeDocumentsAsync(items, fileStream, options, cancellationToken).ConfigureAwait(false);
+        await WriteFileAsync(filePath, fileStream => SerializeDocumentsAsync(items, fileStream, options, cancellationToken), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -421,10 +419,8 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(filePath);
         ArgumentNullException.ThrowIfNull(writeOptions);
 
-        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
-
-        await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        await SerializeDocumentsAsync(items, fileStream, options, writeOptions, cancellationToken).ConfigureAwait(false);
+        await WriteFileAsync(filePath, fileStream => SerializeDocumentsAsync(items, fileStream, options, writeOptions, cancellationToken), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -524,6 +520,15 @@ public static partial class ToonSerializer
             {
                 EnsureSeparableByBlankLines(length, typeof(T));
             }
+            else if (batch.HasLine(start, writeOptions.DocumentSeparator))
+            {
+                // It would end the document there when read (a root string "===" with the separator "===")
+                throw new ToonSerializationException(
+                    $"A document has a line that is the document separator, so it could not be read back as one document; choose a separator that cannot be a line of {typeof(T).Name}, such as the default \"---\".")
+                {
+                    TargetType = typeof(T)
+                };
+            }
 
             isFirst = false;
             lastIsEmpty = length == 0;
@@ -576,6 +581,34 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
+    ///     Writes a file through a temporary file in the same directory, which replaces the file only when everything was
+    ///     written: an item that fails to serialize, or a canceled write, leaves the old file as it was.
+    /// </summary>
+    private static async ValueTask WriteFileAsync(string filePath, Func<FileStream, ValueTask> write, CancellationToken cancellationToken)
+    {
+        var fullPath = Path.GetFullPath(filePath);
+        var temporary = Path.Combine(Path.GetDirectoryName(fullPath)!, "." + Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp");
+
+        try
+        {
+            var fileStream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await write(fileStream).ConfigureAwait(false);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporary, fullPath, overwrite: true);
+        }
+        catch
+        {
+            File.Delete(temporary);
+            throw;
+        }
+    }
+
+    /// <summary>
     ///     Deserializes a TOON format string to an object of the specified type.
     /// </summary>
     /// <param name="toonString">The TOON format string to deserialize.</param>
@@ -590,6 +623,7 @@ public static partial class ToonSerializer
     public static object? Deserialize(string toonString, Type type, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(toonString);
+        ArgumentNullException.ThrowIfNull(type);
         options ??= ToonSerializerOptions.Default;
 
         return DeserializeText(toonString, type, options);
@@ -733,7 +767,7 @@ public static partial class ToonSerializer
         var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
 
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8Strict);
+        using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8StrictReader, detectEncodingFromByteOrderMarks: false);
 
         await foreach (var item in DeserializeDocumentsAsync<T>(reader, options, cancellationToken).ConfigureAwait(false))
         {
@@ -770,7 +804,7 @@ public static partial class ToonSerializer
         var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 81920, useAsync: true);
 
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8Strict);
+        using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8StrictReader, detectEncodingFromByteOrderMarks: false);
 
         await foreach (var item in DeserializeDocumentsAsync<T>(reader, options, multiDocumentOptions, cancellationToken).ConfigureAwait(false))
         {

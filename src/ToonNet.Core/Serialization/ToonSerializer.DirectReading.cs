@@ -468,7 +468,7 @@ public static partial class ToonSerializer
                     return _parser.BuildValue(value) is var tree && info.Target.IsInstanceOfType(tree) ? tree : throw new DirectReadFallbackException();
                 }
 
-                if (ToonJsonInterop.IsDocumentType(info.Target) && ToonJsonInterop.TryFromToon(_parser.BuildValue(value), info.Target, out var document))
+                if (ToonJsonInterop.IsDocumentType(info.Target) && ToonJsonInterop.TryFromToon(_parser.BuildValue(value), info.Target, _options.MaxDepth, out var document))
                 {
                     return document;
                 }

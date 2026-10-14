@@ -18,7 +18,11 @@ internal static class ToonJsonInterop
         type == typeof(ToonDocument) || type == typeof(JsonElement) || type == typeof(JsonDocument) || typeof(JsonNode).IsAssignableFrom(type);
 
     /// <summary>Converts a document value to its TOON value.</summary>
-    public static bool TryToToon(object value, out ToonValue result)
+    /// <param name="value">The value.</param>
+    /// <param name="maxDepth">The deepest nesting allowed (JSON parsed with a larger <c>MaxDepth</c> can be deeper).</param>
+    /// <param name="result">The TOON value.</param>
+    /// <exception cref="ToonSerializationException">Thrown when the JSON is nested deeper than <paramref name="maxDepth"/>.</exception>
+    public static bool TryToToon(object value, int maxDepth, out ToonValue result)
     {
         switch (value)
         {
@@ -26,13 +30,13 @@ internal static class ToonJsonInterop
                 result = document.Root;
                 return true;
             case JsonElement element:
-                result = FromElement(element);
+                result = FromElement(element, 0, maxDepth);
                 return true;
             case JsonDocument document:
-                result = FromElement(document.RootElement);
+                result = FromElement(document.RootElement, 0, maxDepth);
                 return true;
             case JsonNode node:
-                result = FromNode(node);
+                result = FromNode(node, 0, maxDepth);
                 return true;
             default:
                 result = null!;
@@ -42,8 +46,11 @@ internal static class ToonJsonInterop
 
     /// <summary>Creates a document value of <paramref name="targetType"/> from a TOON value.</summary>
     /// <exception cref="ToonSerializationException">Thrown when the TOON value does not fit the target (an array for a JsonObject).</exception>
-    public static bool TryFromToon(ToonValue value, Type targetType, out object? result)
+    public static bool TryFromToon(ToonValue value, Type targetType, int maxDepth, out object? result)
     {
+        // The JSON of a TOON value is as deep as the value, which the TOON depth limit bounds (JSON's default is 64)
+        var documentOptions = new JsonDocumentOptions { MaxDepth = maxDepth + 1 };
+
         if (targetType == typeof(ToonDocument))
         {
             result = new ToonDocument(value);
@@ -58,20 +65,20 @@ internal static class ToonJsonInterop
 
         if (targetType == typeof(JsonElement) || targetType == typeof(JsonElement?))
         {
-            using var document = JsonDocument.Parse(ToJson(value));
+            using var document = JsonDocument.Parse(ToJson(value, maxDepth), documentOptions);
             result = document.RootElement.Clone();
             return true;
         }
 
         if (targetType == typeof(JsonDocument))
         {
-            result = JsonDocument.Parse(ToJson(value));
+            result = JsonDocument.Parse(ToJson(value, maxDepth), documentOptions);
             return true;
         }
 
         if (typeof(JsonNode).IsAssignableFrom(targetType))
         {
-            var node = JsonNode.Parse(ToJson(value));
+            var node = JsonNode.Parse(ToJson(value, maxDepth), documentOptions: documentOptions);
 
             result = node == null || targetType.IsInstanceOfType(node)
                 ? node
@@ -84,28 +91,38 @@ internal static class ToonJsonInterop
         return false;
     }
 
-    private static ToonValue FromElement(JsonElement element)
+    private static void Enter(int depth, int maxDepth)
+    {
+        if (depth > maxDepth || !System.Runtime.CompilerServices.RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            throw new ToonSerializationException($"Maximum depth of {maxDepth} exceeded while converting JSON");
+        }
+    }
+
+    private static ToonValue FromElement(JsonElement element, int depth, int maxDepth)
     {
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
             {
+                Enter(depth, maxDepth);
                 var obj = new ToonObject();
 
                 foreach (var property in element.EnumerateObject())
                 {
-                    obj.Properties[property.Name] = FromElement(property.Value); // a repeated name keeps the last value
+                    obj.Properties[property.Name] = FromElement(property.Value, depth + 1, maxDepth); // a repeated name keeps the last value
                 }
 
                 return obj;
             }
             case JsonValueKind.Array:
             {
+                Enter(depth, maxDepth);
                 var array = new ToonArray(new List<ToonValue>(element.GetArrayLength()));
 
                 foreach (var item in element.EnumerateArray())
                 {
-                    array.Items.Add(FromElement(item));
+                    array.Items.Add(FromElement(item, depth + 1, maxDepth));
                 }
 
                 return array;
@@ -123,7 +140,7 @@ internal static class ToonJsonInterop
         }
     }
 
-    private static ToonValue FromNode(JsonNode? node)
+    private static ToonValue FromNode(JsonNode? node, int depth, int maxDepth)
     {
         switch (node)
         {
@@ -131,22 +148,24 @@ internal static class ToonJsonInterop
                 return ToonNull.Instance;
             case JsonObject obj:
             {
+                Enter(depth, maxDepth);
                 var result = new ToonObject(obj.Count);
 
                 foreach (var (name, value) in obj)
                 {
-                    result.Properties[name] = FromNode(value);
+                    result.Properties[name] = FromNode(value, depth + 1, maxDepth);
                 }
 
                 return result;
             }
             case JsonArray array:
             {
+                Enter(depth, maxDepth);
                 var result = new ToonArray(new List<ToonValue>(array.Count));
 
                 foreach (var item in array)
                 {
-                    result.Items.Add(FromNode(item));
+                    result.Items.Add(FromNode(item, depth + 1, maxDepth));
                 }
 
                 return result;
@@ -158,7 +177,7 @@ internal static class ToonJsonInterop
                 // A value parsed from JSON text holds a JsonElement: convert it as one (its number text decides)
                 if (value.TryGetValue<JsonElement>(out var element))
                 {
-                    return FromElement(element);
+                    return FromElement(element, depth, maxDepth);
                 }
 
                 // A value created from a CLR value can hold a NaN or an infinity, which has no JSON form (and no value
@@ -196,11 +215,11 @@ internal static class ToonJsonInterop
     private static ToonValue Number(string text) => ToonNumber.TryParse(text, out var number) ? number : new ToonString(text);
 
     /// <summary>The UTF-8 JSON text of a TOON value (numbers in their canonical form).</summary>
-    private static byte[] ToJson(ToonValue value)
+    private static byte[] ToJson(ToonValue value, int maxDepth)
     {
         var buffer = new ArrayBufferWriter<byte>();
 
-        using (var writer = new Utf8JsonWriter(buffer))
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { MaxDepth = maxDepth + 1 }))
         {
             Write(writer, value);
         }

@@ -96,8 +96,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and cut to 64 characters: a key with a line break or a bidirectional control cannot forge a log line or change how a
   message reads, and a long key cannot make a huge message. Paths write such keys as `$['a b']`; the unknown-key error
   of `UnmappedMemberHandling.Disallow` names the key only in its path.
+- **ToonNet.Core:** Encoding a tree built in code that is cyclic or nested very deeply through arrays of objects, and
+  serializing a `JsonElement`, `JsonDocument` or `JsonNode` nested deeper than `MaxDepth`, throw instead of ending the
+  process with a stack overflow; a converter that serializes its values again on a cyclic graph throws
+  `InsufficientExecutionStackException`. TOON values deeper than System.Text.Json's default of 64 levels read into
+  `JsonElement` and `JsonNode` members (up to `MaxDepth`).
+- **ToonNet.Core:** `ToonValidator.Validate` uses memory in proportion to the document: it wrote the path of every value
+  as it went, so a long key above many values took gigabytes. Integers longer than 10,000 characters are rejected for
+  `BigInteger`, `Int128` and `UInt128` before parsing them, which takes time that grows faster than their length.
+- **ToonNet.Core:** Reading multiple documents from a stream or file is strict UTF-8 whatever byte order mark it starts
+  with (a UTF-16 mark switched the encoding, and unpaired surrogates became U+FFFD). A stream that reports a length it
+  does not have no longer makes the reader reserve that much memory. `DeserializeAsyncEnumerable` stops reading at the
+  first line after the root array in strict mode, which makes the document an error, instead of reading the rest of
+  the stream first.
+- **ToonNet.Core:** Writing documents with an explicit separator throws when a document has a line that is the
+  separator (a root string `END` with the separator `END`), which would read back as two documents. The streaming file
+  writers (`SerializeCollectionToFileAsync`, `SerializeDocumentsAsync` to a path) write a temporary file and replace
+  the file with it at the end, so an item that fails leaves the old file as it was. `ToonDocumentWriter` checks the
+  field names of a table before writing its header.
 
 ### Fixed
+- **ToonNet.Core:** A number with more significant digits or decimal places than a `decimal` holds (such as
+  `6.250879627769291e-15`) kept a rounded `decimal` as its exact value, which the encoder, `DeepEquals` and
+  `ToonDocumentReader.TryGetDecimal` used: re-encoding a tree changed its digits, and two different numbers compared
+  equal. Such numbers now keep only their `double`. `Deserialize(string, Type)` throws `ArgumentNullException` for a
+  null type.
 - **ToonNet.Core:** A number read into an enum wrapped around its underlying type (`300` into a `byte` enum gave 44,
   `-1` gave 255, `4294967297` into an `int` enum gave 1); it is checked like a number of that type, and the error names
   the enum. Multidimensional arrays (`int[,]`) are rejected with a clear error: they were written flattened and failed

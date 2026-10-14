@@ -21,6 +21,12 @@ internal static class ToonTextEncoding
     /// </summary>
     public static readonly UTF8Encoding Utf8Strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
+    /// <summary>
+    ///     Strict UTF-8 for a <see cref="StreamReader"/> (with <c>detectEncodingFromByteOrderMarks: false</c>): its preamble
+    ///     makes the reader skip a UTF-8 byte order mark, and no other mark switches it to UTF-16 or UTF-32.
+    /// </summary>
+    internal static readonly UTF8Encoding Utf8StrictReader = new(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true);
+
     /// <summary>The size of the byte buffer streams are read through.</summary>
     private const int ByteChunkSize = 16 * 1024;
 
@@ -131,6 +137,9 @@ internal static class ToonTextEncoding
     ///     Decodes a stream read in chunks: bytes go through a pooled buffer, characters into a pooled buffer that grows
     ///     as needed. A sequence split across chunks is kept by the decoder until the next one.
     /// </summary>
+    /// <summary>The most characters reserved before reading a stream (16 MB of text); longer text grows the buffer.</summary>
+    private const int MaxInitialCapacity = 8 * 1024 * 1024;
+
     private struct Utf8StreamDecoder
     {
         private readonly System.Text.Decoder _decoder;
@@ -143,12 +152,13 @@ internal static class ToonTextEncoding
             _decoder = Utf8Strict.GetDecoder();
             Bytes = ArrayPool<byte>.Shared.Rent(ByteChunkSize);
 
-            // A seekable stream tells how many bytes are left, which bounds the number of characters
+            // A seekable stream tells how many bytes are left, which bounds the number of characters; up to a size, so a
+            // stream that reports more than it has does not make a huge buffer before anything is read
             var capacity = ByteChunkSize;
 
             if (stream.CanSeek)
             {
-                capacity = (int)Math.Clamp(stream.Length - stream.Position + 2, 2, Array.MaxLength);
+                capacity = (int)Math.Clamp(stream.Length - stream.Position + 2, 2, MaxInitialCapacity);
             }
 
             _text = new ToonPooledText(capacity);

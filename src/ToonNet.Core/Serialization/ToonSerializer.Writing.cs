@@ -33,6 +33,10 @@ public static partial class ToonSerializer
             return options.IgnoreNullValues ? null : ToonNull.Instance;
         }
 
+        // Converters run before the depth check, and one can serialize its values again (a cyclic graph): a stack check
+        // turns what would end the process into an exception
+        System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack();
+
         var runtimeType = value.GetType();
         var converter = propertyConverter ?? options.GetConverter(runtimeType) ?? options.GetConverter(declaredType);
 
@@ -47,7 +51,7 @@ public static partial class ToonSerializer
         }
 
         // A ToonDocument, JsonElement or JsonNode is written as the value it holds
-        if (ToonJsonInterop.TryToToon(value, out var documentValue))
+        if (ToonJsonInterop.TryToToon(value, options.MaxDepth, out var documentValue))
         {
             return documentValue;
         }

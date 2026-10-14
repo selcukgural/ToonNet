@@ -991,6 +991,9 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
                 throw new ArgumentException("A field name is null.", nameof(fields));
             }
 
+            // Before anything is written: the header with a field TOON cannot represent would be cut off
+            CheckText(fields[i]);
+
             for (var j = 0; j < i; j++)
             {
                 if (fields[j] == fields[i])
@@ -1045,7 +1048,7 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
                     writer.WriteKeyedHeader(key, length);
                 }
 
-                writer.WriteFieldList(fields);
+                writer.WriteFieldList(fields); // the fields were checked before the header was started
 
                 // Rows are objects one level below the array
                 EnterNesting();

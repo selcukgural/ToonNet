@@ -38,7 +38,7 @@ public static partial class ToonSerializer
         }
 
         // A ToonDocument, JsonElement or JsonNode is created from the value (null included)
-        if (ToonJsonInterop.TryFromToon(value, targetType, out var documentValue))
+        if (ToonJsonInterop.TryFromToon(value, targetType, options.MaxDepth, out var documentValue))
         {
             return documentValue;
         }
@@ -240,6 +240,8 @@ public static partial class ToonSerializer
 
             if (value is ToonString bigText && (targetType == typeof(BigInteger) || targetType == typeof(Int128) || targetType == typeof(UInt128)))
             {
+                EnsureIntegerLength(bigText.Value.Length, targetType, value, state);
+
                 // Integers beyond the decimal range are written as strings (lossless). Each branch is boxed on its own: a
                 // conditional expression would convert Int128 and UInt128 to BigInteger.
                 if (targetType == typeof(Int128))
@@ -396,11 +398,27 @@ public static partial class ToonSerializer
         }
     }
 
+    /// <summary>The most characters of an integer read into a BigInteger, Int128 or UInt128.</summary>
+    internal const int MaxIntegerLength = 10_000;
+
+    /// <summary>
+    ///     Rejects integers of more than <see cref="MaxIntegerLength"/> characters: parsing takes time that grows faster than
+    ///     their length (seconds for a few million digits).
+    /// </summary>
+    private static void EnsureIntegerLength(int length, Type targetType, ToonValue value, SerializerState state)
+    {
+        if (length > MaxIntegerLength)
+        {
+            throw Error($"The integer is longer than {MaxIntegerLength} characters", targetType, value, state);
+        }
+    }
+
     /// <summary>
     ///     Reads an integer token such as <c>123456789012345678901234567890123</c> or <c>1e40</c> exactly.
     /// </summary>
     private static object ParseWideInteger(string text, ToonNumber number, Type targetType, SerializerState state)
     {
+        EnsureIntegerLength(text.Length, targetType, number, state);
         if (!BigInteger.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var integer))
         {
             throw Error("The number is not an integer", targetType, number, state);

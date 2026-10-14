@@ -166,12 +166,14 @@ public static class ToonValidator
     {
         ArgumentNullException.ThrowIfNull(root);
         
-        var stack = new Stack<(ToonValue Value, int Depth, string Path)>();
-        stack.Push((root, 0, "$"));
+        // Each value keeps a link to where it is, and the path is written only for the value that fails: a path per
+        // value would copy long keys once for every value below them
+        var stack = new Stack<(ToonValue Value, int Depth, Step? Step)>();
+        stack.Push((root, 0, null));
 
         while (stack.Count > 0)
         {
-            var (value, depth, path) = stack.Pop();
+            var (value, depth, step) = stack.Pop();
 
             // Only objects and arrays count towards the depth (the root is at depth 0), as in the parser
             if (value is ToonObject or ToonArray && depth > maxDepth)
@@ -180,7 +182,7 @@ public static class ToonValidator
                     ToonValidationErrorCodes.MaxDepthExceeded,
                     $"Maximum depth of {maxDepth} exceeded during validation.",
                     ValidationSeverity.Error,
-                    path: path);
+                    path: Step.Format(step));
             }
 
             switch (value)
@@ -189,7 +191,7 @@ public static class ToonValidator
                 {
                     foreach (var (key, child) in obj.Properties)
                     {
-                        stack.Push((child, depth + 1, $"{path}.{key}"));
+                        stack.Push((child, depth + 1, new Step(step, key, 0)));
                     }
 
                     break;
@@ -198,7 +200,7 @@ public static class ToonValidator
                 {
                     for (var i = array.Items.Count - 1; i >= 0; i--)
                     {
-                        stack.Push((array.Items[i], depth + 1, $"{path}[{i}]"));
+                        stack.Push((array.Items[i], depth + 1, new Step(step, null, i)));
                     }
 
                     break;
@@ -207,6 +209,36 @@ public static class ToonValidator
         }
 
         return null;
+    }
+
+    /// <summary>A step from a container to a value in it: a key, or an index when the key is null.</summary>
+    private sealed record Step(Step? Parent, string? Key, int Index)
+    {
+        public static string Format(Step? step)
+        {
+            var steps = new List<Step>();
+
+            for (; step != null; step = step.Parent)
+            {
+                steps.Add(step);
+            }
+
+            var text = new System.Text.StringBuilder("$");
+
+            for (var i = steps.Count - 1; i >= 0; i--)
+            {
+                if (steps[i].Key is { } key)
+                {
+                    ToonErrorText.AppendMember(text, key);
+                }
+                else
+                {
+                    text.Append('[').Append(steps[i].Index.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(']');
+                }
+            }
+
+            return text.ToString();
+        }
     }
 
     /// <summary>

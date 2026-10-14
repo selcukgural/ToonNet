@@ -55,8 +55,9 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(utf8Stream);
         ArgumentNullException.ThrowIfNull(multiDocumentOptions);
 
-        // As the file overloads read: strict UTF-8, a byte order mark at the start is skipped
-        using var reader = new StreamReader(utf8Stream, ToonTextEncoding.Utf8Strict, detectEncodingFromByteOrderMarks: true, bufferSize: -1, leaveOpen: true);
+        // As the file overloads read: strict UTF-8, a UTF-8 byte order mark at the start is skipped (and no other mark
+        // switches the encoding)
+        using var reader = new StreamReader(utf8Stream, ToonTextEncoding.Utf8StrictReader, detectEncodingFromByteOrderMarks: false, bufferSize: -1, leaveOpen: true);
 
         await foreach (var item in DeserializeDocumentsAsync<T>(reader, options, multiDocumentOptions, cancellationToken).ConfigureAwait(false))
         {

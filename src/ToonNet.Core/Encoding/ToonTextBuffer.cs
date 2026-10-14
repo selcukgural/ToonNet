@@ -320,6 +320,47 @@ internal sealed class ToonTextBuffer : IDisposable
         await writer.WriteAsync(_current.AsMemory(0, _currentLength), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Whether a line of the text from <paramref name="start"/> (the start of a line) is <paramref name="line"/>.</summary>
+    public bool HasLine(int start, string line)
+    {
+        var offset = 0;
+        var matched = 0; // the characters of the current line that match, or -1 when it does not
+
+        bool Scan(ReadOnlySpan<char> text)
+        {
+            foreach (var c in text)
+            {
+                if (c == '\n')
+                {
+                    if (matched == line.Length)
+                    {
+                        return true;
+                    }
+
+                    matched = 0;
+                }
+                else
+                {
+                    matched = matched >= 0 && matched < line.Length && line[matched] == c ? matched + 1 : -1;
+                }
+            }
+
+            return false;
+        }
+
+        foreach (var (chunk, length) in _previous ?? [])
+        {
+            if (offset + length > start && Scan(chunk.AsSpan(Math.Max(start - offset, 0), length - Math.Max(start - offset, 0))))
+            {
+                return true;
+            }
+
+            offset += length;
+        }
+
+        return Scan(_current.AsSpan(Math.Max(start - offset, 0), _currentLength - Math.Max(start - offset, 0))) || matched == line.Length;
+    }
+
     /// <summary>Creates a string from the written characters.</summary>
     public override string ToString()
     {

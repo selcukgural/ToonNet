@@ -2384,15 +2384,73 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return false;
         }
 
-        // Keep the exact value when it fits in a decimal. Values below decimal precision (e.g. 1e-30) round to a
-        // different value there, so they only keep the double.
-        if (decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out exact) &&
-            Math.Abs((double)exact - value) <= Math.Abs(value) * 1e-12)
+        // Keep the exact value when a decimal holds it exactly; one that would round (more significant digits or decimal
+        // places than a decimal has, e.g. 1e-30 or 0.00000000000000012345678901234567) only keeps the double
+        if (FitsDecimal(token, out var places, out var significant) &&
+            decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out exact) &&
+            (significant <= 28 || exact.Scale >= Math.Max(places, 0)))
         {
+            // 29 significant digits fit when they are at most decimal's largest mantissa; parsing rounds them otherwise,
+            // to fewer decimal places
             hasExact = true;
         }
 
         return true;
+    }
+
+    /// <summary>
+    ///     Whether a JSON number token may fit a <see cref="decimal"/> without rounding: at most 28 decimal places and 29
+    ///     significant digits (28 always fit; 29 when they do not exceed decimal's largest mantissa).
+    /// </summary>
+    private static bool FitsDecimal(ReadOnlySpan<char> token, out long places, out int significant)
+    {
+        places = 0;
+        significant = 0;
+
+        var exponentAt = token.IndexOfAny('e', 'E');
+        var mantissa = exponentAt < 0 ? token : token[..exponentAt];
+        var exponent = 0;
+
+        if (exponentAt >= 0 && !int.TryParse(token[(exponentAt + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent))
+        {
+            return false; // an exponent beyond int is far beyond decimal
+        }
+
+        int first = -1, last = -1, digits = 0, point = -1;
+
+        for (var i = 0; i < mantissa.Length; i++)
+        {
+            var c = mantissa[i];
+
+            if (c == '.')
+            {
+                point = digits;
+                continue;
+            }
+
+            if (c is < '0' or > '9')
+            {
+                continue; // the sign
+            }
+
+            if (c != '0')
+            {
+                first = first < 0 ? digits : first;
+                last = digits;
+            }
+
+            digits++;
+        }
+
+        if (first < 0)
+        {
+            return true; // zero
+        }
+
+        // Decimal places: the digits after the point up to the last significant one, less the exponent
+        places = (long)(last + 1 - (point < 0 ? digits : point)) - exponent;
+        significant = last - first + 1;
+        return places <= 28 && significant <= 29;
     }
 
     /// <summary>

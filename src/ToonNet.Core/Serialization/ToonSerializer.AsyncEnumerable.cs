@@ -310,6 +310,9 @@ public static partial class ToonSerializer
         /// <summary>With a target: the array ended (or is not there), so the stream is not read further.</summary>
         private bool _ended;
 
+        /// <summary>Whether a line read makes the document an error (in strict mode), so no more lines are read.</summary>
+        private bool _errorFound;
+
         /// <summary>With a target: the document has no value at the path.</summary>
         private bool _missing;
 
@@ -514,6 +517,10 @@ public static partial class ToonSerializer
                     }
 
                     return true;
+                case Form.Whole or Form.Tail when _errorFound:
+                    // The document is an error at a line already read: the rest is not needed (or kept) to report it
+                    _ended = true;
+                    return true;
                 case Form.Whole or Form.Tail:
                     _lineNumber++;
                     Append(line);
@@ -532,8 +539,9 @@ public static partial class ToonSerializer
 
                 if (spaces == 0)
                 {
-                    // Content after the array: the parser reports it with the last batch
+                    // Content after the array: the parser reports it with the last batch, at this line in strict mode
                     _form = Form.Tail;
+                    _errorFound = options.StrictMode;
                 }
                 else
                 {
@@ -749,7 +757,8 @@ public static partial class ToonSerializer
 
             if (text.SequenceEqual("[]") || text.Length == 0 || text[0] != '[')
             {
-                // `[]` and anything that is not a root array header (the parser or the check below reports it)
+                // `[]` and anything that is not a root array header (the parser or the check below reports it, after
+                // reading all of it: an error further on comes first, as for the whole document)
                 _form = Form.Whole;
                 _bodyFirstLine = _lineNumber;
                 Append(line);
