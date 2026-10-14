@@ -145,13 +145,13 @@ public static class ToonSourceGenerationHelpers
     {
         if (depth > options.ValidatedMaxDepth)
         {
-            throw ToonEncodingException.Create($"Maximum depth of {options.MaxDepth} exceeded during serialization", suggestion:
+            throw ToonEncodingException.AtPath($"Maximum depth of {options.MaxDepth} exceeded during serialization", "$", suggestion:
                                                "The object graph may contain a circular reference; mark the back-reference with [ToonIgnore].");
         }
 
         if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
-            throw ToonEncodingException.Create("Object graph is nested too deeply to serialize with the available stack space");
+            throw ToonEncodingException.AtPath("Object graph is nested too deeply to serialize with the available stack space", "$");
         }
     }
 
@@ -164,12 +164,37 @@ public static class ToonSourceGenerationHelpers
     {
         if (depth > options.ValidatedMaxDepth)
         {
-            throw ToonSerializer.DepthError($"Maximum depth of {options.MaxDepth} exceeded during deserialization", typeof(object), null);
+            throw ToonSerializer.DepthError($"Maximum depth of {options.MaxDepth} exceeded during deserialization", typeof(object), "$");
         }
 
         if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
-            throw ToonSerializer.DepthError("Document is nested too deeply to deserialize with the available stack space", typeof(object), null);
+            throw ToonSerializer.DepthError("Document is nested too deeply to deserialize with the available stack space", typeof(object), "$");
         }
+    }
+
+    /// <summary>
+    ///     Puts a property name or dictionary key in front of the path of an error that <see cref="ToonSerializer"/> or
+    ///     generated code raised while converting the value at that key, as the error leaves the value; other errors
+    ///     are left as they are. Returns false, for use as an exception filter.
+    /// </summary>
+    /// <param name="exception">The error.</param>
+    /// <param name="name">The serialized property name or the dictionary key.</param>
+    public static bool AddPath(ToonException exception, string name)
+    {
+        exception.PrependPath(ToonException.PathOf(name));
+        return false;
+    }
+
+    /// <summary>
+    ///     Puts an item index in front of the path of an error raised while converting the item, as
+    ///     <see cref="AddPath(ToonException, string)"/> does for a key. Returns false, for use as an exception filter.
+    /// </summary>
+    /// <param name="exception">The error.</param>
+    /// <param name="index">The index of the item.</param>
+    public static bool AddPath(ToonException exception, int index)
+    {
+        exception.PrependPath(ToonException.PathOf(index));
+        return false;
     }
 }

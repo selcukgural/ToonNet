@@ -23,6 +23,7 @@ internal sealed class SourceEmitter
     private const string Options = Serialization + "ToonSerializerOptions";
     private const string Writer = "global::ToonNet.Core.Encoding.ToonWriter";
     private const string RowShape = Serialization + "ToonRowShape";
+    private const string ToonException = "global::ToonNet.Core.ToonException";
     private const string HiddenAttribute = "[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]";
 
     private readonly TypeModel _model;
@@ -245,6 +246,15 @@ internal sealed class SourceEmitter
         EmitPolicyLocal();
         code.AppendLine($"var __obj = new {Models}ToonObject({model.Properties.Length});");
 
+        // Errors get the property's name in their path as they leave its value, like ToonSerializer's
+        var tracksPath = model.Properties.Any(p => p.ConverterTypeName != null || CanFailWriting(p.Plan));
+
+        if (tracksPath)
+        {
+            code.AppendLine("string? __at = null;");
+            code.BeginBlock("try");
+        }
+
         for (var i = 0; i < model.Properties.Length; i++)
         {
             var property = model.Properties[i];
@@ -254,6 +264,12 @@ internal sealed class SourceEmitter
             code.AppendLine();
             code.AppendLine($"// {property.Name}");
             code.BeginBlock(property.IsReadOnly ? "if (options.IncludeReadOnlyProperties)" : "");
+
+            if (property.ConverterTypeName != null || CanFailWriting(property.Plan))
+            {
+                code.AppendLine($"__at = {name};");
+            }
+
             code.AppendLine($"var {local} = value.{Identifier(property)};");
 
             if (property.ConverterTypeName != null)
@@ -272,10 +288,31 @@ internal sealed class SourceEmitter
             code.EndBlock();
         }
 
+        if (tracksPath)
+        {
+            code.EndBlock();
+            EmitPathFilter("__at != null", "__at");
+        }
+
         code.AppendLine();
         code.AppendLine("return __obj;");
         code.EndBlock();
     }
+
+    /// <summary>
+    /// Emits the catch clause that puts a key or index in front of the path of an error leaving the try block (the
+    /// filter only completes the path, so the clause never catches).
+    /// </summary>
+    private void EmitPathFilter(string condition, string segment)
+    {
+        var filter = $"{Helpers}.AddPath(__ex, {segment})";
+        _code.BeginBlock($"catch ({ToonException} __ex) when ({(condition.Length == 0 ? filter : condition + " && " + filter)})");
+        _code.AppendLine("throw; // not reached");
+        _code.EndBlock();
+    }
+
+    /// <summary>Whether writing a non-null value can raise an error (nested objects, collections, the serializer).</summary>
+    private static bool CanFailWriting(ValuePlan plan) => plan.Kind is not (ValueKind.Inline or ValueKind.Raw or ValueKind.Primitive);
 
     /// <summary>Stores a value in an object slot; nulls follow <c>IgnoreNullValues</c>, like ToonSerializer.</summary>
     private void EmitStore(string target, ValuePlan plan, string local, string depth)
@@ -1525,6 +1562,10 @@ internal sealed class SourceEmitter
 
         var arguments = new List<string>();
 
+        // Errors get the key in their path as they leave its value, like ToonSerializer's
+        code.AppendLine("string? __at = null;");
+        code.BeginBlock("try");
+
         for (var j = 0; j < constructor.Parameters.Length; j++)
         {
             var parameter = constructor.Parameters[j];
@@ -1537,7 +1578,10 @@ internal sealed class SourceEmitter
 
             code.AppendLine();
             code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue};");
-            code.AppendLine($"if ({Helpers}.TryGetProperty(__obj, {key}, {ignoreCase}, out var __ta{j})) __a{j} = {read};");
+            code.BeginBlock($"if ({Helpers}.TryGetProperty(__obj, {key}, {ignoreCase}, out var __ta{j}))");
+            code.AppendLine($"__at = {key};");
+            code.AppendLine($"__a{j} = {read};");
+            code.EndBlock();
             arguments.Add($"__a{j}");
         }
 
@@ -1558,17 +1602,21 @@ internal sealed class SourceEmitter
             code.AppendLine($"{property.TypeName} __p{i} = default!;");
             code.AppendLine($"var __h{i} = false;");
             code.BeginBlock($"if ({Helpers}.TryGetProperty(__obj, {NameExpression(property)}, {IgnoreCase(PolicyNames(property), unambiguous)}, out var __t{i}))");
+            code.AppendLine($"__at = {NameExpression(property)};");
             code.AppendLine($"__p{i} = {read};");
             code.AppendLine($"__h{i} = true;");
             code.EndBlock();
         }
 
         code.AppendLine();
+        code.AppendLine("__at = null;");
 
         EmitConstruction(arguments);
 
         code.AppendLine();
         code.AppendLine("return __result;");
+        code.EndBlock();
+        EmitPathFilter("__at != null", "__at");
         code.EndBlock();
     }
 
@@ -1749,12 +1797,33 @@ internal sealed class SourceEmitter
         {
             var key = plan.Key!.Inline == PrimitiveKind.String ? "__entry.Key" : $"{Helpers}.FormatKey(__entry.Key)";
 
+            var tracksPath = CanFailWriting(element);
             code.AppendLine($"var __obj = new {Models}ToonObject({CountExpression});");
+
+            if (tracksPath)
+            {
+                code.AppendLine("string? __at = null;");
+                code.BeginBlock("try");
+            }
+
             code.BeginBlock("foreach (var __entry in value)");
             code.AppendLine($"var __key = {key};");
+
+            if (tracksPath)
+            {
+                code.AppendLine("__at = __key;");
+            }
+
             code.AppendLine("var __value = __entry.Value;");
             EmitStore("__obj.Properties[__key]", element, "__value", "depth + 1");
             code.EndBlock();
+
+            if (tracksPath)
+            {
+                code.EndBlock();
+                EmitPathFilter("__at != null", "__at");
+            }
+
             code.AppendLine("return __obj;");
         }
         else
@@ -1762,12 +1831,33 @@ internal sealed class SourceEmitter
             // Null items are always kept so that indexes are preserved, like ToonSerializer.
             var item = WriteExpression(element, NonNull(element, "__item"), "depth + 1");
 
+            var tracksPath = CanFailWriting(element);
             code.AppendLine($"var __array = new {Models}ToonArray(new global::System.Collections.Generic.List<{Models}ToonValue>({CountExpression}));");
+
+            if (tracksPath)
+            {
+                code.AppendLine("var __i = 0;");
+                code.BeginBlock("try");
+            }
+
             code.BeginBlock("foreach (var __item in value)");
             code.AppendLine(element.CanBeNull
                                 ? $"__array.Items.Add(__item is null ? {Models}ToonNull.Instance : {item});"
                                 : $"__array.Items.Add({item});");
+
+            if (tracksPath)
+            {
+                code.AppendLine("__i++;");
+            }
+
             code.EndBlock();
+
+            if (tracksPath)
+            {
+                code.EndBlock();
+                EmitPathFilter("", "__i");
+            }
+
             code.AppendLine("return __array;");
         }
 
@@ -1820,18 +1910,27 @@ internal sealed class SourceEmitter
 
             code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
             code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>(__obj.Properties.Count);");
+            code.AppendLine("string? __at = null;");
+            code.BeginBlock("try");
             code.BeginBlock("foreach (var __entry in __obj.Properties)");
+            code.AppendLine("__at = __entry.Key;");
             code.AppendLine($"__dictionary[{key}] = {ReadExpression(element, "__entry.Value", "depth + 1")};");
             code.EndBlock();
+            code.EndBlock();
+            EmitPathFilter("__at != null", "__at");
             code.AppendLine("return __dictionary;");
         }
         else
         {
             code.AppendLine($"if (value is not {Models}ToonArray __array) return {reflection};");
             code.AppendLine($"var __items = new global::System.Collections.Generic.List<{element.TypeName}>(__array.Count);");
-            code.BeginBlock("for (var __i = 0; __i < __array.Count; __i++)");
+            code.AppendLine("var __i = 0;");
+            code.BeginBlock("try");
+            code.BeginBlock("for (; __i < __array.Count; __i++)");
             code.AppendLine($"__items.Add({ReadExpression(element, "__array[__i]", "depth + 1")});");
             code.EndBlock();
+            code.EndBlock();
+            EmitPathFilter("", "__i");
             code.AppendLine(plan.Kind switch
             {
                 ValueKind.Array => "return __items.ToArray();",

@@ -102,10 +102,19 @@ public abstract class ToonTypeInfo
 
         ToonSourceGenerationHelpers.CheckSerializationDepth(options, depth);
         var array = new ToonArray(new List<ToonValue>(count));
+        var index = 0;
 
-        foreach (var item in items)
+        try
         {
-            array.Items.Add(item is null ? ToonNull.Instance : elementInfo.Serialize(item, options, depth + 1));
+            foreach (var item in items)
+            {
+                array.Items.Add(item is null ? ToonNull.Instance : elementInfo.Serialize(item, options, depth + 1));
+                index++;
+            }
+        }
+        catch (ToonException ex) when (ToonSourceGenerationHelpers.AddPath(ex, index))
+        {
+            throw; // not reached: the filter only completes the path
         }
 
         return array;
@@ -121,10 +130,18 @@ public abstract class ToonTypeInfo
         }
 
         var items = new List<T>(array.Count);
+        var i = 0;
 
-        for (var i = 0; i < array.Count; i++)
+        try
         {
-            items.Add(elementInfo.Deserialize!(array[i], options, depth + 1));
+            for (; i < array.Count; i++)
+            {
+                items.Add(elementInfo.Deserialize!(array[i], options, depth + 1));
+            }
+        }
+        catch (ToonException ex) when (ToonSourceGenerationHelpers.AddPath(ex, i))
+        {
+            throw; // not reached: the filter only completes the path
         }
 
         return items;
@@ -165,20 +182,29 @@ public abstract class ToonTypeInfo
 
         ToonSourceGenerationHelpers.CheckSerializationDepth(options, depth);
         var result = new ToonObject(dictionary.Count);
+        string? at = null;
 
-        foreach (var (key, entryValue) in dictionary)
+        try
         {
-            if (entryValue is null)
+            foreach (var (key, entryValue) in dictionary)
             {
-                if (!options.IgnoreNullValues)
+                if (entryValue is null)
                 {
-                    result.Properties[key] = ToonNull.Instance;
+                    if (!options.IgnoreNullValues)
+                    {
+                        result.Properties[key] = ToonNull.Instance;
+                    }
+                }
+                else
+                {
+                    at = key;
+                    result.Properties[key] = valueInfo.Serialize(entryValue, options, depth + 1);
                 }
             }
-            else
-            {
-                result.Properties[key] = valueInfo.Serialize(entryValue, options, depth + 1);
-            }
+        }
+        catch (ToonException ex) when (at != null && ToonSourceGenerationHelpers.AddPath(ex, at))
+        {
+            throw; // not reached: the filter only completes the path
         }
 
         return result;
@@ -197,10 +223,19 @@ public abstract class ToonTypeInfo
         }
 
         var dictionary = new Dictionary<string, TValue>(obj.Properties.Count);
+        string? at = null;
 
-        foreach (var (key, entryValue) in obj.Properties)
+        try
         {
-            dictionary[key] = valueInfo.Deserialize!(entryValue, options, depth + 1);
+            foreach (var (key, entryValue) in obj.Properties)
+            {
+                at = key;
+                dictionary[key] = valueInfo.Deserialize!(entryValue, options, depth + 1);
+            }
+        }
+        catch (ToonException ex) when (at != null && ToonSourceGenerationHelpers.AddPath(ex, at))
+        {
+            throw; // not reached: the filter only completes the path
         }
 
         return dictionary;

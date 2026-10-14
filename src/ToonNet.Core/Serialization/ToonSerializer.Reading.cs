@@ -72,7 +72,14 @@ public static partial class ToonSerializer
         if (generatedAllowed && value is ToonObject && GetGeneratedSerializer(targetType, options) is { Deserialize: { } generated } serializer &&
             serializer.ReadsWith(options))
         {
-            return generated(value, options, depth);
+            try
+            {
+                return generated(value, options, depth);
+            }
+            catch (ToonException ex) when (InPath(ex, state))
+            {
+                throw; // not reached: the filter only completes the path
+            }
         }
 
         if (TryDeserializePrimitive(value, targetType, state, out var primitiveResult))
@@ -122,11 +129,7 @@ public static partial class ToonSerializer
 
     internal static ToonSerializationException DepthError(string message, Type targetType, string? path)
     {
-        return new ToonSerializationException(ToonException.WithDetails(message, ("path", path)))
-        {
-            TargetType = targetType,
-            Path = path
-        };
+        return ToonSerializationException.AtPath(message, path, targetType, namesTargetType: false);
     }
 
     /// <summary>The error for a value of the wrong kind (an array for an object, ...), for composed type infos.</summary>
@@ -139,12 +142,7 @@ public static partial class ToonSerializer
     /// </remarks>
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
     {
-        var path = state.Path;
-        var text = ToonException.WithDetails(message, ("path", path), ("target type", targetType.Name));
-
-        return inner == null
-            ? new ToonSerializationException(text) { TargetType = targetType, Path = path, Value = value }
-            : new ToonSerializationException(text, inner) { TargetType = targetType, Path = path, Value = value };
+        return ToonSerializationException.AtPath(message, state.Path, targetType, namesTargetType: true, value, inner);
     }
 
     /// <summary>

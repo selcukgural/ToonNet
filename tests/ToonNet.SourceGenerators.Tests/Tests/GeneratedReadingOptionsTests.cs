@@ -71,7 +71,8 @@ public class GeneratedReadingOptionsTests
                      "product: b\nProduct: a",
                      "PRODUCT_NAME: x\nproduct_name: y",
                      "total: 4\nTOTAL: 5\nAmount: 1",
-                     "Product: a\nOther: 1");
+                     "Product: a\nOther: 1",
+                     "lines[1]{Sku,Price,Extra}:\n  a,1,2");
     }
 
     [Fact]
@@ -124,7 +125,10 @@ public class GeneratedReadingOptionsTests
     public void NestedObjectsAndLists()
     {
         AssertParity(OptionOrder.ToonTypeInfo, OptionOrder.Deserialize,
-                     "Buyer:\n  Name: a\n  Age: 1\nLines[1]{Sku,Price}:\n  x,1");
+                     "Buyer:\n  name: a\n  age: 1\nLines[1]{SKU,price}:\n  x,1",
+                     "Buyer:\n  Name: a\nLines[1]{Sku,Price}:\n  x,1",
+                     "Buyer:\n  Name: a\n  Age: 1\n  Extra: 1",
+                     "lines[1]{sku,price,more}:\n  x,1,2");
     }
 
     /// <summary>The reflection-based serializer's metadata cache (private), to prove it was not used.</summary>

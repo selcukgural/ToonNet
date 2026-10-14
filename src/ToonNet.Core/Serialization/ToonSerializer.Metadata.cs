@@ -395,6 +395,20 @@ public static partial class ToonSerializer
     /// The path is kept as segments (a name, or an array index) and only turned into text for an error, so walking
     /// a collection does not format a string per item. The lists are created on first use.
     /// </remarks>
+    /// <summary>
+    ///     Puts the path of the state in front of the path of an error that generated code raised (relative to the value
+    ///     it was given), as the error leaves generated code. Returns false, for use as an exception filter.
+    /// </summary>
+    private static bool InPath(ToonException exception, SerializerState state)
+    {
+        if (!state.IsRoot)
+        {
+            exception.PrependPath(state.Path);
+        }
+
+        return false;
+    }
+
     private sealed class SerializerState
     {
         /// <summary>A state for reads that never push a segment or track objects (primitive reads from generated code).</summary>
@@ -416,6 +430,9 @@ public static partial class ToonSerializer
         public void Push(int index) => (_path ??= []).Add((null, index));
 
         public void Pop() => _path!.RemoveAt(_path.Count - 1);
+
+        /// <summary>Whether the path is the root (<c>$</c>).</summary>
+        public bool IsRoot => _path is not { Count: > 0 };
 
         public string Path
         {

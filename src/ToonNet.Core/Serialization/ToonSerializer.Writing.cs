@@ -59,7 +59,14 @@ public static partial class ToonSerializer
 
         if (generatedAllowed && GetGeneratedSerializer(runtimeType, options) is { } generated)
         {
-            return generated.Serialize(value, options, depth);
+            try
+            {
+                return generated.Serialize(value, options, depth);
+            }
+            catch (ToonException ex) when (InPath(ex, state))
+            {
+                throw; // not reached: the filter only completes the path
+            }
         }
 
         if (GetTypeMetadata(runtimeType).TypeConverter is { } typeConverter)
@@ -70,17 +77,17 @@ public static partial class ToonSerializer
         // Only objects, collections and dictionaries count towards the depth (the root is at depth 0)
         if (depth > options.ValidatedMaxDepth)
         {
-            throw ToonEncodingException.Create($"Maximum depth of {options.MaxDepth} exceeded during serialization", state.Path);
+            throw ToonEncodingException.AtPath($"Maximum depth of {options.MaxDepth} exceeded during serialization", state.Path);
         }
 
         if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
-            throw ToonEncodingException.Create("Object graph is nested too deeply to serialize with the available stack space", state.Path);
+            throw ToonEncodingException.AtPath("Object graph is nested too deeply to serialize with the available stack space", state.Path);
         }
 
         if (!state.Visiting.Add(value))
         {
-            throw ToonEncodingException.Create("A circular reference was detected", state.Path, suggestion:
+            throw ToonEncodingException.AtPath("A circular reference was detected", state.Path, suggestion:
                                                "Break the cycle or mark the back-reference with [ToonIgnore].");
         }
 

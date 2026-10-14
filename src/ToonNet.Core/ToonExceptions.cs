@@ -41,6 +41,24 @@ public class ToonException : Exception
     }
 
     /// <summary>
+    ///     Puts <paramref name="prefix"/> (a path such as <c>$.Items[2]</c>) in front of a path that starts with <c>$</c>,
+    ///     or makes it the path when there is none.
+    /// </summary>
+    internal static string PrependPath(string prefix, string? path) => path is { Length: > 1 } ? prefix + path[1..] : prefix;
+
+    /// <summary>The path of a property or dictionary key, as the serializer writes it: <c>$.Name</c>.</summary>
+    internal static string PathOf(string name) => name.StartsWith('[') ? "$" + name : "$." + name;
+
+    /// <summary>The path of an item: <c>$[2]</c>.</summary>
+    internal static string PathOf(int index) => "$[" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
+
+    /// <summary>
+    ///     Puts a path in front of the path of an error the serializer raised, as the error leaves the value the path
+    ///     leads to; other errors are left as they are.
+    /// </summary>
+    internal virtual void PrependPath(string prefix) { }
+
+    /// <summary>
     ///     Optional suggestion for fixing the error.
     /// </summary>
     public string? Suggestion { get; init; }
@@ -153,10 +171,30 @@ public sealed class ToonEncodingException : ToonException
     /// <param name="innerException">The exception that is the cause of the current exception.</param>
     public ToonEncodingException(string message, Exception innerException) : base(message, innerException) { }
 
+    /// <summary>The message without details, for an error the serializer raised (its path can still be completed).</summary>
+    private string? _reason;
+
+    private string? _propertyPath;
+
     /// <summary>
     ///     Gets the path to the problematic property.
     /// </summary>
-    public string? PropertyPath { get; init; }
+    public string? PropertyPath { get => _propertyPath; init => _propertyPath = value; }
+
+    /// <inheritdoc />
+    public override string Message => _reason == null ? base.Message : WithDetails(_reason, ("property", _propertyPath));
+
+    /// <summary>An error the serializer raised at a path (relative to where it was raised, if it is completed later).</summary>
+    internal static ToonEncodingException AtPath(string message, string path, string? suggestion = null) =>
+        new(WithDetails(message, ("property", path))) { _reason = message, PropertyPath = path, Suggestion = suggestion };
+
+    internal override void PrependPath(string prefix)
+    {
+        if (_reason != null)
+        {
+            _propertyPath = PrependPath(prefix, _propertyPath);
+        }
+    }
     
     /// <summary>
     ///     Gets the value that caused the encoding error.
@@ -211,11 +249,49 @@ public sealed class ToonSerializationException : ToonException
     /// </summary>
     public Type? TargetType { get; init; }
     
+    /// <summary>The message without details, for an error the serializer raised (its path can still be completed).</summary>
+    private string? _reason;
+
+    /// <summary>Whether the message names the target type.</summary>
+    private bool _namesTargetType;
+
+    private string? _path;
+
     /// <summary>
     ///     Gets where the error occurred: a path such as <c>$.Items[2].Price</c> for errors raised by
     ///     <see cref="Serialization.ToonSerializer"/>, or the property name passed to <see cref="Create"/>.
     /// </summary>
-    public string? Path { get; init; }
+    public string? Path { get => _path; init => _path = value; }
+
+    /// <inheritdoc />
+    public override string Message => _reason == null
+        ? base.Message
+        : WithDetails(_reason, ("path", _path), ("target type", _namesTargetType ? TargetType?.Name : null));
+
+    /// <summary>
+    ///     An error the serializer raised at a path (relative to where it was raised, if it is completed later); the
+    ///     message names the path and, with <paramref name="namesTargetType"/>, the target type.
+    /// </summary>
+    internal static ToonSerializationException AtPath(string message, string? path, Type targetType, bool namesTargetType, object? value = null,
+                                                      Exception? inner = null)
+    {
+        var text = WithDetails(message, ("path", path), ("target type", namesTargetType ? targetType.Name : null));
+
+        return inner == null
+            ? new ToonSerializationException(text) { _reason = message, _namesTargetType = namesTargetType, Path = path, TargetType = targetType, Value = value }
+            : new ToonSerializationException(text, inner)
+            {
+                _reason = message, _namesTargetType = namesTargetType, Path = path, TargetType = targetType, Value = value
+            };
+    }
+
+    internal override void PrependPath(string prefix)
+    {
+        if (_reason != null)
+        {
+            _path = PrependPath(prefix, _path);
+        }
+    }
 
     /// <summary>
     ///     Gets the value that caused the error.
