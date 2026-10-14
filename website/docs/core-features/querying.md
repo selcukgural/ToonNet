@@ -29,6 +29,8 @@ Filter expressions compare with `==`, `!=`, `<`, `<=`, `>`, `>=`, combine with `
 members for existence (`[?@.discount]`). `@` is the item being tested; `$` is the root. Literals are numbers, strings in
 single or double quotes, `true`, `false` and `null`.
 
+The five functions of RFC 9535:
+
 | Function | Result |
 |----------|--------|
 | `length(value)` | The length of a string (in characters), an array or an object |
@@ -36,6 +38,73 @@ single or double quotes, `true`, `false` and `null`.
 | `match(text, pattern)` | Whether the whole string matches a regular expression (I-Regexp, RFC 9485) |
 | `search(text, pattern)` | Whether some part of the string matches |
 | `value(query)` | The value of a query that selects exactly one |
+
+## ToonNet Functions
+
+Most JSONPath libraries stop at the five standard functions, which leaves everyday filters awkward: I-Regexp has no
+case-insensitive flag, and there is no "starts with" or "sum of the lines". ToonNet adds these, under names that
+follow the RFC's rules for function extensions:
+
+| Function | Result | Example |
+|----------|--------|---------|
+| `starts_with(text, prefix)` | Whether a string starts with another | `$.users[?starts_with(@.email, 'admin')]` |
+| `ends_with(text, suffix)` | Whether a string ends with another | `$.users[?ends_with(@.email, '@firma.com')]` |
+| `contains(text, part)` | Whether a string contains another | `$.products[?contains(@.name, 'Pro')]` |
+| `contains(array, item)` | Whether an array has an item (compared by value) | `$.products[?contains(@.tags, 'sale')]` |
+| `equals_ignore_case(a, b)` | Whether two strings are equal ignoring case | `$.users[?equals_ignore_case(@.city, 'oslo')]` |
+| `lower(text)`, `upper(text)` | The string in lower or upper case | `$.users[?lower(@.name) == 'ada']` |
+| `trim(text)` | The string without leading and trailing white space | `$.users[?trim(@.code) == 'X1']` |
+| `type(value)` | `'null'`, `'boolean'`, `'number'`, `'string'`, `'object'` or `'array'` | `$.items[?type(@.price) != 'number']` |
+| `sum(query)` | The sum of the numbers a query selects (0 for none) | `$.orders[?sum(@.lines[*].price) > 1000]` |
+| `min(query)`, `max(query)` | The smallest or largest of the numbers | `$.orders[?max(@.lines[*].qty) > 10]` |
+| `avg(query)` | Their average | `$.products[?avg(@.ratings[*]) >= 4.5]` |
+
+- **Strings are compared ordinally**, without culture: the result does not depend on the machine's language.
+  `equals_ignore_case`, `lower` and `upper` use the invariant culture's case rules, so Turkish `İ` is not `I`; write
+  both forms when it matters (`|| @.city == 'İstanbul'`).
+- **Wrong types are false or nothing**, as in the RFC: `starts_with(@.score, '1')` is false when `score` is a number,
+  and `lower(@.age)` gives no value, so a comparison with it is false.
+- **Aggregates are exact**: `sum`, `min`, `max` and `avg` work with decimals while every number is one
+  (`0.1 + 0.1 + 0.1` is `0.3`). A value that is not a number makes the result nothing; the sum of no values is 0.
+- **Over text**, `starts_with`, `ends_with`, `contains` and `equals_ignore_case` on a member and a string literal are
+  tested on the member's text, like comparisons, without building anything.
+- **Portability:** a path that uses these functions is ToonNet's: other JSONPath implementations reject it. Set
+  `ToonPathOptions.StandardFunctionsOnly` to allow only the five standard ones, for paths that must stay portable.
+
+### Your Own Functions
+
+Register functions with `ToonPathFunctions` and pass them in the options of the paths that call them:
+
+```csharp
+var functions = new ToonPathFunctions()
+    .AddPredicate("is_vip", customer => customer?["tier"]?.GetValue<string>() == "gold")      // [?is_vip(@.customer)]
+    .AddPredicate("same_day", (a, b) => SameDay(a, b))                                         // two values
+    .AddFunction("net", total => total is ToonNumber n ? new ToonNumber(n.Value / 1.2) : null) // [?net(@.total) > 100]
+    .AddNodesPredicate("all_shipped", lines => lines.All(l => l["shipped"] is ToonBoolean { Value: true }))
+    .AddNodesFunction("weight", lines => new ToonNumber(lines.Sum(l => l["kg"]!.GetValue<double>())));
+
+var options = new ToonPathOptions { Functions = functions };
+
+var vip = ToonPath.Parse("$.orders[?is_vip(@.customer) && net(@.total) > 100]", options).SelectFrom(toon);
+var heavy = ToonSerializer.DeserializeAll<Order>(toon, "$.orders[?weight(@.lines[*]) > 20]",
+                                                 new ToonSerializerOptions { PathOptions = options });
+```
+
+| Method | Called as | Arguments | Result |
+|--------|-----------|-----------|--------|
+| `AddPredicate(name, v => bool)` | `[?name(@.a)]` | a value (null when the query selects nothing) | a test |
+| `AddPredicate(name, (a, b) => bool)` | `[?name(@.a, 'x')]` | two values | a test |
+| `AddFunction(name, v => value)` | `[?name(@.a) > 1]` | a value | a value to compare (null for none) |
+| `AddFunction(name, (a, b) => value)` | `[?name(@.a, @.b) == 'x']` | two values | a value to compare |
+| `AddNodesPredicate(name, values => bool)` | `[?name(@.lines[*])]` | the values a query selects | a test |
+| `AddNodesFunction(name, values => value)` | `[?name(@.lines[*]) > 1]` | the values a query selects | a value to compare |
+
+The type rules of the RFC apply: a predicate is tested, not compared (`[?is_vip(@) == true]` is an error); a value
+function is compared; a value argument is a literal, a singular query (`@.name`) or a value function; a nodes argument
+is any query. Names are lowercase letters, digits and underscores, starting with a letter, and cannot be those of the
+built-in functions. Register functions before compiling the paths that use them; they are called on the threads that
+evaluate paths, so they should not change shared state. Functions and their limits also work in
+[rules](validation).
 
 ## On a Tree
 
@@ -124,6 +193,7 @@ deep document would visit billions of values); the step budget and the timeout s
 | `MaxPatternLength` | 1,024 characters | the pattern is not valid: `match()`/`search()` are false |
 | `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document | `InvalidOperationException` when evaluating |
 | `Timeout` | 10 seconds (`Timeout.InfiniteTimeSpan` turns it off) | `TimeoutException` when evaluating |
+| `Functions`, `StandardFunctionsOnly` | none; extensions allowed | an unknown function is a `ToonPathException` |
 
 The defaults suit paths written in code. For paths that clients send (for example to filter an API response), set
 stricter limits, on a compiled path or on the serializer options:
@@ -151,6 +221,7 @@ are compiled once and cached (up to 512 characters); paths with other limits are
 
 ## See Also
 
+- [Rules and Validation](validation): rules written with paths, such as "every order total is positive"
 - [Editing Trees](editing): navigating, changing and patching `ToonValue` trees
 - [Reader and Writer](reader-writer): reading documents token by token
 - [Streaming](streaming): large arrays item by item

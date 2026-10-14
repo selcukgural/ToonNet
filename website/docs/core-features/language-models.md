@@ -6,6 +6,7 @@ answer back into objects.
 
 ```csharp
 using ToonNet.Core.Llm;
+using ToonNet.Core.Validation;
 
 var prompt = $"""
     These are the open orders (TOON):
@@ -86,10 +87,37 @@ catch (ToonException ex)
 }
 ```
 
-With a `[ToonSerializable]` type, `ToonPrompt.Serialize(value, typeInfo, options)` and
-`ToonPrompt.Deserialize(answer, typeInfo)` work without reflection.
+An answer can also be well-formed and wrong: a negative quantity, a status that does not exist, a total that does not
+match its lines. `ToonPrompt.DeserializeValidated` checks the answer against a [rule set](validation) before reading
+it, and its `ToonRuleException` says what to fix:
+
+```csharp
+var rules = new ToonRuleSet()
+    .Rule("$.Lines[*]", "@.Quantity > 0", "Quantities must be positive")
+    .Rule("$", "@.Status == 'Open' || @.Status == 'Closed'", "Status must be Open or Closed")
+    .Required("$.Customers[0]", "Name at least one customer");
+
+for (var attempt = 0; attempt < 3; attempt++)
+{
+    var answer = await CallModelAsync(prompt);
+
+    try
+    {
+        return ToonPrompt.DeserializeValidated<Summary>(answer, rules);
+    }
+    catch (ToonException ex)   // ToonParseException, ToonRuleException or ToonSerializationException
+    {
+        prompt += $"\n\nYour answer could not be used: {ex.Message}. Answer again with the same shape.";
+    }
+}
+```
+
+With a `[ToonSerializable]` type, `ToonPrompt.Serialize(value, typeInfo, options)`,
+`ToonPrompt.Deserialize(answer, typeInfo)` and `ToonPrompt.DeserializeValidated(answer, rules, typeInfo)` work without
+reflection.
 
 ## See Also
 
+- [Rules and Validation](validation): rules an answer must follow
 - [Querying](querying): taking parts of a large document before putting it in a prompt
 - [Serialization](serialization): options such as the naming policy and the delimiter

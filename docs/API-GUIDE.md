@@ -348,6 +348,20 @@ applies and creates JSON Merge Patches (RFC 7386).
 `ToonSerializer.Deserialize<T>(ToonDocumentReader reader)` reads the value a reader is on, as `JsonSerializer` reads
 from a `Utf8JsonReader`.
 
+### Functions and Rules
+
+Filters can call ToonNet functions besides the standard five: `starts_with`, `ends_with`, `contains` (strings and
+arrays), `equals_ignore_case`, `lower`, `upper`, `trim`, `type`, `sum`, `min`, `max`, `avg`; register your own with
+`ToonPathFunctions` in `ToonPathOptions.Functions` (`StandardFunctionsOnly` keeps paths portable).
+
+```csharp
+var rules = new ToonRuleSet()
+    .Rule("$.orders[*]", "sum(@.lines[*].price) == @.total", "The lines do not add up")
+    .Unique("$.orders[*].id", "Order id {value} repeats");
+
+rules.Validate(toon).ThrowIfInvalid();   // ToonRuleException with the path of each violation
+```
+
 ### Prompts and Answers
 
 ```csharp
@@ -358,7 +372,7 @@ var shape = ToonPrompt.DescribeShape<Summary>();       // a TOON template of the
 var summary = ToonPrompt.Deserialize<Summary>(answer); // the ```toon block of the answer, in non-strict mode
 ```
 
-See the website pages *Querying*, *Editing Trees* and *Language Models* for details.
+See the website pages *Querying*, *Rules and Validation*, *Editing Trees* and *Language Models* for details.
 
 ### Use Cases
 

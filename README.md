@@ -46,8 +46,9 @@ ToonNet focuses on three things:
 2. **📐 Spec conformance** - Encoder and decoder follow TOON spec v4.4, pass every official fixture and write the
    same text as the official library
 3. **🔧 Familiar API** - `Serialize`/`Deserialize` methods in the style of System.Text.Json
-4. **🔎 Query, edit, stream** - JSONPath (RFC 9535) over trees and straight over text, `DeserializeAt` for one part of
-   a large document, JSON Merge Patch, and helpers for prompts and model answers
+4. **🔎 Query, validate, edit, stream** - JSONPath (RFC 9535) with string, type and aggregate functions, over trees
+   and straight over text; `DeserializeAt` for one part of a large document; Schematron-style rules; JSON Merge Patch;
+   and helpers for prompts and model answers. Most of this is not in other TOON libraries.
 
 ### 🤖 AI Token Optimization
 
@@ -221,7 +222,8 @@ them straight from it, with code generated for each type.
 | Options | indent, delimiter, strict, naming policies, null handling, read-only properties, converters, max depth | indent, delimiter, strict |
 | Exact `decimal` / `ulong` | ✅ | rounded through `double` |
 | Multi-document streaming | ✅ `SerializeDocumentsAsync` / `DeserializeDocumentsAsync` | single document per stream |
-| Queries | ✅ JSONPath (RFC 9535, 715/715 compliance cases) over trees and text; `DeserializeAt`, `DeserializeAll` | – |
+| Queries | ✅ JSONPath (RFC 9535, 715/715 compliance cases) over trees and text, string/type/aggregate and your own functions; `DeserializeAt`, `DeserializeAll` | – |
+| Business rules | ✅ `ToonRuleSet`: assertions, `Required`, `Forbidden`, `Unique`, with the path of each violation | – |
 | Editing | ✅ indexers, `GetValue<T>`, `DeepClone`, `DeepEquals`, `SetValue`/`RemoveAll` by path, JSON Merge Patch | `JsonNode` |
 | LLM helpers | ✅ `ToonPrompt`: shortened arrays, answer templates, lenient reading of answers | – |
 | ASP.NET Core | input/output formatters, `ToonResult`, configuration provider | – |
@@ -388,10 +390,18 @@ Paths are JSONPath (RFC 9535); they select values in a tree, straight from text,
 var orders = ToonSerializer.DeserializeAt<List<Order>>(toon, "$.data.orders");
 
 // Every value a filter selects, read straight into objects
-var big = ToonSerializer.DeserializeAll<Order>(toon, "$.data.orders[?@.total > 100 && @.paid == true]");
+var paid = ToonSerializer.DeserializeAll<Order>(toon, "$.data.orders[?@.total > 100 && @.paid == true]");
 
 // The items of an array inside a document, streamed
 await foreach (var order in ToonSerializer.DeserializeAsyncEnumerableAt<Order>(stream, "$.data.orders")) { }
+
+// ToonNet functions in filters, and your own
+var admins = ToonSerializer.DeserializeAll<User>(toon, "$.users[?ends_with(@.email, '@firma.com') && contains(@.roles, 'admin')]");
+var big = ToonSerializer.DeserializeAll<Order>(toon, "$.orders[?sum(@.lines[*].price) > 1000]");
+var options = new ToonPathOptions { Functions = new ToonPathFunctions().AddPredicate("is_vip", c => IsVip(c)) };
+
+// Paths from clients: limits on length, nesting, work and time
+var safe = new ToonSerializerOptions { PathOptions = new ToonPathOptions { MaxLength = 256, Timeout = TimeSpan.FromMilliseconds(200) } };
 
 // Trees: navigate, query, change, patch
 var root = ToonDocument.Parse(toon).Root;
@@ -400,6 +410,22 @@ var ids = root.Select("$.orders[?@.total > 100].id");
 root.SetValue("$.meta.updatedBy", "selcuk");
 root.RemoveAll("$.users[?@.active == false]");
 root = ToonMergePatch.Apply(root, patch);     // JSON Merge Patch (RFC 7386)
+```
+
+### Rules and Validation
+
+Business rules as paths, in the manner of Schematron, with the location of every value that breaks one:
+
+```csharp
+var rules = new ToonRuleSet()
+    .Rule("$.orders[*].total", "@ >= 0", "An order total cannot be negative ({value})")
+    .Rule("$.orders[*]", "sum(@.lines[*].price) == @.total", "The lines do not add up to the total")
+    .Required("$.customer.email", "The customer needs an email")
+    .Forbidden("$..password", "Passwords must not be sent")
+    .Unique("$.orders[*].id", "Order id {value} repeats");
+
+var result = rules.Validate(toon);    // result.Violations: $['orders'][1]['total']: An order total cannot be negative (-5)
+result.ThrowIfInvalid();              // or ToonPrompt.DeserializeValidated<T>(answer, rules) for model answers
 ```
 
 ### Language Models
@@ -472,6 +498,7 @@ string yaml = ToonYamlConvert.ToYaml(toonString);
 | `DeserializeAsyncEnumerableAt<T>(stream, path)` | Core | UTF-8 stream | Items as they arrive | A large array inside a document |
 | `ToonPath.Parse(path).Select(root)` / `.SelectFrom(toon)` | Core | Tree or TOON text | Values | Queries |
 | `ToonMergePatch.Apply(target, patch)` | Core | Trees | Tree | Partial updates |
+| `ToonRuleSet.Validate(toon)` | Core | TOON text or tree | Violations with paths | Business rules |
 | `ToonPrompt.Serialize` / `DescribeShape` / `Deserialize` | Core | Objects, model answers | TOON, templates, objects | LLM prompts and answers |
 | `FromJson(json)` | Extensions.Json | JSON string | TOON string | Convert JSON to TOON |
 | `ToJson(toon)` | Extensions.Json | TOON string | JSON string | Convert TOON to JSON |

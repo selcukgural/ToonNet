@@ -39,6 +39,7 @@ const sidebars: SidebarsConfig = {
         'core-features/streaming',
         'core-features/reader-writer',
         'core-features/querying',
+        'core-features/validation',
         'core-features/editing',
         'core-features/language-models',
         'core-features/type-system',
