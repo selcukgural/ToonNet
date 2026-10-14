@@ -96,7 +96,8 @@ var cheap = tree.Select("$.Products[?@.Price < 10 && match(@.Sku, 'A.')].Sku");
 tree.SetValue("$.Warehouses.oslo.Stock", 4);
 
 if (cheap is not [ToonString { Value: "A1" }] || tree["Warehouses"]!["oslo"]!["Stock"]!.GetValue<int>() != 4 ||
-    tree.Deserialize(Catalog.ToonTypeInfo)!.Warehouses["oslo"].Stock != 4 || !ToonValue.DeepEquals(tree, tree.DeepClone()))
+    tree.Deserialize(Catalog.ToonTypeInfo)!.Warehouses["oslo"].Stock != 4 || !ToonValue.DeepEquals(tree, tree.DeepClone()) ||
+    ToonSerializer.DeserializeAt(expected, "$.Products[1].Size", Size.ToonTypeInfo)!.Height != 4)
 {
     Console.WriteLine("FAILED: paths or tree access");
     return 1;

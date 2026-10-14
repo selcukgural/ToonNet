@@ -63,6 +63,11 @@ public partial class TypeInfoTests
                 Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(viaReader, options));
                 Assert.False(reader.Read());
             }
+
+            Assert.Equal(ToonSerializer.Serialize(reference, options),
+                         ToonSerializer.Serialize(ToonSerializer.DeserializeAt(expected, "$", typeInfo, options), options));
+            Assert.Equal(ToonSerializer.Serialize(reference, options),
+                         ToonSerializer.Serialize(ToonSerializer.DeserializeAt(utf8, "$", typeInfo, options), options));
             Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(ToonSerializer.Deserialize(utf8, typeInfo, options), options));
             Assert.Equal(ToonSerializer.Serialize(reference, options),
                          ToonSerializer.Serialize(ToonSerializer.Deserialize(expected.AsSpan(), typeInfo, options), options));

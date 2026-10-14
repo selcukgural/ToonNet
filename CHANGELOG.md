@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Utf8JsonReader`: a large document can be read partly by hand and partly into objects, item by item. Where direct
   reading gives up, the parser returns to the start of the value and converts its tree, so results and errors are those
   of `Deserialize<T>(string)`.
+- **ToonNet.Core:** `ToonSerializer.DeserializeAt<T>(toon, "$.data.orders")` (string, UTF-8 bytes, or a stream with
+  `DeserializeAtAsync`; also with a `ToonTypeInfo`) converts only the value at a path of member names and indexes. In
+  strict mode the parser skips what comes before the value without building it and stops at its end: in a quick
+  measurement on 10,000 rows, a small object at the start of the document is read 22x faster than the whole document
+  with 3 KB instead of 1 MB allocated, and the rows themselves at the speed of a document that holds only them. A
+  missing value gives `default`; errors carry the path in the document (`$.data.orders[1].Id`).
 
 ## [3.3.0] - 2026-10-14
 
