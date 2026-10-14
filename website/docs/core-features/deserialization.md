@@ -321,17 +321,26 @@ with the current generator). Writing is not affected.
 
 ### Unknown Keys and Required Properties
 
-Keys that match no property are ignored, and a `required` property without a key keeps its default value. To report
-both instead, set `UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow` and `RespectRequiredMembers = true`
+Keys that match no property are ignored by default. A `required` property without a key is an error
+(`RespectRequiredMembers` is `true` by default since ToonNet 4.0; set it to `false` to keep the default value instead).
+To report unknown keys too, set `UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow`
 (see [Configuration](configuration#strict-reading)):
 
 ```csharp
 var options = new ToonSerializerOptions { UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow };
 
-ToonSerializer.Deserialize<Person>("Name: Alice
-Aeg: 30", options);
-// ToonSerializationException: The key 'Aeg' matches no property or constructor parameter (path: $.Aeg, target type: Person)
+ToonSerializer.Deserialize<Person>("Name: Alice\nAeg: 30", options);
+// ToonSerializationException: The key matches no property or constructor parameter (path: $.Aeg, target type: Person)
 ```
+
+The key appears only in the path, escaped and cut to 64 characters (`$['first name']` for a key that is not a simple
+identifier).
+
+### Non-Public Setters
+
+Reading sets only public setters (`set` and `init`). A property with a `private`, `protected` or `internal` setter
+(`IsAdmin { get; private set; }`) is not set from a document unless it is marked `[ToonInclude]`; see
+[Configuration](configuration#non-public-setters-and-tooninclude).
 
 ### Property Naming Policy
 
@@ -586,6 +595,10 @@ var lenient = new ToonSerializerOptions
 var config = ToonSerializer.Deserialize<AppConfig>(handWrittenToon, lenient);
 ```
 
+Use non-strict mode only for documents you trust. With duplicate keys the last value wins, so a document can read
+differently here than in a strict reader or a check that looked at the first key; keep strict mode for request bodies
+and other untrusted input (see [Security](../advanced/security)).
+
 ## Error Handling
 
 ```csharp
@@ -607,7 +620,10 @@ catch (ToonSerializationException ex)
 }
 ```
 
-Both derive from `ToonException`. Text nested deeper than `ToonOptions.MaxDepth` is a `ToonParseException` (with the
+Both derive from `ToonException`. Keys in paths and messages are escaped and cut to 64 characters, so a key with a line
+break or a control character cannot forge a log line. When the target type's constructor throws, the message names only
+the exception's type (`The constructor of Money threw ArgumentException`); the exception itself is the
+`InnerException`, so its message does not reach clients through model-state errors. Text nested deeper than `ToonOptions.MaxDepth` is a `ToonParseException` (with the
 line and column); exceeding `ToonSerializerOptions.MaxDepth` while converting is a `ToonSerializationException` (with the
 path).
 
@@ -631,9 +647,10 @@ var person = ToonSerializer.Deserialize<Person>(toonInput);
 
 ### Issue: Missing Properties
 
-**Problem**: TOON input missing required properties.
+**Problem**: TOON input missing properties.
 
-**Solution**: Missing keys leave the property at its initial value; make properties nullable or provide defaults:
+**Solution**: Missing keys leave the property at its initial value; make properties nullable or provide defaults. A
+property declared `required` is the exception: its key must be present unless `RespectRequiredMembers` is `false`.
 
 ```csharp
 public class Person

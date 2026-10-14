@@ -36,9 +36,10 @@ var options = new ToonSerializerOptions
 | `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Transform property names |
 | `PropertyNameCaseInsensitive` | `bool` | `false` | Match keys to property names ignoring case when reading |
 | `UnmappedMemberHandling` | `ToonUnmappedMemberHandling` | `Skip` | `Disallow` makes a key that matches no property or constructor parameter an error when reading |
-| `RespectRequiredMembers` | `bool` | `false` | Make a missing key for a C# `required` property an error when reading |
+| `RespectRequiredMembers` | `bool` | `true` | Make a missing key for a C# `required` property an error when reading (`false` before 4.0) |
 | `IgnoreNullValues` | `bool` | `false` | Skip null properties during serialization |
-| `IncludeReadOnlyProperties` | `bool` | `true` | Serialize get-only properties |
+| `IncludeReadOnlyProperties` | `bool` | `true` | Serialize get-only properties (and properties whose setter is not public, unless `[ToonInclude]`) |
+| `SerializeRuntimeTypes` | `bool` | `false` | Write objects with the properties of their runtime type instead of their declared type (`true` before 4.0) |
 | `MaxDepth` | `int` | `100` | Maximum object nesting while serializing/deserializing (1–200, or up to 1000 with `AllowExtendedLimits`) |
 | `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
 | `Converters` | `List<IToonConverter>` | empty | Custom type converters |
@@ -250,27 +251,53 @@ Generated code and the `ToonTypeInfo` overloads apply it too. See
 
 ## Strict Reading
 
-Two options turn silent defaults into errors, as `JsonSerializerOptions` does:
+Two options turn silent defaults into errors, as `JsonSerializerOptions` does. `RespectRequiredMembers` is on by
+default since ToonNet 4.0; `UnmappedMemberHandling` is off by default:
 
 ```csharp
 var options = new ToonSerializerOptions
 {
     UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow, // a key that matches nothing is an error
-    RespectRequiredMembers = true                                 // a missing `required` property is an error
+    RespectRequiredMembers = true                                 // the default: a missing `required` property is an error
 };
 ```
 
 Both throw a `ToonSerializationException` with the path, for example
-`The key 'Nmae' matches no property or constructor parameter (path: $.Nmae, target type: Account)` or
-`The required property 'Name' is missing (path: $, target type: Account)`. Keys of read-only properties count as
-matched, so what `ToonSerializer` writes reads back; a key with the value `null` counts as present; `required`
-properties are not checked when the constructor used for reading has `[SetsRequiredMembers]`. Generated code and the
-`ToonTypeInfo` overloads apply these options too (code generated before ToonNet 3.3 leaves them to reflection).
+`The key matches no property or constructor parameter (path: $.Nmae, target type: Account)` or
+`The required property 'Name' is missing (path: $, target type: Account)`. The unknown key appears only in the path,
+escaped and cut to 64 characters; a key that is not a simple identifier is written as `$['first name']`. Keys of
+read-only properties count as matched, so what `ToonSerializer` writes reads back; a key with the value `null` counts
+as present; `required` properties are not checked when the constructor used for reading has `[SetsRequiredMembers]`.
+Set `RespectRequiredMembers = false` to leave a missing `required` property at its default value, as before 4.0.
+Generated code and the `ToonTypeInfo` overloads apply these options too (code generated before ToonNet 3.3 leaves them
+to reflection).
+
+## Non-Public Setters and [ToonInclude]
+
+Reading sets only public setters (`set` and `init`), as System.Text.Json does. A property whose setter is `private`,
+`protected` or `internal` is not set from a document, so a client cannot set what the code keeps for itself. Mark the
+property `[ToonInclude]` (namespace `ToonNet.Core.Serialization.Attributes`) to let reading use its setter:
+
+```csharp
+public class Account
+{
+    public string Name { get; set; } = "";
+    public bool IsAdmin { get; private set; }               // not set from documents
+    [ToonInclude] public int Logins { get; private set; }   // set from documents
+}
+
+var account = ToonSerializer.Deserialize<Account>("Name: Ada\nIsAdmin: true\nLogins: 3")!;
+// account.IsAdmin = false, account.Logins = 3
+```
+
+Both properties are still written. A property with a non-public setter and no `[ToonInclude]` counts as read-only: it
+is left out when `IncludeReadOnlyProperties` is `false`, and its key counts as matched for
+`UnmappedMemberHandling.Disallow`. Generated code follows the same rules.
 
 ## IncludeReadOnlyProperties
 
 Get-only properties are serialized by default. Set `IncludeReadOnlyProperties = false` to write only properties that
-have a setter:
+reading can set (a public setter, or a non-public one with `[ToonInclude]`):
 
 ```csharp
 public class Rectangle
@@ -290,6 +317,33 @@ ToonSerializer.Serialize(new Rectangle(), new ToonSerializerOptions { IncludeRea
 // Height: 4
 ```
 
+## SerializeRuntimeTypes
+
+Writing uses the type a value is declared as: a property's type, a collection's item type, a dictionary's value type,
+or the `T` of `Serialize<T>`. An object in a property of a base or summary type writes only the properties of that
+type, as with System.Text.Json:
+
+```csharp
+public class UserSummary { public string Name { get; set; } = ""; }
+public class User : UserSummary { public string PasswordHash { get; set; } = ""; }
+public class Reply { public UserSummary Author { get; set; } = new(); }
+
+var reply = new Reply { Author = new User { Name = "Ada", PasswordHash = "x9f..." } };
+
+ToonSerializer.Serialize(reply);
+// Author:
+//   Name: Ada
+```
+
+A value declared as an interface writes the interface's properties; a value declared as `object` is written with its
+runtime type. Collections, dictionaries and primitives are written as what they are. Converters registered for an item's or a dictionary
+value's declared type apply to it, as they do for properties.
+
+`SerializeRuntimeTypes = true` writes every object with the properties of its runtime type, as ToonNet did before 4.0
+(the sample above would also write `PasswordHash`). Members of derived types then reach the output, which can expose
+data a narrower type was meant to hide. Prefer declaring the type you want to write, or `object` where any type is
+meant.
+
 ## MaxDepth
 
 `MaxDepth` limits how deeply objects, collections and dictionaries may nest while serializing and deserializing
@@ -306,6 +360,9 @@ var options = new ToonSerializerOptions
     MaxDepth = 500
 };
 ```
+
+Keep `AllowExtendedLimits` off for input you do not control: deep documents cost more stack and time to read. See
+[Security](../advanced/security).
 
 Exceeding the limit throws `ToonEncodingException` when serializing and `ToonSerializationException` when
 deserializing (parsing the text throws `ToonParseException` for `ToonOptions.MaxDepth`).
@@ -448,7 +505,7 @@ public static class ToonPresets
         IgnoreNullValues = true
     };
     
-    // Hand-edited configuration files (snake_case, lenient parsing)
+    // Hand-edited configuration files you trust (snake_case, lenient parsing)
     public static readonly ToonSerializerOptions Config = new()
     {
         PropertyNamingPolicy = PropertyNamingPolicy.SnakeCase,
@@ -460,6 +517,10 @@ public static class ToonPresets
 // Usage
 string toon = ToonSerializer.Serialize(data, ToonPresets.Api);
 ```
+
+Use `StrictMode = false` only for documents you trust. Non-strict reading does not check array lengths and lets the
+last of duplicate keys win, so a document can read differently here than in a strict reader or a check that looked at
+the first key. Keep the default for request bodies and other untrusted input. See [Security](../advanced/security).
 
 ## Environment-Specific Configuration
 
@@ -540,6 +601,8 @@ var options = new ToonSerializerOptions
 };
 ```
 
+Only for files you trust; keep strict mode for untrusted input.
+
 ### Scenario 3: Logging/Debugging
 
 ```csharp
@@ -560,6 +623,9 @@ var options = new ToonSerializerOptions
     ToonOptions = new ToonOptions { StrictMode = false }  // accept documents from older writers
 };
 ```
+
+Only for documents you trust, such as your own exports; keep strict mode for untrusted input
+(see [Security](../advanced/security)).
 
 ## Thread-Safety
 

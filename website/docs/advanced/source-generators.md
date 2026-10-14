@@ -54,8 +54,11 @@ produce the same TOON for the same object:
   base-class properties first, then declaration order);
 - the same constructor (a `[ToonConstructor]` one, otherwise the public parameterless one, otherwise the public one with
   the most parameters), with parameters bound to keys by property name;
-- `[ToonProperty]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`, `PropertyNamingPolicy`,
-  `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers` and `Converters` options.
+- the same setters for reading (public ones, and non-public ones only with `[ToonInclude]`);
+- writing with the declared type of each property, item and dictionary value;
+- `[ToonProperty]`, `[ToonConverter]`, `[ToonInclude]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`,
+  `PropertyNamingPolicy`, `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers`,
+  `SerializeRuntimeTypes` and `Converters` options.
 
 ### What is generated
 
@@ -73,9 +76,11 @@ Any other property type (`object`, interfaces, abstract types, type parameters, 
 other collection types) is handed to the reflection-based serializer and reported as warning `TOON006`, with the
 reason. Use `[ToonSerializable(AllowReflectionFallback = false)]` to turn these into errors (`TOON007`).
 
-At runtime the generated methods apply the converters of the options to the values they convert, and defer to
-`ToonSerializer` when a property holds an instance of a class derived from its declared `[ToonSerializable]` type. The
-output is the same either way.
+At runtime the generated methods apply the converters of the options to the values they convert. An instance of a
+class derived from a property's declared `[ToonSerializable]` type is written as the declared type, as `ToonSerializer`
+writes it; with `SerializeRuntimeTypes = true` the generated methods defer to `ToonSerializer`, which writes the runtime
+type. The output is the same either way. Code generated before 4.0 does not report its properties' types; regenerate
+it with the 4.0 generator.
 
 `ToonSerializer` uses the generated methods as well: each generated type registers them from a module initializer, so
 `ToonSerializer.Serialize`/`Deserialize<T>` and everything built on them (the ASP.NET Core formatters, `ToonResult`,
@@ -124,7 +129,7 @@ string many = ToonSerializer.Serialize(new List<Catalog> { catalog }, catalogs);
 These overloads write and read straight from text, like the others and with the same output, at the same speed: on
 10,000 records they serialize 2.4–4x and deserialize 1.6–2x faster than going through a `ToonDocument`. A value that
 only reflection would handle directly (an object without generated code in a property typed `object`, a derived
-instance) makes the whole document go through the generated tree-based methods, with the same text. Converters of the
+instance with `SerializeRuntimeTypes`) makes the whole document go through the generated tree-based methods, with the same text. Converters of the
 options are applied too: values no converter applies to are still converted straight from text, the others through the
 generated tree-based methods. `ToonTypeInfo.GetGenerated<T>()` returns the same type info for generic code or a type
 whose own member is named `ToonTypeInfo`.
@@ -137,8 +142,9 @@ Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
 byte[] utf8 = new ToonEncoder().EncodeToUtf8Bytes(Catalog.Serialize(catalog));  // or Encode(document, bufferWriter)
 ```
 
-This holds as long as objects are of their declared types (a derived instance is handed to the reflection-based
-serializer). The repository's CI publishes an app that uses both with NativeAOT and fails on any trim or AOT warning.
+This holds as long as objects are of their declared types or `SerializeRuntimeTypes` is off (with it on, a derived
+instance is handed to the reflection-based serializer). A document that leaves out a `required` or `init` property with
+an initializer (`= true`, `= new()`) is read by the reflection-based reader too, which keeps the initializer. The repository's CI publishes an app that uses both with NativeAOT and fails on any trim or AOT warning.
 
 ## Supported shapes
 
@@ -147,16 +153,12 @@ serializer). The repository's CI publishes an app that uses both with NativeAOT 
 | Classes, structs, records, record structs | ✅ |
 | Positional records and constructor parameters | ✅ parameter defaults are used for missing keys |
 | `init`-only and `required` properties | ✅ |
-| Private setters (also in base classes) | ✅ |
+| Non-public setters marked `[ToonInclude]` (also in base classes) | ✅ (without it, only public setters are used) |
 | Nested types, generic types, the global namespace | ✅ containing types must be `partial` too |
 | Abstract types | `Serialize` only |
 
 Known differences from `ToonSerializer`:
 
-- A non-`required` `init` property of a **generic** type is set through the object initializer, so a missing key resets
-  it to `default` instead of keeping its initializer value.
-- A `required` property whose key is missing from the document is set to `default` instead of keeping its initializer
-  value (with `RespectRequiredMembers`, both report the missing key).
 - A circular reference is reported as "maximum depth exceeded" instead of "circular reference" (both throw
   `ToonEncodingException`).
 

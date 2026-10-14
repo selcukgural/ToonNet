@@ -18,7 +18,7 @@ namespace ToonNet.AspNetCore.Mvc.Http;
 /// The request must have a TOON content type (<c>application/toon</c> or <c>text/toon</c>); a charset other than UTF-8
 /// is decoded strictly. A body larger than <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> (4 MB, the limit of
 /// the MVC formatter) is rejected with <c>413 Payload Too Large</c>, unless the endpoint sets its own limit
-/// (<c>[RequestSizeLimit]</c>, <c>.WithRequestSizeLimit(...)</c> or <c>[DisableRequestSizeLimit]</c>), which the server
+/// (<c>[RequestSizeLimit]</c>, <c>.WithMetadata(new RequestSizeLimitAttribute(...))</c> or <c>[DisableRequestSizeLimit]</c>), which the server
 /// then enforces. A body with only whitespace reads as the default value, because an empty
 /// TOON document would read as an empty object. Invalid TOON throws a <see cref="ToonException"/>.
 /// </remarks>

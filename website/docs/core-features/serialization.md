@@ -290,15 +290,24 @@ public class Rectangle : Shape
     public double Height { get; set; }
 }
 
-// Serialize as base type
 Shape shape = new Circle { Color = "Red", Radius = 5.0 };
+
+// Declared as Shape: only Shape's properties are written
 string toon = ToonSerializer.Serialize<Shape>(shape);
+// Color: Red
+
+// Declared as object: written as what it is, base-class properties first
+string all = ToonSerializer.Serialize<object>(shape);
 // Color: Red
 // Radius: 5
 ```
 
-Objects are written with their runtime type, base-class properties first. No type discriminator is written, so
-reading the text back into `Shape` needs a [custom converter](../advanced/custom-converters).
+Since ToonNet 4.0, objects are written with the type they are declared as (the `T` of `Serialize<T>`, a property's
+type, a collection's item type, a dictionary's value type), as with System.Text.Json, so a derived type's members do
+not reach the output through a narrower type. A value declared as `object` is written with its runtime type.
+`SerializeRuntimeTypes = true` writes every object with its runtime type, as before 4.0; it also writes members of
+derived types that a base type was meant to hide (see [Configuration](configuration#serializeruntimetypes)). No type
+discriminator is written, so reading the text back into `Shape` needs a [custom converter](../advanced/custom-converters).
 
 ### Serialize Complex Nested Structures
 

@@ -24,6 +24,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'getting-started/installation',
+        'getting-started/migration-4',
         'getting-started/quick-start',
         'getting-started/basic-serialization',
       ],
@@ -78,6 +79,7 @@ const sidebars: SidebarsConfig = {
         'advanced/performance-tuning',
         'advanced/custom-converters',
         'advanced/source-generators',
+        'advanced/security',
       ],
     },
   ],

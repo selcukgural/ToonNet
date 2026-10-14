@@ -166,16 +166,20 @@ Controls C# object serialization behavior:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `IgnoreNullValues` | `bool` | `false` | Skip properties whose value is `null` |
-| `IncludeReadOnlyProperties` | `bool` | `true` | Include read-only properties when serializing |
+| `IncludeReadOnlyProperties` | `bool` | `true` | Include read-only properties when serializing (also those whose setter is not public, unless `[ToonInclude]`) |
 | `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Key naming: `Default`, `CamelCase`, `SnakeCase`, `LowerCase` |
 | `PropertyNameCaseInsensitive` | `bool` | `false` | Match keys to property names ignoring case when reading |
 | `UnmappedMemberHandling` | `ToonUnmappedMemberHandling` | `Skip` | `Disallow`: a key that matches no property is an error |
-| `RespectRequiredMembers` | `bool` | `false` | A missing key for a C# `required` property is an error |
+| `RespectRequiredMembers` | `bool` | `true` | A missing key for a C# `required` property is an error (`false` before 4.0) |
+| `SerializeRuntimeTypes` | `bool` | `false` | Write objects with their runtime type instead of their declared type (`true` before 4.0) |
 | `MaxDepth` | `int` | `100` | Maximum object graph depth |
 | `AllowExtendedLimits` | `bool` | `false` | Allow `MaxDepth` above 200 (up to 1000) |
 
 > **Untrusted input:** parsing enforces `ToonOptions.MaxDepth` and also checks the remaining stack space, so hostile, deeply nested
-> input fails with a `ToonParseException` instead of crashing the process. Keep `AllowExtendedLimits` off for input you don't control.
+> input fails with a `ToonParseException` instead of crashing the process. Keep `AllowExtendedLimits` off and `StrictMode` on
+> for input you don't control. `SerializeRuntimeTypes = true` writes the members of derived types too (an entity in a
+> property of a summary type writes all of the entity's properties), which can put data in responses that the declared
+> type leaves out.
 
 ---
 
@@ -354,7 +358,7 @@ builder.Configuration.AddToonFile(
     reloadOnChange: true  // Auto-reload when file changes
 );
 
-// Custom parsing options (e.g. non-strict mode)
+// Custom parsing options (e.g. non-strict mode, for files you control)
 builder.Configuration.AddToonFile("legacy.toon", optional: true, reloadOnChange: false,
     options: new ToonOptions { StrictMode = false });
 ```

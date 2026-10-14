@@ -42,6 +42,9 @@ How the serializer calls a converter:
 - `Write` is not called for `null`; the serializer writes `null` itself (or skips the property when
   `IgnoreNullValues` is set).
 - `Read` **is** called for a `null` value, with a `ToonNull`, so handle it for reference types.
+- When writing, a converter of the options for the value's runtime type is used first, otherwise one for its declared
+  type: a property's type, a collection's item type or a dictionary's value type (since 4.0 for items and dictionary
+  values too).
 - The `options` argument lets a converter serialize nested values with `ToonSerializer.SerializeToValue`
   and `ToonSerializer.DeserializeFromValue`.
 

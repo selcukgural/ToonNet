@@ -98,7 +98,8 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   charset, so a client cannot change the content type of a response that a cache then serves to others.
 - **ToonNet.AspNetCore.Mvc:** `ReadFromToonAsync` limits bodies to `ToonFormatterDefaults.MaxRequestBodySize` (4 MB,
   as the MVC formatter does) and rejects larger ones with `413 Payload Too Large`; an endpoint with a size limit of its
-  own (`[RequestSizeLimit]`, `.WithRequestSizeLimit(...)`, `[DisableRequestSizeLimit]`) keeps the server's limit.
+  own (`[RequestSizeLimit]`, `.WithMetadata(new RequestSizeLimitAttribute(...))`, `[DisableRequestSizeLimit]`) keeps
+  the server's limit.
   Before, only the server limited it (30 MB by default in Kestrel).
 - **ToonNet.Core:** The message of a conversion error no longer includes the message of an exception thrown by the
   target type's constructor, which reached clients through model-state errors; it names the exception's type, and the

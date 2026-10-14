@@ -81,6 +81,26 @@ subsections):
 builder.Services.AddToonNet(builder.Configuration);
 ```
 
+The `ToonOptions` subsection reads `IndentSize`, `MaxDepth`, `Delimiter`, `StrictMode` and `AllowExtendedLimits`; the
+`ToonSerializerOptions` subsection reads `IgnoreNullValues`, `IncludeReadOnlyProperties`, `PropertyNamingPolicy`,
+`PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers` (default `true`),
+`SerializeRuntimeTypes` (default `false`), `MaxDepth` and `AllowExtendedLimits`:
+
+```json
+{
+  "ToonNet": {
+    "ToonSerializerOptions": {
+      "PropertyNamingPolicy": "CamelCase",
+      "SerializeRuntimeTypes": false
+    }
+  }
+}
+```
+
+`ToonNet:ToonSerializerOptions:SerializeRuntimeTypes = true` writes objects with their runtime type, so members of
+derived types reach responses through properties of narrower types; leave it off unless you need the behavior of
+ToonNet before 4.0 (see [Security](../advanced/security)).
+
 Invalid values (for example a `MaxDepth` above 200 without `AllowExtendedLimits`, or an `IndentSize` outside 1–100) make
 the application fail at startup. Calling `AddToonNet` more than once is safe: the delegates add up and the services
 are registered once.

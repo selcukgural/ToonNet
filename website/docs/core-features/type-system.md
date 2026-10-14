@@ -28,11 +28,11 @@ that TOON spec §3 requires implementations to document.
 | dictionaries | object | Keys formatted with the invariant culture; readable into string, numeric, enum, `Guid` (and other parsable) keys |
 | objects whose values are uniform objects (at least two) | object, keyed tabular form | `servers[2:]{host,port}:` with one `name: cells` row per entry (spec §9.5); applies to dictionaries and classes alike |
 | lists of uniform objects | array, tabular form | Nested objects of the same shape become nested field groups: `orders[2]{id,customer{name,country}}:` (spec §9.3) |
-| other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the runtime type is used |
+| other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the declared type is used (a value declared as `object` is written with its runtime type; `SerializeRuntimeTypes` writes every value with it). Reading sets public setters, and non-public ones marked `[ToonInclude]` |
 | `ToonValue` | as is | Useful for dynamic content |
 | `ToonDocument`, `JsonElement`, `JsonDocument`, `JsonNode` | the value they hold | A `ToonDocument` is written as its root and JSON values as the TOON value of their JSON (numbers in canonical form); reading creates them from the TOON value |
 | `Tuple<T1, …>` | object | `Item1`, `Item2`, … (properties) |
-| `ValueTuple` (`(int, string)`) | object without properties | Its elements are fields, which are not written or read, so it is written as an empty object, as System.Text.Json writes `{}`; use a record or class instead |
+| `ValueTuple` (`(int, string)`) | not supported | Its elements are fields, which are not written or read, so it throws `NotSupportedException`; use a record or class instead |
 
 Reading into `object` produces `Dictionary<string, object?>`, `List<object?>`, `string`, `bool`, `long` (integers),
 `decimal` (other exact numbers) or `double`.
@@ -43,7 +43,10 @@ When reading:
 - Quoted numbers are accepted for numeric targets, and unquoted numbers or booleans for `string` targets.
 - The constructor is chosen in this order: the one marked `[ToonConstructor]`, then a public parameterless constructor,
   then the public constructor with the most parameters (for example for positional records). Constructor parameters
-  are matched to properties by name (case-insensitively), then the remaining settable properties are assigned.
+  are matched to properties by name (case-insensitively), then the remaining properties are assigned through public
+  setters (`set`, `init`); a non-public setter is used only when the property is marked `[ToonInclude]`.
+- A missing key for a `required` property throws a `ToonSerializationException` (`RespectRequiredMembers`, on by
+  default since 4.0).
 - Errors include the path of the failing value, for example `$.Items[2].Price`.
 - Serializing an object graph with a cycle throws a `ToonEncodingException` instead of recursing until `MaxDepth`.
 

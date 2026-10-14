@@ -60,6 +60,7 @@ converting it first:
 ### 🚀 Getting Started
 Start here if you're new to ToonNet:
 - **[Installation](getting-started/installation)** - NuGet packages and requirements
+- **[Migrating to 4.0](getting-started/migration-4)** - Changed defaults and how to keep the old behavior
 - **[Quick Start](getting-started/quick-start)** - 5-minute tutorial
 - **[Basic Serialization](getting-started/basic-serialization)** - Fundamental examples
 
@@ -92,6 +93,7 @@ Optimization and customization:
 - **[Performance Tuning](advanced/performance-tuning)** - Optimization strategies
 - **[Custom Converters](advanced/custom-converters)** - Type-specific converters
 - **[Source Generators](advanced/source-generators)** - Compile-time code generation
+- **[Security](advanced/security)** - Defaults and limits for untrusted input
 
 ### 📚 Reference
 Additional resources:

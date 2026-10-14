@@ -101,7 +101,9 @@ Accept: application/toon
 
 The output formatter produces `application/toon` and `text/toon` (the media types the input formatter accepts) and
 answers with the one the client asked for, also when the `Accept` value names a charset
-(`application/toon; charset=utf-16`); UTF-8 and UTF-16 are written. It is added after the JSON formatter, so JSON stays the default for `Accept: */*` or a missing `Accept` header; use
+(`application/toon; charset=utf-16`); UTF-8 and UTF-16 are written. Another charset in `Accept` is not copied into the
+response's `Content-Type`: the response is written in UTF-8, so a client cannot make a cached response carry a
+content type of its choosing. It is added after the JSON formatter, so JSON stays the default for `Accept: */*` or a missing `Accept` header; use
 `[Produces("application/toon")]` to always return TOON from an action.
 
 ## See Also

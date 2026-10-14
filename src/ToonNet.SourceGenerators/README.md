@@ -18,10 +18,11 @@ public static T Deserialize(ToonDocument doc, ToonSerializerOptions? options = n
 ```
 
 The generated code follows the same rules as the reflection-based `ToonSerializer` and produces the same TOON:
-the same properties in the same order, the same constructor selection, `[ToonProperty]`, `[ToonIgnore]`,
-`[ToonPropertyOrder]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`,
-`PropertyNamingPolicy`, `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers` and
-`Converters` options.
+the same properties in the same order, the same constructor selection, the same setters for reading (public ones, and
+non-public ones only with `[ToonInclude]`), writing with declared types, `[ToonProperty]`, `[ToonIgnore]`,
+`[ToonInclude]`, `[ToonPropertyOrder]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`,
+`PropertyNamingPolicy`, `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers`,
+`SerializeRuntimeTypes` and `Converters` options.
 
 **What is generated and what is not:**
 
@@ -40,9 +41,11 @@ warning **`TOON006`** with the reason: `object`, interfaces, abstract types and 
 unknown), classes without `[ToonSerializable]`, other collection types (`ImmutableArray`, `SortedDictionary`, ...).
 Set `[ToonSerializable(AllowReflectionFallback = false)]` to make these errors (`TOON007`).
 
-At runtime the generated methods apply the converters of the options to the values they convert, and defer to
-`ToonSerializer` when a property holds an instance of a type derived from the declared `[ToonSerializable]` class
-(`ToonSerializer` writes the runtime type). The output is the same either way.
+At runtime the generated methods apply the converters of the options to the values they convert. An instance of a
+type derived from a property's declared `[ToonSerializable]` class is written as the declared class, as
+`ToonSerializer` writes it; with `SerializeRuntimeTypes = true` the generated methods defer to `ToonSerializer`, which
+writes the runtime type. The output is the same either way. Regenerate code with the 4.0 generator: older generated
+writers do not report their properties' types.
 
 `ToonSerializer` uses the generated methods as well: each generated type registers them from a module initializer, so
 `ToonSerializer.Serialize`/`Deserialize<T>` and everything built on them (the ASP.NET Core formatters, `ToonResult`,
@@ -111,7 +114,7 @@ Order copy = Order.Deserialize(ToonDocument.Parse(toon));
 | Classes, structs, records, record structs | ✅ |
 | Positional records and constructor parameters | ✅ bound by name (case-insensitive), parameter defaults used for missing keys |
 | `init`-only and `required` properties | ✅ |
-| Properties with private setters (also in base classes) | ✅ |
+| Properties with non-public setters marked `[ToonInclude]` (also in base classes) | ✅ (without it, only public setters are used) |
 | Inherited properties | ✅ base-class properties first, like `ToonSerializer` |
 | Nested types, generic types, the global namespace | ✅ containing types must be `partial` too |
 | Abstract types | `Serialize` only |
@@ -121,11 +124,6 @@ parameterless constructor, otherwise the public constructor with the most parame
 
 **Known differences from `ToonSerializer`:**
 
-- A non-`required` `init` property of a **generic** type is set through the object initializer, so a key missing from
-  the document resets it to `default` instead of keeping its initializer value. Non-generic types keep the initializer
-  value (the setter is called through `[UnsafeAccessor]`).
-- A `required` property whose key is missing from the document is set to `default` instead of keeping its initializer
-  value (with `RespectRequiredMembers`, both report the missing key).
 - A circular reference is reported as "maximum depth exceeded" (`ToonEncodingException`), where `ToonSerializer`
   reports "circular reference" (also a `ToonEncodingException`).
 
@@ -210,7 +208,7 @@ Converters of the options are applied without reflection too.
 
 ## 📋 Requirements
 
-- .NET 8.0 or later (the generated code uses `[UnsafeAccessor]` for `init`-only and private setters)
+- .NET 8.0 or later (the generated code uses `[UnsafeAccessor]` for `init`-only setters and `[ToonInclude]` non-public setters)
 - ToonNet.Core of the same release (generated code uses its hidden writer and reader APIs)
 
 ---

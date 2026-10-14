@@ -219,7 +219,7 @@ them straight from it, with code generated for each type.
 | Source generator | ✅ `[ToonSerializable]` | – |
 | NativeAOT / trimming | ✅ `ToonSerializer` with generated type infos, tested in CI | – |
 | Document model | `ToonDocument` / `ToonValue` | `JsonNode` |
-| Options | indent, delimiter, strict, naming policies, null handling, read-only properties, converters, max depth | indent, delimiter, strict |
+| Options | indent, delimiter, strict, naming policies, null handling, read-only properties, unknown keys, required members, declared or runtime types, converters, max depth | indent, delimiter, strict |
 | Exact `decimal` / `ulong` | ✅ | rounded through `double` |
 | Multi-document streaming | ✅ `SerializeDocumentsAsync` / `DeserializeDocumentsAsync` | single document per stream |
 | Queries | ✅ JSONPath (RFC 9535, 715/715 compliance cases) over trees and text, string/type/aggregate and your own functions; `DeserializeAt`, `DeserializeAll` | – |

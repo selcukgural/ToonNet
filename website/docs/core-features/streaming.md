@@ -41,6 +41,10 @@ await ToonSerializer.SerializeDocumentsAsync(
 );
 ```
 
+The file methods (`SerializeDocumentsAsync` to a path, `SerializeCollectionToFileAsync`) write to a temporary file next
+to the target and replace the target with it at the end, so an item that fails or a cancelled export leaves the old file
+as it was.
+
 ### Deserialize Incrementally
 
 ```csharp
@@ -164,7 +168,8 @@ An item that encodes to an empty document (an object with no properties, or with
 `IgnoreNullValues`) cannot be told apart from a blank-line separator, so blank-line output throws a
 `ToonSerializationException` for it. `ExplicitSeparator` output keeps such items: the empty document becomes an empty
 line between separators (and a final newline when it is the last item), and the reader returns it as an object.
-`DocumentSeparator` must be a single non-blank line.
+`DocumentSeparator` must be a single non-blank line. A document with a line that is the separator (a root string `END`
+with the separator `END`) would read back as two documents, so writing it throws.
 
 ### Batch Size Configuration
 
