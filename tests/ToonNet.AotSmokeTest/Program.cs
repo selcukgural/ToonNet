@@ -106,6 +106,16 @@ if (streamedProducts is not [{ Sku: "A1" }, { Sku: "B2" }])
     return 1;
 }
 
+// Prompts: shortened arrays, answers read leniently
+var promptText = ToonNet.Core.Llm.ToonPrompt.Serialize(catalog, Catalog.ToonTypeInfo, new ToonNet.Core.Llm.ToonPromptOptions { MaxArrayItems = 1 });
+var answer = ToonNet.Core.Llm.ToonPrompt.Deserialize("Here:\n```toon\n" + promptText + "\n```", Catalog.ToonTypeInfo);
+
+if (!promptText.Contains("# 1 more item") || answer is not { Products.Count: 1, Tags.Count: 1 })
+{
+    Console.WriteLine("FAILED: prompt helpers");
+    return 1;
+}
+
 // Paths, values and type infos on a parsed tree
 var tree = ToonDocument.Parse(expected).Root;
 var cheap = tree.Select("$.Products[?@.Price < 10 && match(@.Sku, 'A.')].Sku");

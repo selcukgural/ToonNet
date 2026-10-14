@@ -159,6 +159,27 @@ public sealed class ToonSerializerOptions : IValidatableObject
     /// </summary>
     public static ToonSerializerOptions Default => new();
 
+    /// <summary>A copy of these options with other parsing and encoding options.</summary>
+    internal ToonSerializerOptions With(ToonOptions toonOptions)
+    {
+        var copy = new ToonSerializerOptions
+        {
+            ToonOptions = toonOptions,
+            UseGeneratedCode = UseGeneratedCode,
+            IgnoreNullValues = IgnoreNullValues,
+            PropertyNamingPolicy = PropertyNamingPolicy,
+            PropertyNameCaseInsensitive = PropertyNameCaseInsensitive,
+            UnmappedMemberHandling = UnmappedMemberHandling,
+            RespectRequiredMembers = RespectRequiredMembers,
+            AllowExtendedLimits = AllowExtendedLimits,
+            MaxDepth = MaxDepth,
+            IncludeReadOnlyProperties = IncludeReadOnlyProperties
+        };
+
+        copy.Converters.AddRange(Converters);
+        return copy;
+    }
+
     /// <summary>
     ///     Adds a custom converter to the collection.
     /// </summary>

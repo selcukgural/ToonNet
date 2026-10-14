@@ -198,6 +198,20 @@ public partial class TypeInfoTests
     }
 
     [Fact]
+    public void Prompt_WithATypeInfo()
+    {
+        var rows = Enumerable.Range(0, 5).Select(i => new WriterRow { Id = i, Name = $"n{i}", Mood = Mood.Calm }).ToList();
+        var list = ToonTypeInfo.CreateList(WriterRow.ToonTypeInfo);
+
+        var text = ToonNet.Core.Llm.ToonPrompt.Serialize(rows, list, new ToonNet.Core.Llm.ToonPromptOptions { MaxArrayItems = 2 });
+        Assert.EndsWith("# 3 more items", text);
+        Assert.Equal(ToonNet.Core.Llm.ToonPrompt.Serialize(rows, new ToonNet.Core.Llm.ToonPromptOptions { MaxArrayItems = 2 }), text);
+
+        var answer = "```toon\n" + ToonSerializer.Serialize(rows[1]) + "\nId: 7\n```";
+        Assert.Equal(7, ToonNet.Core.Llm.ToonPrompt.Deserialize(answer, WriterRow.ToonTypeInfo)!.Id);
+    }
+
+    [Fact]
     public void GetGenerated_ReturnsTheGeneratedTypeInfo()
     {
         Assert.Same(ParcelDepot.ToonTypeInfo, ToonTypeInfo.GetGenerated<ParcelDepot>());

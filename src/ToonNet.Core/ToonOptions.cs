@@ -159,4 +159,14 @@ public sealed class ToonOptions : IValidatableObject
     ///     the defaults: create and keep your own instance (<c>new ToonOptions { ... }</c>) to use other settings.
     /// </summary>
     public static ToonOptions Default => new();
+
+    /// <summary>A copy of these options in non-strict mode (§14.4).</summary>
+    internal ToonOptions NonStrict() => new()
+    {
+        IndentSize = IndentSize,
+        Delimiter = Delimiter,
+        StrictMode = false,
+        AllowExtendedLimits = AllowExtendedLimits,
+        MaxDepth = MaxDepth
+    };
 }

@@ -45,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DeserializeAsyncEnumerable` does for a root array: memory stays flat, and the stream is read no further than the end
   of the array. Other singular paths read the whole document first. (A path overload of `DeserializeAsyncEnumerable`
   would make existing calls with `null` options ambiguous, hence the name.)
+- **ToonNet.Core:** `ToonPrompt` (namespace `ToonNet.Core.Llm`) for working with language models: `Serialize` with
+  `ToonPromptOptions.MaxArrayItems` shortens long arrays for a prompt (the header declares the items kept, and a
+  comment line says `# 380 more items`, so the text stays valid TOON); `DescribeShape<T>()` gives a TOON template of
+  the answer to ask for (`orders[N]{id,customer,total}:` with `<integer>`, `<string>`, `<Draft|Active>` placeholders,
+  following the serializer's names and forms); `Extract` takes the ```` ```toon ```` block out of an answer, and
+  `Parse`/`Deserialize` read it in non-strict mode, so a miscounted length or a repeated key does not fail the answer.
 
 ## [3.3.0] - 2026-10-14
 
