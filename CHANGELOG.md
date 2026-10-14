@@ -29,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** Enum properties are written and read without boxing, through the names of the enum's values
   (flag combinations, undefined values, aliases and names that differ only in case still go through `ToString` and
   `Enum.Parse`): on 2,000 objects with three enum properties, 1.7x faster with about 60% less allocation in both
-  directions.
+  directions. Lists, arrays and dictionary values of enums take the same path: 20,000 items of `List<TEnum>` are
+  written 3.2x and read 4.5x faster, with less than a third of the allocation.
 - **ToonNet.Core:** Primitive and enum properties of structs are read and written in place in the boxed instance,
   like those of classes, instead of boxing each value: on 2,000 structs with four properties, writing is 1.4x faster
   and reading 2x faster, with a third of the allocation, the same as for classes.

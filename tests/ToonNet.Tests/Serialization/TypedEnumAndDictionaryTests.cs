@@ -136,6 +136,26 @@ public class TypedEnumAndDictionaryTests
         Assert.Equal(tree.Message, direct.Message);
     }
 
+    [Fact]
+    public void EnumLists_AreWrittenAndReadLikeTheTree()
+    {
+        List<Plain> plain = [Plain.Zero, Plain.Two, (Plain)9];
+        Access[] flags = [Access.All, Access.Read | (Access)8, Access.None];
+        List<Plain?> maybe = [Plain.One, null];
+        List<Alias> aliases = [Alias.Same, Alias.Other];
+
+        Assert.Equal(TreeText(plain), ToonSerializer.Serialize(plain));
+        Assert.Equal(TreeText(flags), ToonSerializer.Serialize(flags));
+        Assert.Equal(TreeText(maybe), ToonSerializer.Serialize(maybe));
+        Assert.Equal(TreeText(aliases), ToonSerializer.Serialize(aliases));
+
+        Assert.Equal(plain, AssertReadParity<List<Plain>>(ToonSerializer.Serialize(plain)));
+        Assert.Equal(flags, AssertReadParity<Access[]>(ToonSerializer.Serialize(flags)));
+        Assert.Equal(maybe, AssertReadParity<List<Plain?>>(ToonSerializer.Serialize(maybe)));
+        AssertReadParity<List<Plain>>("[4]: two,\"1\",0,Two");
+        AssertReadParity<HashSet<Access>>("[2]: \"Read, Write\",None");
+    }
+
     private static T? AssertReadParity<T>(string toon)
     {
         var direct = ToonSerializer.Deserialize<T>(toon);

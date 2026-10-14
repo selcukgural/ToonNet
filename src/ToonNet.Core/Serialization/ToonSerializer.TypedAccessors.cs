@@ -54,7 +54,7 @@ public static partial class ToonSerializer
             var declaringType = property.DeclaringType!;
             var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
 
-            if (!(IsTypedPrimitive(type) || type.IsEnum) || property.GetGetMethod() is not { } getter)
+            if (!IsTypedPrimitive(type) || property.GetGetMethod() is not { } getter)
             {
                 return null;
             }
@@ -78,7 +78,7 @@ public static partial class ToonSerializer
                    type == typeof(sbyte) || type == typeof(ushort) || type == typeof(uint) || type == typeof(ulong) ||
                    type == typeof(double) || type == typeof(float) || type == typeof(decimal) ||
                    type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(Guid) ||
-                   type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan);
+                   type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan) || type.IsEnum;
         }
     }
 
