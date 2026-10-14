@@ -298,7 +298,7 @@ public class SpecFixtureConformanceTests
             var name = fixture.Test.GetProperty("name").GetString();
 
             // A document that is only `null` has no items
-            var expected = Describe(() => Task.FromResult(ToonSerializer.Deserialize<List<object?>>(input, options) ?? []));
+            var expected = Describe(() => Task.FromResult<List<object?>?>(ToonSerializer.Deserialize<List<object?>>(input, options) ?? []));
 
             foreach (var batch in new[] { 1, 1 << 20 })
             {

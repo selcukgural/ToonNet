@@ -80,14 +80,14 @@ public static partial class ToonSerializer
         return ReadRootItems(utf8Stream, options, text => DeserializeText(text, listInfo, options), DefaultBatchCharacters, cancellationToken);
     }
 
-    private static async IAsyncEnumerable<T?> ReadRootItems<T>(Stream stream, ToonSerializerOptions options, Func<ToonText, List<T?>?> readBatch,
+    private static async IAsyncEnumerable<T?> ReadRootItems<T>(Stream stream, ToonSerializerOptions options, Func<ToonText, IEnumerable<T?>?> readBatch,
                                                               int batchCharacters, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var batches = new RootArrayBatches(stream, options.ToonOptions, batchCharacters);
 
         while (await batches.NextAsync(cancellationToken).ConfigureAwait(false))
         {
-            List<T?>? items;
+            IEnumerable<T?>? items;
 
             try
             {
