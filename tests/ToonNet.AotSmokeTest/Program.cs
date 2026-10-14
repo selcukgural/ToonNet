@@ -142,6 +142,21 @@ if (cheap is not [ToonString { Value: "A1" }] || tree["Warehouses"]!["oslo"]!["S
     return 1;
 }
 
+// Records with constructor defaults, structs, init and required members, sets and nullable values
+var shapes = new Shapes(7, new Point { X = 1, Y = -2 }) { Code = "c", Labels = ["b", "a"], Maybe = 3, Origin = new(0, 0) };
+const string shapesText = "Id: 7\nAt:\n  X: 1\n  Y: -2\nScale: 1.5\nCode: c\nLabels[2]: b,a\nMaybe: 3\nOrigin:\n  X: 0\n  Y: 0";
+var shapesBack = ToonSerializer.Deserialize("Id: 7\nAt:\n  X: 1\n  Y: -2\nCode: c\nLabels[2]: b,a\nMaybe: null\nOrigin:\n  X: 0\n  Y: 0",
+                                            Shapes.ToonTypeInfo)!;
+
+if (ToonSerializer.Serialize(shapes, Shapes.ToonTypeInfo) != shapesText ||
+    shapesBack is not { Id: 7, At: { X: 1, Y: -2 }, Scale: 1.5, Code: "c", Maybe: null, Origin: { X: 0, Y: 0 } } ||
+    !shapesBack.Labels.SetEquals(["a", "b"]))
+{
+    Console.WriteLine("FAILED: records, structs, init and required members");
+    Console.WriteLine(ToonSerializer.Serialize(shapes, Shapes.ToonTypeInfo));
+    return 1;
+}
+
 Console.WriteLine("OK");
 return 0;
 
@@ -193,4 +208,23 @@ public partial class Catalog
     public List<Product> Products { get; set; } = [];
     public Dictionary<string, Warehouse> Warehouses { get; set; } = [];
     public List<string> Tags { get; set; } = [];
+}
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public partial struct Point
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+}
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public readonly partial record struct Coordinates(int X, int Y);
+
+[ToonSerializable(AllowReflectionFallback = false)]
+public partial record Shapes(int Id, Point At, double Scale = 1.5)
+{
+    public required string Code { get; init; }
+    public HashSet<string> Labels { get; init; } = [];
+    public int? Maybe { get; set; }
+    public Coordinates Origin { get; init; }
 }
