@@ -340,7 +340,7 @@ public static partial class ToonSerializer
 
         public void Fallback() => throw new DirectReadFallbackException();
 
-        private ToonReader Reader => _reader ??= new ToonReader(_parser, this);
+        public ToonReader Reader => _reader ??= new ToonReader(_parser, this);
 
         public static object? Read(ToonText text, Type type, ToonSerializerOptions options)
         {

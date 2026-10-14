@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or exhaust the stack. Invalid paths throw `ToonPathException` with the position of the error.
 - **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
   creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.
+- **ToonNet.Core:** `ToonSerializer.Deserialize<T>(ToonDocumentReader)` (also with a `Type`, or a `ToonTypeInfo`
+  without reflection) converts the value the reader is on, straight from the text, as `JsonSerializer` reads from a
+  `Utf8JsonReader`: a large document can be read partly by hand and partly into objects, item by item. Where direct
+  reading gives up, the parser returns to the start of the value and converts its tree, so results and errors are those
+  of `Deserialize<T>(string)`.
 
 ## [3.3.0] - 2026-10-14
 

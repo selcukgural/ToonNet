@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using ToonNet.Core;
 using ToonNet.Core.Models;
+using ToonNet.Core.Parsing;
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
 
@@ -53,6 +54,15 @@ public partial class TypeInfoTests
             Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(read, options));
             Assert.Equal(ToonSerializer.Serialize(reference, options),
                          ToonSerializer.Serialize(ToonDocument.Parse(expected, options.ToonOptions).Root.Deserialize(typeInfo, options), options));
+
+            using (var reader = new ToonDocumentReader(expected, options.ToonOptions))
+            {
+                readFallbacks = ToonSerializer.DirectReadFallbacks;
+                var viaReader = ToonSerializer.Deserialize(reader, typeInfo, options);
+                Assert.Equal(directRead, readFallbacks == ToonSerializer.DirectReadFallbacks);
+                Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(viaReader, options));
+                Assert.False(reader.Read());
+            }
             Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(ToonSerializer.Deserialize(utf8, typeInfo, options), options));
             Assert.Equal(ToonSerializer.Serialize(reference, options),
                          ToonSerializer.Serialize(ToonSerializer.Deserialize(expected.AsSpan(), typeInfo, options), options));

@@ -1444,6 +1444,53 @@ internal sealed class ToonParser(ToonOptions? options = null)
         return Unescape(token[1..end], line.Number, value.Column + 1);
     }
 
+    /// <summary>The state of the reader methods before a value is read, to read the value again (<see cref="Restore"/>).</summary>
+    internal readonly struct Checkpoint(int position, int depth, int headerSpans, int keyCount, int reservedListItems, int headersFrom,
+                                        Header[] headers)
+    {
+        public readonly int Position = position;
+        public readonly int Depth = depth;
+        public readonly int HeaderSpans = headerSpans;
+        public readonly int KeyCount = keyCount;
+        public readonly int ReservedListItems = reservedListItems;
+
+        /// <summary>The headers from this index on, which reading the value may remove; those before it stay.</summary>
+        public readonly int HeadersFrom = headersFrom;
+
+        public readonly Header[] Headers = headers;
+    }
+
+    /// <summary>
+    ///     Saves the state before <paramref name="value"/> is read, so the value can be read again after
+    ///     <see cref="Restore"/> (when reading it straight into an object gave up, it is built as a tree instead). The
+    ///     cursors that contain the value are not changed by reading it.
+    /// </summary>
+    internal Checkpoint Save(in ValueRef value)
+    {
+        // Reading an array or keyed object removes its header when it ends, and the headers added after it
+        var from = value.HeaderIndex >= 0 ? Math.Min(value.HeaderIndex, _headers.Count) : _headers.Count;
+        var headers = from < _headers.Count ? _headers.GetRange(from, _headers.Count - from).ToArray() : [];
+
+        return new Checkpoint(_position, _depth, _headerSpans, _keyCount, _reservedListItems, from, headers);
+    }
+
+    /// <summary>Returns to the state <see cref="Save"/> recorded.</summary>
+    internal void Restore(in Checkpoint checkpoint)
+    {
+        _position = checkpoint.Position;
+        _depth = checkpoint.Depth;
+        _headerSpans = checkpoint.HeaderSpans;
+        _keyCount = checkpoint.KeyCount;
+        _reservedListItems = checkpoint.ReservedListItems;
+
+        if (_headers.Count > checkpoint.HeadersFrom)
+        {
+            _headers.RemoveRange(checkpoint.HeadersFrom, _headers.Count - checkpoint.HeadersFrom);
+        }
+
+        _headers.AddRange(checkpoint.Headers);
+    }
+
     /// <summary>
     ///     Reads past a value without building it, making the same checks as reading it (a quoted token is unescaped and
     ///     dropped).

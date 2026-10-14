@@ -297,6 +297,47 @@ public sealed class ToonDocumentReader : IDisposable
         }
     }
 
+    /// <summary>The parser, for the serializer to read the current value with (<see cref="BeginValue"/>).</summary>
+    internal ToonParser Parser => _parser;
+
+    /// <summary>
+    ///     Positions the reader on the value to read, as <see cref="ReadValue"/> does (reading the first token if nothing
+    ///     was read yet, and moving from a property name to its value), and returns the value; the caller reads it with
+    ///     <see cref="Parser"/> and then calls <see cref="EndValue"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the reader is not on a property name or the start of a value.</exception>
+    internal ToonParser.ValueRef BeginValue(string caller)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (!_started)
+        {
+            Read();
+        }
+
+        if (TokenType == ToonTokenType.PropertyName)
+        {
+            Emit(_value);
+        }
+
+        return TokenType switch
+        {
+            ToonTokenType.StartObject or ToonTokenType.StartArray when !_entered => _value,
+            ToonTokenType.String or ToonTokenType.Number or ToonTokenType.True or ToonTokenType.False or ToonTokenType.Null => _value,
+            _ => throw new InvalidOperationException($"{caller} needs a property name or the start of a value, not {TokenType}.")
+        };
+    }
+
+    /// <summary>Moves the reader to the last token of the value <see cref="BeginValue"/> returned, which was read.</summary>
+    internal void EndValue()
+    {
+        if (TokenType is ToonTokenType.StartObject or ToonTokenType.StartArray)
+        {
+            TokenType = TokenType == ToonTokenType.StartObject ? ToonTokenType.EndObject : ToonTokenType.EndArray;
+            _entered = true;
+        }
+    }
+
     /// <summary>The name of the current property.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the reader is not on a property name.</exception>
     public string GetPropertyName()
