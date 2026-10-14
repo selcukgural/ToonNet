@@ -15,9 +15,10 @@ namespace ToonNet.Core.Serialization;
 ///     overloads, with the same output, but are compatible with trimming and NativeAOT: values are written and read by
 ///     generated code, and a shape that only reflection would handle directly (rare: a property typed
 ///     <see cref="object"/>, a value of a derived type) makes the whole document go through the generated
-///     <c>Serialize</c>/<c>Deserialize</c> methods instead. To keep reflection out entirely, mark the types with
-///     <c>[ToonSerializable(AllowReflectionFallback = false)]</c>; options with converters are not supported, because
-///     generated code hands converters to the reflection-based serializer.
+///     <c>Serialize</c>/<c>Deserialize</c> methods instead. Converters of the options are applied as by the other
+///     overloads: values no converter applies to are still converted straight from text, the others through the
+///     generated tree-based methods, which consult the converters. To keep reflection out entirely, mark the types with
+///     <c>[ToonSerializable(AllowReflectionFallback = false)]</c>.
 /// </remarks>
 public abstract class ToonTypeInfo
 {
@@ -56,7 +57,8 @@ public abstract class ToonTypeInfo
             (list, options, depth) => SerializeItems(list, list?.Count ?? 0, elementInfo, options, depth),
             elementInfo.Deserialize == null ? null : (value, options, depth) => DeserializeItems(value, elementInfo, options, depth)!,
             elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)!,
-            elementInfo.AppliesReadingOptions);
+            elementInfo.FeatureLevel,
+            check => check.GetConverter(typeof(List<T>)) == null && elementInfo.ConvertsDirectly(check));
     }
 
     /// <summary>Creates the type info of an array of values with <paramref name="elementInfo"/>.</summary>
@@ -69,7 +71,8 @@ public abstract class ToonTypeInfo
             (array, options, depth) => SerializeItems(array, array?.Length ?? 0, elementInfo, options, depth),
             elementInfo.Deserialize == null ? null : (value, options, depth) => DeserializeItems(value, elementInfo, options, depth)?.ToArray()!,
             elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)?.ToArray()!,
-            elementInfo.AppliesReadingOptions);
+            elementInfo.FeatureLevel,
+            check => check.GetConverter(typeof(T[])) == null && elementInfo.ConvertsDirectly(check));
     }
 
     /// <summary>
@@ -85,12 +88,20 @@ public abstract class ToonTypeInfo
             (dictionary, options, depth) => SerializeEntries(dictionary, valueInfo, options, depth),
             valueInfo.Deserialize == null ? null : (value, options, depth) => DeserializeEntries(value, valueInfo, options, depth)!,
             valueInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadEntries(reader, value, valueInfo, depth)!,
-            valueInfo.AppliesReadingOptions);
+            valueInfo.FeatureLevel,
+            check => check.GetConverter(typeof(Dictionary<string, TValue>)) == null && valueInfo.ConvertsDirectly(check));
     }
 
     #region Composed conversions
 
     // These follow the generated code for collection and dictionary properties, which follows ToonSerializer.
+
+    /// <summary>Converts a non-null item, with the converter of the options for it if there is one (null: no value).</summary>
+    private static ToonValue? SerializeItem<T>(T item, ToonTypeInfo<T> info, ToonSerializerOptions options, int depth) =>
+        options.Converters.Count != 0 && ToonSerializer.TryWriteConverted(item, options, useDeclaredType: false, out var converted) ? converted : info.Serialize(item, options, depth);
+
+    private static T DeserializeItem<T>(ToonValue value, ToonTypeInfo<T> info, ToonSerializerOptions options, int depth) =>
+        options.Converters.Count != 0 && ToonSerializer.TryReadConverted<T>(value, options, out var converted) ? converted : info.Deserialize!(value, options, depth);
 
     private static ToonValue SerializeItems<T>(IEnumerable<T>? items, int count, ToonTypeInfo<T> elementInfo, ToonSerializerOptions options,
                                                int depth)
@@ -108,7 +119,7 @@ public abstract class ToonTypeInfo
         {
             foreach (var item in items)
             {
-                array.Items.Add(item is null ? ToonNull.Instance : elementInfo.Serialize(item, options, depth + 1));
+                array.Items.Add(item is null ? ToonNull.Instance : SerializeItem(item, elementInfo, options, depth + 1) ?? ToonNull.Instance);
                 index++;
             }
         }
@@ -136,7 +147,7 @@ public abstract class ToonTypeInfo
         {
             for (; i < array.Count; i++)
             {
-                items.Add(elementInfo.Deserialize!(array[i], options, depth + 1));
+                items.Add(DeserializeItem(array[i], elementInfo, options, depth + 1));
             }
         }
         catch (ToonException ex) when (ToonSourceGenerationHelpers.AddPath(ex, i))
@@ -198,7 +209,11 @@ public abstract class ToonTypeInfo
                 else
                 {
                     at = key;
-                    result.Properties[key] = valueInfo.Serialize(entryValue, options, depth + 1);
+
+                    if (SerializeItem(entryValue, valueInfo, options, depth + 1) is { } converted)
+                    {
+                        result.Properties[key] = converted;
+                    }
                 }
             }
         }
@@ -230,7 +245,7 @@ public abstract class ToonTypeInfo
             foreach (var (key, entryValue) in obj.Properties)
             {
                 at = key;
-                dictionary[key] = valueInfo.Deserialize!(entryValue, options, depth + 1);
+                dictionary[key] = DeserializeItem(entryValue, valueInfo, options, depth + 1);
             }
         }
         catch (ToonException ex) when (at != null && ToonSourceGenerationHelpers.AddPath(ex, at))
@@ -283,12 +298,13 @@ public sealed class ToonTypeInfo<T> : ToonTypeInfo
     internal static ToonTypeInfo<T>? Generated;
 
     internal ToonTypeInfo(Func<T, ToonSerializerOptions, int, ToonValue> serialize, Func<ToonValue, ToonSerializerOptions, int, T>? deserialize,
-                          ReadMethod? read, bool appliesReadingOptions)
+                          ReadMethod? read, int featureLevel, Func<ToonSerializer.ConverterCheck, bool> convertsDirectly)
     {
         Serialize = serialize;
         Deserialize = deserialize;
         Read = read;
-        AppliesReadingOptions = appliesReadingOptions;
+        FeatureLevel = featureLevel;
+        ConvertsDirectly = convertsDirectly;
     }
 
     /// <inheritdoc />
@@ -303,9 +319,12 @@ public sealed class ToonTypeInfo<T> : ToonTypeInfo
     /// <summary>Reads a value straight from text; null when the type cannot be created.</summary>
     internal ReadMethod? Read { get; }
 
+    /// <summary>What the generated code applies itself (see <see cref="ToonObjectWriter.FeatureLevel"/>; the lowest of the parts).</summary>
+    internal int FeatureLevel { get; }
+
     /// <summary>
-    ///     Whether the generated code applies case-insensitive reading, unmapped key errors and required properties (code
-    ///     from older generators leaves them to reflection).
+    ///     For options with converters: whether no converter applies to the type or to what its generated code converts
+    ///     itself, so <see cref="Read"/> can read it (otherwise the tree-based methods, which consult the converters, do).
     /// </summary>
-    internal bool AppliesReadingOptions { get; }
+    internal Func<ToonSerializer.ConverterCheck, bool> ConvertsDirectly { get; }
 }

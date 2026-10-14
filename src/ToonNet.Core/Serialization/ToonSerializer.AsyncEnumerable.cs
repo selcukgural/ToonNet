@@ -63,11 +63,11 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type of the items.</typeparam>
     /// <param name="utf8Stream">The stream; it is read to the end and left open.</param>
     /// <param name="itemTypeInfo">The type info of the items, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="options">Optional deserialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The items, in order.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="itemTypeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters and the generated code is from an older generator.</exception>
     /// <exception cref="ToonParseException">Thrown while enumerating when the text is not valid UTF-8 or not valid TOON.</exception>
     /// <exception cref="ToonSerializationException">Thrown while enumerating when the root is not an array or an item cannot be converted.</exception>
     public static IAsyncEnumerable<T?> DeserializeAsyncEnumerable<T>(Stream utf8Stream, ToonTypeInfo<T> itemTypeInfo, ToonSerializerOptions? options = null,

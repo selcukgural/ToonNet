@@ -181,8 +181,9 @@ Converters exchange `ToonValue` trees, but only for the values they convert: the
 and read straight from the text. Generated code (`[ToonSerializable]`) does not consult converters, so the serializer
 uses it for a type only when no converter applies to the type or to anything its generated code converts itself
 (property, element, key and value types, and the types with generated code it reaches); for the other types it uses
-reflection. A converter for a type your models do not use costs nothing measurable; a converter for `int` turns
-generated code off for every model with an `int` property.
+reflection, or with the `ToonTypeInfo` overloads the generated tree-based methods, which consult the converters (no
+reflection, for trimmed and NativeAOT apps). A converter for a type your models do not use costs nothing measurable; a
+converter for `int` takes the fast path away from every model with an `int` property.
 
 ## Error Handling
 

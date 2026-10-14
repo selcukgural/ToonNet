@@ -40,9 +40,9 @@ warning **`TOON006`** with the reason: `object`, interfaces, abstract types and 
 unknown), classes without `[ToonSerializable]`, other collection types (`ImmutableArray`, `SortedDictionary`, ...).
 Set `[ToonSerializable(AllowReflectionFallback = false)]` to make these errors (`TOON007`).
 
-At runtime the generated methods defer to `ToonSerializer` when the options contain converters, and when a property
-holds an instance of a type derived from the declared `[ToonSerializable]` class (`ToonSerializer` writes the runtime
-type). The output is the same either way.
+At runtime the generated methods apply the converters of the options to the values they convert, and defer to
+`ToonSerializer` when a property holds an instance of a type derived from the declared `[ToonSerializable]` class
+(`ToonSerializer` writes the runtime type). The output is the same either way.
 
 `ToonSerializer` uses the generated methods as well: each generated type registers them from a module initializer, so
 `ToonSerializer.Serialize`/`Deserialize<T>` and everything built on them (the ASP.NET Core formatters, `ToonResult`,
@@ -202,7 +202,7 @@ var catalogs = ToonTypeInfo.CreateList(Catalog.ToonTypeInfo);  // collection roo
 ```
 
 The generated `Serialize`/`Deserialize` methods with `ToonEncoder` and `ToonDocument.Parse` need no reflection either.
-Options with converters are not supported without reflection.
+Converters of the options are applied without reflection too.
 
 ---
 

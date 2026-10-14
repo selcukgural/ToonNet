@@ -29,11 +29,12 @@ public static partial class ToonSerializer
 
     /// <summary>
     ///     Why the reflection-based code may be trimmed and compiled ahead of time: it runs only under the methods above
-    ///     (annotated as such), or from generated code for converters and derived types, which need reflection.
+    ///     (annotated as such), or from generated code for derived types and types without generated code, which need
+    ///     reflection.
     /// </summary>
     internal const string ReflectionJustification =
         "Reached only from ToonSerializer methods annotated with RequiresUnreferencedCode and RequiresDynamicCode, or from " +
-        "generated code when options contain converters or an object is of a derived type, which need the reflection-based serializer.";
+        "generated code when an object is of a derived type or a type without generated code, which need the reflection-based serializer.";
 
     /// <summary>Ends the previous document's last line and inserts one blank line.</summary>
     private const string BlankLineDocumentSeparator = "\n\n";

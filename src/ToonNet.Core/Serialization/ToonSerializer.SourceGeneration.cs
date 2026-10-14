@@ -28,8 +28,11 @@ public static partial class ToonSerializer
         /// <summary>Null when the type has no constructor generated code can use.</summary>
         public Func<ToonValue, ToonSerializerOptions, int, object?>? Deserialize { get; } = deserialize;
 
+        /// <summary>What the generated code applies itself (see <see cref="ToonObjectWriter.FeatureLevel"/>).</summary>
+        public int FeatureLevel { get; } = Math.Max(writer?.FeatureLevel ?? 0, reader?.FeatureLevel ?? 0);
+
         /// <summary>Whether the generated code may read with the options (code from older generators ignores some).</summary>
-        public bool ReadsWith(ToonSerializerOptions options) => options.AllowsGeneratedReading || Reader?.AppliesReadingOptions == true;
+        public bool ReadsWith(ToonSerializerOptions options) => options.AllowsGeneratedReading || FeatureLevel >= 1;
     }
 
     private static readonly ConcurrentDictionary<Type, GeneratedSerializer> RegisteredGeneratedSerializers = new();
@@ -57,7 +60,8 @@ public static partial class ToonSerializer
             serialize,
             deserialize,
             deserialize == null ? null : reader != null ? reader.Read : (ToonReader r, in ToonReaderValue v, int depth) => deserialize(r.BuildTree(in v), r.Options, depth),
-            reader?.AppliesReadingOptions == true);
+            Math.Max(writer?.FeatureLevel ?? 0, reader?.FeatureLevel ?? 0),
+            static check => check.AllowsGeneratedCode(typeof(T)));
     }
 
     /// <summary>
@@ -89,20 +93,26 @@ public static partial class ToonSerializer
 
     /// <summary>
     ///     The generated serializer to use for <paramref name="type"/>, if any. Generated code produces the same result
-    ///     as this serializer but defers to it when the options contain converters.
+    ///     as this serializer; code from older generators defers to it when the options contain converters.
     /// </summary>
     private static GeneratedSerializer? GetGeneratedSerializer(Type type, ToonSerializerOptions options)
     {
-        return options.Converters.Count == 0 && options.UseGeneratedCode ? FindGeneratedSerializer(type) : null;
+        return options.UseGeneratedCode && FindGeneratedSerializer(type) is { } generated && (options.Converters.Count == 0 || generated.FeatureLevel >= 1)
+            ? generated
+            : null;
     }
 
     /// <summary>
     ///     Tells, for options with converters, whether generated code can convert a type: no converter may apply to the
     ///     type or to anything its generated code (and the generated code of the types it reaches) converts itself.
     /// </summary>
-    internal sealed class ConverterCheck(IToonConverter[] converters, ToonSerializerOptions options)
+    internal sealed class ConverterCheck(IToonConverter[] converters)
     {
         private readonly ConcurrentDictionary<Type, bool> _allowed = new();
+        private readonly ConcurrentDictionary<Type, IToonConverter?> _converters = new();
+
+        /// <summary>The first converter that can convert the type, as <see cref="ToonSerializerOptions.GetConverter"/> finds it.</summary>
+        public IToonConverter? GetConverter(Type type) => _converters.GetOrAdd(type, static (t, all) => Array.Find(all, c => c.CanConvert(t)), converters);
 
         /// <summary>Whether the check was made for exactly these converters (the list can change between calls).</summary>
         public bool IsFor(List<IToonConverter> current)
@@ -159,8 +169,65 @@ public static partial class ToonSerializer
         }
 
         /// <summary>Whether a converter reads or writes the type, directly or through a nullable's underlying type.</summary>
-        private bool IsConverted(Type type) =>
-            options.GetConverter(type) != null || (Nullable.GetUnderlyingType(type) is { } underlying && options.GetConverter(underlying) != null);
+        public bool IsConverted(Type type) =>
+            GetConverter(type) != null || (Nullable.GetUnderlyingType(type) is { } underlying && GetConverter(underlying) != null);
+    }
+
+    /// <summary>
+    ///     Writes a non-null value with the converter of the options for it, as <see cref="SerializeValue"/> finds it: for
+    ///     its runtime type, else (a property value, <paramref name="useDeclaredType"/>) its declared type; false when no
+    ///     converter applies. Items and dictionary values are looked up by their runtime type only.
+    /// </summary>
+    internal static bool TryWriteConverted<T>(T value, ToonSerializerOptions options, bool useDeclaredType, out ToonValue? result)
+    {
+        result = null;
+
+        if (value is null || GetConverterCheck(options) is not { } check)
+        {
+            return false;
+        }
+
+        // A value type is its own runtime type (a nullable's value its underlying type), without boxing to ask
+        var declared = typeof(T);
+        var runtime = declared.IsValueType ? Nullable.GetUnderlyingType(declared) ?? declared : value.GetType();
+
+        if ((check.GetConverter(runtime) ?? (useDeclaredType && runtime != declared ? check.GetConverter(declared) : null)) is not { } converter)
+        {
+            return false;
+        }
+
+        result = converter.Write(value, options);
+        return true;
+    }
+
+    /// <summary>
+    ///     Reads a value with the converter of the options for <typeparamref name="T"/> (or, for a non-null value of a
+    ///     nullable type, its underlying type), as <see cref="DeserializeValue"/> does; false when no converter applies.
+    /// </summary>
+    internal static bool TryReadConverted<T>(ToonValue value, ToonSerializerOptions options, out T result)
+    {
+        result = default!;
+
+        if (GetConverterCheck(options) is not { } check)
+        {
+            return false;
+        }
+
+        var target = typeof(T);
+
+        if (check.GetConverter(target) is { } converter)
+        {
+            result = (T)converter.Read(value, target, options)!;
+            return true;
+        }
+
+        if (value is not ToonNull && Nullable.GetUnderlyingType(target) is { } underlying && check.GetConverter(underlying) is { } underlyingConverter)
+        {
+            result = (T)underlyingConverter.Read(value, underlying, options)!;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>The converter check for the options' current converters, or null when they have none.</summary>
@@ -175,7 +242,7 @@ public static partial class ToonSerializer
 
         if (check == null || !check.IsFor(options.Converters))
         {
-            options.ConverterCheck = check = new ConverterCheck([.. options.Converters], options);
+            options.ConverterCheck = check = new ConverterCheck([.. options.Converters]);
         }
 
         return check;

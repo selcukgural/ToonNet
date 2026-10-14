@@ -510,6 +510,14 @@ public static partial class ToonSerializer
 
             if (_generatedOnly)
             {
+                // A converter writes the value through its tree, and so does generated code that would not consult one
+                // it should (the generated tree-based method does)
+                if (_hasConverters && (IsDeclaredTypeConverted(declaredType) || IsConverted(runtimeType) ||
+                                       (FindGeneratedSerializer(runtimeType) != null && !_converterCheck!.AllowsGeneratedCode(runtimeType))))
+                {
+                    return DirectKind.Tree;
+                }
+
                 info = GetGeneratedOnlyTypeInfo(runtimeType);
                 return info.Kind;
             }
@@ -554,13 +562,44 @@ public static partial class ToonSerializer
         {
             if (_generatedOnly)
             {
-                // A ToonValue is its own tree (a ToonDocument or JSON value holds one); anything else needs the
-                // reflection-based serializer
-                return value as ToonValue ??
-                       (value != null && ToonJsonInterop.TryToToon(value, out var documentValue) ? documentValue : throw new GeneratedOnlyFallbackException());
+                return ToGeneratedTree(value, declaredType, depth);
             }
 
             return SerializeValue(value, declaredType, _options, depth, new SerializerState(), propertyConverter);
+        }
+
+        /// <summary>
+        ///     The tree of a value without reflection: through a converter of the options, as a <see cref="ToonValue"/> (a
+        ///     <see cref="ToonDocument"/> or JSON value holds one), or through the generated tree-based method of its
+        ///     type; anything else needs the reflection-based serializer.
+        /// </summary>
+        private ToonValue? ToGeneratedTree(object? value, Type declaredType, int depth)
+        {
+            if (value == null)
+            {
+                return _ignoreNulls ? null : ToonNull.Instance;
+            }
+
+            var runtimeType = value.GetType();
+
+            if (_hasConverters && (_converterCheck!.GetConverter(runtimeType) ?? _converterCheck.GetConverter(declaredType)) is { } converter)
+            {
+                return converter.Write(value, _options);
+            }
+
+            if (value is ToonValue toonValue)
+            {
+                return toonValue;
+            }
+
+            if (ToonJsonInterop.TryToToon(value, out var documentValue))
+            {
+                return documentValue;
+            }
+
+            return GetGeneratedSerializer(runtimeType, _options) is { } generated
+                ? generated.Serialize(value, _options, depth)
+                : throw new GeneratedOnlyFallbackException();
         }
 
         #region Objects and dictionaries

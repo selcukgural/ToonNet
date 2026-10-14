@@ -220,10 +220,10 @@ public static partial class ToonSerializer
     /// <param name="utf8Stream">The stream to write to; it is left open.</param>
     /// <param name="value">The value to serialize.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional serialization options; converters are not supported.</param>
+    /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters and the generated code is from an older generator.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     public static ValueTask SerializeAsync<T>(Stream utf8Stream, T? value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null,
                                               CancellationToken cancellationToken = default) =>
@@ -236,11 +236,14 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="utf8Stream">The stream to read; it is read to the end and left open.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="options">Optional deserialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters or ask for case-insensitive reading.</exception>
+    /// <exception cref="NotSupportedException">
+    ///     Thrown when the generated code is from an older generator that does not apply the options, or cannot create
+    ///     <typeparamref name="T"/>.
+    /// </exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
     public static ValueTask<T?> DeserializeAsync<T>(Stream utf8Stream, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null,

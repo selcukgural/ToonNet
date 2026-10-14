@@ -73,8 +73,9 @@ Any other property type (`object`, interfaces, abstract types, type parameters, 
 other collection types) is handed to the reflection-based serializer and reported as warning `TOON006`, with the
 reason. Use `[ToonSerializable(AllowReflectionFallback = false)]` to turn these into errors (`TOON007`).
 
-At runtime the generated methods defer to `ToonSerializer` when the options contain converters, or when a property
-holds an instance of a class derived from its declared `[ToonSerializable]` type. The output is the same either way.
+At runtime the generated methods apply the converters of the options to the values they convert, and defer to
+`ToonSerializer` when a property holds an instance of a class derived from its declared `[ToonSerializable]` type. The
+output is the same either way.
 
 `ToonSerializer` uses the generated methods as well: each generated type registers them from a module initializer, so
 `ToonSerializer.Serialize`/`Deserialize<T>` and everything built on them (the ASP.NET Core formatters, `ToonResult`,
@@ -123,10 +124,10 @@ string many = ToonSerializer.Serialize(new List<Catalog> { catalog }, catalogs);
 These overloads write and read straight from text, like the others and with the same output, at the same speed: on
 10,000 records they serialize 2.4–4x and deserialize 1.6–2x faster than going through a `ToonDocument`. A value that
 only reflection would handle directly (an object without generated code in a property typed `object`, a derived
-instance) makes the whole document go through the generated tree-based methods, with the same text. Options with
-converters are not supported (generated code hands converters to the reflection-based serializer), and
-`ToonTypeInfo.GetGenerated<T>()` returns the same type info for generic code or a type whose own member is named
-`ToonTypeInfo`.
+instance) makes the whole document go through the generated tree-based methods, with the same text. Converters of the
+options are applied too: values no converter applies to are still converted straight from text, the others through the
+generated tree-based methods. `ToonTypeInfo.GetGenerated<T>()` returns the same type info for generic code or a type
+whose own member is named `ToonTypeInfo`.
 
 The generated `Serialize`/`Deserialize` methods with `ToonEncoder` and `ToonDocument.Parse` need no reflection either:
 

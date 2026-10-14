@@ -17,10 +17,10 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type of the value.</typeparam>
     /// <param name="value">The value to serialize.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional serialization options; converters are not supported.</param>
+    /// <param name="options">Optional serialization options.</param>
     /// <returns>The TOON text, the same as <see cref="Serialize{T}(T, ToonSerializerOptions)"/> writes.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="typeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters and the generated code is from an older generator.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     public static string Serialize<T>(T? value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
     {
@@ -38,10 +38,10 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type of the value.</typeparam>
     /// <param name="value">The value to serialize.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional serialization options; converters are not supported.</param>
+    /// <param name="options">Optional serialization options.</param>
     /// <returns>The UTF-8 encoded TOON text.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="typeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters and the generated code is from an older generator.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     public static byte[] SerializeToUtf8Bytes<T>(T? value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
     {
@@ -60,9 +60,9 @@ public static partial class ToonSerializer
     /// <param name="utf8Destination">The buffer writer to write to; the text is written only after the value is serialized.</param>
     /// <param name="value">The value to serialize.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional serialization options; converters are not supported.</param>
+    /// <param name="options">Optional serialization options.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Destination"/> or <paramref name="typeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters and the generated code is from an older generator.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     public static void Serialize<T>(IBufferWriter<byte> utf8Destination, T? value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
     {
@@ -82,9 +82,9 @@ public static partial class ToonSerializer
     /// <param name="utf8Stream">The stream to write to; it is left open. The text is written only after the value is serialized.</param>
     /// <param name="value">The value to serialize.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional serialization options; converters are not supported.</param>
+    /// <param name="options">Optional serialization options.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters and the generated code is from an older generator.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     public static void Serialize<T>(Stream utf8Stream, T? value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
@@ -105,10 +105,10 @@ public static partial class ToonSerializer
     /// <param name="value">The value to serialize.</param>
     /// <param name="stream">The stream to write to; it is left open.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional serialization options; converters are not supported.</param>
+    /// <param name="options">Optional serialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> or <paramref name="typeInfo"/> is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the options contain converters and the generated code is from an older generator.</exception>
     /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
     /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
@@ -134,12 +134,12 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="toonString">The TOON text.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="options">Optional deserialization options.</param>
     /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="toonString"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    ///     Thrown when the options contain converters, or generated code cannot create <typeparamref name="T"/> (no
-    ///     usable constructor).
+    ///     Thrown when generated code cannot create <typeparamref name="T"/> (no usable constructor), or is from an older
+    ///     generator that does not apply the options.
     /// </exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
@@ -158,11 +158,12 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="utf8Toon">The UTF-8 encoded TOON text; a byte order mark at the start is ignored.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="options">Optional deserialization options.</param>
     /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    ///     Thrown when the options contain converters, or generated code cannot create <typeparamref name="T"/>.
+    ///     Thrown when generated code cannot create <typeparamref name="T"/>, or is from an older generator that does not
+    ///     apply the options.
     /// </exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
@@ -180,11 +181,12 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="toon">The TOON text.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="options">Optional deserialization options.</param>
     /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    ///     Thrown when the options contain converters, or generated code cannot create <typeparamref name="T"/>.
+    ///     Thrown when generated code cannot create <typeparamref name="T"/>, or is from an older generator that does not
+    ///     apply the options.
     /// </exception>
     /// <exception cref="ToonParseException">Thrown when parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
@@ -203,11 +205,12 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="utf8Toon">The stream to read; it is read to the end and left open.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="options">Optional deserialization options.</param>
     /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Toon"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    ///     Thrown when the options contain converters, or generated code cannot create <typeparamref name="T"/>.
+    ///     Thrown when generated code cannot create <typeparamref name="T"/>, or is from an older generator that does not
+    ///     apply the options.
     /// </exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
@@ -227,12 +230,13 @@ public static partial class ToonSerializer
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="stream">The stream to read; it is read to the end and left open.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
-    /// <param name="options">Optional deserialization options; converters are not supported.</param>
+    /// <param name="options">Optional deserialization options.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The deserialized value, or null when the document is <c>null</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    ///     Thrown when the options contain converters, or generated code cannot create <typeparamref name="T"/>.
+    ///     Thrown when generated code cannot create <typeparamref name="T"/>, or is from an older generator that does not
+    ///     apply the options.
     /// </exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or parsing fails.</exception>
     /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted to the target type.</exception>
@@ -252,20 +256,32 @@ public static partial class ToonSerializer
     #endregion
 
     /// <summary>Checks the arguments common to the overloads that take a type info and returns the options to use.</summary>
-    private static ToonSerializerOptions CheckTypeInfo(ToonTypeInfo typeInfo, ToonSerializerOptions? options)
+    private static ToonSerializerOptions CheckTypeInfo<T>(ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options)
     {
         ArgumentNullException.ThrowIfNull(typeInfo);
         options ??= ToonSerializerOptions.Default;
 
-        if (options.Converters.Count != 0)
+        if (options.Converters.Count != 0 && typeInfo.FeatureLevel < 1)
         {
             throw new NotSupportedException(
-                "Serializing with a ToonTypeInfo does not support converters, which generated code hands to the reflection-based serializer; " +
-                "use the overloads without a type info.");
+                $"The generated code of {typeof(T).Name} is from an older ToonNet.SourceGenerators that hands converters to the reflection-based " +
+                "serializer; rebuild with the current generator, or use the overloads without a type info.");
         }
 
-
         return options;
+    }
+
+    /// <summary>The tree of a root value: through the converter of the options for it, or the generated tree-based method.</summary>
+    private static ToonValue SerializeRootTree<T>(T? value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            return ToonNull.Instance;
+        }
+
+        return options.Converters.Count != 0 && TryWriteConverted(value, options, useDeclaredType: true, out var converted)
+            ? converted ?? ToonNull.Instance
+            : typeInfo.Serialize(value, options, 0);
     }
 
     /// <summary>
@@ -286,8 +302,7 @@ public static partial class ToonSerializer
             DirectWriteFallbacks++;
             buffer.Truncate(start);
 
-            var tree = value is null ? ToonNull.Instance : typeInfo.Serialize(value, options, 0);
-            new ToonEncoder(options.ToonOptions).Write(new ToonDocument(tree), buffer);
+            new ToonEncoder(options.ToonOptions).Write(new ToonDocument(SerializeRootTree(value, typeInfo, options)), buffer);
         }
     }
 
@@ -297,7 +312,7 @@ public static partial class ToonSerializer
     /// </summary>
     private static T? DeserializeText<T>(ToonText text, ToonTypeInfo<T> typeInfo, ToonSerializerOptions options)
     {
-        if (!options.AllowsGeneratedReading && !typeInfo.AppliesReadingOptions)
+        if (!options.AllowsGeneratedReading && typeInfo.FeatureLevel < 1)
         {
             throw new NotSupportedException(
                 $"The generated code of {typeof(T).Name} is from an older ToonNet.SourceGenerators that does not apply PropertyNameCaseInsensitive, " +
@@ -307,7 +322,8 @@ public static partial class ToonSerializer
         var deserialize = typeInfo.Deserialize ?? throw new NotSupportedException(
             $"Generated code cannot create {typeof(T).Name}: it needs a public parameterless constructor or a constructor whose parameters match its properties.");
 
-        if (typeInfo.Read != null)
+        // With converters, only what no converter applies to is read straight from the text
+        if (typeInfo.Read != null && (GetConverterCheck(options) is not { } check || typeInfo.ConvertsDirectly(check)))
         {
             try
             {
@@ -321,6 +337,9 @@ public static partial class ToonSerializer
         }
 
         var document = new ToonParser(options.ToonOptions).Parse(text);
-        return deserialize(document.Root, options, 0);
+
+        return options.Converters.Count != 0 && TryReadConverted<T>(document.Root, options, out var converted)
+            ? converted
+            : deserialize(document.Root, options, 0);
     }
 }

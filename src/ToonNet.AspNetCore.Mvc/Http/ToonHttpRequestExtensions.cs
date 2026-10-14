@@ -62,7 +62,7 @@ public static class ToonHttpRequestExtensions
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>The value, or the default value when the document is <c>null</c> or the body is blank.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
-    /// <exception cref="NotSupportedException">Thrown when the options contain converters or ask for case-insensitive reading.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the generated code is from an older generator that does not apply the options.</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
     public static ValueTask<T?> ReadFromToonAsync<T>(this HttpRequest request, ToonTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
     {

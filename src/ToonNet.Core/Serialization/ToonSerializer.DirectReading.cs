@@ -387,7 +387,9 @@ public static partial class ToonSerializer
         {
             if (_generatedOnly)
             {
-                return ReadGeneratedValue(value, GetGeneratedOnlyReadTypeInfo(targetType), depth);
+                return _hasConverters && TryReadConvertedTree(value, targetType, depth, out var converted)
+                    ? converted
+                    : ReadGeneratedValue(value, GetGeneratedOnlyReadTypeInfo(targetType), depth);
             }
 
             // Generated code does not consult converters: with converters, it reads only types where none applies.
@@ -444,7 +446,7 @@ public static partial class ToonSerializer
         {
             if (info.Kind == ReadKind.Generated && value.NodeKind == ToonNodeKind.Object)
             {
-                if (!_options.AllowsGeneratedReading && !info.Reader!.AppliesReadingOptions)
+                if (!_options.AllowsGeneratedReading && info.Reader!.FeatureLevel < 1)
                 {
                     throw new DirectReadFallbackException(); // code from an older generator
                 }
@@ -493,6 +495,55 @@ public static partial class ToonSerializer
             }
 
             throw new DirectReadFallbackException();
+        }
+
+        /// <summary>
+        ///     For reading with a type info and converters: reads a value from its tree with the converter of the options
+        ///     for its type (as <see cref="DeserializeValue"/> finds it), or with the generated tree-based method when
+        ///     the generated reader would not consult a converter it should; false for values generated code reads
+        ///     straight from the text.
+        /// </summary>
+        private bool TryReadConvertedTree(in ToonParser.ValueRef value, Type targetType, int depth, out object? result)
+        {
+            var check = _converterCheck!;
+            var underlying = Nullable.GetUnderlyingType(targetType);
+            var isNull = value.NodeKind == ToonNodeKind.Primitive && _parser.IsNull(value);
+
+            if (check.GetConverter(targetType) is { } converter)
+            {
+                result = converter.Read(_parser.BuildValue(value), targetType, _options);
+                return true;
+            }
+
+            if (underlying != null && !isNull && check.GetConverter(underlying) is { } underlyingConverter)
+            {
+                result = underlyingConverter.Read(_parser.BuildValue(value), underlying, _options);
+                return true;
+            }
+
+            var target = underlying ?? targetType;
+
+            if (FindGeneratedSerializer(target) is { Deserialize: { } deserialize } generated && !check.AllowsGeneratedCode(target))
+            {
+                if (isNull && (underlying != null || !target.IsValueType))
+                {
+                    result = null;
+                    return true;
+                }
+
+                // Code from older generators hands converters to reflection; other non-object values are reported by
+                // the tree-based path
+                if (generated.FeatureLevel < 1 || value.NodeKind != ToonNodeKind.Object)
+                {
+                    throw new DirectReadFallbackException();
+                }
+
+                result = deserialize(_parser.BuildValue(value), _options, depth);
+                return true;
+            }
+
+            result = null;
+            return false;
         }
 
         /// <summary>Builds the value's tree and converts it with <see cref="DeserializeValue"/>.</summary>

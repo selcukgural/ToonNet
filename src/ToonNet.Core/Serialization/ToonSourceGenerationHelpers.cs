@@ -11,8 +11,8 @@ namespace ToonNet.Core.Serialization;
 ///     The methods share the conversion rules of <see cref="ToonSerializer"/>, so generated code produces the same
 ///     output. Generated types register themselves (and a <see cref="ToonObjectWriter{T}"/> that writes their objects
 ///     straight to text) with <c>Register</c>, and <see cref="ToonSerializer"/> then uses the generated code instead of
-///     reflection. Generated code calls the primitive methods only when the options contain no converters (otherwise
-///     it defers to <see cref="ToonSerializer"/> entirely), which is why they do not consult converters.
+///     reflection. With converters in the options, generated code asks <see cref="TryWriteConverted{T}"/> and
+///     <see cref="TryReadConverted{T}"/> first, which is why the primitive methods do not consult converters.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class ToonSourceGenerationHelpers
@@ -99,6 +99,22 @@ public static class ToonSourceGenerationHelpers
     ///     properties), which code from older generators defers to.
     /// </summary>
     public static bool ReadsWithReflection(ToonSerializerOptions options) => !options.AllowsGeneratedReading;
+
+    /// <summary>
+    ///     Writes a non-null value with the converter of the options for it, as <see cref="ToonSerializer"/> finds it:
+    ///     for its runtime type, else (with <paramref name="useDeclaredType"/>, for property values) for
+    ///     <typeparamref name="T"/>. Returns false when no converter applies; a null result means no value (a property
+    ///     is left out).
+    /// </summary>
+    public static bool TryWriteConverted<T>(T value, ToonSerializerOptions options, bool useDeclaredType, out ToonValue? result) =>
+        ToonSerializer.TryWriteConverted(value, options, useDeclaredType, out result);
+
+    /// <summary>
+    ///     Reads a value with the converter of the options for <typeparamref name="T"/> (or, for a non-null value of a
+    ///     nullable type, its underlying type), as <see cref="ToonSerializer"/> does; false when no converter applies.
+    /// </summary>
+    public static bool TryReadConverted<T>(ToonValue value, ToonSerializerOptions options, out T result) =>
+        ToonSerializer.TryReadConverted(value, options, out result);
 
     /// <summary>
     ///     Gets the value of a key as <see cref="ToonSerializer"/> does: the exact key, or with <paramref name="ignoreCase"/>

@@ -24,6 +24,9 @@ internal sealed class SourceEmitter
     private const string Writer = "global::ToonNet.Core.Encoding.ToonWriter";
     private const string RowShape = Serialization + "ToonRowShape";
     private const string ToonException = "global::ToonNet.Core.ToonException";
+
+    /// <summary>Whether the options have converters, which the tree-based methods then ask for every value.</summary>
+    private const string ConvertLocal = "var __convert = options.Converters.Count != 0;";
     private const string HiddenAttribute = "[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]";
 
     private readonly TypeModel _model;
@@ -202,7 +205,9 @@ internal sealed class SourceEmitter
         }
 
         code.AppendLine($"options ??= {Options}.Default;");
-        code.AppendLine($"return new {Models}ToonDocument(__ToonSerializeValue(value, options, 0));");
+        code.AppendLine("// A converter of the options for the type writes the root, as in ToonSerializer");
+        code.AppendLine($"return new {Models}ToonDocument(options.Converters.Count != 0 && {Helpers}.TryWriteConverted<{model.FullyQualifiedName}>(value, options, true, out var __c) " +
+                        $"? __c ?? {Models}ToonNull.Instance : __ToonSerializeValue(value, options, 0));");
         code.EndBlock();
         code.AppendLine();
     }
@@ -237,13 +242,13 @@ internal sealed class SourceEmitter
             return;
         }
 
-        var fallback = model.CheckRuntimeType
-            ? $"options.Converters.Count != 0 || value.GetType() != typeof({model.TypeOfName})"
-            : "options.Converters.Count != 0";
-
-        code.AppendLine("// Converters and derived types are handled by ToonSerializer, which knows the runtime type.");
-        code.AppendLine($"if ({fallback}) return {reflection};");
+        if (model.CheckRuntimeType)
+        {
+            code.AppendLine("// Derived types are handled by ToonSerializer, which knows the runtime type.");
+            code.AppendLine($"if (value.GetType() != typeof({model.TypeOfName})) return {reflection};");
+        }
         EmitPolicyLocal();
+        code.AppendLine(ConvertLocal);
         code.AppendLine($"var __obj = new {Models}ToonObject({model.Properties.Length});");
 
         // Errors get the property's name in their path as they leave its value, like ToonSerializer's
@@ -282,7 +287,7 @@ internal sealed class SourceEmitter
             }
             else
             {
-                EmitStore($"__obj.Properties[{name}]", property.Plan, local, "depth + 1");
+                EmitStore($"__obj.Properties[{name}]", property.Plan, local, "depth + 1", useDeclaredType: true);
             }
 
             code.EndBlock();
@@ -314,11 +319,26 @@ internal sealed class SourceEmitter
     /// <summary>Whether writing a non-null value can raise an error (nested objects, collections, the serializer).</summary>
     private static bool CanFailWriting(ValuePlan plan) => plan.Kind is not (ValueKind.Inline or ValueKind.Raw or ValueKind.Primitive);
 
-    /// <summary>Stores a value in an object slot; nulls follow <c>IgnoreNullValues</c>, like ToonSerializer.</summary>
-    private void EmitStore(string target, ValuePlan plan, string local, string depth)
+    /// <summary>
+    /// Stores a value in an object slot; nulls follow <c>IgnoreNullValues</c>, and a converter of the options for the
+    /// value (by its runtime type, else with <paramref name="useDeclaredType"/> its declared type) writes it, like
+    /// ToonSerializer.
+    /// </summary>
+    private void EmitStore(string target, ValuePlan plan, string local, string depth, bool useDeclaredType)
     {
-        EmitNullCheck(plan, local, target, () => _code.AppendLine($"{target} = {WriteExpression(plan, NonNull(plan, local), depth)};"));
+        EmitNullCheck(plan, local, target, () =>
+        {
+            // Also for values handed to the serializer, which would write null for a converter's null (no value)
+            var write = $"{target} = {WriteExpression(plan, NonNull(plan, local), depth)};";
+            var converted = $"__c{_variable++}";
+            _code.BeginBlock($"if (__convert && {Helpers}.TryWriteConverted<{plan.TypeName}>({local}, options, {Bool(useDeclaredType)}, out var {converted}))");
+            _code.AppendLine($"if ({converted} is not null) {target} = {converted};");
+            _code.EndBlock();
+            _code.AppendLine($"else {write}");
+        });
     }
+
+    private static string Bool(bool value) => value ? "true" : "false";
 
     private void EmitNullCheck(ValuePlan plan, string local, string target, Action write)
     {
@@ -458,8 +478,6 @@ internal sealed class SourceEmitter
         // Undefined policy values use the property names as they are, like the default policy
         return $"__policy switch {{ {policyType}.CamelCase => {Bool(duplicate[1])}, {policyType}.SnakeCase => {Bool(duplicate[2])}, " +
                $"{policyType}.LowerCase => {Bool(duplicate[3])}, _ => {Bool(duplicate[0])} }}";
-
-        static string Bool(bool value) => value ? "true" : "false";
     }
 
     /// <summary>Writes one property in <c>__ToonWriteFields</c>, counting it in <c>__count</c> when it is written.</summary>
@@ -941,6 +959,7 @@ internal sealed class SourceEmitter
         code.AppendLine();
         code.BeginBlock($"private sealed class __ToonObjectWriter : {Serialization}ToonObjectWriter<{type}>");
         code.AppendLine($"public override int PropertyCount => {_model.Properties.Length};");
+        code.AppendLine("public override int FeatureLevel => 1;");
         code.AppendLine($"public override string GetName(int index, {Options} options) => __ToonGetName(index, options);");
         code.AppendLine($"public override int WriteFields({type} value, {Writer} writer, int lineDepth, int childDepth, bool firstOnCurrentLine, int depth) =>");
         code.AppendLine("    __ToonWriteFields(value, writer, lineDepth, childDepth, firstOnCurrentLine, depth);");
@@ -1124,7 +1143,7 @@ internal sealed class SourceEmitter
         code.AppendLine();
         code.BeginBlock($"private sealed class __ToonObjectReader : {Serialization}ToonObjectReader<{type}>");
         code.AppendLine($"public override {type} Read({Reader} reader, in {ReaderValue} value, int depth) => __ToonReadObject(reader, in value, depth);");
-        code.AppendLine("public override bool AppliesReadingOptions => true;");
+        code.AppendLine("public override int FeatureLevel => 1;");
         code.EndBlock();
     }
 
@@ -1225,8 +1244,6 @@ internal sealed class SourceEmitter
         var policyType = Serialization + "PropertyNamingPolicy";
         return $"(__ci && __policy switch {{ {policyType}.CamelCase => {Bool(matches[1])}, {policyType}.SnakeCase => {Bool(matches[2])}, " +
                $"{policyType}.LowerCase => {Bool(matches[3])}, _ => {Bool(matches[0])} }})";
-
-        static string Bool(bool value) => value ? "true" : "false";
     }
 
     /// <summary>The indexes of the required properties ToonSerializer checks with <c>RespectRequiredMembers</c>.</summary>
@@ -1355,8 +1372,6 @@ internal sealed class SourceEmitter
         // Undefined policy values use the property names as they are, like the default policy
         return $"__policy switch {{ {policyType}.CamelCase => {Bool(duplicate[1])}, {policyType}.SnakeCase => {Bool(duplicate[2])}, " +
                $"{policyType}.LowerCase => {Bool(duplicate[3])}, _ => {Bool(duplicate[0])} }}";
-
-        static string Bool(bool value) => value ? "true" : "false";
     }
 
     /// <summary>Emits <c>__ToonSlot</c>: the slot of a key per naming policy, or -1.</summary>
@@ -1499,7 +1514,9 @@ internal sealed class SourceEmitter
         }
 
         code.AppendLine($"options ??= {Options}.Default;");
-        code.AppendLine("return __ToonDeserializeValue(doc.Root, options, 0);");
+        code.AppendLine("// A converter of the options for the type reads the root, as in ToonSerializer");
+        code.AppendLine($"return options.Converters.Count != 0 && {Helpers}.TryReadConverted<{model.FullyQualifiedName}>(doc.Root, options, out var __c) " +
+                        "? __c : __ToonDeserializeValue(doc.Root, options, 0);");
         code.EndBlock();
         code.AppendLine();
     }
@@ -1528,9 +1545,10 @@ internal sealed class SourceEmitter
             return;
         }
 
-        code.AppendLine("// Converters, null and non-object values are handled (or reported) by ToonSerializer.");
-        code.AppendLine($"if (options.Converters.Count != 0 || value is not {Models}ToonObject __obj) return {reflection};");
+        code.AppendLine("// Null and non-object values are handled (or reported) by ToonSerializer.");
+        code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
         EmitPolicyLocal();
+        code.AppendLine(ConvertLocal);
         code.AppendLine("var __ci = options.PropertyNameCaseInsensitive;");
 
         var unambiguous = UnambiguousNames(constructor);
@@ -1680,6 +1698,20 @@ internal sealed class SourceEmitter
     /// </summary>
     private string ReadExpression(ValuePlan plan, string toon, string depth)
     {
+        // The serializer consults the converters itself; otherwise a converter of the options for the type reads it
+        if (plan.Kind == ValueKind.Reflection)
+        {
+            return ConvertlessReadExpression(plan, toon, depth);
+        }
+
+        var converted = $"__c{_variable++}";
+        return $"(__convert && {Helpers}.TryReadConverted<{plan.TypeName}>({toon}, options, out var {converted}) ? {converted} : " +
+               $"({ConvertlessReadExpression(plan, toon, depth)}))";
+    }
+
+    /// <summary>An expression reading a <c>ToonValue</c> as the plan's declared type when no converter applies.</summary>
+    private string ConvertlessReadExpression(ValuePlan plan, string toon, string depth)
+    {
         var n = _variable++;
 
         switch (plan.Kind)
@@ -1792,6 +1824,7 @@ internal sealed class SourceEmitter
         // Another runtime type than the ones generated code knows (a derived type, one with a converter) goes to the
         // reflection-based serializer, which writes the runtime type
         code.AppendLine($"if (!({KnownCollectionCondition(plan, "value")})) return {Helpers}.SerializeWithReflection<{plan.ValueTypeName}>(value, options, depth);");
+        code.AppendLine(ConvertLocal);
 
         if (plan.Kind == ValueKind.Dictionary)
         {
@@ -1815,7 +1848,7 @@ internal sealed class SourceEmitter
             }
 
             code.AppendLine("var __value = __entry.Value;");
-            EmitStore("__obj.Properties[__key]", element, "__value", "depth + 1");
+            EmitStore("__obj.Properties[__key]", element, "__value", "depth + 1", useDeclaredType: false);
             code.EndBlock();
 
             if (tracksPath)
@@ -1841,9 +1874,27 @@ internal sealed class SourceEmitter
             }
 
             code.BeginBlock("foreach (var __item in value)");
-            code.AppendLine(element.CanBeNull
-                                ? $"__array.Items.Add(__item is null ? {Models}ToonNull.Instance : {item});"
-                                : $"__array.Items.Add({item});");
+
+            // A converter of the options for an item's runtime type writes it, like ToonSerializer
+            var branches = new List<string>();
+
+            if (element.CanBeNull)
+            {
+                branches.Add($"if (__item is null) __array.Items.Add({Models}ToonNull.Instance);");
+            }
+
+            if (element.Kind != ValueKind.Reflection)
+            {
+                branches.Add($"if (__convert && {Helpers}.TryWriteConverted<{element.TypeName}>(__item, options, false, out var __c)) " +
+                             $"__array.Items.Add(__c ?? {Models}ToonNull.Instance);");
+            }
+
+            branches.Add($"__array.Items.Add({item});");
+
+            for (var b = 0; b < branches.Count; b++)
+            {
+                code.AppendLine(b == 0 ? branches[b] : "else " + branches[b]);
+            }
 
             if (tracksPath)
             {
@@ -1900,13 +1951,16 @@ internal sealed class SourceEmitter
         code.AppendLine();
         code.BeginBlock($"private static {plan.TypeName} __ToonRead{id}({Models}ToonValue value, {Options} options, int depth)");
         code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
+        code.AppendLine(ConvertLocal);
 
         if (plan.Kind == ValueKind.Dictionary)
         {
             var keyPlan = plan.Key!;
+            // A converter of the options for the key type reads keys (not string keys), like ToonSerializer
             var key = keyPlan.Inline == PrimitiveKind.String
                 ? "__entry.Key"
-                : $"{Helpers}.ReadPrimitive<{keyPlan.ValueTypeName}>(new {Models}ToonString(__entry.Key))";
+                : $"(__convert && {Helpers}.TryReadConverted<{keyPlan.ValueTypeName}>(new {Models}ToonString(__entry.Key), options, out var __ck) " +
+                  $"? __ck : {Helpers}.ReadPrimitive<{keyPlan.ValueTypeName}>(new {Models}ToonString(__entry.Key)))";
 
             code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
             code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>(__obj.Properties.Count);");
@@ -2004,6 +2058,12 @@ internal sealed class SourceEmitter
             if (!types.Contains(plan.ValueTypeName))
             {
                 types.Add(plan.ValueTypeName);
+            }
+
+            // A converter may apply to the nullable type only
+            if (plan.IsNullableValueType && !types.Contains(plan.TypeName))
+            {
+                types.Add(plan.TypeName);
             }
 
             // The concrete types it writes itself, whatever the declared type

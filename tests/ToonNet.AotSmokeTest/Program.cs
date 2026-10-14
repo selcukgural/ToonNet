@@ -76,8 +76,33 @@ if (viaTypeInfo != expected || ToonSerializer.Serialize(readViaTypeInfo, Catalog
     return 1;
 }
 
+// Converters of the options are applied by generated code too
+var withConverter = new ToonSerializerOptions();
+withConverter.AddConverter(new SizeConverter());
+var converted = ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo, withConverter);
+var convertedBack = ToonSerializer.Deserialize(converted, Catalog.ToonTypeInfo, withConverter)!;
+
+if (!converted.Contains("A1,9.99,1x2") || convertedBack.Products[1].Size.Height != 4 ||
+    ToonSerializer.Serialize(convertedBack, Catalog.ToonTypeInfo, withConverter) != converted)
+{
+    Console.WriteLine("FAILED: the type info overloads with a converter differ or do not round-trip");
+    Console.WriteLine(converted);
+    return 1;
+}
+
 Console.WriteLine("OK");
 return 0;
+
+public sealed class SizeConverter : ToonConverter<Size>
+{
+    public override ToonValue Write(Size? value, ToonSerializerOptions options) => new ToonString($"{value!.Width}x{value.Height}");
+
+    public override Size Read(ToonValue value, ToonSerializerOptions options)
+    {
+        var parts = ((ToonString)value).Value.Split('x');
+        return new Size { Width = int.Parse(parts[0]), Height = int.Parse(parts[1]) };
+    }
+}
 
 public enum Status
 {

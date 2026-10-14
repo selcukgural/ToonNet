@@ -84,6 +84,14 @@ public abstract class ToonObjectWriter
     /// </summary>
     public virtual Type[]? InlineTypes => null;
 
+    /// <summary>
+    ///     What the generated code applies itself: 0 for code from generators before ToonNet 3.3; 1 when it also applies
+    ///     the converters of the options, <see cref="ToonSerializerOptions.PropertyNameCaseInsensitive"/>,
+    ///     <see cref="ToonSerializerOptions.UnmappedMemberHandling"/> and <see cref="ToonSerializerOptions.RespectRequiredMembers"/>.
+    ///     The serializer leaves to reflection what older code does not apply.
+    /// </summary>
+    public virtual int FeatureLevel => 0;
+
     internal abstract void WriteValueOf(object value, int index, ToonWriter writer);
 }
 

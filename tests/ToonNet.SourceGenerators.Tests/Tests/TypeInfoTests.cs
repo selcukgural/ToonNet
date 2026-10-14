@@ -118,8 +118,9 @@ public partial class TypeInfoTests
         var node = new WriterNode { Name = "n", Anything = new PlainBox { X = 3 }, Rows = Rows() };
         AssertSame(node, WriterNode.ToonTypeInfo, direct: false);
 
-        // Reading a property whose type has no generated code goes through the generated tree-based method
-        AssertSame(new PlainHolder { Box = new PlainBox { X = 1 } }, PlainHolder.ToonTypeInfo, direct: false, directRead: false);
+        // Reading a property whose type has no generated code goes through the generated tree-based method; writing,
+        // the object's own tree is written in place (no fallback of the whole document)
+        AssertSame(new PlainHolder { Box = new PlainBox { X = 1 } }, PlainHolder.ToonTypeInfo, direct: true, directRead: false);
 
         // Primitives and null there need no reflection, so the same type is written and read straight from text
         AssertSame(new WriterNode { Name = "n", Anything = 5, Rows = Rows(), Leaf = new WriterLeaf { Numbers = [1] } }, WriterNode.ToonTypeInfo);
@@ -210,13 +211,13 @@ public partial class TypeInfoTests
     }
 
     [Fact]
-    public void Converters_AreNotSupported()
+    public void Converters_AreApplied()
     {
         var options = new ToonSerializerOptions();
         options.Converters.Add(new BoxSizeConverter());
 
-        Assert.Throws<NotSupportedException>(() => ToonSerializer.Serialize(Size(1, 2), BoxSize.ToonTypeInfo, options));
-        Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("Width: 1", BoxSize.ToonTypeInfo, options));
+        Assert.Equal(ToonSerializer.Serialize(Size(1, 2), options), ToonSerializer.Serialize(Size(1, 2), BoxSize.ToonTypeInfo, options));
+        Assert.NotNull(ToonSerializer.Deserialize("Width: 1", BoxSize.ToonTypeInfo, options));
     }
 
     [Fact]
