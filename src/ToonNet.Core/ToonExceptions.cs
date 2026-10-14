@@ -294,6 +294,26 @@ public sealed class ToonSerializationException : ToonException
     }
 
     /// <summary>
+    ///     For an error in an item of a batch of a streamed array (<c>$[3].Id</c>): the path in the whole document, with
+    ///     the items of the earlier batches counted and the path of the array in front (<c>$.data.orders[1003].Id</c>).
+    /// </summary>
+    internal void RebaseItemPath(long itemsBefore, string arrayPath)
+    {
+        if (_reason == null || _path is not { } path || !path.StartsWith("$[", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var close = path.IndexOf(']');
+
+        if (close > 2 && long.TryParse(path.AsSpan(2, close - 2), System.Globalization.NumberStyles.None,
+                                       System.Globalization.CultureInfo.InvariantCulture, out var index))
+        {
+            _path = arrayPath + "[" + (index + itemsBefore).ToString(System.Globalization.CultureInfo.InvariantCulture) + "]" + path[(close + 1)..];
+        }
+    }
+
+    /// <summary>
     ///     Gets the value that caused the error.
     /// </summary>
     public object? Value { get; init; }
@@ -334,7 +354,8 @@ public sealed class ToonPathException : ToonException
     /// <param name="path">The path text.</param>
     /// <param name="position">The 0-based position of the error in the path.</param>
     public ToonPathException(string reason, string path, int position)
-        : base(WithDetails(reason, ("position", position.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("path", path)))
+        : base(WithDetails(reason, ("position", position.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                           ("path", path.Length <= 200 ? path : path[..200] + "...")))
     {
         Reason = reason;
         Path = path;

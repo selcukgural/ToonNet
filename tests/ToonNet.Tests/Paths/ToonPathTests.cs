@@ -193,4 +193,35 @@ public class ToonPathTests
 
         Assert.Equal(["bcd", "b"], root.Select("$.names[?match(@, $.pattern)]").Select(v => v.GetValue<string>()));
     }
+
+    [Fact]
+    public void RunawayQueries_StopAtTheBudget()
+    {
+        // 40 nested objects: each `..*` multiplies the values by the depth
+        var deep = string.Concat(Enumerable.Range(0, 40).Select(i => new string(' ', i * 2) + "a:\n")) + new string(' ', 80) + "b: 1";
+        var path = ToonPath.Parse("$..*..*..*..*..*..*..*..*");
+        var watch = Stopwatch.StartNew();
+
+        Assert.Throws<InvalidOperationException>(() => path.Select(ToonDocument.Parse(deep).Root));
+        Assert.Throws<InvalidOperationException>(() => path.SelectFrom(deep));
+        Assert.Throws<InvalidOperationException>(() => ToonPath.Parse("$[?@..[?@..[?@..[?@..[?@..b]]]]]").Select(ToonDocument.Parse(deep).Root));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), watch.Elapsed.ToString());
+
+        // A large document gets a budget in proportion to its size
+        var rows = "rows[100000]{a,b}:\n" + string.Join('\n', Enumerable.Range(0, 100_000).Select(i => $"  {i},x"));
+        Assert.Equal(300_001, ToonPath.Parse("$..*").Select(ToonDocument.Parse(rows).Root).Count);
+        Assert.Equal(300_001, ToonPath.Parse("$..*").SelectFrom(rows).Count);
+    }
+
+    [Fact]
+    public void LongPaths_AreNotCached_AndShortenedInMessages()
+    {
+        var path = "$" + string.Concat(Enumerable.Repeat(".a", 400));
+
+        Assert.NotSame(ToonPath.Parse(path), ToonPath.Parse(path));
+
+        var ex = Assert.Throws<ToonPathException>(() => ToonPath.Parse(path + "."));
+        Assert.Equal(path + ".", ex.Path);
+        Assert.True(ex.Message.Length < 300);
+    }
 }

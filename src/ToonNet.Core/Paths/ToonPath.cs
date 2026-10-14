@@ -16,16 +16,20 @@ namespace ToonNet.Core.Paths;
 ///         <c>length()</c>, <c>count()</c>, <c>match()</c>, <c>search()</c> and <c>value()</c>.
 ///     </para>
 ///     <para>
-///         A path is immutable and thread-safe. <see cref="Parse"/> caches the paths it compiles, so the methods that take
-///         path text (such as <see cref="ToonValue.Select(string)"/>) compile each path once. Regular expressions run in
-///         linear time, and nesting is limited, so a path from untrusted input cannot make evaluation slow through a
-///         pattern or exhaust the stack; the work of a query still grows with the document and with nested descendant
-///         filters.
+///         A path is immutable and thread-safe. <see cref="Parse"/> caches the paths it compiles (up to 512 characters),
+///         so the methods that take path text (such as <see cref="ToonValue.Select(string)"/>) compile each path once.
+///         Regular expressions run in linear time, nesting is limited, and an evaluation may take at most a million steps
+///         plus 16 per value of the
+///         document (beyond that it throws <see cref="InvalidOperationException"/>), so a path from untrusted input cannot
+///         make a query slow through a pattern, exhaust the stack, or multiply the work with nested descendant segments.
 ///     </para>
 /// </remarks>
 public sealed class ToonPath
 {
     private const int MaxCacheSize = 1024;
+
+    /// <summary>Longer paths are compiled each time, so the cache does not keep large texts.</summary>
+    private const int MaxCachedLength = 512;
 
     private static readonly ConcurrentDictionary<string, ToonPath> Cache = new(StringComparer.Ordinal);
 
@@ -64,6 +68,11 @@ public sealed class ToonPath
         }
 
         var compiled = new ToonPath(path, ToonPathParser.Parse(path));
+
+        if (path.Length > MaxCachedLength)
+        {
+            return compiled;
+        }
 
         if (Cache.Count >= MaxCacheSize)
         {
@@ -105,7 +114,7 @@ public sealed class ToonPath
     public IReadOnlyList<ToonValue> Select(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false);
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false, new EvaluationBudget(root));
         var values = new ToonValue[nodes.Count];
 
         for (var i = 0; i < values.Length; i++)
@@ -172,7 +181,7 @@ public sealed class ToonPath
             var root = parser.Parse(text).Root;
             var location = new ToonPathTextEvaluator.LocationStack();
 
-            foreach (var node in ToonPathEvaluator.Select(Query, root, root, track: sink.WantsLocations))
+            foreach (var node in ToonPathEvaluator.Select(Query, root, root, track: sink.WantsLocations, new EvaluationBudget(root)))
             {
                 sink.Add(node.Value, location, node.Location);
             }
@@ -184,7 +193,7 @@ public sealed class ToonPath
 
         try
         {
-            evaluator.Evaluate(parser, sink);
+            evaluator.Evaluate(parser, sink, new EvaluationBudget(text.Length));
         }
         finally
         {
@@ -212,7 +221,7 @@ public sealed class ToonPath
     public IReadOnlyList<ToonPathMatch> SelectMatches(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true);
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true, new EvaluationBudget(root));
         var matches = new ToonPathMatch[nodes.Count];
 
         for (var i = 0; i < matches.Length; i++)
@@ -231,7 +240,7 @@ public sealed class ToonPath
     public ToonValue? SelectSingle(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false);
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: false, new EvaluationBudget(root));
 
         return nodes.Count switch
         {
@@ -344,7 +353,7 @@ public sealed class ToonPath
     public int RemoveAll(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
-        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true);
+        var nodes = ToonPathEvaluator.Select(Query, root, root, track: true, new EvaluationBudget(root));
 
         if (nodes.Count == 0)
         {

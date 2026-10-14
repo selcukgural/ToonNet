@@ -19,8 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`$.orders[?@.total > 100 && @.paid == true].id`). It passes all 715 cases of the JSONPath Compliance Test Suite.
   On a tree: `Select`, `SelectSingle`, `SelectMatches` (with normalized paths such as `$['orders'][2]`), `SetValue`
   (creates missing objects and arrays on the way) and `RemoveAll`. Paths are compiled once and cached; regular
-  expressions run in linear time and nesting is limited, so paths from untrusted input cannot hang a query on a pattern
-  or exhaust the stack. Invalid paths throw `ToonPathException` with the position of the error.
+  expressions run in linear time, nesting is limited, and an evaluation takes at most a million steps plus 16 per value
+  of the document (then throws `InvalidOperationException`), so paths from untrusted input cannot hang a query on a
+  pattern, exhaust the stack, or multiply the work with nested `..` segments. Invalid paths throw `ToonPathException`
+  with the position of the error.
 - **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
   creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.
 - **ToonNet.Core:** `ToonSerializer.Deserialize<T>(ToonDocumentReader)` (also with a `Type`, or a `ToonTypeInfo`
@@ -51,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the answer to ask for (`orders[N]{id,customer,total}:` with `<integer>`, `<string>`, `<Draft|Active>` placeholders,
   following the serializer's names and forms); `Extract` takes the ```` ```toon ```` block out of an answer, and
   `Parse`/`Deserialize` read it in non-strict mode, so a miscounted length or a repeated key does not fail the answer.
+
+### Fixed
+- **ToonNet.Core:** `DeserializeAsyncEnumerable` reported conversion errors with the index of the item in its batch
+  (`$[780].Id` for item 15,780); errors now name the item of the whole array.
 
 ## [3.3.0] - 2026-10-14
 

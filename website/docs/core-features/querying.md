@@ -115,9 +115,10 @@ To read the items of an array inside a document from a stream as they arrive, se
 
 Regular expressions run on .NET's non-backtracking engine, patterns are limited to 1,024 characters, and nesting
 (parentheses, filters, function calls) to 64 levels, so a path cannot hang a query on a pattern or exhaust the stack.
-The work of a query still grows with the document: each descendant segment (`..`) visits the whole subtree, and filters
-inside descendants multiply that. If clients send paths (for example to filter an API response), accept a fixed set,
-or reject paths with more than one `..`.
+Each descendant segment (`..`) visits the whole subtree, so nested ones multiply the work (`$..*..*..*..*` on a small,
+deep document would visit billions of values): an evaluation takes at most a million steps plus 16 per value of the
+document, and throws `InvalidOperationException` beyond that. If clients send paths (for example to filter an API
+response), prefer a fixed set, or reject paths with more than one `..`.
 
 ## See Also
 

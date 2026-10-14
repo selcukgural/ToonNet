@@ -167,9 +167,10 @@ internal sealed class ToonPathTextEvaluator
     internal static ToonPathTextEvaluator For(ToonPath path) => path.TextEvaluator ??= new ToonPathTextEvaluator(path);
 
     /// <summary>The state of one evaluation (the evaluator itself is shared).</summary>
-    private sealed class Walker(ToonParser parser, ISink sink, int segments)
+    private sealed class Walker(ToonParser parser, ISink sink, int segments, EvaluationBudget work)
     {
         public readonly ToonParser Parser = parser;
+        public readonly EvaluationBudget Work = work;
         public readonly ISink Sink = sink;
         public readonly LocationStack Location = new();
 
@@ -186,9 +187,9 @@ internal sealed class ToonPathTextEvaluator
     }
 
     /// <summary>Evaluates the path over the document the parser has begun, and checks that nothing follows the root.</summary>
-    public void Evaluate(ToonParser parser, ISink sink)
+    public void Evaluate(ToonParser parser, ISink sink, EvaluationBudget work)
     {
-        var walker = new Walker(parser, sink, _segments.Length);
+        var walker = new Walker(parser, sink, _segments.Length, work);
         Walk(walker, parser.ReadRoot(), 0);
         parser.EndDocument();
     }
@@ -335,7 +336,7 @@ internal sealed class ToonPathTextEvaluator
         {
             var tree = parser.BuildValue(child);
 
-            if (ToonPathEvaluator.Test(selector.Filter!, tree, tree))
+            if (ToonPathEvaluator.Test(selector.Filter!, tree, tree, walker.Work))
             {
                 WalkTree(walker, tree, index + 1);
             }
@@ -359,7 +360,7 @@ internal sealed class ToonPathTextEvaluator
             partial = BuildMembers(parser, child, members);
         }
 
-        if (ToonPathEvaluator.Test(selector.Filter!, partial, partial))
+        if (ToonPathEvaluator.Test(selector.Filter!, partial, partial, walker.Work))
         {
             parser.Restore(checkpoint);
             Walk(walker, child, index + 1);
@@ -456,7 +457,7 @@ internal sealed class ToonPathTextEvaluator
     /// <summary>Evaluates the rest of the path, from <paramref name="index"/>, on a tree.</summary>
     private void WalkTree(Walker walker, ToonValue tree, int index)
     {
-        foreach (var node in ToonPathEvaluator.Select(_rests[index], tree, tree, track: walker.Sink.WantsLocations))
+        foreach (var node in ToonPathEvaluator.Select(_rests[index], tree, tree, track: walker.Sink.WantsLocations, walker.Work))
         {
             walker.Sink.Add(node.Value, walker.Location, node.Location);
         }

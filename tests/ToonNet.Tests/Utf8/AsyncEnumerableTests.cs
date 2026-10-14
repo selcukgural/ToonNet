@@ -360,5 +360,57 @@ public class AsyncEnumerableTests
         Assert.True(stream.BytesRead < 100_000, $"read {stream.BytesRead} bytes");
     }
 
+    [Theory]
+    [InlineData("data:\n    orders[1]{a}:\n        1")]
+    [InlineData("data:\n  orders[1]{a}:\n    1\n  orders[1]{a}:\n    2")]
+    [InlineData("data:\n  x: 1\ndata:\n  orders[1]{a}:\n    1")]
+    public async Task NonStrictMode_ReadsLikeDeserializeAt(string text)
+    {
+        var options = new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } };
+        var expected = ToonSerializer.Serialize(ToonSerializer.DeserializeAt<List<object?>>(text, "$.data.orders", options));
+
+        Assert.Equal(expected, ToonSerializer.Serialize(await ReadAll(
+            ToonSerializer.DeserializeAsyncEnumerableAt<object>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.orders", options))));
+    }
+
+    [Fact]
+    public async Task NullAtThePath_GivesNoItems()
+    {
+        Assert.Empty(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream("data:\n  orders: null"u8.ToArray()),
+                                                                                 "$.data.orders")));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(1 << 20)]
+    public async Task ConversionErrors_HaveThePathInTheWholeArray(int batch)
+    {
+        var rows = Enumerable.Range(0, 3000).Select(i => i == 2500 ? "    x,a" : $"    {i},a");
+        var text = "data:\n  orders[3000]{Id,Label}:\n" + string.Join('\n', rows);
+
+        var ex = await Assert.ThrowsAsync<ToonSerializationException>(() => ReadAll(
+            ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.orders",
+                                                              new ToonSerializerOptions(), batch)));
+        Assert.Equal("$.data.orders[2500].Id", ex.Path);
+        Assert.Equal(Assert.Throws<ToonSerializationException>(() => ToonSerializer.DeserializeAt<List<Item>>(text, "$.data.orders")).Message,
+                     ex.Message);
+
+        var root = "[3000]{Id,Label}:\n" + string.Join('\n', rows.Select(r => r[2..]));
+        ex = await Assert.ThrowsAsync<ToonSerializationException>(() => ReadAll(
+            ToonSerializer.DeserializeAsyncEnumerable<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(root)), new ToonSerializerOptions(), batch)));
+        Assert.Equal("$[2500].Id", ex.Path);
+    }
+
+    [Fact]
+    public async Task IndentationErrors_CountTheSpacesOfTheDocument()
+    {
+        const string text = "data:\n  orders[2]:\n    - 1\n     - 2";
+
+        var whole = Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeAt<List<object>>(text, "$.data.orders"));
+        var streamed = await Assert.ThrowsAsync<ToonParseException>(() => ReadAll(
+            ToonSerializer.DeserializeAsyncEnumerableAt<object>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.orders")));
+        Assert.Equal(whole.Message, streamed.Message);
+    }
+
     #endregion
 }

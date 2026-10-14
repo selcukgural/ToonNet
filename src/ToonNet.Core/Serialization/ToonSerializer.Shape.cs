@@ -45,9 +45,11 @@ public static partial class ToonSerializer
                     Line(0, Placeholder(type));
                     break;
                 case Kind.Collection:
+                    _visiting.Add(type);
                     WriteArray(null, inner!, 0);
                     break;
                 case Kind.Dictionary:
+                    _visiting.Add(type);
                     WriteMember("<key>", inner!, 0);
                     break;
                 default:
@@ -203,12 +205,17 @@ public static partial class ToonSerializer
                     var placeholder = Placeholder(type);
                     Line(depth, $"{key}: {(mayBeNull && !placeholder.EndsWith("|null>") ? placeholder[..^1] + "|null>" : placeholder)}");
                     break;
+                case Kind.Collection or Kind.Dictionary when !_visiting.Add(type):
+                    Line(depth, $"{key}: <{type.Name}>"); // a collection within itself
+                    break;
                 case Kind.Collection:
                     WriteArray(key, inner!, depth);
+                    _visiting.Remove(type);
                     break;
                 case Kind.Dictionary:
                     Line(depth, key + ":");
                     WriteMember("<key>", inner!, depth + 1);
+                    _visiting.Remove(type);
                     break;
                 default:
                     if (_visiting.Contains(type))
@@ -277,11 +284,16 @@ public static partial class ToonSerializer
 
             switch (Classify(element, out _))
             {
+                case Kind.Collection or Kind.Dictionary when !_visiting.Add(element):
+                    Line(depth + 1, $"<{element.Name}>"); // a collection within itself
+                    break;
                 case Kind.Collection:
                     WriteArray(null, inner!, depth + 1);
+                    _visiting.Remove(element);
                     break;
                 case Kind.Dictionary:
                     WriteMember("<key>", inner!, depth + 1);
+                    _visiting.Remove(element);
                     break;
                 default:
                     if (_visiting.Contains(element))
@@ -294,6 +306,13 @@ public static partial class ToonSerializer
                     }
 
                     break;
+            }
+
+            if (_text.Length == start)
+            {
+                // An object without members is a bare hyphen
+                Line(depth, "-");
+                return;
             }
 
             var firstLine = start == 0 ? 0 : start + 1;

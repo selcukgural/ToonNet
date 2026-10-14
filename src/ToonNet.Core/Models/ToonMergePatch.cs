@@ -47,7 +47,8 @@ public static class ToonMergePatch
             result = new ToonObject(members.Properties.Count);
         }
 
-        foreach (var (key, value) in members.Properties)
+        // A snapshot: the patch may be the target itself, or inside it
+        foreach (var (key, value) in members.Properties.ToArray())
         {
             if (value is ToonNull)
             {

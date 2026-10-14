@@ -113,7 +113,8 @@ public static partial class ToonSerializer
         var compiled = SingularPath(path);
         options ??= ToonSerializerOptions.Default;
 
-        return MemberNames(compiled) is { } names
+        // Non-strict mode lets a repeated key replace an earlier one and indentation vary, which only the parser follows
+        return MemberNames(compiled) is { } names && (names.Length == 0 || options.ToonOptions.StrictMode)
             ? ReadRootItems(utf8Stream, options, text => (List<T?>?)DeserializeText(text, typeof(List<T?>), options), DefaultBatchCharacters,
                             cancellationToken, names.Length == 0 ? null : names)
             : ReadWholeAt(utf8Stream, compiled, options, cancellationToken,
@@ -145,7 +146,7 @@ public static partial class ToonSerializer
         options = CheckTypeInfo(itemTypeInfo, options);
         var listInfo = ToonTypeInfo.CreateList(itemTypeInfo);
 
-        return MemberNames(compiled) is { } names
+        return MemberNames(compiled) is { } names && (names.Length == 0 || options.ToonOptions.StrictMode)
             ? ReadRootItems(utf8Stream, options, text => DeserializeText(text, listInfo, options), DefaultBatchCharacters, cancellationToken,
                             names.Length == 0 ? null : names)
             : ReadWholeAt(utf8Stream, compiled, options, cancellationToken, (text, path, options) => DeserializeAtText(text, path, listInfo, options));
@@ -214,6 +215,12 @@ public static partial class ToonSerializer
             catch (ToonParseException ex)
             {
                 throw batches.Relocate(ex);
+            }
+            catch (ToonSerializationException ex)
+            {
+                // The batch is a root array of some of the items: name the item of the whole array
+                ex.RebaseItemPath(batches.ItemsBefore, batches.ArrayPath);
+                throw;
             }
 
             // A document that is only `null` has no items
@@ -308,6 +315,12 @@ public static partial class ToonSerializer
 
         public ToonText Text => _text.Text;
 
+        /// <summary>The items of the array in the batches before the current one.</summary>
+        public long ItemsBefore => _totalItems - _lastBatchItems;
+
+        /// <summary>The path of the array, as errors give it.</summary>
+        public string ArrayPath => target == null ? "$" : PathText();
+
         /// <summary>Reads lines until a batch is ready; false after the last batch.</summary>
         public async ValueTask<bool> NextAsync(CancellationToken cancellationToken)
         {
@@ -349,6 +362,16 @@ public static partial class ToonSerializer
 
             // The batch declares its own count; the error names the counts of the whole array
             const string mismatch = "Array length mismatch: expected ";
+
+            // An item line lost the indentation of the header: the count in the message is that of the whole document
+            const string indentation = "Indentation of ";
+
+            if (error.Line > 1 && _dedent > 0 && message.StartsWith(indentation, StringComparison.Ordinal) &&
+                message.IndexOf(' ', indentation.Length) is var end and > 0 &&
+                int.TryParse(message.AsSpan(indentation.Length, end - indentation.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var spaces))
+            {
+                message = indentation + (spaces + _dedent).ToString(CultureInfo.InvariantCulture) + message[end..];
+            }
 
             // In the batch, the header has no key or indentation and the items lost the header's indentation. On the
             // header line, a count mismatch is reported at the start of the line and other errors at their character;
@@ -595,6 +618,12 @@ public static partial class ToonSerializer
 
             if (rest.Length == 0 || rest[0] != '[')
             {
+                if (rest is ": null")
+                {
+                    _missing = _ended = true; // null has no items, like a document that is only null
+                    return;
+                }
+
                 if (rest is ": []")
                 {
                     // An empty array

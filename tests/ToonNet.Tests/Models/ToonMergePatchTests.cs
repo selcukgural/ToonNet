@@ -80,4 +80,12 @@ public class ToonMergePatchTests
         Assert.Throws<ArgumentNullException>(() => ToonMergePatch.Apply(new ToonObject(), null!));
         Assert.Throws<ArgumentNullException>(() => ToonMergePatch.Create(null!, new ToonObject()));
     }
+
+    [Fact]
+    public void Apply_PatchIsTheTarget()
+    {
+        var target = ToonDocument.Parse("a: null\nb:\n  c: 1").Root;
+
+        Assert.Equal("b:\n  c: 1", ToonSerializer.Serialize(ToonMergePatch.Apply(target, target)));
+    }
 }

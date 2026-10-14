@@ -5,6 +5,93 @@ using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Paths;
 
+/// <summary>
+///     The work one evaluation may do: a base amount, plus 16 steps per value of the document. A path from untrusted input
+///     cannot make a query run away: each descendant segment (<c>..</c>) multiplies the values it visits by the depth of
+///     the document, so <c>$..*..*..*..*</c> on a small, deep document would otherwise visit billions of values.
+/// </summary>
+internal sealed class EvaluationBudget
+{
+    /// <summary>The steps every evaluation may take, whatever the size of the document.</summary>
+    internal const long BaseSteps = 1_000_000;
+
+    /// <summary>The steps per value of the document that an evaluation may take beyond <see cref="BaseSteps"/>.</summary>
+    internal const long StepsPerValue = 16;
+
+    private long _remaining;
+    private ToonValue? _root;
+
+    /// <summary>A budget for a tree: the values are counted when the base amount is used up.</summary>
+    public EvaluationBudget(ToonValue root)
+    {
+        _remaining = BaseSteps;
+        _root = root;
+    }
+
+    /// <summary>A budget for a document of <paramref name="length"/> characters (each value takes at least one).</summary>
+    public EvaluationBudget(int length)
+    {
+        _remaining = BaseSteps + StepsPerValue * length;
+    }
+
+    public void Spend(int steps = 1)
+    {
+        if ((_remaining -= steps) < 0)
+        {
+            Extend();
+        }
+    }
+
+    private void Extend()
+    {
+        if (_root != null)
+        {
+            _remaining += StepsPerValue * CountValues(_root);
+            _root = null;
+
+            if (_remaining >= 0)
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "The path does too much work for the size of the document; nested descendant segments (..) multiply the values a query visits.");
+    }
+
+    private static long CountValues(ToonValue root)
+    {
+        var count = 0L;
+        var pending = new Stack<ToonValue>();
+        pending.Push(root);
+
+        while (pending.TryPop(out var value))
+        {
+            count++;
+
+            switch (value)
+            {
+                case ToonObject obj:
+                    foreach (var (_, member) in obj.Properties)
+                    {
+                        pending.Push(member);
+                    }
+
+                    break;
+                case ToonArray array:
+                    foreach (var item in array.Items)
+                    {
+                        pending.Push(item);
+                    }
+
+                    break;
+            }
+        }
+
+        return count;
+    }
+}
+
 /// <summary>Evaluates a compiled path over a <see cref="ToonValue"/> tree, with the semantics of RFC 9535.</summary>
 internal static class ToonPathEvaluator
 {
@@ -84,7 +171,7 @@ internal static class ToonPathEvaluator
     }
 
     /// <summary>Selects the nodes of <paramref name="query"/>, starting at <paramref name="start"/> (the root or the current node).</summary>
-    public static List<Node> Select(Query query, ToonValue root, ToonValue start, bool track)
+    public static List<Node> Select(Query query, ToonValue root, ToonValue start, bool track, EvaluationBudget work)
     {
         var nodes = new List<Node>(1) { new(start, null) };
 
@@ -96,13 +183,13 @@ internal static class ToonPathEvaluator
             {
                 if (segment.Descendant)
                 {
-                    SelectDescendants(segment.Selectors, node, root, track, next);
+                    SelectDescendants(segment.Selectors, node, root, track, next, work);
                 }
                 else
                 {
                     foreach (var selector in segment.Selectors)
                     {
-                        SelectChildren(selector, node, root, track, next);
+                        SelectChildren(selector, node, root, track, next, work);
                     }
                 }
             }
@@ -119,11 +206,13 @@ internal static class ToonPathEvaluator
     }
 
     /// <summary>Applies the selectors to a node and all its descendants, in document order (§2.5.2.2).</summary>
-    private static void SelectDescendants(Selector[] selectors, Node node, ToonValue root, bool track, List<Node> output)
+    private static void SelectDescendants(Selector[] selectors, Node node, ToonValue root, bool track, List<Node> output, EvaluationBudget work)
     {
+        work.Spend();
+
         foreach (var selector in selectors)
         {
-            SelectChildren(selector, node, root, track, output);
+            SelectChildren(selector, node, root, track, output, work);
         }
 
         switch (node.Value)
@@ -133,7 +222,7 @@ internal static class ToonPathEvaluator
 
                 foreach (var (key, value) in obj.Properties)
                 {
-                    SelectDescendants(selectors, new Node(value, track ? new Location(node.Location, obj, key, -1) : null), root, track, output);
+                    SelectDescendants(selectors, new Node(value, track ? new Location(node.Location, obj, key, -1) : null), root, track, output, work);
                 }
 
                 break;
@@ -142,14 +231,21 @@ internal static class ToonPathEvaluator
 
                 for (var i = 0; i < array.Items.Count; i++)
                 {
-                    SelectDescendants(selectors, new Node(array.Items[i], track ? new Location(node.Location, array, null, i) : null), root, track, output);
+                    SelectDescendants(selectors, new Node(array.Items[i], track ? new Location(node.Location, array, null, i) : null), root, track, output, work);
                 }
 
                 break;
         }
     }
 
-    private static void SelectChildren(Selector selector, Node node, ToonValue root, bool track, List<Node> output)
+    private static void SelectChildren(Selector selector, Node node, ToonValue root, bool track, List<Node> output, EvaluationBudget work)
+    {
+        var before = output.Count;
+        AddChildren(selector, node, root, track, output, work);
+        work.Spend(output.Count - before);
+    }
+
+    private static void AddChildren(Selector selector, Node node, ToonValue root, bool track, List<Node> output, EvaluationBudget work)
     {
         switch (selector.Kind)
         {
@@ -203,7 +299,7 @@ internal static class ToonPathEvaluator
                     case ToonObject filtered:
                         foreach (var (key, value) in filtered.Properties)
                         {
-                            if (Test(selector.Filter!, root, value))
+                            if (Test(selector.Filter!, root, value, work))
                             {
                                 output.Add(new Node(value, track ? new Location(node.Location, filtered, key, -1) : null));
                             }
@@ -213,7 +309,7 @@ internal static class ToonPathEvaluator
                     case ToonArray items:
                         for (var i = 0; i < items.Items.Count; i++)
                         {
-                            if (Test(selector.Filter!, root, items.Items[i]))
+                            if (Test(selector.Filter!, root, items.Items[i], work))
                             {
                                 output.Add(new Node(items.Items[i], track ? new Location(node.Location, items, null, i) : null));
                             }
@@ -272,14 +368,16 @@ internal static class ToonPathEvaluator
     #region Filter expressions
 
     /// <summary>Evaluates a logical expression with <paramref name="current"/> as <c>@</c>.</summary>
-    internal static bool Test(PathExpression expression, ToonValue root, ToonValue current)
+    internal static bool Test(PathExpression expression, ToonValue root, ToonValue current, EvaluationBudget work)
     {
+        work.Spend();
+
         switch (expression)
         {
             case OrExpression or:
                 foreach (var operand in or.Operands)
                 {
-                    if (Test(operand, root, current))
+                    if (Test(operand, root, current, work))
                     {
                         return true;
                     }
@@ -289,7 +387,7 @@ internal static class ToonPathEvaluator
             case AndExpression and:
                 foreach (var operand in and.Operands)
                 {
-                    if (!Test(operand, root, current))
+                    if (!Test(operand, root, current, work))
                     {
                         return false;
                     }
@@ -297,22 +395,22 @@ internal static class ToonPathEvaluator
 
                 return true;
             case NotExpression not:
-                return !Test(not.Operand, root, current);
+                return !Test(not.Operand, root, current, work);
             case QueryExpression { Query: var query }:
                 return query.IsSingular
                     ? SelectSingular(query, root, current) != null
-                    : Select(query, root, query.Absolute ? root : current, track: false).Count != 0;
+                    : Select(query, root, query.Absolute ? root : current, track: false, work).Count != 0;
             case ComparisonExpression comparison:
-                return Compare(Evaluate(comparison.Left, root, current), comparison.Operator, Evaluate(comparison.Right, root, current));
+                return Compare(Evaluate(comparison.Left, root, current, work), comparison.Operator, Evaluate(comparison.Right, root, current, work));
             case FunctionExpression function:
-                return TestFunction(function, root, current);
+                return TestFunction(function, root, current, work);
             default:
                 throw new InvalidOperationException("Not a logical expression.");
         }
     }
 
     /// <summary>Evaluates an expression of ValueType; null is Nothing (§2.4.1).</summary>
-    private static ToonValue? Evaluate(PathExpression expression, ToonValue root, ToonValue current)
+    private static ToonValue? Evaluate(PathExpression expression, ToonValue root, ToonValue current, EvaluationBudget work)
     {
         switch (expression)
         {
@@ -321,7 +419,7 @@ internal static class ToonPathEvaluator
             case QueryExpression { Query: var query }:
                 return SelectSingular(query, root, current);
             case FunctionExpression function:
-                return EvaluateFunction(function, root, current);
+                return EvaluateFunction(function, root, current, work);
             default:
                 throw new InvalidOperationException("Not a value expression.");
         }
@@ -357,18 +455,18 @@ internal static class ToonPathEvaluator
         return value;
     }
 
-    private static List<Node> SelectNodes(PathExpression argument, ToonValue root, ToonValue current)
+    private static List<Node> SelectNodes(PathExpression argument, ToonValue root, ToonValue current, EvaluationBudget work)
     {
         var query = ((QueryExpression)argument).Query;
-        return Select(query, root, query.Absolute ? root : current, track: false);
+        return Select(query, root, query.Absolute ? root : current, track: false, work);
     }
 
-    private static ToonValue? EvaluateFunction(FunctionExpression function, ToonValue root, ToonValue current)
+    private static ToonValue? EvaluateFunction(FunctionExpression function, ToonValue root, ToonValue current, EvaluationBudget work)
     {
         switch (function.Function)
         {
             case FunctionKind.Length:
-                return Evaluate(function.Arguments[0], root, current) switch
+                return Evaluate(function.Arguments[0], root, current, work) switch
                 {
                     ToonString text => new ToonNumber((long)CountScalars(text.Value)),
                     ToonArray array => new ToonNumber((long)array.Items.Count),
@@ -376,17 +474,17 @@ internal static class ToonPathEvaluator
                     _ => null
                 };
             case FunctionKind.Count:
-                return new ToonNumber((long)SelectNodes(function.Arguments[0], root, current).Count);
+                return new ToonNumber((long)SelectNodes(function.Arguments[0], root, current, work).Count);
             case FunctionKind.Value:
-                return SelectNodes(function.Arguments[0], root, current) is [var single] ? single.Value : null;
+                return SelectNodes(function.Arguments[0], root, current, work) is [var single] ? single.Value : null;
             default:
                 throw new InvalidOperationException("The function does not return a value.");
         }
     }
 
-    private static bool TestFunction(FunctionExpression function, ToonValue root, ToonValue current)
+    private static bool TestFunction(FunctionExpression function, ToonValue root, ToonValue current, EvaluationBudget work)
     {
-        if (Evaluate(function.Arguments[0], root, current) is not ToonString text)
+        if (Evaluate(function.Arguments[0], root, current, work) is not ToonString text)
         {
             return false;
         }
@@ -394,7 +492,7 @@ internal static class ToonPathEvaluator
         var full = function.Function == FunctionKind.Match;
         var regex = function.HasLiteralRegex
             ? function.LiteralRegex
-            : Evaluate(function.Arguments[1], root, current) is ToonString pattern ? ToonPathRegex.Get(pattern.Value, full) : null;
+            : Evaluate(function.Arguments[1], root, current, work) is ToonString pattern ? ToonPathRegex.Get(pattern.Value, full) : null;
 
         return regex != null && regex.IsMatch(text.Value);
     }

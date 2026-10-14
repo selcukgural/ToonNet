@@ -183,4 +183,25 @@ public class ToonPromptTests
         Assert.Throws<ArgumentOutOfRangeException>(() => ToonPrompt.Encode(root, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ToonPromptOptions { MaxArrayItems = 0 });
     }
+
+    public sealed class SelfList : List<SelfList>;
+
+    public sealed class SelfMap : Dictionary<string, SelfMap>;
+
+    public sealed class Empty;
+
+    public sealed class Holder
+    {
+        public List<Empty> Items { get; set; } = [];
+        public SelfList Nested { get; set; } = [];
+    }
+
+    [Fact]
+    public void DescribeShape_RecursiveCollections_AndEmptyTypes()
+    {
+        Assert.Equal("[N]:\n  - <SelfList>", ToonPrompt.DescribeShape<SelfList>());
+        Assert.Equal("<key>: <SelfMap>", ToonPrompt.DescribeShape<SelfMap>());
+        Assert.Equal("[N]:\n  -", ToonPrompt.DescribeShape<List<Empty>>());
+        Assert.Equal("Items[N]:\n  -\nNested[N]:\n  - <SelfList>", ToonPrompt.DescribeShape<Holder>());
+    }
 }
