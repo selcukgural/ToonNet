@@ -187,6 +187,239 @@ public static partial class ToonSerializer
         return DeserializeAtText(text.Text, compiled, typeInfo, options);
     }
 
+    /// <summary>
+    ///     Deserializes every value a path selects, such as the rows that pass a filter, straight from the text:
+    ///     <c>DeserializeAll&lt;Order&gt;(toon, "$.orders[?@.total &gt; 100]")</c>. What the path does not select is skipped
+    ///     without being built or converted.
+    /// </summary>
+    /// <typeparam name="T">The type of the values.</typeparam>
+    /// <param name="toon">The TOON text.</param>
+    /// <param name="path">A JSONPath (RFC 9535); see <see cref="ToonPath"/>.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The converted values, in the order <see cref="ToonPath.Select"/> gives them; empty when there are none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="toon"/> or <paramref name="path"/> is null.</exception>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted (its path in the document is in the error).</exception>
+    /// <remarks>
+    ///     The whole document is read and checked; a filter that only compares members reads just those members of each
+    ///     child, and only the selected values are converted. See <see cref="ToonPath.SelectFrom(string, ToonOptions)"/>.
+    /// </remarks>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static List<T?> DeserializeAll<T>(string toon, string path, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(toon);
+        return DeserializeAllText<T>(toon, ToonPath.Parse(path), options ?? ToonSerializerOptions.Default);
+    }
+
+    /// <summary>
+    ///     Deserializes every value a path selects in UTF-8 encoded TOON text; see
+    ///     <see cref="DeserializeAll{T}(string, string, ToonSerializerOptions)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the values.</typeparam>
+    /// <param name="utf8Toon">The UTF-8 encoded TOON text; a byte order mark at the start is ignored.</param>
+    /// <param name="path">A JSONPath (RFC 9535).</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The converted values.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="path"/> is null.</exception>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static List<T?> DeserializeAll<T>(ReadOnlySpan<byte> utf8Toon, string path, ToonSerializerOptions? options = null)
+    {
+        var compiled = ToonPath.Parse(path);
+        using var text = ToonTextEncoding.Decode(utf8Toon);
+        return DeserializeAllText<T>(text.Text, compiled, options ?? ToonSerializerOptions.Default);
+    }
+
+    /// <summary>
+    ///     Reads UTF-8 encoded TOON text from a stream to its end and deserializes every value a path selects; see
+    ///     <see cref="DeserializeAll{T}(string, string, ToonSerializerOptions)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the values.</typeparam>
+    /// <param name="utf8Toon">The stream; it is read to the end and left open.</param>
+    /// <param name="path">A JSONPath (RFC 9535).</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>The converted values.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Toon"/> or <paramref name="path"/> is null.</exception>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static async ValueTask<List<T?>> DeserializeAllAsync<T>(Stream utf8Toon, string path, ToonSerializerOptions? options = null,
+                                                                  CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(utf8Toon);
+        var compiled = ToonPath.Parse(path);
+
+        using var text = await ToonTextEncoding.ReadAsync(utf8Toon, cancellationToken).ConfigureAwait(false);
+        return DeserializeAllText<T>(text.Text, compiled, options ?? ToonSerializerOptions.Default);
+    }
+
+    /// <summary>
+    ///     Deserializes every value a path selects with the type info of their type, without reflection; see
+    ///     <see cref="DeserializeAll{T}(string, string, ToonSerializerOptions)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the values.</typeparam>
+    /// <param name="toon">The TOON text.</param>
+    /// <param name="path">A JSONPath (RFC 9535).</param>
+    /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The converted values.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="NotSupportedException">Thrown when generated code cannot create <typeparamref name="T"/>, or the options need a newer generator.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    public static List<T?> DeserializeAll<T>(string toon, string path, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(toon);
+        return DeserializeAllText(toon, ToonPath.Parse(path), typeInfo, options);
+    }
+
+    /// <summary>
+    ///     Deserializes every value a path selects in UTF-8 encoded TOON text with the type info of their type, without
+    ///     reflection; see <see cref="DeserializeAll{T}(string, string, ToonSerializerOptions)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the values.</typeparam>
+    /// <param name="utf8Toon">The UTF-8 encoded TOON text; a byte order mark at the start is ignored.</param>
+    /// <param name="path">A JSONPath (RFC 9535).</param>
+    /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The converted values.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="path"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="NotSupportedException">Thrown when generated code cannot create <typeparamref name="T"/>, or the options need a newer generator.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    public static List<T?> DeserializeAll<T>(ReadOnlySpan<byte> utf8Toon, string path, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
+    {
+        var compiled = ToonPath.Parse(path);
+        using var text = ToonTextEncoding.Decode(utf8Toon);
+        return DeserializeAllText(text.Text, compiled, typeInfo, options);
+    }
+
+    /// <summary>
+    ///     Reads UTF-8 encoded TOON text from a stream to its end and deserializes every value a path selects with the type
+    ///     info of their type, without reflection; see <see cref="DeserializeAll{T}(string, string, ToonSerializerOptions)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the values.</typeparam>
+    /// <param name="utf8Toon">The stream; it is read to the end and left open.</param>
+    /// <param name="path">A JSONPath (RFC 9535).</param>
+    /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>The converted values.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Toon"/>, <paramref name="path"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="ToonPathException">Thrown when the path is not valid.</exception>
+    /// <exception cref="NotSupportedException">Thrown when generated code cannot create <typeparamref name="T"/>, or the options need a newer generator.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
+    /// <exception cref="ToonSerializationException">Thrown when a value cannot be converted.</exception>
+    public static async ValueTask<List<T?>> DeserializeAllAsync<T>(Stream utf8Toon, string path, ToonTypeInfo<T> typeInfo,
+                                                                  ToonSerializerOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(utf8Toon);
+        var compiled = ToonPath.Parse(path);
+        ArgumentNullException.ThrowIfNull(typeInfo);
+
+        using var text = await ToonTextEncoding.ReadAsync(utf8Toon, cancellationToken).ConfigureAwait(false);
+        return DeserializeAllText(text.Text, compiled, typeInfo, options);
+    }
+
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    private static List<T?> DeserializeAllText<T>(ToonText text, ToonPath path, ToonSerializerOptions options)
+    {
+        var sink = new ObjectSink<T>(options);
+        path.Evaluate(text, options.ToonOptions, sink);
+        return sink.Items;
+    }
+
+    private static List<T?> DeserializeAllText<T>(ToonText text, ToonPath path, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options)
+    {
+        options = CheckTypeInfo(typeInfo, options);
+        CheckGeneratedReading(typeInfo, options);
+
+        var sink = new TypeInfoSink<T>(typeInfo, options);
+        path.Evaluate(text, options.ToonOptions, sink);
+        return sink.Items;
+    }
+
+    /// <summary>Converts the selected values with reflection; errors get the value's path in the document.</summary>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    private sealed class ObjectSink<T>(ToonSerializerOptions options) : ToonPathTextEvaluator.ISink
+    {
+        public readonly List<T?> Items = [];
+
+        public bool WantsLocations => true;
+
+        public void Add(ToonParser parser, in ToonParser.ValueRef value, ToonPathTextEvaluator.LocationStack location)
+        {
+            try
+            {
+                Items.Add(Unbox<T>(ReadAt(parser, value, typeof(T), options)));
+            }
+            catch (ToonException ex)
+            {
+                ex.PrependPath(location.Format());
+                throw;
+            }
+        }
+
+        public void Add(ToonValue tree, ToonPathTextEvaluator.LocationStack location, ToonPathEvaluator.Location? relative)
+        {
+            try
+            {
+                Items.Add(Unbox<T>(DeserializeValue(tree, typeof(T), options, 0, new SerializerState())));
+            }
+            catch (ToonException ex)
+            {
+                ex.PrependPath(location.Format(relative));
+                throw;
+            }
+        }
+    }
+
+    /// <summary>Converts the selected values with a type info; errors get the value's path in the document.</summary>
+    private sealed class TypeInfoSink<T>(ToonTypeInfo<T> typeInfo, ToonSerializerOptions options) : ToonPathTextEvaluator.ISink
+    {
+        public readonly List<T?> Items = [];
+
+        public bool WantsLocations => true;
+
+        public void Add(ToonParser parser, in ToonParser.ValueRef value, ToonPathTextEvaluator.LocationStack location)
+        {
+            try
+            {
+                Items.Add(ReadAt(parser, value, typeInfo, options));
+            }
+            catch (ToonException ex)
+            {
+                ex.PrependPath(location.Format());
+                throw;
+            }
+        }
+
+        public void Add(ToonValue tree, ToonPathTextEvaluator.LocationStack location, ToonPathEvaluator.Location? relative)
+        {
+            try
+            {
+                Items.Add(DeserializeFromValue(tree, typeInfo, options));
+            }
+            catch (ToonException ex)
+            {
+                ex.PrependPath(location.Format(relative));
+                throw;
+            }
+        }
+    }
+
     /// <summary>The value as <typeparamref name="T"/>; null (no value at the path) is <c>default</c>, also for value types.</summary>
     private static T? Unbox<T>(object? value) => value is null ? default : (T)value;
 

@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   measurement on 10,000 rows, a small object at the start of the document is read 22x faster than the whole document
   with 3 KB instead of 1 MB allocated, and the rows themselves at the speed of a document that holds only them. A
   missing value gives `default`; errors carry the path in the document (`$.data.orders[1].Id`).
+- **ToonNet.Core:** `ToonPath.SelectFrom(toon)` evaluates a path straight over TOON text and builds only the selected
+  values, and `ToonSerializer.DeserializeAll<T>(toon, "$.orders[?@.total > 100]")` (string, UTF-8, stream; also with a
+  `ToonTypeInfo`) reads them straight into objects. Filters that compare members with literals are tested on the
+  members' text without building anything. In a quick measurement on 10,000 rows, such a filter runs 2.3x faster than
+  parsing and selecting with 100x less memory, and `DeserializeAll` 2.3x faster than deserializing everything and
+  filtering with LINQ, with 13x less memory; selecting one value skips the rest at the speed of validation.
 
 ## [3.3.0] - 2026-10-14
 

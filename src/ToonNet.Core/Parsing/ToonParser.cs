@@ -1446,7 +1446,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
     /// <summary>The state of the reader methods before a value is read, to read the value again (<see cref="Restore"/>).</summary>
     internal readonly struct Checkpoint(int position, int depth, int headerSpans, int keyCount, int reservedListItems, int headersFrom,
-                                        Header[] headers)
+                                        int headerCount, Header header, Header[]? headers)
     {
         public readonly int Position = position;
         public readonly int Depth = depth;
@@ -1457,7 +1457,11 @@ internal sealed class ToonParser(ToonOptions? options = null)
         /// <summary>The headers from this index on, which reading the value may remove; those before it stay.</summary>
         public readonly int HeadersFrom = headersFrom;
 
-        public readonly Header[] Headers = headers;
+        /// <summary>The number of headers from <see cref="HeadersFrom"/> on: one is kept in <see cref="Header"/>, more in <see cref="Headers"/>.</summary>
+        public readonly int HeaderCount = headerCount;
+
+        public readonly Header Header = header;
+        public readonly Header[]? Headers = headers;
     }
 
     /// <summary>
@@ -1467,11 +1471,13 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// </summary>
     internal Checkpoint Save(in ValueRef value)
     {
-        // Reading an array or keyed object removes its header when it ends, and the headers added after it
-        var from = value.HeaderIndex >= 0 ? Math.Min(value.HeaderIndex, _headers.Count) : _headers.Count;
-        var headers = from < _headers.Count ? _headers.GetRange(from, _headers.Count - from).ToArray() : [];
+        // Reading an array or keyed object removes its own header when it ends (and the headers added after it, which
+        // Restore drops); a row or field group only refers to the header of the array it is in
+        var from = value.Kind is RefKind.HeaderArray or RefKind.KeyedObject ? Math.Min(value.HeaderIndex, _headers.Count) : _headers.Count;
+        var count = _headers.Count - from;
 
-        return new Checkpoint(_position, _depth, _headerSpans, _keyCount, _reservedListItems, from, headers);
+        return new Checkpoint(_position, _depth, _headerSpans, _keyCount, _reservedListItems, from, count,
+                              count == 1 ? _headers[from] : default, count > 1 ? _headers.GetRange(from, count).ToArray() : null);
     }
 
     /// <summary>Returns to the state <see cref="Save"/> recorded.</summary>
@@ -1488,7 +1494,14 @@ internal sealed class ToonParser(ToonOptions? options = null)
             _headers.RemoveRange(checkpoint.HeadersFrom, _headers.Count - checkpoint.HeadersFrom);
         }
 
-        _headers.AddRange(checkpoint.Headers);
+        if (checkpoint.HeaderCount == 1)
+        {
+            _headers.Add(checkpoint.Header);
+        }
+        else if (checkpoint.Headers != null)
+        {
+            _headers.AddRange(checkpoint.Headers);
+        }
     }
 
     /// <summary>

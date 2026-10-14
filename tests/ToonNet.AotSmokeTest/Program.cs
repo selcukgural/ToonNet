@@ -1,5 +1,6 @@
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
+using ToonNet.Core.Paths;
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
 
@@ -97,7 +98,9 @@ tree.SetValue("$.Warehouses.oslo.Stock", 4);
 
 if (cheap is not [ToonString { Value: "A1" }] || tree["Warehouses"]!["oslo"]!["Stock"]!.GetValue<int>() != 4 ||
     tree.Deserialize(Catalog.ToonTypeInfo)!.Warehouses["oslo"].Stock != 4 || !ToonValue.DeepEquals(tree, tree.DeepClone()) ||
-    ToonSerializer.DeserializeAt(expected, "$.Products[1].Size", Size.ToonTypeInfo)!.Height != 4)
+    ToonSerializer.DeserializeAt(expected, "$.Products[1].Size", Size.ToonTypeInfo)!.Height != 4 ||
+    ToonSerializer.DeserializeAll(expected, "$.Products[?@.Price > 10]", Product.ToonTypeInfo) is not [{ Sku: "B2" }] ||
+    ToonPath.Parse("$.Warehouses[?@.Stock < 5].City").SelectFrom(expected) is not [ToonString { Value: "Oslo" }])
 {
     Console.WriteLine("FAILED: paths or tree access");
     return 1;

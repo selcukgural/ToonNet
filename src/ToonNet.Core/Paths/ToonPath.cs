@@ -40,6 +40,9 @@ public sealed class ToonPath
 
     internal Query Query { get; }
 
+    /// <summary>The evaluator over text, created on first use.</summary>
+    internal ToonPathTextEvaluator? TextEvaluator;
+
     /// <summary>
     ///     Whether the path selects at most one value: it has only member names and indexes (<c>$.a.b[0]</c>), no wildcard,
     ///     slice, filter, descendant segment or second selector in a bracket.
@@ -111,6 +114,95 @@ public sealed class ToonPath
         }
 
         return values;
+    }
+
+    /// <summary>
+    ///     Selects the values the path leads to straight from TOON text, building only the selected values: what the path
+    ///     does not select is skipped, not built.
+    /// </summary>
+    /// <param name="toon">The TOON text.</param>
+    /// <param name="options">Parsing options; defaults when null.</param>
+    /// <returns>The selected values, as <see cref="Select"/> gives them for the parsed document.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="toon"/> is null.</exception>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
+    /// <remarks>
+    ///     The whole text is read and checked. Segments with one selector are evaluated over the text; a segment with
+    ///     several selectors, a negative slice step or a descendant segment builds the value it applies to. A filter that
+    ///     only compares members (<c>[?@.total &gt; 100]</c>) reads just those members of each child. In non-strict mode,
+    ///     and for filters with absolute queries (<c>$</c>), the document is parsed into a tree first.
+    /// </remarks>
+    public IReadOnlyList<ToonValue> SelectFrom(string toon, ToonOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(toon);
+        return SelectFromText(toon, options ?? ToonOptions.Default);
+    }
+
+    /// <summary>
+    ///     Selects the values the path leads to straight from UTF-8 encoded TOON text, building only the selected values;
+    ///     see <see cref="SelectFrom(string, ToonOptions)"/>.
+    /// </summary>
+    /// <param name="utf8Toon">The UTF-8 encoded TOON text; a byte order mark at the start is ignored.</param>
+    /// <param name="options">Parsing options; defaults when null.</param>
+    /// <returns>The selected values.</returns>
+    /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
+    public IReadOnlyList<ToonValue> SelectFrom(ReadOnlySpan<byte> utf8Toon, ToonOptions? options = null)
+    {
+        using var text = Encoding.ToonTextEncoding.Decode(utf8Toon);
+        return SelectFromText(text.Text, options ?? ToonOptions.Default);
+    }
+
+    private IReadOnlyList<ToonValue> SelectFromText(Parsing.ToonText text, ToonOptions options)
+    {
+        var sink = new TreeSink();
+        Evaluate(text, options, sink);
+        return sink.Values;
+    }
+
+    /// <summary>
+    ///     Evaluates the path over text into a sink: with the parser's cursors in strict mode, on the parsed tree otherwise
+    ///     (repeated keys keep their last value) or when a filter needs the whole document.
+    /// </summary>
+    internal void Evaluate(Parsing.ToonText text, ToonOptions options, ToonPathTextEvaluator.ISink sink)
+    {
+        var evaluator = ToonPathTextEvaluator.For(this);
+        var parser = new Parsing.ToonParser(options);
+
+        if (!options.StrictMode || evaluator.NeedsTree)
+        {
+            var root = parser.Parse(text).Root;
+            var location = new ToonPathTextEvaluator.LocationStack();
+
+            foreach (var node in ToonPathEvaluator.Select(Query, root, root, track: sink.WantsLocations))
+            {
+                sink.Add(node.Value, location, node.Location);
+            }
+
+            return;
+        }
+
+        parser.BeginDocument(text);
+
+        try
+        {
+            evaluator.Evaluate(parser, sink);
+        }
+        finally
+        {
+            parser.ReleaseDocument();
+        }
+    }
+
+    /// <summary>Collects the selected values as trees.</summary>
+    private sealed class TreeSink : ToonPathTextEvaluator.ISink
+    {
+        public readonly List<ToonValue> Values = [];
+
+        public bool WantsLocations => false;
+
+        public void Add(Parsing.ToonParser parser, in Parsing.ToonParser.ValueRef value, ToonPathTextEvaluator.LocationStack location) =>
+            Values.Add(parser.BuildValue(value));
+
+        public void Add(ToonValue tree, ToonPathTextEvaluator.LocationStack location, ToonPathEvaluator.Location? relative) => Values.Add(tree);
     }
 
     /// <summary>Selects the values the path leads to with their locations, as normalized paths (<c>$['orders'][2]</c>).</summary>
