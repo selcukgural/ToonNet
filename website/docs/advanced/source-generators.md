@@ -155,7 +155,8 @@ Known differences from `ToonSerializer`:
 
 - A non-`required` `init` property of a **generic** type is set through the object initializer, so a missing key resets
   it to `default` instead of keeping its initializer value.
-- A `required` property whose key is missing from the document is set to `default`.
+- A `required` property whose key is missing from the document is set to `default` instead of keeping its initializer
+  value (with `RespectRequiredMembers`, both report the missing key).
 - A circular reference is reported as "maximum depth exceeded" instead of "circular reference" (both throw
   `ToonEncodingException`).
 

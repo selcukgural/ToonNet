@@ -124,7 +124,8 @@ parameterless constructor, otherwise the public constructor with the most parame
 - A non-`required` `init` property of a **generic** type is set through the object initializer, so a key missing from
   the document resets it to `default` instead of keeping its initializer value. Non-generic types keep the initializer
   value (the setter is called through `[UnsafeAccessor]`).
-- A `required` property whose key is missing from the document is set to `default`.
+- A `required` property whose key is missing from the document is set to `default` instead of keeping its initializer
+  value (with `RespectRequiredMembers`, both report the missing key).
 - A circular reference is reported as "maximum depth exceeded" (`ToonEncodingException`), where `ToonSerializer`
   reports "circular reference" (also a `ToonEncodingException`).
 

@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   faster with generated code.
 
 ### Fixed
+- **ToonNet.Core:** The package README on NuGet showed the HTML of its header as text (NuGet does not render HTML); the
+  header is Markdown now.
 - **ToonNet.SourceGenerators:** A converter registered for a nullable value type only (`CanConvert(typeof(int?))`)
   was ignored for properties of that type when `ToonSerializer` used generated code; such properties now go through
   the converter, as with reflection.

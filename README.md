@@ -1,6 +1,4 @@
-<div align="center">
-
-<img src="https://raw.githubusercontent.com/selcukgural/ToonNet/master/icon.png" alt="ToonNet Logo" width="128" height="128">
+![ToonNet](https://raw.githubusercontent.com/selcukgural/ToonNet/master/icon.png)
 
 **TOON Data Format Serialization for .NET**
 
@@ -14,8 +12,6 @@
 [![Documentation](https://img.shields.io/badge/docs-online-brightgreen?style=flat&logo=docusaurus)](https://selcukgural.github.io/ToonNet/)
 
 [Quick Start](#-quick-start) • [Documentation](https://selcukgural.github.io/ToonNet/) • [API Reference](https://selcukgural.github.io/ToonNet/docs/api-guide) • [Samples](https://github.com/selcukgural/ToonNet/tree/master/demo/ToonNet.Demo/Samples)
-
-</div>
 
 ---
 
