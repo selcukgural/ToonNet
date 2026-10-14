@@ -278,6 +278,9 @@ public static partial class ToonSerializer
     private sealed class DirectReader(ToonParser parser, ToonSerializerOptions options, bool generatedOnly = false) : IToonDeserializationHost
     {
         private readonly ToonParser _parser = parser;
+
+        /// <summary>The parser of the document being read.</summary>
+        public ToonParser Parser => _parser;
         private readonly ToonSerializerOptions _options = options;
 
         /// <summary>
@@ -676,10 +679,18 @@ public static partial class ToonSerializer
             var factory = info.Dictionary!;
             var dictionary = factory.CreateEntries();
             var keyType = factory.KeyType;
+            var typedKeys = factory.HasTypedKeys && !IsConverted(keyType);
+            var primitiveValues = factory.HasPrimitiveValues && !IsConverted(factory.ValueType);
             var cursor = _parser.BeginObject(value);
 
             while (_parser.NextProperty(ref cursor, out var key, out var fieldValue))
             {
+                // Keys and primitive values without boxing; other keys (and their errors) take the general path
+                if (typedKeys && factory.Helpers.TryAddEntry(this, dictionary, key, fieldValue, primitiveValues, depth + 1))
+                {
+                    continue;
+                }
+
                 var typedKey = keyType == typeof(string)
                     ? key
                     : DeserializeValue(new ToonString(key), keyType, _options, depth + 1, State)!;
@@ -792,7 +803,13 @@ public static partial class ToonSerializer
                 return TimeSpan.TryParse(text, invariant, out var span) && SetToken(span, out result);
             }
 
-            // Enums: names (case-insensitive), numeric strings and flag lists, like Enum.Parse
+            // Enums: exact names without boxing, else names (case-insensitive), numeric strings and flag lists, like
+            // Enum.Parse
+            if (typeof(T).IsEnum && EnumText<T>.TryParse(text, out result))
+            {
+                return true;
+            }
+
             if (!Enum.TryParse(Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T), text, ignoreCase: true, out var parsedEnum))
             {
                 return false;

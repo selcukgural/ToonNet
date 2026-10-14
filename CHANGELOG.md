@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** The reflection-based writer writes arrays and lists of typed primitives (and their nullable forms)
   from their typed items instead of boxing each one, and formats `DateOnly`, `TimeOnly` and `TimeSpan` on the stack. On
   2,000 objects with such properties: 2x faster, a third of the allocation.
+- **ToonNet.Core:** Dictionaries whose keys are strings, integers or GUIDs and whose values are primitives are written
+  and read without boxing their keys and values or creating a tree value for each: on 20,000 entries of
+  `Dictionary<int, int>`, writing is 3.5x faster and allocates only the output, reading is 2.4x faster with half the
+  allocation, and both are now faster than System.Text.Json. Other keys and values, and errors, take the path they
+  took before.
+- **ToonNet.Core:** Enum properties are written and read without boxing, through the names of the enum's values
+  (flag combinations, undefined values, aliases and names that differ only in case still go through `ToString` and
+  `Enum.Parse`): on 2,000 objects with three enum properties, 1.7x faster with about 60% less allocation in both
+  directions.
 - **ToonNet.Core:** Serializing an `IAsyncEnumerable<T>` throws `ToonSerializationException`; before, it was written as an
   object without properties (an empty document, which reads back as an empty object). The MVC output formatter and
   `ToonResult` collect such sequences into a list first.

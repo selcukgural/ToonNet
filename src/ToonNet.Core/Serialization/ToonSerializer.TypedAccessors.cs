@@ -43,7 +43,7 @@ public static partial class ToonSerializer
         public abstract void WriteText(ToonWriter writer, object instance);
 
         /// <summary>
-        ///     Creates an accessor for a property of a class with a primitive type; null for other properties.
+        ///     Creates an accessor for a property of a class with a primitive or enum type; null for other properties.
         /// </summary>
         [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
         [UnconditionalSuppressMessage("Trimming", "IL2076", Justification = ToonSerializer.ReflectionJustification)]
@@ -52,7 +52,7 @@ public static partial class ToonSerializer
             var declaringType = property.DeclaringType!;
             var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
 
-            if (declaringType.IsValueType || !IsTypedPrimitive(type) || property.GetGetMethod() is not { } getter)
+            if (declaringType.IsValueType || !(IsTypedPrimitive(type) || type.IsEnum) || property.GetGetMethod() is not { } getter)
             {
                 return null;
             }
@@ -266,6 +266,10 @@ public static partial class ToonSerializer
             Unsafe.As<T, TimeSpan>(ref value).TryFormat(text, out var length, "c", CultureInfo.InvariantCulture);
             writer.WriteString(text[..length]);
         }
+        else if (typeof(T).IsEnum)
+        {
+            writer.WriteString(EnumText<T>.GetName(value) ?? value.ToString()!);
+        }
         else
         {
             writer.WritePrimitive(WriteTyped(value));
@@ -288,6 +292,11 @@ public static partial class ToonSerializer
         {
             // Nullable<TPrimitive>: unwrap through the non-nullable branches below
             return value is null ? null : WriteBoxedPrimitive(value);
+        }
+
+        if (typeof(T).IsEnum)
+        {
+            return new ToonString(EnumText<T>.GetName(value) ?? value!.ToString()!);
         }
 
         if (typeof(T) == typeof(int))
@@ -383,6 +392,12 @@ public static partial class ToonSerializer
     private static bool TryReadTyped<T>(ToonValue value, out T result)
     {
         result = default!;
+
+        if (typeof(T).IsEnum)
+        {
+            // Exact names only; other names, numbers and errors take the general path
+            return value is ToonString name && EnumText<T>.TryParse(name.Value, out result);
+        }
 
         if (typeof(T) == typeof(string))
         {
@@ -497,5 +512,135 @@ public static partial class ToonSerializer
 
             return true;
         }
+    }
+
+    /// <summary>
+    ///     The names of an enum type's values, to write and read them without boxing. Values without a single name of
+    ///     their own (flag combinations, undefined values, aliases) and names that differ only in case leave the work
+    ///     to <see cref="Enum"/>, so the results are those of <c>ToString</c> and <c>Enum.Parse</c>.
+    /// </summary>
+    private static class EnumText<T>
+    {
+        private static readonly ulong[] Values;
+        private static readonly string[] Names;
+
+        /// <summary>Whether reading exact names gives what <c>Enum.Parse</c> with <c>ignoreCase</c> gives.</summary>
+        private static readonly bool ReadNames;
+
+        static EnumText()
+        {
+            // Both are sorted by value (GetValuesAsUnderlyingType needs no generated code for the enum type)
+            var names = Enum.GetNames(typeof(T));
+            var values = Enum.GetValuesAsUnderlyingType(typeof(T));
+            var bits = new ulong[values.Length];
+
+            for (var i = 0; i < bits.Length; i++)
+            {
+                if (ToBits(values.GetValue(i)) is not { } valueBits)
+                {
+                    Values = [];
+                    Names = [];
+                    return;
+                }
+
+                bits[i] = valueBits;
+            }
+
+            if (bits.Distinct().Count() != bits.Length)
+            {
+                // ToString picks one of the names of an alias; leave the choice to it
+                Values = [];
+                Names = [];
+                return;
+            }
+
+            Values = bits;
+            Names = names;
+            ReadNames = names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Length;
+        }
+
+        /// <summary>The name of a value with one of its own, or null.</summary>
+        public static string? GetName(T value)
+        {
+            var bits = Bits(value);
+            var values = Values;
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (values[i] == bits)
+                {
+                    return Names[i];
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>Reads an exact name; false for anything else.</summary>
+        public static bool TryParse(ReadOnlySpan<char> text, out T value)
+        {
+            if (ReadNames)
+            {
+                var names = Names;
+
+                for (var i = 0; i < names.Length; i++)
+                {
+                    if (text.SequenceEqual(names[i]))
+                    {
+                        value = FromBits(Values[i]);
+                        return true;
+                    }
+                }
+            }
+
+            value = default!;
+            return false;
+        }
+
+        private static ulong Bits(T value) => Unsafe.SizeOf<T>() switch
+        {
+            1 => Unsafe.As<T, byte>(ref value),
+            2 => Unsafe.As<T, ushort>(ref value),
+            4 => Unsafe.As<T, uint>(ref value),
+            _ => Unsafe.As<T, ulong>(ref value)
+        };
+
+        private static T FromBits(ulong bits)
+        {
+            switch (Unsafe.SizeOf<T>())
+            {
+                case 1:
+                {
+                    var narrow = (byte)bits;
+                    return Unsafe.As<byte, T>(ref narrow);
+                }
+                case 2:
+                {
+                    var narrow = (ushort)bits;
+                    return Unsafe.As<ushort, T>(ref narrow);
+                }
+                case 4:
+                {
+                    var narrow = (uint)bits;
+                    return Unsafe.As<uint, T>(ref narrow);
+                }
+                default:
+                    return Unsafe.As<ulong, T>(ref bits);
+            }
+        }
+
+        /// <summary>The bits of an underlying value as <see cref="Bits"/> reads them from the enum, or null for other types.</summary>
+        private static ulong? ToBits(object? value) => value switch
+        {
+            byte v => v,
+            sbyte v => (byte)v,
+            short v => (ushort)v,
+            ushort v => v,
+            int v => (uint)v,
+            uint v => v,
+            long v => (ulong)v,
+            ulong v => v,
+            _ => null
+        };
     }
 }

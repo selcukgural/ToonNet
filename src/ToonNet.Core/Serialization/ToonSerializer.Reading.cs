@@ -728,6 +728,15 @@ public static partial class ToonSerializer
         /// <summary>Creates the <see cref="Dictionary{TKey,TValue}"/> the entries are read into.</summary>
         public required Func<IDictionary> CreateEntries { get; init; }
 
+        /// <summary>Typed operations on the entries.</summary>
+        public required DictionaryHelpers Helpers { get; init; }
+
+        /// <summary>Whether keys are read by <see cref="TryReadKey{TKey}"/> (strings, integers and GUIDs).</summary>
+        public required bool HasTypedKeys { get; init; }
+
+        /// <summary>Whether values are primitives that <see cref="TryReadToken{T}"/> can read without boxing.</summary>
+        public required bool HasPrimitiveValues { get; init; }
+
         /// <summary>Creates the target from the entries, or returns null when the target type cannot be created.</summary>
         public required Func<IDictionary, object?> Complete { get; init; }
 
@@ -758,6 +767,9 @@ public static partial class ToonSerializer
                 KeyType = keyType,
                 ValueType = valueType,
                 CreateEntries = helpers.CreateEntries,
+                Helpers = helpers,
+                HasTypedKeys = keyType == typeof(string) || keyType == typeof(int) || keyType == typeof(long) || keyType == typeof(Guid),
+                HasPrimitiveValues = PrimitiveAccessor.IsTypedPrimitive(Nullable.GetUnderlyingType(valueType) ?? valueType),
                 Complete = SelectCompletion(targetType, keyType, valueType, helpers)
             };
         }
@@ -841,11 +853,37 @@ public static partial class ToonSerializer
 
         /// <summary>Adds the entries to <paramref name="dictionary"/>, an <see cref="IDictionary{TKey,TValue}"/>, and returns it.</summary>
         public abstract object AddAll(object dictionary, IDictionary entries);
+
+        /// <summary>
+        ///     Adds an entry whose key <see cref="TryReadKey{TKey}"/> reads, with the value read as a primitive token
+        ///     when <paramref name="primitiveValue"/> is set and the token is an exact match, otherwise by the reader;
+        ///     false (with nothing read) when the key needs the general path.
+        /// </summary>
+        public abstract bool TryAddEntry(DirectReader reader, IDictionary entries, string key, in ToonParser.ValueRef value, bool primitiveValue,
+                                         int depth);
     }
 
     private sealed class DictionaryHelpers<TKey, TValue> : DictionaryHelpers where TKey : notnull
     {
         public override IDictionary CreateEntries() => new Dictionary<TKey, TValue>();
+
+        public override bool TryAddEntry(DirectReader reader, IDictionary entries, string key, in ToonParser.ValueRef value, bool primitiveValue,
+                                         int depth)
+        {
+            if (!TryReadKey(key, out TKey typedKey))
+            {
+                return false;
+            }
+
+            if (!primitiveValue || !TryReadToken(reader.Parser, value, out TValue item))
+            {
+                // The reader returns null only for types that accept it
+                item = (TValue)reader.ReadValue(value, typeof(TValue), depth)!;
+            }
+
+            ((Dictionary<TKey, TValue>)entries)[typedKey] = item;
+            return true;
+        }
 
         public override object AddAll(object dictionary, IDictionary entries)
         {
@@ -858,6 +896,56 @@ public static partial class ToonSerializer
 
             return dictionary;
         }
+    }
+
+    /// <summary>
+    ///     Reads a dictionary key as <typeparamref name="TKey"/> when it is a string, or a canonical integer or a GUID
+    ///     for those key types, which read the same as through <see cref="DeserializeValue"/>; false for anything else.
+    /// </summary>
+    private static bool TryReadKey<TKey>(string key, out TKey result)
+    {
+        if (typeof(TKey) == typeof(string))
+        {
+            result = Unsafe.As<string, TKey>(ref key);
+            return true;
+        }
+
+        if (typeof(TKey) == typeof(int))
+        {
+            if (IsCanonicalInteger(key) && int.TryParse(key, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var number))
+            {
+                result = Unsafe.As<int, TKey>(ref number);
+                return true;
+            }
+        }
+        else if (typeof(TKey) == typeof(long))
+        {
+            if (IsCanonicalInteger(key) && long.TryParse(key, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var number))
+            {
+                result = Unsafe.As<long, TKey>(ref number);
+                return true;
+            }
+        }
+        else if (typeof(TKey) == typeof(Guid))
+        {
+            if (Guid.TryParse(key, out var guid))
+            {
+                result = Unsafe.As<Guid, TKey>(ref guid);
+                return true;
+            }
+        }
+
+        result = default!;
+        return false;
+    }
+
+    /// <summary>An integer in canonical form: an optional minus sign and digits without a leading zero, and not <c>-0</c>.</summary>
+    private static bool IsCanonicalInteger(ReadOnlySpan<char> text)
+    {
+        var digits = text.Length > 0 && text[0] == '-' ? text[1..] : text;
+
+        return digits.Length is > 0 and < 20 && (digits[0] != '0' || (digits.Length == 1 && digits.Length == text.Length)) &&
+               !digits.ContainsAnyExceptInRange('0', '9');
     }
 
     /// <summary>

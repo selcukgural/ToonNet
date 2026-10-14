@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 
 namespace ToonNet.Core.Serialization;
@@ -260,13 +261,113 @@ public static partial class ToonSerializer
         public abstract Type ValueType { get; }
 
         public abstract IEnumerable<(object Key, object? Value)> Read(object dictionary);
+
+        /// <summary>
+        ///     Writes the entries as <c>key: value</c> lines without boxing when the keys are strings, integers or GUIDs
+        ///     and the values primitives (callers check that no converter applies); false, with nothing written, for
+        ///     other types.
+        /// </summary>
+        /// <param name="writer">The writer.</param>
+        /// <param name="dictionary">The dictionary.</param>
+        /// <param name="lineDepth">The depth of the entry lines.</param>
+        /// <param name="firstOnCurrentLine">Whether the first entry continues the current line.</param>
+        /// <param name="ignoreNulls">Whether entries with a null value are left out.</param>
+        /// <param name="count">The number of entries written.</param>
+        public virtual bool TryWritePrimitiveEntries(ToonWriter writer, object dictionary, int lineDepth, bool firstOnCurrentLine, bool ignoreNulls,
+                                                     out int count)
+        {
+            count = 0;
+            return false;
+        }
     }
 
-    private sealed class DictionaryEntryReader<TKey, TValue> : DictionaryEntryReader
+    private sealed class DictionaryEntryReader<TKey, TValue> : DictionaryEntryReader where TKey : notnull
     {
+        /// <summary>Whether <see cref="TryWritePrimitiveEntries"/> writes this dictionary type.</summary>
+        private static readonly bool PrimitiveEntries =
+            (typeof(TKey) == typeof(string) || IsIntegerKey(typeof(TKey)) || typeof(TKey) == typeof(Guid)) &&
+            (typeof(TValue) == typeof(string) || (typeof(TValue).IsValueType && PrimitiveAccessor.IsTypedPrimitive(typeof(TValue))));
+
         public override Type KeyType => typeof(TKey);
 
         public override Type ValueType => typeof(TValue);
+
+        public override bool TryWritePrimitiveEntries(ToonWriter writer, object dictionary, int lineDepth, bool firstOnCurrentLine, bool ignoreNulls,
+                                                      out int count)
+        {
+            count = 0;
+
+            if (!PrimitiveEntries)
+            {
+                return false;
+            }
+
+            if (dictionary is Dictionary<TKey, TValue> concrete)
+            {
+                foreach (var (key, value) in concrete)
+                {
+                    WriteEntry(writer, key, value, lineDepth, firstOnCurrentLine, ignoreNulls, ref count);
+                }
+            }
+            else
+            {
+                foreach (var (key, value) in (IEnumerable<KeyValuePair<TKey, TValue>>)dictionary)
+                {
+                    WriteEntry(writer, key, value, lineDepth, firstOnCurrentLine, ignoreNulls, ref count);
+                }
+            }
+
+            return true;
+        }
+
+        private static void WriteEntry(ToonWriter writer, TKey key, TValue value, int lineDepth, bool firstOnCurrentLine, bool ignoreNulls,
+                                       ref int count)
+        {
+            if (value is null && ignoreNulls)
+            {
+                return;
+            }
+
+            if (count > 0 || !firstOnCurrentLine)
+            {
+                writer.StartLine(lineDepth);
+            }
+
+            if (typeof(TKey) == typeof(string))
+            {
+                writer.WriteKey(Unsafe.As<TKey, string>(ref key));
+            }
+            else
+            {
+                // An integer or a GUID starts with a digit, a minus sign or contains one, so it is always quoted, and
+                // has nothing to escape
+                Span<char> text = stackalloc char[40];
+                writer.WriteQuotedKey(text[..FormatKey(key, text)]);
+            }
+
+            writer.Write(": ");
+            WriteTypedText(writer, value);
+            count++;
+        }
+
+        /// <summary>Formats an integer or GUID key as <see cref="FormatDictionaryKey"/> does.</summary>
+        private static int FormatKey(TKey key, Span<char> text)
+        {
+            var invariant = CultureInfo.InvariantCulture;
+            int written;
+
+            if (typeof(TKey) == typeof(int)) Unsafe.As<TKey, int>(ref key).TryFormat(text, out written, default, invariant);
+            else if (typeof(TKey) == typeof(long)) Unsafe.As<TKey, long>(ref key).TryFormat(text, out written, default, invariant);
+            else if (typeof(TKey) == typeof(short)) Unsafe.As<TKey, short>(ref key).TryFormat(text, out written, default, invariant);
+            else if (typeof(TKey) == typeof(byte)) Unsafe.As<TKey, byte>(ref key).TryFormat(text, out written, default, invariant);
+            else if (typeof(TKey) == typeof(sbyte)) Unsafe.As<TKey, sbyte>(ref key).TryFormat(text, out written, default, invariant);
+            else if (typeof(TKey) == typeof(ushort)) Unsafe.As<TKey, ushort>(ref key).TryFormat(text, out written, default, invariant);
+            else if (typeof(TKey) == typeof(uint)) Unsafe.As<TKey, uint>(ref key).TryFormat(text, out written, default, invariant);
+            else if (typeof(TKey) == typeof(ulong)) Unsafe.As<TKey, ulong>(ref key).TryFormat(text, out written, default, invariant);
+            else Unsafe.As<TKey, Guid>(ref key).TryFormat(text, out written);
+
+            return written;
+        }
 
         public override IEnumerable<(object Key, object? Value)> Read(object dictionary)
         {
@@ -276,6 +377,10 @@ public static partial class ToonSerializer
             }
         }
     }
+
+    private static bool IsIntegerKey(Type type) =>
+        type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte) || type == typeof(sbyte) ||
+        type == typeof(ushort) || type == typeof(uint) || type == typeof(ulong);
 
     private static string FormatDictionaryKey(object key)
     {

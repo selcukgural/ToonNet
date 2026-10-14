@@ -620,6 +620,12 @@ public static partial class ToonSerializer
         private int WriteDictionaryEntries(object dictionary, DirectTypeInfo info, int lineDepth, int childDepth, bool firstOnCurrentLine,
                                            int depth)
         {
+            if (!_hasConverters && !_generatedOnly &&
+                info.Entries!.TryWritePrimitiveEntries(_writer, dictionary, lineDepth, firstOnCurrentLine, _ignoreNulls, out var written))
+            {
+                return written;
+            }
+
             var count = 0;
 
             foreach (var (rawKey, entryValue) in info.Entries!.Read(dictionary))

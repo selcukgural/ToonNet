@@ -262,6 +262,14 @@ public sealed class ToonWriter
         }
     }
 
+    /// <summary>Writes a key that is always quoted and has nothing to escape (a formatted integer or GUID).</summary>
+    internal void WriteQuotedKey(ReadOnlySpan<char> key)
+    {
+        _buffer.Append('"');
+        _buffer.Append(key);
+        _buffer.Append('"');
+    }
+
     /// <summary>
     ///     Writes a primitive value. NaN and infinities are written as null (spec §3).
     /// </summary>
