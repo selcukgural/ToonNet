@@ -67,22 +67,33 @@ public sealed class ToonInputFormatter : TextInputFormatter
         ArgumentNullException.ThrowIfNull(encoding);
 
         var httpContext = context.HttpContext;
-        string content;
+        var request = httpContext.Request;
+
+        if (request.ContentLength > _maxRequestBodySize)
+        {
+            throw CreatePayloadTooLargeException();
+        }
+
+        // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
+        var body = new LimitedReadStream(request.Body, _maxRequestBodySize, CreatePayloadTooLargeException);
 
         try
         {
-            content = await ReadBodyAsync(httpContext.Request, encoding, httpContext.RequestAborted).ConfigureAwait(false);
-        }
-        catch (DecoderFallbackException)
-        {
-            // Ill-formed UTF-8 is an error, not text with U+FFFD in it (TOON spec §4)
-            context.ModelState.TryAddModelError(context.ModelName, "The request body is not valid UTF-8.");
-            return await InputFormatterResult.FailureAsync().ConfigureAwait(false);
-        }
+            object? model;
 
-        try
-        {
-            var model = ToonSerializer.Deserialize(content, context.ModelType, _options);
+            if (encoding.CodePage == Encoding.UTF8.CodePage)
+            {
+                // UTF-8 (the common case) is decoded strictly into a pooled buffer and parsed there, without a string;
+                // ill-formed bytes are an error, not text with U+FFFD in it (TOON spec §4)
+                model = await ToonSerializer.DeserializeFromStreamAsync(body, context.ModelType, _options, httpContext.RequestAborted)
+                                            .ConfigureAwait(false);
+            }
+            else
+            {
+                var content = await ReadTextAsync(body, encoding, httpContext.RequestAborted).ConfigureAwait(false);
+                model = ToonSerializer.Deserialize(content, context.ModelType, _options);
+            }
+
             return await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false);
         }
         catch (ToonException ex)
@@ -92,23 +103,10 @@ public sealed class ToonInputFormatter : TextInputFormatter
         }
     }
 
-    /// <summary>
-    /// Reads the request body as text, rejecting bodies larger than the configured limit.
-    /// </summary>
-    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-
-    private async Task<string> ReadBodyAsync(HttpRequest request, Encoding encoding, CancellationToken cancellationToken)
+    /// <summary>Reads a body in an encoding other than UTF-8 as text.</summary>
+    private static async Task<string> ReadTextAsync(Stream body, Encoding encoding, CancellationToken cancellationToken)
     {
-        if (request.ContentLength > _maxRequestBodySize)
-        {
-            throw CreatePayloadTooLargeException();
-        }
-
-        // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
-        var body = new LimitedReadStream(request.Body, _maxRequestBodySize, CreatePayloadTooLargeException);
-        // UTF-8 bodies are decoded strictly, so ill-formed bytes throw instead of becoming U+FFFD
-        var decoder = encoding.CodePage == Encoding.UTF8.CodePage ? StrictUtf8 : encoding;
-        using var reader = new StreamReader(body, decoder, detectEncodingFromByteOrderMarks: true, ReadBufferSize, leaveOpen: true);
+        using var reader = new StreamReader(body, encoding, detectEncodingFromByteOrderMarks: true, ReadBufferSize, leaveOpen: true);
         return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
     }
 

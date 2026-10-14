@@ -202,6 +202,34 @@ public class MvcTests
     }
 
     [Fact]
+    public async Task ToonInputFormatter_Utf8Body_WithByteOrderMark_IsRead()
+    {
+        var formatter = new ToonInputFormatter(new ToonSerializerOptions());
+        byte[] body = [0xEF, 0xBB, 0xBF, .. System.Text.Encoding.UTF8.GetBytes("Name: Çağrı 😀\nAge: 5")];
+
+        var result = await formatter.ReadAsync(CreateInputContext(body, ToonFormatterDefaults.MediaType));
+
+        Assert.False(result.HasError);
+        var model = Assert.IsType<TestModel>(result.Model);
+        Assert.Equal("Çağrı 😀", model.Name);
+        Assert.Equal(5, model.Age);
+    }
+
+    [Fact]
+    public async Task ToonInputFormatter_LargeUtf8Body_IsReadInChunks()
+    {
+        // Larger than the read buffer, so the body is decoded in several reads
+        var formatter = new ToonInputFormatter(new ToonSerializerOptions());
+        var name = string.Concat(Enumerable.Repeat("ğüşİöç😀", 5_000));
+        var body = System.Text.Encoding.UTF8.GetBytes($"Name: {name}\nAge: 7");
+
+        var result = await formatter.ReadAsync(CreateInputContext(body, ToonFormatterDefaults.MediaType));
+
+        Assert.False(result.HasError);
+        Assert.Equal(name, Assert.IsType<TestModel>(result.Model).Name);
+    }
+
+    [Fact]
     public async Task ToonInputFormatter_Utf16Body_UsesRequestEncoding()
     {
         var formatter = new ToonInputFormatter(new ToonSerializerOptions());

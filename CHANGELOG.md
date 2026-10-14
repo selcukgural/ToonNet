@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **ToonNet.Core:** `DeserializeFromStreamAsync`, `DeserializeFromFileAsync` and the other stream and file readers
   decode into pooled buffers instead of reading the whole text into a string first.
+- **ToonNet.AspNetCore.Mvc:** `ToonInputFormatter` reads UTF-8 request bodies with the new stream reader, decoding into
+  a pooled buffer instead of a string (other charsets are read as before). A UTF-8 body that starts with a UTF-16
+  byte order mark is now rejected as ill-formed UTF-8 instead of being decoded as UTF-16.
 - **ToonNet.Core (source compatibility):** With the new overloads, a call that passes a bare `null` literal, such as
   `ToonDocument.Parse(null!)` or `ToonSerializer.Deserialize<T>(null!)`, is ambiguous; cast it, for example
   `(string)null!`, as with System.Text.Json.
