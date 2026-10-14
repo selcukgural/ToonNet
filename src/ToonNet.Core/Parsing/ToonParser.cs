@@ -45,15 +45,20 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>The lines of the document being parsed, in an array rented from <see cref="ArrayPool{T}.Shared"/>.</summary>
     private Line[] _lines = [];
 
-    /// <summary>Whether <see cref="_lines"/> was rented from the pool (a table that outgrew its first array was not).</summary>
+    /// <summary>Whether <see cref="_lines"/> was rented from the pool (a table of over <see cref="MaxPooledLines"/> lines was not).</summary>
     private bool _linesPooled;
 
     /// <summary>
-    ///     The most lines the first line table holds: larger documents grow the table, outside the pool, so the pool does
-    ///     not keep large arrays and the first allocation does not follow the line breaks of the input (which may be only
-    ///     line breaks).
+    ///     The most lines the first line table holds, so the first allocation does not follow the line breaks of the input
+    ///     (which may be only line breaks); larger documents grow the table as their lines are read.
     /// </summary>
     private const int MaxInitialLines = 64 * 1024;
+
+    /// <summary>
+    ///     The most lines a table grown from the pool holds (24 MB): a larger table, for a document of over a million
+    ///     lines, is allocated outside the pool, so the pool does not keep it.
+    /// </summary>
+    private const int MaxPooledLines = 1024 * 1024;
 
     /// <summary>The number of lines in <see cref="_lines"/> (the rented array may be longer).</summary>
     private int _lineCount;
@@ -332,18 +337,20 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _lineCount = count;
     }
 
-    /// <summary>Doubles the line table (outside the pool) and returns the new array.</summary>
+    /// <summary>Doubles the line table (from the pool up to <see cref="MaxPooledLines"/>) and returns the new array.</summary>
     private Line[] GrowLines(int count)
     {
-        var larger = new Line[(int)Math.Min((long)count * 2, Array.MaxLength)];
+        var size = (int)Math.Min((long)count * 2, Array.MaxLength);
+        var pooled = size <= MaxPooledLines;
+        var larger = pooled ? ArrayPool<Line>.Shared.Rent(size) : new Line[size];
         _lines.AsSpan(0, count).CopyTo(larger);
 
         if (_linesPooled)
         {
             ArrayPool<Line>.Shared.Return(_lines);
-            _linesPooled = false;
         }
 
+        _linesPooled = pooled;
         return _lines = larger;
     }
 

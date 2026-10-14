@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - **ToonNet.Core:** Reading untrusted documents is hardened so that their cost stays in proportion to their size:
   declared array lengths no longer reserve memory for items that are not there, runs of blank lines no longer grow the
-  parser's line table (whose large arrays no longer go back to the shared pool), duplicate checks of long field lists
+  parser's line table (and a table of over a million lines no longer goes back to the shared pool), duplicate checks of long field lists
   take linear time, and buffers that held document text are cleared on error paths too. Upgrading is recommended for
   services that read TOON from untrusted sources.
 

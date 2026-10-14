@@ -79,10 +79,10 @@ public static partial class ToonSerializer
 
             switch (kind)
             {
-                // A converter for an entry's declared type (which the tree consults) is left to the tree; the generated
-                // writer does not tell its declared types
+                // A converter for an entry's declared type (which the tree consults) is left to the tree. The generated
+                // writer does not tell its declared types, but the converter check covers what its code writes itself
                 case DirectKind.Dictionary when _hasConverters && IsConvertedDeclared(info.Entries!.ValueType):
-                case DirectKind.Generated when _hasConverters:
+                case DirectKind.Generated when _hasConverters && !_converterCheck!.AllowsGeneratedCode(value.GetType()):
                     return PlanResult.Unknown;
                 case DirectKind.Dictionary:
                     foreach (var (rawKey, entryValue) in info.Entries!.Read(value))
@@ -355,9 +355,11 @@ public static partial class ToonSerializer
                         }
                         else
                         {
-                            if (_hasConverters)
+                            // The declared type, which a converter may match, is not known here; no converter applies to the
+                            // declared types of what the generated code writes itself when the converter check allows it
+                            if (_hasConverters && !_converterCheck!.AllowsGeneratedCode(objects[0]!.GetType()))
                             {
-                                return PlanResult.Unknown; // the declared type, which a converter may match, is not known here
+                                return PlanResult.Unknown;
                             }
 
                             var values = (rented ??= ArrayPool<object?>.Shared.Rent(objects.Length)).AsSpan(0, objects.Length);
