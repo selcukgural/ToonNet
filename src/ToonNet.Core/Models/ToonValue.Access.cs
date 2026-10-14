@@ -60,12 +60,27 @@ public abstract partial class ToonValue
     ///     (or its nullable form), with the parsing rules of <see cref="ToonSerializer"/>: <c>doc.Root["id"]!.GetValue&lt;int&gt;()</c>.
     /// </summary>
     /// <typeparam name="T">The type to convert to.</typeparam>
-    /// <returns>The converted value; <c>default</c> for <see cref="ToonNull"/> and a nullable or reference type.</returns>
+    /// <returns>
+    ///     The converted value; <c>default</c> for <see cref="ToonNull"/> and a nullable or reference type. A
+    ///     <see cref="ToonValue"/> type this value is (<c>GetValue&lt;ToonNumber&gt;()</c>) gives the value itself, and
+    ///     <see cref="object"/> gives what reading a primitive into <see cref="object"/> gives (a string, a boolean, a
+    ///     <see cref="long"/>, <see cref="decimal"/> or <see cref="double"/>, or null).
+    /// </returns>
     /// <exception cref="ToonSerializationException">
     ///     Thrown when the value cannot be converted (an object or array, a number out of range, text that does not parse).
     /// </exception>
     /// <remarks>Use <see cref="Deserialize{T}(ToonSerializerOptions)"/> for objects and collections.</remarks>
-    public T GetValue<T>() => ToonSerializer.ReadPrimitiveForGeneratedCode<T>(this);
+    public T GetValue<T>()
+    {
+        if (this is T self && typeof(T) != typeof(object))
+        {
+            return self;
+        }
+
+        return typeof(T) == typeof(object) && this is not (ToonObject or ToonArray)
+            ? (T)ToonSerializer.ToUntypedPrimitive(this)!
+            : ToonSerializer.ReadPrimitiveForGeneratedCode<T>(this);
+    }
 
     /// <summary>Converts this primitive like <see cref="GetValue{T}"/>, without throwing when it cannot be converted.</summary>
     /// <typeparam name="T">The type to convert to.</typeparam>
@@ -73,6 +88,12 @@ public abstract partial class ToonValue
     /// <returns>Whether the value was converted.</returns>
     public bool TryGetValue<T>([MaybeNullWhen(false)] out T value)
     {
+        if (this is T self && typeof(T) != typeof(object))
+        {
+            value = self;
+            return true;
+        }
+
         if (this is ToonObject or ToonArray)
         {
             value = default;
@@ -177,9 +198,10 @@ public abstract partial class ToonValue
                 RuntimeHelpers.EnsureSufficientExecutionStack();
                 var items = new List<ToonValue>(array.Items.Count);
 
+                // A null that code put into Items is a null item, as everywhere else
                 foreach (var item in array.Items)
                 {
-                    items.Add(item.DeepClone());
+                    items.Add((item ?? ToonNull.Instance).DeepClone());
                 }
 
                 return new ToonArray(items, array.FieldNames is { } names ? (string[])names.Clone() : null);
@@ -253,7 +275,7 @@ public abstract partial class ToonValue
 
                 for (var i = 0; i < items.Count; i++)
                 {
-                    if (!DeepEquals(items[i], otherItems[i]))
+                    if (!DeepEquals(items[i] ?? ToonNull.Instance, otherItems[i] ?? ToonNull.Instance))
                     {
                         return false;
                     }

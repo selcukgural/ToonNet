@@ -178,4 +178,49 @@ public class ToonValueAccessTests
         Assert.Throws<InsufficientExecutionStackException>(() => deep.DeepClone());
         Assert.Throws<InsufficientExecutionStackException>(() => ToonValue.DeepEquals(deep, deep.AsArray()[0]));
     }
+
+    [Fact]
+    public void NullItems_AreReadAsToonNull()
+    {
+        // Items is a List<ToonValue>, so code can add null to it: every operation treats that as ToonNull
+        ToonArray Array() => new() { Items = { new ToonNumber(1), null!, new ToonObject { ["k"] = null!, ["n"] = new ToonArray { Items = { null! } } } } };
+        var root = new ToonObject { ["a"] = Array() };
+        var expected = ToonDocument.Parse("a[3]:\n  - 1\n  - null\n  - k: null\n    n[1]: null").Root;
+
+        Assert.Equal("a[3]:\n  - 1\n  - null\n  - k: null\n    n[1]: null", new ToonNet.Core.Encoding.ToonEncoder().Encode(new ToonDocument(root)));
+        Assert.True(ToonValue.DeepEquals(root, expected));
+        Assert.True(ToonValue.DeepEquals(root.DeepClone(), expected));
+        Assert.Same(ToonNull.Instance, root.DeepClone()["a"]![1]);
+        Assert.Equal([1, null], new ToonArray { Items = { new ToonNumber(1), null! } }.Deserialize<int?[]>()!);
+        Assert.Equal([null, "x"], new ToonArray { Items = { null!, new ToonString("x") } }.Deserialize<List<string?>>()!);
+        Assert.Equal(2, root.Select("$.a[*]").Count(v => v is ToonNull or ToonObject));
+
+        var patched = root.DeepClone();
+        ToonMergePatch.Apply(patched, new ToonObject { ["a"] = Array() });
+        Assert.True(ToonValue.DeepEquals(patched, expected));
+        Assert.True(ToonValue.DeepEquals(ToonMergePatch.Create(expected, root), new ToonObject()));
+    }
+
+    [Fact]
+    public void GetValue_OfAToonValueType_GivesTheValue_AndObjectGivesTheClrValue()
+    {
+        var root = ToonDocument.Parse("n: 1.5\ni: 7\ns: x\nb: true\nz: null\no:\n  k: 1").Root;
+
+        Assert.Same(root["n"], root["n"]!.GetValue<ToonNumber>());
+        Assert.Same(root["n"], root["n"]!.GetValue<ToonValue>());
+        Assert.Same(root["o"], root["o"]!.GetValue<ToonObject>());
+        Assert.True(root["o"]!.TryGetValue<ToonObject>(out var obj));
+        Assert.Same(root["o"], obj);
+        Assert.False(root["o"]!.TryGetValue<ToonArray>(out _));
+
+        Assert.Equal(1.5m, root["n"]!.GetValue<object>());
+        Assert.Equal(7L, root["i"]!.GetValue<object>());
+        Assert.Equal("x", root["s"]!.GetValue<object>());
+        Assert.Equal(true, root["b"]!.GetValue<object>());
+        Assert.Null(root["z"]!.GetValue<object>());
+        Assert.True(root["i"]!.TryGetValue<object>(out var untyped));
+        Assert.Equal(7L, untyped);
+        Assert.Throws<ToonSerializationException>(() => root["o"]!.GetValue<object>());
+        Assert.Throws<ToonSerializationException>(() => root["s"]!.GetValue<ToonNumber>());
+    }
 }

@@ -185,7 +185,8 @@ internal sealed class EvaluationBudget
     {
         if (_root != null)
         {
-            _remaining += Options.MaxStepsPerValue * CountValues(_root);
+            var (values, characters) = CountValues(_root);
+            _remaining += Options.MaxStepsPerValue * values + TextAllowance(characters);
             _root = null;
 
             if (_remaining >= 0)
@@ -196,8 +197,8 @@ internal sealed class EvaluationBudget
 
         if (_text is { } text)
         {
-            // As for a tree: the values, and a value per 16 characters
-            _remaining += Options.MaxStepsPerValue * (CountTextValues(text.Span) + text.Length / 16);
+            // As for a tree: the values, and the characters to read
+            _remaining += Options.MaxStepsPerValue * CountTextValues(text.Span) + TextAllowance(text.Length);
             _text = null;
 
             if (_remaining >= 0)
@@ -352,13 +353,17 @@ internal sealed class EvaluationBudget
     }
 
     /// <summary>
-    ///     The values of a tree, and a value per 16 characters of its strings and keys: the work a query does is counted
-    ///     in steps per 16 characters it reads, so long strings get the allowance to be read (as text evaluation counts
-    ///     the characters of the document).
+    ///     The steps that let a query read the characters of the document twice (a step per 16 characters it reads), so a
+    ///     filter over a long string is not over the budget. Not a step per character: nested descendant segments would
+    ///     spend that on the values.
     /// </summary>
-    private static long CountValues(ToonValue root)
+    private long TextAllowance(long characters) => Options.MaxStepsPerValue == 0 ? 0 : 2 * (characters / 16);
+
+    /// <summary>The values of a tree, and the characters of its strings and keys.</summary>
+    private static (long Values, long Characters) CountValues(ToonValue root)
     {
         var count = 0L;
+        var characters = 0L;
         var pending = new Stack<ToonValue>();
         pending.Push(root);
 
@@ -369,12 +374,12 @@ internal sealed class EvaluationBudget
             switch (value)
             {
                 case ToonString text:
-                    count += text.Value.Length / 16;
+                    characters += text.Value.Length;
                     break;
                 case ToonObject obj:
                     foreach (var (key, member) in obj.Properties)
                     {
-                        count += key.Length / 16;
+                        characters += key.Length;
                         pending.Push(member);
                     }
 
@@ -389,7 +394,7 @@ internal sealed class EvaluationBudget
             }
         }
 
-        return count;
+        return (count, characters);
     }
 }
 
@@ -399,7 +404,7 @@ internal static class ToonPathEvaluator
     /// <summary>A selected value and, when locations are tracked, where it is.</summary>
     internal readonly struct Node(ToonValue value, Location? location)
     {
-        public readonly ToonValue Value = value;
+        public readonly ToonValue Value = value ?? ToonNull.Instance; // a null that code put into ToonArray.Items
         public readonly Location? Location = location;
     }
 
@@ -779,7 +784,7 @@ internal static class ToonPathEvaluator
                     return null;
                 }
 
-                value = array.Items[index];
+                value = array.Items[index] ?? ToonNull.Instance;
             }
         }
 

@@ -233,4 +233,27 @@ public class ToonDocumentReaderTests
 
         Assert.Throws<ObjectDisposedException>(() => reader.Read());
     }
+
+    [Fact]
+    public void Disposed_AccessorsThrow_InsteadOfReadingReturnedBuffers()
+    {
+        var reader = new ToonDocumentReader([.. "a: 1\nb: x\nc: true\nd[1]: 2"u8]);
+        Assert.True(reader.Read());   // {
+        Assert.True(reader.Read());   // a
+        Assert.True(reader.Read());   // 1
+        reader.Dispose();
+
+        Assert.Equal(ToonTokenType.None, reader.TokenType);
+        Assert.Equal(0, reader.LineNumber);
+        Assert.Throws<ObjectDisposedException>(() => reader.ValueSpan.ToString());
+        Assert.Throws<ObjectDisposedException>(() => reader.GetInt32());
+        Assert.Throws<ObjectDisposedException>(() => reader.TryGetDecimal(out _));
+        Assert.Throws<ObjectDisposedException>(() => reader.GetDouble());
+        Assert.Throws<ObjectDisposedException>(() => reader.GetString());
+        Assert.Throws<ObjectDisposedException>(() => reader.GetBoolean());
+        Assert.Throws<ObjectDisposedException>(() => reader.GetPropertyName());
+        Assert.Throws<ObjectDisposedException>(() => reader.ArrayLength);
+        Assert.Throws<ObjectDisposedException>(() => reader.ReadValue());
+        Assert.Throws<ObjectDisposedException>(() => reader.Skip());
+    }
 }

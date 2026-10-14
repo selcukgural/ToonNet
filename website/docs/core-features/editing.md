@@ -72,7 +72,8 @@ root = ToonMergePatch.Apply(root, patch);   // sets meta.region, removes meta.dr
 ```
 
 `Apply` changes objects in place and returns the result (a new value when the patch is not an object); call
-`DeepClone` first to keep the original. `ToonMergePatch.Create(original, modified)` gives the patch between two trees,
+`DeepClone` first to keep the original. An object that is in the tree twice (the same instance added at two places)
+changes at both. `ToonMergePatch.Create(original, modified)` gives the patch between two trees,
 so a client can send only what it changed:
 
 ```csharp

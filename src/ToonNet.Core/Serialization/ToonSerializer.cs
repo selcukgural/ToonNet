@@ -859,9 +859,14 @@ public static partial class ToonSerializer
         var currentObject = new StringBuilder();
         var lines = new ToonLineReader(reader);
 
+        // Line numbers of errors are those of the stream: the line of the document's first line is added
+        var lineNumber = 0;
+        var documentStart = 1;
+
         while (await lines.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            lineNumber++;
 
             // A blank line has nothing but spaces (spec §12); tabs and other characters are content
             var isBoundary = multiDocumentOptions.Mode switch
@@ -880,10 +885,14 @@ public static partial class ToonSerializer
                 var toonString = currentObject.ToString();
                 currentObject.Clear();
 
-                var obj = await DeserializeAsync<T>(toonString, options, cancellationToken).ConfigureAwait(false);
-                yield return obj;
+                yield return await ReadDocumentAsync(toonString, documentStart).ConfigureAwait(false);
 
                 continue;
+            }
+
+            if (currentObject.Length == 0)
+            {
+                documentStart = lineNumber;
             }
 
             currentObject.Append(line).Append('\n');
@@ -894,9 +903,19 @@ public static partial class ToonSerializer
             yield break;
         }
 
-        var lastToonString = currentObject.ToString();
-        var lastObj = await DeserializeAsync<T>(lastToonString, options, cancellationToken).ConfigureAwait(false);
-        yield return lastObj;
+        yield return await ReadDocumentAsync(currentObject.ToString(), documentStart).ConfigureAwait(false);
+
+        async ValueTask<T?> ReadDocumentAsync(string document, int firstLine)
+        {
+            try
+            {
+                return await DeserializeAsync<T>(document, options, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ToonParseException ex) when (ex.Line > 0 && firstLine > 1)
+            {
+                throw new ToonParseException(ex.Reason, ex.Line + firstLine - 1, ex.Column);
+            }
+        }
     }
 
     /// <summary>

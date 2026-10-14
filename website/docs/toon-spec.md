@@ -66,7 +66,8 @@ cannot be represented and throws `ToonEncodingException`. Custom mappings use `I
   `decimal` keeps its exact value; otherwise it is approximated as a `double`. A numeric token that overflows `double`
   (for example `1e400`) decodes as a **string**, not as infinity. When binding to .NET integer types, fractions and
   out-of-range values throw `ToonSerializationException` rather than being truncated.
-- `-0` decodes as `0`.
+- `-0` decodes as the number zero: `0` in integers, `decimal` and `object`, negative zero in `double` and `float`
+  (as `double.Parse` and System.Text.Json give it). It is written as `0`.
 
 ### Key order and keys (§2, §15)
 

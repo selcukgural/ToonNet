@@ -22,6 +22,8 @@ public static partial class ToonSerializer
     private static object? DeserializeValue(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, SerializerState state,
                                             IToonConverter? propertyConverter = null)
     {
+        // A null that code put into a tree (ToonArray.Items is a list) is a null value
+        value ??= ToonNull.Instance;
         var generatedAllowed = !state.FromGeneratedCode;
         state.FromGeneratedCode = false;
 
@@ -164,6 +166,9 @@ public static partial class ToonSerializer
     ///     <see cref="Dictionary{TKey,TValue}"/>, arrays <see cref="List{T}"/>, integers <see cref="long"/>,
     ///     other exact numbers <see cref="decimal"/> and the rest <see cref="double"/>.
     /// </summary>
+    /// <summary>The value of a primitive as reading it into <see cref="object"/> gives it.</summary>
+    internal static object? ToUntypedPrimitive(ToonValue value) => ToUntyped(value, ToonSerializerOptions.Default, 0);
+
     private static object? ToUntyped(ToonValue value, ToonSerializerOptions options, int depth)
     {
         if (value is ToonArray or ToonObject)

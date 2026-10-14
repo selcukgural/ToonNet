@@ -71,6 +71,8 @@ items[2]:
   for it (including tables with nested field groups).
 - The text is collected in a pooled buffer and written by `Flush`, `FlushAsync` and `Dispose`. Flush every few hundred
   rows to keep memory flat while writing a large table to a stream.
+- The writer does not track property names: writing one twice in an object gives a document that strict readers reject
+  (a repeated key).
 
 ## Reading
 
@@ -112,7 +114,9 @@ while (reader.Read())
 
 `ValueSpan` is the raw text of a primitive token and `LineNumber` its line. The reader checks the document with the
 rules and errors of `ToonDocument.Parse` (a `ToonParseException` with line and column), and the end of the document when
-`Read` returns false. UTF-8 input is decoded into a pooled buffer; dispose the reader to return it.
+`Read` returns false. In non-strict mode a repeated key is reported each time it appears, in document order; a tree
+(`ReadValue`, `ToonDocument.Parse`) keeps the last value. UTF-8 input is decoded into a pooled buffer; dispose the reader
+to return it (the getters throw `ObjectDisposedException` afterwards).
 
 ### Values Into Objects
 

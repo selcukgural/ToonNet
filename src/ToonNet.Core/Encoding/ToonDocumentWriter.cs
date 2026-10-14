@@ -14,6 +14,8 @@ namespace ToonNet.Core.Encoding;
 ///         (rows, entries) they will have, and the writer checks it at the end. Each value must fit its place: a value
 ///         inside an object needs a property name, inline arrays and table rows take primitives only, and a document has
 ///         one root value (an object, an array or a primitive). A misuse throws <see cref="InvalidOperationException"/>.
+///         Property names are not tracked: a name written twice in an object is a repeated key, which strict readers
+///         reject.
 ///     </para>
 ///     <para>
 ///         The text is collected in a pooled buffer and written to the destination (as UTF-8 without a byte order mark

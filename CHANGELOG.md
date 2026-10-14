@@ -222,8 +222,8 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   or `SerializeDocumentsAsync` to a path no longer empties the file, and long paths in error messages are shortened.
 - **ToonNet.Core:** `ToonPrompt.DescribeShape` follows the serializer's forms: field groups and keyed tables, `|null`
   in table cells, `[Flags]` enums, `<any>` for converted members, and `/` between choices when `|` is the delimiter.
-- **ToonNet.Core:** Path queries give long strings the allowance to be read: the step budget grows with a step per 16
-  characters of the document's strings and keys, so a filter that reads a 20 MB string once no longer exceeds it, and
+- **ToonNet.Core:** Path queries give long strings the allowance to be read: the step budget grows with the steps to read
+  the document's strings and keys twice, so a filter that reads a 20 MB string once no longer exceeds it, and
   comparing two strings costs as much as the shorter one. `SetValue` checks the whole path before it changes the tree,
   so a path that fails halfway leaves no new containers behind. `ToonRuleResult.IsTruncated` is false when exactly
   `MaxViolations` errors were found. `ToonPrompt.Extract` skips an empty unmarked block, reads indented fences (an
@@ -232,6 +232,12 @@ Defaults that let documents and responses do more than the code meant, now as Sy
 - **ToonNet.Core:** `DeserializeAsyncEnumerableAt` in strict mode reports a line before the array that is
   indented with a tab or by a number of spaces the indent size does not divide, or that is not a member of the object
   being searched, as `DeserializeAt` does; it stepped over such lines or gave no items.
+- **ToonNet.Core:** A null that code put into `ToonArray.Items` is a null item to the indexer, paths, the serializer
+  (generated code included), `DeepClone` and `DeepEquals`; they threw `NullReferenceException`. `GetValue<T>()` with a
+  `ToonValue` type the value is (`GetValue<ToonNumber>()`) gives the value itself, and `GetValue<object>()` gives what
+  reading a primitive into `object` gives. The getters of a disposed `ToonDocumentReader` throw
+  `ObjectDisposedException` instead of reading buffers returned to the pool. Errors in the second and later documents
+  of `DeserializeDocumentsAsync` have the line of the stream, not the line within the document.
 - **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
   so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that

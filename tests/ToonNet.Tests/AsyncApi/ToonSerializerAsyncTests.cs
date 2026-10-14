@@ -210,6 +210,30 @@ public sealed class ToonSerializerAsyncTests
         Assert.Equal(["A", "B"], await Names(ToonSerializer.DeserializeDocumentsAsync<TestUser>(collection)));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeserializeDocumentsAsync_Errors_HaveTheLineOfTheStream(bool explicitSeparator)
+    {
+        // The second document starts at line 4 (blank line) or 5 (separator line and a blank line); its error is on its line 2
+        var text = explicitSeparator ? "Name: A\nAge: 1\n---\n\nName: B\n Age: 2\n" : "Name: A\nAge: 1\n\nName: B\n Age: 2\n";
+        var read = explicitSeparator ? ToonMultiDocumentReadOptions.ExplicitSeparator : ToonMultiDocumentReadOptions.BlankLine;
+        var names = new List<string?>();
+
+        var ex = await Assert.ThrowsAsync<ToonParseException>(async () =>
+        {
+            await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text)), _options, read))
+            {
+                names.Add(user!.Name);
+            }
+        });
+
+        Assert.Equal(["A"], names);
+        Assert.Equal(explicitSeparator ? 6 : 5, ex.Line);
+        Assert.Equal(1, ex.Column);
+        Assert.Equal($"Indentation of 1 spaces is not a multiple of the indent size 2 (line {ex.Line}, column 1)", ex.Message);
+    }
+
 #pragma warning disable CS0618 // the names before 3.2 still work
     [Fact]
     public async Task NamesBefore32_StillWork()

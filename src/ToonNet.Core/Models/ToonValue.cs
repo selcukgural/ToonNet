@@ -456,7 +456,8 @@ public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null
     public ToonArray() : this([]) { }
 
     /// <summary>
-    ///     Gets the array items.
+    ///     Gets the array items. A null put into the list is a <see cref="ToonNull"/> item to every reader of the array
+    ///     (the indexer, paths, the serializer, cloning and comparing).
     /// </summary>
     public List<ToonValue> Items { get; } = items;
 
@@ -491,7 +492,7 @@ public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null
     /// <returns>The item at the specified index.</returns>
     public new ToonValue this[int index]
     {
-        get => Items[index];
+        get => Items[index] ?? ToonNull.Instance;
         set => Items[index] = value ?? ToonNull.Instance;
     }
 

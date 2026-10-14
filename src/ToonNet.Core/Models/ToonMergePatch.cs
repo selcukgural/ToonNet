@@ -16,7 +16,8 @@ public static class ToonMergePatch
 {
     /// <summary>
     ///     Applies a merge patch to a value, changing it in place where it is an object (call
-    ///     <see cref="ToonValue.DeepClone"/> first to keep the original).
+    ///     <see cref="ToonValue.DeepClone"/> first to keep the original). An object that is in the target at two places
+    ///     (the same instance) changes at both.
     /// </summary>
     /// <param name="target">The value to patch.</param>
     /// <param name="patch">The patch: an object merges member by member (<c>null</c> removes a member); anything else replaces the target.</param>
