@@ -252,7 +252,7 @@ public static partial class ToonSerializer
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     /// <remarks>
     ///     This method writes each object as a separate TOON document, separated by blank lines.
-    ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
+    ///     This format is compatible with DeserializeDocumentsAsync for reading back multiple objects.
     ///     An object that encodes to an empty document would be lost on reading, so it throws a
     ///     <see cref="ToonSerializationException"/>.
     /// </remarks>
@@ -296,7 +296,7 @@ public static partial class ToonSerializer
 
 
     /// <summary>
-    ///     Asynchronously serializes a collection of objects to a stream with each object separated by a blank line.
+    ///     Asynchronously writes each item of a collection to a stream as a separate TOON document, separated by blank lines.
     /// </summary>
     /// <typeparam name="T">The type of objects to serialize.</typeparam>
     /// <param name="values">The collection of values to serialize.</param>
@@ -310,13 +310,13 @@ public static partial class ToonSerializer
     /// <exception cref="OperationCanceledException">Thrown when the operation is canceled.</exception>
     /// <remarks>
     ///     This method writes each object as a separate TOON document, separated by blank lines.
-    ///     This format is compatible with DeserializeStreamAsync for reading back multiple objects.
+    ///     This format is compatible with DeserializeDocumentsAsync for reading back multiple objects.
     ///     An object that encodes to an empty document would be lost on reading, so it throws a
     ///     <see cref="ToonSerializationException"/>.
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async ValueTask SerializeCollectionToStreamAsync<T>(IEnumerable<T> values, Stream stream, ToonSerializerOptions? options = null,
+    public static async ValueTask SerializeDocumentsAsync<T>(IEnumerable<T> values, Stream stream, ToonSerializerOptions? options = null,
                                                                       CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(values);
@@ -351,7 +351,7 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
-    ///     Asynchronously serializes a stream of objects to a file with memory-efficient incremental serialization.
+    ///     Asynchronously writes each item of an async sequence to a file as a separate TOON document, as the items arrive.
     /// </summary>
     /// <typeparam name="T">The type of objects to serialize.</typeparam>
     /// <param name="items">The async enumerable stream of items to serialize.</param>
@@ -366,12 +366,12 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     This method is designed for large datasets that do not fit in memory (e.g., database queries, ETL pipelines).
     ///     Items are serialized incrementally as they are enumerated, with minimal memory overhead.
-    ///     Uses blank-line separation by default. Compatible with <see cref="DeserializeStreamAsync{T}(string,ToonSerializerOptions,CancellationToken)"/>.
+    ///     Uses blank-line separation by default. Compatible with <see cref="DeserializeDocumentsAsync{T}(string,ToonSerializerOptions,CancellationToken)"/>.
     /// </remarks>
     /// <example>
     ///     <code>
     ///     // Stream large dataset from database
-    ///     await ToonSerializer.SerializeStreamAsync(
+    ///     await ToonSerializer.SerializeDocumentsAsync(
     ///         items: dbContext.Users.AsAsyncEnumerable(),
     ///         filePath: "users.toon",
     ///         cancellationToken: cts.Token
@@ -380,7 +380,7 @@ public static partial class ToonSerializer
     /// </example>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options = null,
+    public static async ValueTask SerializeDocumentsAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options = null,
                                                           CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -389,11 +389,11 @@ public static partial class ToonSerializer
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
 
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        await SerializeStreamAsync(items, fileStream, options, cancellationToken).ConfigureAwait(false);
+        await SerializeDocumentsAsync(items, fileStream, options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Asynchronously serializes a stream of objects to a file with memory-efficient incremental serialization and custom write options.
+    ///     Asynchronously writes each item of an async sequence to a file as a separate TOON document, as the items arrive, separated as the write options say.
     /// </summary>
     /// <typeparam name="T">The type of objects to serialize.</typeparam>
     /// <param name="items">The async enumerable stream of items to serialize.</param>
@@ -412,7 +412,7 @@ public static partial class ToonSerializer
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options,
+    public static async ValueTask SerializeDocumentsAsync<T>(IAsyncEnumerable<T> items, string filePath, ToonSerializerOptions? options,
                                                           ToonMultiDocumentWriteOptions writeOptions,
                                                           CancellationToken cancellationToken = default)
     {
@@ -423,11 +423,11 @@ public static partial class ToonSerializer
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
 
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
-        await SerializeStreamAsync(items, fileStream, options, writeOptions, cancellationToken).ConfigureAwait(false);
+        await SerializeDocumentsAsync(items, fileStream, options, writeOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Asynchronously serializes a stream of objects to a stream with memory-efficient incremental serialization.
+    ///     Asynchronously writes each item of an async sequence to a stream as a separate TOON document, as the items arrive.
     /// </summary>
     /// <typeparam name="T">The type of objects to serialize.</typeparam>
     /// <param name="items">The async enumerable stream of items to serialize.</param>
@@ -442,18 +442,18 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     This method is designed for large datasets that do not fit in memory (e.g., database queries, ETL pipelines).
     ///     Items are serialized incrementally as they are enumerated, with minimal memory overhead.
-    ///     Uses blank-line separation by default. Compatible with <see cref="DeserializeStreamAsync{T}(StreamReader,ToonSerializerOptions,CancellationToken)"/>.
+    ///     Uses blank-line separation by default. Compatible with <see cref="DeserializeDocumentsAsync{T}(StreamReader,ToonSerializerOptions,CancellationToken)"/>.
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options = null,
+    public static async ValueTask SerializeDocumentsAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options = null,
                                                           CancellationToken cancellationToken = default)
     {
-        await SerializeStreamAsync(items, stream, options, ToonMultiDocumentWriteOptions.BlankLine, cancellationToken).ConfigureAwait(false);
+        await SerializeDocumentsAsync(items, stream, options, ToonMultiDocumentWriteOptions.BlankLine, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Asynchronously serializes a stream of objects to a stream with memory-efficient incremental serialization and custom write options.
+    ///     Asynchronously writes each item of an async sequence to a stream as a separate TOON document, as the items arrive, separated as the write options say.
     /// </summary>
     /// <typeparam name="T">The type of objects to serialize.</typeparam>
     /// <param name="items">The async enumerable stream of items to serialize.</param>
@@ -475,7 +475,7 @@ public static partial class ToonSerializer
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async ValueTask SerializeStreamAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options,
+    public static async ValueTask SerializeDocumentsAsync<T>(IAsyncEnumerable<T> items, Stream stream, ToonSerializerOptions? options,
                                                           ToonMultiDocumentWriteOptions writeOptions,
                                                           CancellationToken cancellationToken = default)
     {
@@ -706,7 +706,7 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
-    ///     Asynchronously deserializes a stream of TOON objects from a file.
+    ///     Asynchronously reads TOON documents separated by blank lines from a file, one item per document.
     /// </summary>
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="filePath">The file path to read from.</param>
@@ -723,7 +723,7 @@ public static partial class ToonSerializer
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options = null,
+    public static async IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(string filePath, ToonSerializerOptions? options = null,
                                                                        [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
     {
@@ -734,14 +734,14 @@ public static partial class ToonSerializer
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
         using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8Strict);
 
-        await foreach (var item in DeserializeStreamAsync<T>(reader, options, cancellationToken).ConfigureAwait(false))
+        await foreach (var item in DeserializeDocumentsAsync<T>(reader, options, cancellationToken).ConfigureAwait(false))
         {
             yield return item;
         }
     }
 
     /// <summary>
-    ///     Asynchronously deserializes a stream of TOON objects from a file using multi-document options.
+    ///     Asynchronously reads TOON documents from a file, one item per document, separated as the multi-document options say.
     /// </summary>
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="filePath">The file path to read from.</param>
@@ -758,7 +758,7 @@ public static partial class ToonSerializer
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(string filePath, ToonSerializerOptions? options,
+    public static async IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(string filePath, ToonSerializerOptions? options,
                                                                        ToonMultiDocumentReadOptions multiDocumentOptions,
                                                                        [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
@@ -771,14 +771,14 @@ public static partial class ToonSerializer
         await using var fileStreamDisposal = fileStream.ConfigureAwait(false);
         using var reader = new StreamReader(fileStream, ToonTextEncoding.Utf8Strict);
 
-        await foreach (var item in DeserializeStreamAsync<T>(reader, options, multiDocumentOptions, cancellationToken).ConfigureAwait(false))
+        await foreach (var item in DeserializeDocumentsAsync<T>(reader, options, multiDocumentOptions, cancellationToken).ConfigureAwait(false))
         {
             yield return item;
         }
     }
 
     /// <summary>
-    ///     Asynchronously deserializes a stream of TOON objects from a StreamReader.
+    ///     Asynchronously reads TOON documents separated by blank lines from a StreamReader, one item per document.
     /// </summary>
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="reader">The StreamReader to read from.</param>
@@ -794,20 +794,20 @@ public static partial class ToonSerializer
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options = null,
+    public static async IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(StreamReader reader, ToonSerializerOptions? options = null,
                                                                        [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
 
-        await foreach (var item in DeserializeStreamAsync<T>(reader, options, ToonMultiDocumentReadOptions.BlankLine, cancellationToken).ConfigureAwait(false))
+        await foreach (var item in DeserializeDocumentsAsync<T>(reader, options, ToonMultiDocumentReadOptions.BlankLine, cancellationToken).ConfigureAwait(false))
         {
             yield return item;
         }
     }
 
     /// <summary>
-    ///     Asynchronously deserializes a stream of TOON objects from a StreamReader using multi-document options.
+    ///     Asynchronously reads TOON documents from a StreamReader, one item per document, separated as the multi-document options say.
     /// </summary>
     /// <typeparam name="T">The type to deserialize to.</typeparam>
     /// <param name="reader">The StreamReader to read from.</param>
@@ -823,7 +823,7 @@ public static partial class ToonSerializer
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
-    public static async IAsyncEnumerable<T?> DeserializeStreamAsync<T>(StreamReader reader, ToonSerializerOptions? options,
+    public static async IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(StreamReader reader, ToonSerializerOptions? options,
                                                                        ToonMultiDocumentReadOptions multiDocumentOptions,
                                                                        [EnumeratorCancellation]
                                                                        CancellationToken cancellationToken = default)

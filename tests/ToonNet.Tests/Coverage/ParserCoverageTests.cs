@@ -188,7 +188,7 @@ public class ParserCoverageTests
             await File.WriteAllTextAsync(path, "a: \"x\ry\"\r\n\r\nb: 1\n");
             var documents = new List<Dictionary<string, object?>?>();
 
-            await foreach (var document in ToonNet.Core.Serialization.ToonSerializer.DeserializeStreamAsync<Dictionary<string, object?>>(path))
+            await foreach (var document in ToonNet.Core.Serialization.ToonSerializer.DeserializeDocumentsAsync<Dictionary<string, object?>>(path))
             {
                 documents.Add(document);
             }
@@ -201,7 +201,7 @@ public class ParserCoverageTests
 
             await Assert.ThrowsAsync<ToonParseException>(async () =>
             {
-                await foreach (var _ in ToonNet.Core.Serialization.ToonSerializer.DeserializeStreamAsync<Dictionary<string, object?>>(path))
+                await foreach (var _ in ToonNet.Core.Serialization.ToonSerializer.DeserializeDocumentsAsync<Dictionary<string, object?>>(path))
                 {
                 }
             });

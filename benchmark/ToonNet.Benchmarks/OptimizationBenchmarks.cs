@@ -217,7 +217,7 @@ public class ToonSerializerOptimizationBenchmarks
     public async Task SerializeCollection_WithArrayPool()
     {
         using var stream = new MemoryStream();
-        await ToonSerializer.SerializeCollectionToStreamAsync(_testData.Items, stream);
+        await ToonSerializer.SerializeDocumentsAsync(_testData.Items, stream);
     }
 
     private class TestData

@@ -542,7 +542,7 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 | `DeserializeAsync<T>(string toon, options, ct)` | Deserialize from string (`ValueTask<T?>`) | Async call sites |
 | `DeserializeFromStreamAsync<T>(Stream, options, ct)` | Read UTF-8 from a stream (also with a `Type`) | Network data |
 | `DeserializeFromFileAsync<T>(string filePath, options, ct)` | Read UTF-8 from a file | File input |
-| `DeserializeStreamAsync<T>(string filePath \| StreamReader, ...)` | Yield one object per document | Multi-document files, see [Streaming](streaming) |
+| `DeserializeDocumentsAsync<T>(string filePath \| StreamReader, ...)` | Yield one object per document | Multi-document files, see [Streaming](streaming) |
 
 ## Parsing Rules and Strict Mode
 
@@ -660,7 +660,7 @@ Person person = ToonSerializer.Deserialize<Person>(toonInput);
 
 1. **Reuse options**: Create `ToonSerializerOptions` once
 2. **Use async methods**: For I/O-bound operations
-3. **Stream multi-document files**: `DeserializeStreamAsync` keeps one document in memory at a time
+3. **Stream multi-document files**: `DeserializeDocumentsAsync` keeps one document in memory at a time
    (`DeserializeFromFileAsync` and `DeserializeFromStreamAsync` read the whole input)
 4. **Use specific types**: Avoid `object` or `dynamic`
 5. **Profile deserialization**: Use BenchmarkDotNet

@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   services that read TOON from untrusted sources.
 
 ### Changed
+- **ToonNet.Core:** The multi-document methods are named after what they do, each item a separate TOON document:
+  `SerializeDocumentsAsync` (was `SerializeStreamAsync` and `SerializeCollectionToStreamAsync`) and
+  `DeserializeDocumentsAsync` (was `DeserializeStreamAsync`), which also reads from a UTF-8 `Stream`. The old names
+  were easy to confuse with `SerializeToStreamAsync` and `DeserializeFromStreamAsync`, which write and read one document;
+  they still work, marked `[Obsolete]`.
 - **ToonNet.Extensions.Yaml:** `FromYaml` types plain scalars by the YAML 1.2 core schema: `yes`/`no`/`on`/`off` are
   strings now (they were booleans, as in YAML 1.1), and `007`, `0xFF`, `0o17`, `.5` and `5.` are numbers (they were
   strings). `.inf` and `.nan` stay strings, and scalars tagged `!!str` are strings. `ToYaml` still quotes

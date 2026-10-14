@@ -22,7 +22,9 @@ Use streaming serialization when:
 - Processing **multi-GB log files**
 - Avoiding **OutOfMemoryException** in production
 
-`SerializeStreamAsync` and `DeserializeStreamAsync` live in `ToonNet.Core.Serialization`.
+`SerializeDocumentsAsync` and `DeserializeDocumentsAsync` live in `ToonNet.Core.Serialization`. They write and read
+each item as a separate TOON document; before 3.2 they were named `SerializeStreamAsync`, `DeserializeStreamAsync` and
+`SerializeCollectionToStreamAsync`, names that still work but are obsolete.
 
 ## Basic Streaming Serialization
 
@@ -32,7 +34,7 @@ Use streaming serialization when:
 using ToonNet.Core.Serialization;
 
 // Export millions of users without loading all into memory
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: dbContext.Users.AsAsyncEnumerable(),
     filePath: "users_export.toon",
     cancellationToken: cancellationToken
@@ -43,7 +45,7 @@ await ToonSerializer.SerializeStreamAsync(
 
 ```csharp
 // Process large files without memory pressure
-await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_export.toon"))
+await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<User>("users_export.toon"))
 {
     await ProcessUserAsync(user);  // Only one user in memory at a time
 }
@@ -73,7 +75,7 @@ await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(strea
   been returned by then. In strict mode the declared length is checked when the array ends.
 - `DeserializeAsyncEnumerable(stream, MyType.ToonTypeInfo)` reads without reflection (trimming, NativeAOT).
 
-For a file of separate documents (one per item), use `SerializeStreamAsync` and `DeserializeStreamAsync` below.
+For a file of separate documents (one per item), use `SerializeDocumentsAsync` and `DeserializeDocumentsAsync` below.
 
 ## Advanced Configuration
 
@@ -87,7 +89,7 @@ Documents separated by one blank line. This is what the overloads without write 
 `SerializeCollectionToFileAsync` writes.
 
 ```csharp
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items,
     "data.toon",
     options: null,
@@ -113,7 +115,7 @@ Documents separated by a `---` line - explicit, YAML-like format. The separator 
 `DocumentSeparator`; the reader recognizes a separator only when the whole line matches it exactly.
 
 ```csharp
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items,
     "data.toon",
     options: null,
@@ -152,7 +154,7 @@ var writeOptions = new ToonMultiDocumentWriteOptions
     BatchSize = 100  // Buffer 100 items before writing
 };
 
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: GenerateLargeDatasetAsync(),
     filePath: "export.toon",
     options: serializerOptions,
@@ -180,7 +182,7 @@ public async Task ExportUsersAsync(CancellationToken cancellationToken)
 {
     using var dbContext = new MyDbContext();
     
-    await ToonSerializer.SerializeStreamAsync(
+    await ToonSerializer.SerializeDocumentsAsync(
         items: dbContext.Users
             .AsNoTracking()  // No change tracking for read-only export
             .AsAsyncEnumerable(),
@@ -199,7 +201,7 @@ Transform and export data incrementally:
 ```csharp
 public async Task RunEtlPipelineAsync(CancellationToken cancellationToken)
 {
-    await ToonSerializer.SerializeStreamAsync(
+    await ToonSerializer.SerializeDocumentsAsync(
         items: ExtractTransformAsync(),
         filePath: "transformed_data.toon",
         options: null,
@@ -235,7 +237,7 @@ public async Task AnalyzeLogsAsync(string logFilePath)
     int errorCount = 0;
     int warningCount = 0;
     
-    await foreach (var logEntry in ToonSerializer.DeserializeStreamAsync<LogEntry>(logFilePath))
+    await foreach (var logEntry in ToonSerializer.DeserializeDocumentsAsync<LogEntry>(logFilePath))
     {
         switch (logEntry.Level)
         {
@@ -260,7 +262,7 @@ Report progress during long-running operations:
 ```csharp
 public async Task ExportWithProgressAsync(IProgress<int> progress, CancellationToken cancellationToken)
 {
-    await ToonSerializer.SerializeStreamAsync(
+    await ToonSerializer.SerializeDocumentsAsync(
         items: TrackProgressAsync(progress),
         filePath: "export.toon",
         cancellationToken: cancellationToken
@@ -292,10 +294,10 @@ var writeOptions = ToonMultiDocumentWriteOptions.ExplicitSeparator;
 var readOptions = ToonMultiDocumentReadOptions.ExplicitSeparator;
 
 // Write
-await ToonSerializer.SerializeStreamAsync(items, "data.toon", options: null, writeOptions: writeOptions);
+await ToonSerializer.SerializeDocumentsAsync(items, "data.toon", options: null, writeOptions: writeOptions);
 
 // Read
-await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>("data.toon", options: null, multiDocumentOptions: readOptions))
+await foreach (var item in ToonSerializer.DeserializeDocumentsAsync<Item>("data.toon", options: null, multiDocumentOptions: readOptions))
 {
     ProcessItem(item);
 }
@@ -307,24 +309,24 @@ inside a document.
 ## Performance Benchmarks
 
 The repository contains a BenchmarkDotNet suite that compares `SerializeCollectionToFileAsync` with
-`SerializeStreamAsync` at several batch sizes (`benchmark/ToonNet.Benchmarks/StreamingSerializationBenchmarks.cs`).
+`SerializeDocumentsAsync` at several batch sizes (`benchmark/ToonNet.Benchmarks/StreamingSerializationBenchmarks.cs`).
 No results are published for the current version; see `benchmark/ToonNet.Benchmarks/README.md` for how to run it on
 your own hardware.
 
 ## API Reference
 
-### SerializeStreamAsync Methods
+### SerializeDocumentsAsync Methods
 
 ```csharp
 // File-based, default options
-ValueTask SerializeStreamAsync<T>(
+ValueTask SerializeDocumentsAsync<T>(
     IAsyncEnumerable<T> items,
     string filePath,
     ToonSerializerOptions? options = null,
     CancellationToken cancellationToken = default);
 
 // File-based, custom write options
-ValueTask SerializeStreamAsync<T>(
+ValueTask SerializeDocumentsAsync<T>(
     IAsyncEnumerable<T> items,
     string filePath,
     ToonSerializerOptions? options,
@@ -332,45 +334,64 @@ ValueTask SerializeStreamAsync<T>(
     CancellationToken cancellationToken = default);
 
 // Stream-based, default options
-ValueTask SerializeStreamAsync<T>(
+ValueTask SerializeDocumentsAsync<T>(
     IAsyncEnumerable<T> items,
     Stream stream,
     ToonSerializerOptions? options = null,
     CancellationToken cancellationToken = default);
 
 // Stream-based, custom write options
-ValueTask SerializeStreamAsync<T>(
+ValueTask SerializeDocumentsAsync<T>(
     IAsyncEnumerable<T> items,
     Stream stream,
     ToonSerializerOptions? options,
     ToonMultiDocumentWriteOptions writeOptions,
     CancellationToken cancellationToken = default);
+
+// A collection in memory, separated by blank lines
+ValueTask SerializeDocumentsAsync<T>(
+    IEnumerable<T> values,
+    Stream stream,
+    ToonSerializerOptions? options = null,
+    CancellationToken cancellationToken = default);
 ```
 
-### DeserializeStreamAsync Methods
+### DeserializeDocumentsAsync Methods
 
 ```csharp
 // File-based, default separator
-IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
     string filePath,
     ToonSerializerOptions? options = null,
     CancellationToken cancellationToken = default);
 
 // File-based, custom separator
-IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
     string filePath,
     ToonSerializerOptions? options,
     ToonMultiDocumentReadOptions multiDocumentOptions,
     CancellationToken cancellationToken = default);
 
-// Stream-based, default separator
-IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+// UTF-8 stream (left open), default or custom separator
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
+    Stream utf8Stream,
+    ToonSerializerOptions? options = null,
+    CancellationToken cancellationToken = default);
+
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
+    Stream utf8Stream,
+    ToonSerializerOptions? options,
+    ToonMultiDocumentReadOptions multiDocumentOptions,
+    CancellationToken cancellationToken = default);
+
+// StreamReader, default separator
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
     StreamReader reader,
     ToonSerializerOptions? options = null,
     CancellationToken cancellationToken = default);
 
-// Stream-based, custom separator
-IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+// StreamReader, custom separator
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
     StreamReader reader,
     ToonSerializerOptions? options,
     ToonMultiDocumentReadOptions multiDocumentOptions,
@@ -414,10 +435,10 @@ writeOptions: new ToonMultiDocumentWriteOptions { BatchSize = 200 }
 **Solution**: Match write and read options:
 ```csharp
 // Write
-await SerializeStreamAsync(..., ToonMultiDocumentWriteOptions.ExplicitSeparator);
+await SerializeDocumentsAsync(..., ToonMultiDocumentWriteOptions.ExplicitSeparator);
 
 // Read
-await DeserializeStreamAsync(..., ToonMultiDocumentReadOptions.ExplicitSeparator);
+await DeserializeDocumentsAsync(..., ToonMultiDocumentReadOptions.ExplicitSeparator);
 ```
 
 ## See Also

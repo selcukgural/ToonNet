@@ -32,7 +32,7 @@ public static partial class ToonSerializer
     ///     memory stays flat however long the array is; an inline array is one line and is read at once. Items are checked
     ///     like the rest of the document; in strict mode the declared length is checked when the array ends, after the
     ///     items before it were returned. For a stream of separate documents, use
-    ///     <see cref="DeserializeStreamAsync{T}(StreamReader, ToonSerializerOptions, CancellationToken)"/>.
+    ///     <see cref="DeserializeDocumentsAsync{T}(StreamReader, ToonSerializerOptions, CancellationToken)"/>.
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]

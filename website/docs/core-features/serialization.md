@@ -399,14 +399,14 @@ Stream data incrementally without memory pressure:
 
 ```csharp
 // Example: Export millions of users from database
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: dbContext.Users.AsAsyncEnumerable(),
     filePath: "users_export.toon",
     cancellationToken: cancellationToken
 );
 
 // Deserialize incrementally
-await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_export.toon"))
+await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<User>("users_export.toon"))
 {
     await ProcessUserAsync(user);  // Only one user in memory at a time
 }
@@ -425,7 +425,7 @@ var writeOptions = new ToonMultiDocumentWriteOptions
     BatchSize = 100  // Buffer 100 items before writing (improves I/O throughput)
 };
 
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: GenerateLargeDatasetAsync(),
     filePath: "export.toon",
     options: serializerOptions,
@@ -434,7 +434,7 @@ await ToonSerializer.SerializeStreamAsync(
 );
 
 // Read with matching separator mode
-await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>(
+await foreach (var item in ToonSerializer.DeserializeDocumentsAsync<Item>(
     "export.toon",
     options: serializerOptions,
     multiDocumentOptions: ToonMultiDocumentReadOptions.ExplicitSeparator,
@@ -485,7 +485,7 @@ Age: 35
 - Items are pulled from the `IAsyncEnumerable<T>` one at a time, so the source never has to be materialized.
 - Up to `BatchSize` serialized documents (default 50) are buffered before each write, so memory use grows with batch
   size × item size, not with the number of items.
-- `DeserializeStreamAsync` reads line by line and keeps only the current document in memory.
+- `DeserializeDocumentsAsync` reads line by line and keeps only the current document in memory.
 - The `CancellationToken` is checked for every item.
 
 The repository contains a BenchmarkDotNet suite for streaming (`benchmark/ToonNet.Benchmarks/StreamingSerializationBenchmarks.cs`);
@@ -496,7 +496,7 @@ run it on your own hardware and data shape for numbers.
 **Database Exports:**
 ```csharp
 // Export entire table without loading into memory
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     dbContext.Orders
         .AsNoTracking()
         .AsAsyncEnumerable(),
@@ -507,7 +507,7 @@ await ToonSerializer.SerializeStreamAsync(
 **ETL Pipelines:**
 ```csharp
 // Transform and export data incrementally
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     ReadAndTransformDataAsync(),
     "transformed_data.toon"
 );
@@ -524,7 +524,7 @@ async IAsyncEnumerable<TransformedData> ReadAndTransformDataAsync()
 **Log Processing:**
 ```csharp
 // Process multi-GB log files without memory issues
-await foreach (var logEntry in ToonSerializer.DeserializeStreamAsync<LogEntry>("app.log.toon"))
+await foreach (var logEntry in ToonSerializer.DeserializeDocumentsAsync<LogEntry>("app.log.toon"))
 {
     if (logEntry.Level == "ERROR")
     {
@@ -538,7 +538,7 @@ await foreach (var logEntry in ToonSerializer.DeserializeStreamAsync<LogEntry>("
 1. **Reuse ToonSerializerOptions**: Create once, use multiple times
 2. **Use async methods** for I/O-bound operations
 3. **Metadata is cached**: the first call for a type builds and caches its metadata; later calls reuse it
-4. **Stream large collections**: use `SerializeStreamAsync` instead of building one huge string
+4. **Stream large collections**: use `SerializeDocumentsAsync` instead of building one huge string
 5. **Write bytes directly**: when the destination wants UTF-8, `SerializeToUtf8Bytes` or a buffer writer skips the
    string (on 10,000 records: 5–14% faster with a third of the allocation; a reused `ArrayBufferWriter<byte>` is
    8–27% faster and makes writing flat tables almost allocation-free)
@@ -577,11 +577,11 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 | `SerializeToStreamAsync(Type, object value, Stream, options, ct)` | Same, with a runtime type | Non-generic code |
 | `SerializeToFileAsync<T>(T value, string filePath, options, ct)` | Write UTF-8 to a file | File persistence |
 | `SerializeCollectionToFileAsync<T>(IEnumerable<T>, string filePath, options, ct)` | One document per item, blank-line separated | Multi-document files |
-| `SerializeCollectionToStreamAsync<T>(IEnumerable<T>, Stream, options, ct)` | Same, to a stream | Multi-document streams |
-| **`SerializeStreamAsync<T>(IAsyncEnumerable<T>, string filePath, ...)`** | **Stream large datasets to a file** | **DB exports, large datasets** |
-| **`SerializeStreamAsync<T>(IAsyncEnumerable<T>, Stream, ...)`** | **Stream to a stream** | **ETL pipelines** |
+| `SerializeDocumentsAsync<T>(IEnumerable<T>, Stream, options, ct)` | Same, to a stream | Multi-document streams |
+| **`SerializeDocumentsAsync<T>(IAsyncEnumerable<T>, string filePath, ...)`** | **Stream large datasets to a file** | **DB exports, large datasets** |
+| **`SerializeDocumentsAsync<T>(IAsyncEnumerable<T>, Stream, ...)`** | **Stream to a stream** | **ETL pipelines** |
 
-The `SerializeStreamAsync` overloads that take `ToonMultiDocumentWriteOptions` control the separator mode and batch
+The `SerializeDocumentsAsync` overloads that take `ToonMultiDocumentWriteOptions` control the separator mode and batch
 size. See [Streaming](streaming) for details.
 
 ## Error Handling
@@ -640,7 +640,7 @@ await using var fileStream = File.Create("large-data.toon");
 await ToonSerializer.SerializeToStreamAsync(largeObject, fileStream);
 
 // Large collections: one document per item, never materialized as a whole
-await ToonSerializer.SerializeStreamAsync(GetItemsAsync(), "items.toon");
+await ToonSerializer.SerializeDocumentsAsync(GetItemsAsync(), "items.toon");
 ```
 
 `SerializeToStreamAsync` still holds the whole TOON text in memory before writing it (in pooled buffers, not a

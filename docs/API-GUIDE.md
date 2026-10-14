@@ -254,14 +254,14 @@ For large datasets (millions of records, database exports, ETL pipelines), ToonN
 
 ```csharp
 // Stream large dataset from database without loading all into memory
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: dbContext.Users.AsAsyncEnumerable(),
     filePath: "users_export.toon",
     cancellationToken: cts.Token
 );
 
 // Read back with incremental deserialization
-await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_export.toon"))
+await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<User>("users_export.toon"))
 {
     ProcessUser(user);  // Memory-efficient: only one user in memory at a time
 }
@@ -271,7 +271,7 @@ await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_ex
 
 ```csharp
 // Custom separator mode and batch size for optimal performance
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: GenerateLargeDatasetAsync(),
     filePath: "export.toon",
     options: null,
@@ -286,7 +286,7 @@ await ToonSerializer.SerializeStreamAsync(
 
 // Read it back in the same mode: the default (blank-line) reader does not recognize "---"
 // and fails with a ToonParseException ("Missing colon after key")
-await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>(
+await foreach (var item in ToonSerializer.DeserializeDocumentsAsync<Item>(
     "export.toon",
     options: null,
     ToonMultiDocumentReadOptions.ExplicitSeparator))
@@ -332,14 +332,14 @@ The root must be an array: an array under a key (`users[200000]{id,name}:`) is a
 
 ```csharp
 // File-based streaming
-ValueTask SerializeStreamAsync<T>(
+ValueTask SerializeDocumentsAsync<T>(
     IAsyncEnumerable<T> items,
     string filePath,
     ToonSerializerOptions? options = null,
     CancellationToken cancellationToken = default);
 
 // Stream-based with custom options
-ValueTask SerializeStreamAsync<T>(
+ValueTask SerializeDocumentsAsync<T>(
     IAsyncEnumerable<T> items,
     Stream stream,
     ToonSerializerOptions? options,
@@ -347,13 +347,13 @@ ValueTask SerializeStreamAsync<T>(
     CancellationToken cancellationToken = default);
 
 // Incremental deserialization
-IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
     string filePath,
     ToonSerializerOptions? options = null,
     CancellationToken cancellationToken = default);
 
 // Same, with the separator mode the file was written with (also for a StreamReader)
-IAsyncEnumerable<T?> DeserializeStreamAsync<T>(
+IAsyncEnumerable<T?> DeserializeDocumentsAsync<T>(
     string filePath,
     ToonSerializerOptions? options,
     ToonMultiDocumentReadOptions multiDocumentOptions,

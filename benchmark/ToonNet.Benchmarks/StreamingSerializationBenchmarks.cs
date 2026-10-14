@@ -34,13 +34,13 @@ public class StreamingSerializationBenchmarks
     }
 
     [Benchmark]
-    public async Task SerializeStreamAsync_IAsyncEnumerable()
+    public async Task SerializeDocumentsAsync_IAsyncEnumerable()
     {
         // New: Streaming serialization (minimal memory footprint)
         var tempFile = Path.GetTempFileName();
         try
         {
-            await ToonSerializer.SerializeStreamAsync(GenerateTestDataAsync(ItemCount), tempFile);
+            await ToonSerializer.SerializeDocumentsAsync(GenerateTestDataAsync(ItemCount), tempFile);
         }
         finally
         {
@@ -52,13 +52,13 @@ public class StreamingSerializationBenchmarks
     }
 
     [Benchmark]
-    public async Task SerializeStreamAsync_WithBatching_BatchSize50()
+    public async Task SerializeDocumentsAsync_WithBatching_BatchSize50()
     {
         // Streaming with default batch size (50)
         var tempFile = Path.GetTempFileName();
         try
         {
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 GenerateTestDataAsync(ItemCount),
                 tempFile,
                 options: null,
@@ -75,13 +75,13 @@ public class StreamingSerializationBenchmarks
     }
 
     [Benchmark]
-    public async Task SerializeStreamAsync_WithBatching_BatchSize100()
+    public async Task SerializeDocumentsAsync_WithBatching_BatchSize100()
     {
         // Streaming with larger batch size (100)
         var tempFile = Path.GetTempFileName();
         try
         {
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 GenerateTestDataAsync(ItemCount),
                 tempFile,
                 options: null,
@@ -98,13 +98,13 @@ public class StreamingSerializationBenchmarks
     }
 
     [Benchmark]
-    public async Task SerializeStreamAsync_ExplicitSeparator()
+    public async Task SerializeDocumentsAsync_ExplicitSeparator()
     {
         // Streaming with explicit separator mode
         var tempFile = Path.GetTempFileName();
         try
         {
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 GenerateTestDataAsync(ItemCount),
                 tempFile,
                 options: null,

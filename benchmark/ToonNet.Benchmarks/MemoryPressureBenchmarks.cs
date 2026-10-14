@@ -112,13 +112,13 @@ public class MemoryPressureBenchmarks
     }
 
     [Benchmark]
-    public async Task SerializeStreamAsync_10K_Items()
+    public async Task SerializeDocumentsAsync_10K_Items()
     {
         // Test streaming serialization with 10K items
         var tempFile = Path.GetTempFileName();
         try
         {
-            await ToonSerializer.SerializeStreamAsync(GenerateTestDataAsync(10_000), tempFile);
+            await ToonSerializer.SerializeDocumentsAsync(GenerateTestDataAsync(10_000), tempFile);
         }
         finally
         {

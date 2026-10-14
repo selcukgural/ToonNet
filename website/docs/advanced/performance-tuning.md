@@ -55,13 +55,13 @@ var allUsers = await dbContext.Users.ToListAsync();  // OOM risk with millions o
 await ToonSerializer.SerializeCollectionToFileAsync(allUsers, "users.toon");
 
 // ✅ Good: Stream incrementally (memory bounded by the batch, not the dataset)
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     dbContext.Users.AsAsyncEnumerable(),
     "users.toon"
 );
 
 // ✅ Better: Stream with batching for optimal throughput
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     dbContext.Users.AsAsyncEnumerable(),
     "users.toon",
     options: null,
@@ -74,7 +74,7 @@ await ToonSerializer.SerializeStreamAsync(
   whole collection
 - **Throughput:** Larger batches mean fewer write calls; measure the right size for your item size
 - **Format:** Documents are separated by a blank line (or `---` with `ToonMultiDocumentWriteOptions.ExplicitSeparator`),
-  which `DeserializeStreamAsync` reads back one by one
+  which `DeserializeDocumentsAsync` reads back one by one
 
 **Read back efficiently:**
 ```csharp
@@ -82,7 +82,7 @@ await ToonSerializer.SerializeStreamAsync(
 var users = ToonSerializer.Deserialize<List<User>>(File.ReadAllText("users.toon"));
 
 // ✅ Good: Stream incrementally
-await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users.toon"))
+await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<User>("users.toon"))
 {
     await ProcessUserAsync(user);  // Documents are read and deserialized one at a time
 }
@@ -183,18 +183,18 @@ public class StreamingBenchmarks
     }
 
     [Benchmark]
-    public async Task SerializeStreamAsync_Incremental()
+    public async Task SerializeDocumentsAsync_Incremental()
     {
-        await ToonSerializer.SerializeStreamAsync(
+        await ToonSerializer.SerializeDocumentsAsync(
             GenerateItemsAsync(ItemCount),
             "test.toon"
         );
     }
 
     [Benchmark]
-    public async Task SerializeStreamAsync_Batched()
+    public async Task SerializeDocumentsAsync_Batched()
     {
-        await ToonSerializer.SerializeStreamAsync(
+        await ToonSerializer.SerializeDocumentsAsync(
             GenerateItemsAsync(ItemCount),
             "test.toon",
             options: null,

@@ -407,7 +407,7 @@ public static partial class ToonSerializer
         {
             throw new ToonSerializationException(
                 $"{type.Name} is an IAsyncEnumerable<T>, which cannot be serialized synchronously; collect its items first " +
-                "(for example into a List<T>), or write them one document at a time with SerializeStreamAsync");
+                "(for example into a List<T>), or write them one document at a time with SerializeDocumentsAsync");
         }
     }
 

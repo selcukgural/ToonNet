@@ -63,18 +63,18 @@ public sealed class Utf8OutputTests : IDisposable
         var expected = string.Join("\n\n", items.Select(item => ToonSerializer.Serialize(item)));
 
         using var collection = new MemoryStream();
-        await ToonSerializer.SerializeCollectionToStreamAsync(items, collection);
+        await ToonSerializer.SerializeDocumentsAsync(items, collection);
         Assert.Equal(expected, System.Text.Encoding.UTF8.GetString(collection.ToArray()));
 
         using var batched = new MemoryStream();
-        await ToonSerializer.SerializeStreamAsync(ToAsync(items), batched, null, new ToonMultiDocumentWriteOptions { BatchSize = 7 });
+        await ToonSerializer.SerializeDocumentsAsync(ToAsync(items), batched, null, new ToonMultiDocumentWriteOptions { BatchSize = 7 });
         Assert.Equal(expected, System.Text.Encoding.UTF8.GetString(batched.ToArray()));
 
         var readBack = new List<Item?>();
         batched.Position = 0;
         using var reader = new StreamReader(batched);
 
-        await foreach (var item in ToonSerializer.DeserializeStreamAsync<Item>(reader))
+        await foreach (var item in ToonSerializer.DeserializeDocumentsAsync<Item>(reader))
         {
             readBack.Add(item);
         }
@@ -108,19 +108,19 @@ public sealed class Utf8OutputTests : IDisposable
     }
 
     [Fact]
-    public async Task SerializeCollectionToStreamAsync_WritesNoBom()
+    public async Task SerializeDocumentsAsync_Collection_WritesNoBom()
     {
         using var stream = new MemoryStream();
-        await ToonSerializer.SerializeCollectionToStreamAsync(Items, stream);
+        await ToonSerializer.SerializeDocumentsAsync(Items, stream);
 
         AssertNoBom(stream.ToArray());
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_WritesNoBom()
+    public async Task SerializeDocumentsAsync_WritesNoBom()
     {
         using var stream = new MemoryStream();
-        await ToonSerializer.SerializeStreamAsync(ToAsync(Items), stream);
+        await ToonSerializer.SerializeDocumentsAsync(ToAsync(Items), stream);
 
         AssertNoBom(stream.ToArray());
     }

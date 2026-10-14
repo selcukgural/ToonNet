@@ -166,8 +166,69 @@ public sealed class ToonSerializerAsyncTests
         Assert.Equal("frank@test.com", result.Email);
     }
 
+    private static async IAsyncEnumerable<TestUser> Users(int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            await Task.Yield();
+            yield return new TestUser { Name = $"U{i}", Age = i, Email = $"u{i}@test.com" };
+        }
+    }
+
+    private static async Task<List<string?>> Names(IAsyncEnumerable<TestUser?> users)
+    {
+        var names = new List<string?>();
+
+        await foreach (var user in users)
+        {
+            names.Add(user?.Name);
+        }
+
+        return names;
+    }
+
     [Fact]
-    public async Task DeserializeStreamAsync_MultipleObjects_YieldsAllObjects()
+    public async Task DeserializeDocumentsAsync_FromAStream_LeavesItOpen()
+    {
+        foreach (var (write, read) in new[]
+                 {
+                     (ToonMultiDocumentWriteOptions.BlankLine, ToonMultiDocumentReadOptions.BlankLine),
+                     (ToonMultiDocumentWriteOptions.ExplicitSeparator, ToonMultiDocumentReadOptions.ExplicitSeparator)
+                 })
+        {
+            using var stream = new MemoryStream();
+            await ToonSerializer.SerializeDocumentsAsync(Users(3), stream, _options, write);
+            stream.Position = 0;
+
+            Assert.Equal(["U0", "U1", "U2"], await Names(ToonSerializer.DeserializeDocumentsAsync<TestUser>(stream, _options, read)));
+            Assert.True(stream.CanRead);
+        }
+
+        using var collection = new MemoryStream();
+        await ToonSerializer.SerializeDocumentsAsync(new[] { new TestUser { Name = "A" }, new TestUser { Name = "B" } }, collection);
+        collection.Position = 0;
+        Assert.Equal(["A", "B"], await Names(ToonSerializer.DeserializeDocumentsAsync<TestUser>(collection)));
+    }
+
+#pragma warning disable CS0618 // the names before 3.2 still work
+    [Fact]
+    public async Task NamesBefore32_StillWork()
+    {
+        using var stream = new MemoryStream();
+        await ToonSerializer.SerializeStreamAsync(Users(2), stream, _options);
+        stream.Position = 0;
+
+        using var reader = new StreamReader(stream, leaveOpen: true);
+        Assert.Equal(["U0", "U1"], await Names(ToonSerializer.DeserializeStreamAsync<TestUser>(reader, _options)));
+
+        using var collection = new MemoryStream();
+        await ToonSerializer.SerializeCollectionToStreamAsync(new[] { new TestUser { Name = "A" } }, collection);
+        Assert.Equal("Name: A", System.Text.Encoding.UTF8.GetString(collection.ToArray()).Split('\n')[0]);
+    }
+#pragma warning restore CS0618
+
+    [Fact]
+    public async Task DeserializeDocumentsAsync_MultipleObjects_YieldsAllObjects()
     {
         // Arrange
         var toonData = """
@@ -191,7 +252,7 @@ public sealed class ToonSerializerAsyncTests
 
             // Act
             var users = new List<TestUser>();
-            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options))
+            await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(filePath, _options))
             {
                 if (user != null)
                 {
@@ -215,7 +276,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task DeserializeStreamAsync_ExplicitSeparator_YieldsAllObjects()
+    public async Task DeserializeDocumentsAsync_ExplicitSeparator_YieldsAllObjects()
     {
         // Arrange
         var toonData = """
@@ -239,7 +300,7 @@ public sealed class ToonSerializerAsyncTests
 
             // Act
             var users = new List<TestUser>();
-            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options, ToonMultiDocumentReadOptions.ExplicitSeparator))
+            await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(filePath, _options, ToonMultiDocumentReadOptions.ExplicitSeparator))
             {
                 if (user != null)
                 {
@@ -300,7 +361,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeCollectionToStreamAsync_MultipleObjects_RoundTrips()
+    public async Task SerializeDocumentsAsync_Collection_MultipleObjects_RoundTrips()
     {
         // Arrange
         var users = new[]
@@ -312,7 +373,7 @@ public sealed class ToonSerializerAsyncTests
         using var stream = new MemoryStream();
 
         // Act
-        await ToonSerializer.SerializeCollectionToStreamAsync(users, stream, _options);
+        await ToonSerializer.SerializeDocumentsAsync(users, stream, _options);
 
         // Assert
         var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
@@ -321,7 +382,7 @@ public sealed class ToonSerializerAsyncTests
         stream.Position = 0;
         using var reader = new StreamReader(stream);
         var readUsers = new List<TestUser?>();
-        await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(reader, _options))
+        await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(reader, _options))
         {
             readUsers.Add(user);
         }
@@ -365,7 +426,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task DeserializeStreamAsync_EmptyFile_ReturnsNoItems()
+    public async Task DeserializeDocumentsAsync_EmptyFile_ReturnsNoItems()
     {
         // Arrange
         var filePath = Path.GetTempFileName();
@@ -376,7 +437,7 @@ public sealed class ToonSerializerAsyncTests
 
             // Act
             var items = new List<TestUser>();
-            await foreach (var item in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options))
+            await foreach (var item in ToonSerializer.DeserializeDocumentsAsync<TestUser>(filePath, _options))
             {
                 if (item != null)
                 {
@@ -397,7 +458,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_LargeDataset_WritesIncrementally()
+    public async Task SerializeDocumentsAsync_LargeDataset_WritesIncrementally()
     {
         // Arrange
         var filePath = Path.GetTempFileName();
@@ -406,7 +467,7 @@ public sealed class ToonSerializerAsyncTests
         try
         {
             // Act - Stream large dataset without loading all into memory
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 GenerateUsersAsync(itemCount), 
                 filePath, 
                 _options
@@ -419,7 +480,7 @@ public sealed class ToonSerializerAsyncTests
 
             // Verify roundtrip - read back and count
             var readCount = 0;
-            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options))
+            await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(filePath, _options))
             {
                 Assert.NotNull(user);
                 readCount++;
@@ -437,7 +498,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_WithExplicitSeparator_WritesCorrectFormat()
+    public async Task SerializeDocumentsAsync_WithExplicitSeparator_WritesCorrectFormat()
     {
         // Arrange
         var filePath = Path.GetTempFileName();
@@ -446,7 +507,7 @@ public sealed class ToonSerializerAsyncTests
         try
         {
             // Act - Use explicit separator mode
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 users,
                 filePath,
                 _options,
@@ -460,7 +521,7 @@ public sealed class ToonSerializerAsyncTests
 
             // Verify roundtrip with matching read options
             var readUsers = new List<TestUser>();
-            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(
+            await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(
                 filePath, 
                 _options, 
                 ToonMultiDocumentReadOptions.ExplicitSeparator))
@@ -483,7 +544,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_WithBlankLineSeparator_WritesCorrectFormat()
+    public async Task SerializeDocumentsAsync_WithBlankLineSeparator_WritesCorrectFormat()
     {
         // Arrange
         var filePath = Path.GetTempFileName();
@@ -492,7 +553,7 @@ public sealed class ToonSerializerAsyncTests
         try
         {
             // Act - Use blank line separator (default)
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 users,
                 filePath,
                 _options,
@@ -505,7 +566,7 @@ public sealed class ToonSerializerAsyncTests
 
             // Verify roundtrip
             var readUsers = new List<TestUser>();
-            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(
+            await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(
                 filePath, 
                 _options, 
                 ToonMultiDocumentReadOptions.BlankLine))
@@ -528,21 +589,21 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_ToStream_WritesCorrectly()
+    public async Task SerializeDocumentsAsync_ToStream_WritesCorrectly()
     {
         // Arrange
         using var stream = new MemoryStream();
         var users = GenerateUsersAsync(100);
 
         // Act
-        await ToonSerializer.SerializeStreamAsync(users, stream, _options);
+        await ToonSerializer.SerializeDocumentsAsync(users, stream, _options);
 
         // Assert
         stream.Position = 0;
         using var reader = new StreamReader(stream);
         
         var readUsers = new List<TestUser>();
-        await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(reader, _options))
+        await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(reader, _options))
         {
             if (user != null)
             {
@@ -554,7 +615,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_WithCancellation_ThrowsOperationCanceledException()
+    public async Task SerializeDocumentsAsync_WithCancellation_ThrowsOperationCanceledException()
     {
         // Arrange
         var filePath = Path.GetTempFileName();
@@ -566,7 +627,7 @@ public sealed class ToonSerializerAsyncTests
             // Act & Assert
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             {
-                await ToonSerializer.SerializeStreamAsync(
+                await ToonSerializer.SerializeDocumentsAsync(
                     GenerateUsersAsync(1000),
                     filePath,
                     _options,
@@ -584,7 +645,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_CustomBatchSize_ProcessesCorrectly()
+    public async Task SerializeDocumentsAsync_CustomBatchSize_ProcessesCorrectly()
     {
         // Arrange
         var filePath = Path.GetTempFileName();
@@ -597,7 +658,7 @@ public sealed class ToonSerializerAsyncTests
         try
         {
             // Act
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 GenerateUsersAsync(50),
                 filePath,
                 _options,
@@ -606,7 +667,7 @@ public sealed class ToonSerializerAsyncTests
 
             // Assert - Verify all items written
             var readCount = 0;
-            await foreach (var user in ToonSerializer.DeserializeStreamAsync<TestUser>(filePath, _options))
+            await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<TestUser>(filePath, _options))
             {
                 Assert.NotNull(user);
                 readCount++;
@@ -624,7 +685,7 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_EmptyStream_WritesNothing()
+    public async Task SerializeDocumentsAsync_EmptyStream_WritesNothing()
     {
         // Arrange
         var filePath = Path.GetTempFileName();
@@ -632,7 +693,7 @@ public sealed class ToonSerializerAsyncTests
         try
         {
             // Act
-            await ToonSerializer.SerializeStreamAsync(
+            await ToonSerializer.SerializeDocumentsAsync(
                 EmptyUsersAsync(),
                 filePath,
                 _options
@@ -675,13 +736,13 @@ public sealed class ToonSerializerAsyncTests
         };
 
         using var stream = new MemoryStream();
-        await ToonSerializer.SerializeStreamAsync(ToAsync(names.Select(n => new OptionalUser { Name = n })), stream, ignoreNulls, writeOptions);
+        await ToonSerializer.SerializeDocumentsAsync(ToAsync(names.Select(n => new OptionalUser { Name = n })), stream, ignoreNulls, writeOptions);
         stream.Position = 0;
 
         using var reader = new StreamReader(stream);
         var result = new List<string?>();
 
-        await foreach (var user in ToonSerializer.DeserializeStreamAsync<OptionalUser>(reader, ignoreNulls, ToonMultiDocumentReadOptions.ExplicitSeparator))
+        await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<OptionalUser>(reader, ignoreNulls, ToonMultiDocumentReadOptions.ExplicitSeparator))
         {
             result.Add(Assert.IsType<OptionalUser>(user).Name);
         }
@@ -696,7 +757,7 @@ public sealed class ToonSerializerAsyncTests
     [InlineData("a,~,~")]
     [InlineData("~")]
     [InlineData("~,~")]
-    public async Task SerializeStreamAsync_ExplicitSeparator_KeepsEmptyDocuments(string items)
+    public async Task SerializeDocumentsAsync_ExplicitSeparator_KeepsEmptyDocuments(string items)
     {
         // "~" is an item without a name, which encodes to an empty document
         var names = items.Split(',').Select(n => n == "~" ? null : n).ToArray();
@@ -706,23 +767,23 @@ public sealed class ToonSerializerAsyncTests
     }
 
     [Fact]
-    public async Task SerializeStreamAsync_BlankLine_RejectsEmptyDocument()
+    public async Task SerializeDocumentsAsync_BlankLine_RejectsEmptyDocument()
     {
         var ignoreNulls = new ToonSerializerOptions { IgnoreNullValues = true };
         var items = ToAsync(new[] { new OptionalUser { Name = "a" }, new OptionalUser() });
 
         using var stream = new MemoryStream();
 
-        var ex = await Assert.ThrowsAsync<ToonSerializationException>(() => ToonSerializer.SerializeStreamAsync(items, stream, ignoreNulls).AsTask());
+        var ex = await Assert.ThrowsAsync<ToonSerializationException>(() => ToonSerializer.SerializeDocumentsAsync(items, stream, ignoreNulls).AsTask());
         Assert.Contains("ExplicitSeparator", ex.Message);
     }
 
     [Fact]
-    public async Task SerializeCollectionToStreamAsync_RejectsEmptyDocument()
+    public async Task SerializeDocumentsAsync_Collection_RejectsEmptyDocument()
     {
         using var stream = new MemoryStream();
 
-        await Assert.ThrowsAsync<ToonSerializationException>(() => ToonSerializer.SerializeCollectionToStreamAsync(
+        await Assert.ThrowsAsync<ToonSerializationException>(() => ToonSerializer.SerializeDocumentsAsync(
             new[] { new OptionalUser() }, stream, new ToonSerializerOptions { IgnoreNullValues = true }).AsTask());
     }
 
@@ -736,10 +797,10 @@ public sealed class ToonSerializerAsyncTests
         var writeOptions = new ToonMultiDocumentWriteOptions { Mode = ToonMultiDocumentSeparatorMode.ExplicitSeparator, DocumentSeparator = separator };
         var readOptions = new ToonMultiDocumentReadOptions { Mode = ToonMultiDocumentSeparatorMode.ExplicitSeparator, DocumentSeparator = separator };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => ToonSerializer.SerializeStreamAsync(GenerateUsersAsync(1), stream, null, writeOptions).AsTask());
+        await Assert.ThrowsAsync<ArgumentException>(() => ToonSerializer.SerializeDocumentsAsync(GenerateUsersAsync(1), stream, null, writeOptions).AsTask());
         await Assert.ThrowsAsync<ArgumentException>(async () =>
         {
-            await foreach (var _ in ToonSerializer.DeserializeStreamAsync<TestUser>(new StreamReader(stream), null, readOptions))
+            await foreach (var _ in ToonSerializer.DeserializeDocumentsAsync<TestUser>(new StreamReader(stream), null, readOptions))
             {
             }
         });

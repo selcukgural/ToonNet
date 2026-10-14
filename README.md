@@ -124,7 +124,7 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 - **ConfigureAwait(false)** - Awaited I/O calls do not capture the synchronization context
 - **Cancellation Support** - `CancellationToken` on all async methods
 - **80 KB file buffers** - File-based methods open the file with an 81,920-byte buffer
-- **Streaming** - `SerializeStreamAsync`/`DeserializeStreamAsync` process one document at a time
+- **Streaming** - `SerializeDocumentsAsync`/`DeserializeDocumentsAsync` process one document at a time
 
 **Thread-Safety:**
 - **Concurrent use:** `ToonSerializer` methods are safe to call from multiple threads.
@@ -225,7 +225,7 @@ them straight from it, with code generated for each type.
 | Document model | `ToonDocument` / `ToonValue` | `JsonNode` |
 | Options | indent, delimiter, strict, naming policies, null handling, read-only properties, converters, max depth | indent, delimiter, strict |
 | Exact `decimal` / `ulong` | ✅ | rounded through `double` |
-| Multi-document streaming | ✅ `SerializeStreamAsync` / `DeserializeStreamAsync` | single document per stream |
+| Multi-document streaming | ✅ `SerializeDocumentsAsync` / `DeserializeDocumentsAsync` | single document per stream |
 | ASP.NET Core | input/output formatters, `ToonResult`, configuration provider | – |
 | JSON / YAML conversion | ✅ `ToonConvert`, `ToonYamlConvert` | via `JsonNode` |
 
@@ -450,20 +450,20 @@ For large datasets (millions of records, database exports, ETL pipelines), ToonN
 
 ```csharp
 // Stream large dataset from database without loading all into memory
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: dbContext.Users.AsAsyncEnumerable(),
     filePath: "users_export.toon",
     cancellationToken: cts.Token
 );
 
 // Read back with incremental deserialization
-await foreach (var user in ToonSerializer.DeserializeStreamAsync<User>("users_export.toon"))
+await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<User>("users_export.toon"))
 {
     ProcessUser(user);  // Memory-efficient: only one user in memory at a time
 }
 
 // Advanced: Custom separator mode and batch size
-await ToonSerializer.SerializeStreamAsync(
+await ToonSerializer.SerializeDocumentsAsync(
     items: GenerateLargeDatasetAsync(),
     filePath: "export.toon",
     options: null,

@@ -14,7 +14,7 @@ ToonNet.Benchmarks is a [BenchmarkDotNet](https://benchmarkdotnet.org/) console 
 - ⚡ **Parser Benchmarks** - TOON parsing performance (`ParserOnlyBenchmarks`)
 - 🔄 **Encoder Benchmarks** - TOON encoding performance (`EncoderOnlyBenchmarks`)
 - 🎯 **Generated vs. `ToonSerializer`** - source-generated methods compared with `ToonSerializer` (`SimpleBenchmarks`, `MediumBenchmarks`, `ComplexBenchmarks`)
-- ⏱️ **Async & Streaming Benchmarks** - async, file, stream and `SerializeStreamAsync` APIs (`AsyncBenchmarks`, `StreamingSerializationBenchmarks`)
+- ⏱️ **Async & Streaming Benchmarks** - async, file, stream and `SerializeDocumentsAsync` APIs (`AsyncBenchmarks`, `StreamingSerializationBenchmarks`)
 - 🧠 **Memory Benchmarks** - allocation tracking (`MemoryPressureBenchmarks`, `ArrayPoolOptimizationBenchmarks`)
 - 📈 **Scalability Tests** - large documents, deep nesting (`LargeDocumentBenchmarks`, `DeepNestingBenchmarks`)
 
@@ -103,7 +103,7 @@ dotnet run -c Release --project benchmark/ToonNet.Benchmarks -- --filter "*Typed
 ### 4. Async & Streaming Benchmarks
 
 - `AsyncBenchmarks` - `SerializeAsync`, `DeserializeAsync`, async parse/encode, file and stream round trips
-- `StreamingSerializationBenchmarks` - `SerializeCollectionToFileAsync` (baseline) vs. `SerializeStreamAsync` with
+- `StreamingSerializationBenchmarks` - `SerializeCollectionToFileAsync` (baseline) vs. `SerializeDocumentsAsync` with
   different batch sizes and the explicit `---` separator, for 1,000 / 10,000 / 100,000 items (`[Params]`)
 
 ### 5. Memory Pressure Benchmarks
@@ -112,7 +112,7 @@ Tests allocation-heavy workloads:
 
 - Parse/encode/round trip of a large document, many documents in a loop
 - Creating many parser and encoder instances
-- `SerializeStreamAsync` vs. `SerializeCollectionToFileAsync` for 10,000 items
+- `SerializeDocumentsAsync` vs. `SerializeCollectionToFileAsync` for 10,000 items
 
 ### 6. Large Document & Deep Nesting Benchmarks
 
