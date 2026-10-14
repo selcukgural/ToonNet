@@ -195,4 +195,46 @@ public class ToonPathFunctionTests
                      Assert.Throws<ToonPathException>(() => ToonPath.Parse("$[?mine(@)]", options)).Reason);
         Assert.NotNull(ToonPath.Parse("$[?length(@) > 1 && match(@, 'a.*')]", options));
     }
+
+    [Fact]
+    public void Aggregates_DoNotOverflow()
+    {
+        var root = ToonDocument.Parse("a[2]: 1e308,1e308\nb[2]: -1e308,-1e308\nc[2]: 79228162514264337593543950335,79228162514264337593543950335\nx[1]: 1").Root;
+
+        // An overflowing sum has no value: it is not infinite, and nothing compares with it (two missing values are
+        // equal under RFC 9535, as for any query that selects nothing)
+        Assert.Empty(ToonPath.Parse("$.x[?sum($.a[*]) > 0]").Select(root));
+        Assert.Empty(ToonPath.Parse("$.x[?sum($.b[*]) < 0]").Select(root));
+        Assert.Single(ToonPath.Parse("$.x[?sum($.a[*]) == $.missing]").Select(root));
+        Assert.Single(ToonPath.Parse("$.x[?avg($.a[*]) == 1e308]").Select(root));
+        Assert.Single(ToonPath.Parse("$.x[?avg($.c[*]) == $.c[0]]").Select(root));
+        Assert.Single(ToonPath.Parse("$.x[?max($.c[*]) == $.c[1]]").Select(root));
+    }
+
+    [Fact]
+    public void NonFiniteNumbers_AreNotEqual()
+    {
+        var functions = new ToonPathFunctions()
+            .AddFunction("nan", _ => new ToonNumber(double.NaN))
+            .AddFunction("inf", _ => new ToonNumber(double.PositiveInfinity));
+        var options = new ToonPathOptions { Functions = functions };
+        var root = new ToonArray([1]);
+
+        Assert.Empty(ToonPath.Parse("$[?nan(@) == inf(@)]", options).Select(root));
+        Assert.Empty(ToonPath.Parse("$[?nan(@) == nan(@)]", options).Select(root));
+        Assert.Single(ToonPath.Parse("$[?inf(@) == inf(@)]", options).Select(root));
+        Assert.False(ToonValue.DeepEquals(new ToonNumber(double.NaN), new ToonNumber(double.PositiveInfinity)));
+    }
+
+    [Fact]
+    public void DocumentedExample_HandlesOtherKinds()
+    {
+        var functions = new ToonPathFunctions()
+            .AddPredicate("is_vip", customer => customer is ToonObject c && c["tier"] is ToonString { Value: "gold" })
+            .AddFunction("net", total => total is ToonNumber n ? new ToonNumber(n.Value / 1.2) : null);
+        var options = new ToonPathOptions { Functions = functions };
+        const string toon = "orders[2]:\n  - customer: Ada\n    total: 500\n  - customer:\n      tier: gold\n    total: 240";
+
+        Assert.Single(ToonPath.Parse("$.orders[?is_vip(@.customer) && net(@.total) > 100]", options).SelectFrom(toon));
+    }
 }

@@ -622,12 +622,15 @@ internal sealed class ToonPathParser
             }
         }
 
+        // As TOON reads numbers: exact when a decimal holds the value (1e-30 does not; it would round to 0)
         var token = _text.AsSpan(start, _position - start);
-        var value = double.Parse(token, NumberStyles.Float, CultureInfo.InvariantCulture);
 
-        return decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var exact)
-            ? new ToonNumber(exact, value)
-            : new ToonNumber(value);
+        if (Parsing.ToonParser.TryParseNumberParts(token, out var value, out var exact, out var hasExact))
+        {
+            return hasExact ? new ToonNumber(exact, value) : new ToonNumber(value);
+        }
+
+        return new ToonNumber(double.Parse(token, NumberStyles.Float, CultureInfo.InvariantCulture));
     }
 
     private bool ConsumeDigits()
@@ -778,6 +781,11 @@ internal sealed class ToonPathParser
         if (++_nesting > _limits.MaxNesting)
         {
             throw Error($"The path nests more than {_limits.MaxNesting} levels");
+        }
+
+        if (!System.Runtime.CompilerServices.RuntimeHelpers.TryEnsureSufficientExecutionStack())
+        {
+            throw Error("The path nests too deeply for the stack of this thread");
         }
     }
 

@@ -69,8 +69,11 @@ reported without it. `result.Errors` and `result.Warnings` separate them, and `r
 `ToonRuleException` whose message lists the errors on one line:
 
 ```text
-The document breaks 2 rules: $['orders'][1]['total']: An order total cannot be negative (-5); $.customer.email: The customer needs an email
+The document has 2 rule violations: $['orders'][1]['total']: An order total cannot be negative (-5); $.customer.email: The customer needs an email
 ```
+
+A validation collects at most `MaxViolations` violations (1,000 by default) and then stops, with `result.IsTruncated`
+true, so a large document full of bad values cannot make a huge result.
 
 ## Answers From Language Models
 
@@ -96,7 +99,8 @@ once, when it is built. A rule set is thread-safe for validation once its rules 
 in a static field) and validate many documents with it.
 
 Validation uses the [limits](querying#paths-from-untrusted-input) of the rule set's `ToonPathOptions`: all the rules
-share one budget of steps and one timeout per document, so rules or documents from untrusted sources cannot run away.
+share one budget of steps and one timeout per document (beyond them, `ToonPathLimitException`), so rules or documents
+from untrusted sources cannot run away.
 
 ## See Also
 

@@ -92,7 +92,7 @@ public class ToonRuleSetTests
         var ex = Assert.Throws<ToonRuleException>(() => Rules().Validate(Orders).ThrowIfInvalid());
 
         Assert.Equal(7, ex.Violations.Count);
-        Assert.StartsWith("The document breaks 7 rules: $['orders'][1]: Total of order an object of 4 members is negative; ", ex.Message);
+        Assert.StartsWith("The document has 7 rule violations: $['orders'][1]: Total of order an object of 4 members is negative; ", ex.Message);
     }
 
     [Fact]
@@ -140,6 +140,50 @@ public class ToonRuleSetTests
         var deep = string.Concat(Enumerable.Range(0, 40).Select(i => new string(' ', i * 2) + "a:\n")) + new string(' ', 80) + "b: 1";
         var rules = new ToonRuleSet().Rule("$..*..*..*..*..*..*", "@", "m");
 
-        Assert.Throws<InvalidOperationException>(() => rules.Validate(deep));
+        Assert.Throws<ToonPathLimitException>(() => rules.Validate(deep));
+    }
+
+    [Fact]
+    public void Violations_AreCapped()
+    {
+        var toon = "\"" + new string('k', 4000) + "\":\n  x[60000]: " + string.Join(',', Enumerable.Repeat(1, 60000));
+        var rules = new ToonRuleSet().Rule("$.*.x[*]", "@ == 0", "bad at {path}");
+
+        var result = rules.Validate(toon);
+
+        Assert.True(result.IsTruncated);
+        Assert.Equal(1000, result.Violations.Count);
+        Assert.False(result.IsValid);
+
+        rules.MaxViolations = 3;
+        Assert.Equal(3, rules.Validate(toon).Violations.Count);
+        Assert.False(new ToonRuleSet().Rule("$.a", "@", "m").Validate("a: 1").IsTruncated);
+        Assert.Throws<ArgumentOutOfRangeException>(() => rules.MaxViolations = 0);
+    }
+
+    [Fact]
+    public void Placeholders_AreFilledInOnce()
+    {
+        var result = new ToonRuleSet().Rule("$.*", "@ > 5", "bad {path} = {value}").Validate("\"{value}\": 1");
+
+        Assert.Equal("bad $['{value}'] = 1", Assert.Single(result.Violations).Message);
+    }
+
+    [Fact]
+    public void LongValues_AreShortenedWholeCharacters()
+    {
+        var text = new string('a', 99) + "😀";
+        var result = new ToonRuleSet().Rule("$.s", "@ == 'x'", "{value}").Validate("s: " + text);
+
+        var message = Assert.Single(result.Violations).Message;
+        Assert.Equal(new string('a', 99) + "...", message);
+    }
+
+    [Fact]
+    public void ExceptionMessage_CountsViolations()
+    {
+        var ex = Assert.Throws<ToonRuleException>(() => new ToonRuleSet().Rule("$.*", "@ > 5", "bad").Validate("a: 1\nb: 2").ThrowIfInvalid());
+
+        Assert.StartsWith("The document has 2 rule violations: ", ex.Message);
     }
 }

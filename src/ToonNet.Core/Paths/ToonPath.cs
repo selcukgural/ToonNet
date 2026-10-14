@@ -20,7 +20,7 @@ namespace ToonNet.Core.Paths;
 ///         so the methods that take path text (such as <see cref="ToonValue.Select(string)"/>) compile each path once.
 ///         Regular expressions run in linear time, and <see cref="ToonPathOptions"/> bound the length and nesting of a path
 ///         (4,096 characters and 64 levels by default) and the work of an evaluation (a million steps plus 16 per value of
-///         the document, beyond which it throws <see cref="InvalidOperationException"/>), so a path from untrusted input
+///         the document, beyond which it throws <see cref="ToonPathLimitException"/>), so a path from untrusted input
 ///         cannot make a query slow through a pattern, exhaust the stack, or multiply the work with nested descendant
 ///         segments. Give stricter options to <see cref="Parse(string, ToonPathOptions)"/> for paths from clients.
 ///     </para>

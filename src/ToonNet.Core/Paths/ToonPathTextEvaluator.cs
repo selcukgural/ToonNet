@@ -459,13 +459,14 @@ internal sealed class ToonPathTextEvaluator
             {
                 parser.Skip(member);
             }
+            // A repeated key: in strict mode the parser reports it when the next member is read; otherwise the last wins
             else if (below.Whole)
             {
-                obj.Properties.Add(key, parser.BuildValue(member));
+                obj.Properties[key] = parser.BuildValue(member);
             }
             else
             {
-                obj.Properties.Add(key, BuildMembers(parser, member, below));
+                obj.Properties[key] = BuildMembers(parser, member, below);
             }
         }
     }

@@ -77,7 +77,7 @@ Register functions with `ToonPathFunctions` and pass them in the options of the 
 
 ```csharp
 var functions = new ToonPathFunctions()
-    .AddPredicate("is_vip", customer => customer?["tier"]?.GetValue<string>() == "gold")      // [?is_vip(@.customer)]
+    .AddPredicate("is_vip", customer => customer is ToonObject c && c["tier"] is ToonString { Value: "gold" }) // [?is_vip(@.customer)]
     .AddPredicate("same_day", (a, b) => SameDay(a, b))                                         // two values
     .AddFunction("net", total => total is ToonNumber n ? new ToonNumber(n.Value / 1.2) : null) // [?net(@.total) > 100]
     .AddNodesPredicate("all_shipped", lines => lines.All(l => l["shipped"] is ToonBoolean { Value: true }))
@@ -103,7 +103,8 @@ The type rules of the RFC apply: a predicate is tested, not compared (`[?is_vip(
 function is compared; a value argument is a literal, a singular query (`@.name`) or a value function; a nodes argument
 is any query. Names are lowercase letters, digits and underscores, starting with a letter, and cannot be those of the
 built-in functions. Register functions before compiling the paths that use them; they are called on the threads that
-evaluate paths, so they should not change shared state. Functions and their limits also work in
+evaluate paths, so they should not change shared state. Exceptions they throw are not caught: an argument can be any
+kind of value (or null), so check its kind first, as `is_vip` does. Functions and their limits also work in
 [rules](validation).
 
 ## On a Tree
@@ -184,15 +185,18 @@ To read the items of an array inside a document from a stream as they arrive, se
 
 Regular expressions run on .NET's non-backtracking engine (linear time), and `ToonPathOptions` bound everything else.
 Each descendant segment (`..`) visits the whole subtree, so nested ones multiply the work (`$..*..*..*..*` on a small,
-deep document would visit billions of values); the step budget and the timeout stop such queries.
+deep document would visit billions of values); the step budget and the timeout stop such queries. A step is a value
+visited, a filter tested, or 16 characters of a string an operation reads (comparisons, `lower`, `match`, ...);
+comparing or passing an object or array costs a step per value in it, so `$.items[?lower($.bigText) == 'x']` cannot
+read a large string once per item for free.
 
 | Limit | Default | Beyond it |
 |-------|---------|-----------|
 | `MaxLength` | 4,096 characters | `ToonPathException` when compiling |
 | `MaxNesting` | 64 levels of filters, parentheses, function calls | `ToonPathException` when compiling |
 | `MaxPatternLength` | 1,024 characters | the pattern is not valid: `match()`/`search()` are false |
-| `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document | `InvalidOperationException` when evaluating |
-| `Timeout` | 10 seconds (`Timeout.InfiniteTimeSpan` turns it off) | `TimeoutException` when evaluating |
+| `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document | `ToonPathLimitException` when evaluating |
+| `Timeout` | 10 seconds (`Timeout.InfiniteTimeSpan` turns it off) | `ToonPathLimitException` (`IsTimeout`) when evaluating |
 | `Functions`, `StandardFunctionsOnly` | none; extensions allowed | an unknown function is a `ToonPathException` |
 
 The defaults suit paths written in code. For paths that clients send (for example to filter an API response), set

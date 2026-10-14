@@ -52,6 +52,19 @@ public sealed class ToonRuleSet
     /// <summary>The options of the rules' paths and assertions.</summary>
     public ToonPathOptions Options { get; }
 
+    private int _maxViolations = 1000;
+
+    /// <summary>
+    ///     The most violations a validation collects (default 1,000); validation stops there and
+    ///     <see cref="ToonRuleResult.IsTruncated"/> is true, so a document with many bad values cannot make a huge result.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is less than 1.</exception>
+    public int MaxViolations
+    {
+        get => _maxViolations;
+        set => _maxViolations = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "MaxViolations must be at least 1");
+    }
+
     /// <summary>The rules, in the order they were added (and are checked).</summary>
     public IReadOnlyList<ToonRule> Rules => _rules;
 
@@ -123,8 +136,7 @@ public sealed class ToonRuleSet
     /// <returns>The values that break rules, in the order of the rules.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="toon"/> is null.</exception>
     /// <exception cref="ToonParseException">Thrown when the text is not valid TOON.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the rules take more steps than the options allow.</exception>
-    /// <exception cref="TimeoutException">Thrown when the rules take longer than the options allow.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the rules take more steps or time than the options allow.</exception>
     public ToonRuleResult Validate(string toon, ToonOptions? options = null) => Validate(ToonDocument.Parse(toon, options).Root);
 
     /// <summary>Checks a UTF-8 encoded document against the rules.</summary>
@@ -132,16 +144,14 @@ public sealed class ToonRuleSet
     /// <param name="options">Parsing options; defaults when null.</param>
     /// <returns>The values that break rules, in the order of the rules.</returns>
     /// <exception cref="ToonParseException">Thrown when the text is not valid UTF-8 or not valid TOON.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the rules take more steps than the options allow.</exception>
-    /// <exception cref="TimeoutException">Thrown when the rules take longer than the options allow.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the rules take more steps or time than the options allow.</exception>
     public ToonRuleResult Validate(ReadOnlySpan<byte> utf8Toon, ToonOptions? options = null) => Validate(ToonDocument.Parse(utf8Toon, options).Root);
 
     /// <summary>Checks a tree against the rules, with <paramref name="root"/> as <c>$</c>.</summary>
     /// <param name="root">The value to check, such as <see cref="ToonDocument.Root"/>.</param>
     /// <returns>The values that break rules, in the order of the rules.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the rules take more steps than the options allow.</exception>
-    /// <exception cref="TimeoutException">Thrown when the rules take longer than the options allow.</exception>
+    /// <exception cref="ToonPathLimitException">Thrown when the rules take more steps or time than the options allow.</exception>
     public ToonRuleResult Validate(ToonValue root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -149,6 +159,7 @@ public sealed class ToonRuleSet
         // One budget for all the rules
         var work = new EvaluationBudget(root, Options);
         var violations = new List<ToonRuleViolation>();
+        var max = _maxViolations;
 
         foreach (var rule in _rules)
         {
@@ -159,24 +170,27 @@ public sealed class ToonRuleSet
                 case ToonRuleKind.Assertion:
                     foreach (var node in nodes)
                     {
-                        if (!ToonPathEvaluator.Test(rule.Expression!, root, node.Value, work))
+                        if (!ToonPathEvaluator.Test(rule.Expression!, root, node.Value, work) && !Add(Violation(rule, node, work)))
                         {
-                            violations.Add(Violation(rule, node));
+                            return new ToonRuleResult(violations, truncated: true);
                         }
                     }
 
                     break;
                 case ToonRuleKind.Required:
-                    if (nodes.Count == 0)
+                    if (nodes.Count == 0 && !Add(new ToonRuleViolation(rule, rule.Path, Format(rule.Message, rule.Path, null), null)))
                     {
-                        violations.Add(new ToonRuleViolation(rule, rule.Path, Format(rule.Message, rule.Path, null), null));
+                        return new ToonRuleResult(violations, truncated: true);
                     }
 
                     break;
                 case ToonRuleKind.Forbidden:
                     foreach (var node in nodes)
                     {
-                        violations.Add(Violation(rule, node));
+                        if (!Add(Violation(rule, node, work)))
+                        {
+                            return new ToonRuleResult(violations, truncated: true);
+                        }
                     }
 
                     break;
@@ -185,11 +199,12 @@ public sealed class ToonRuleSet
 
                     foreach (var node in nodes)
                     {
-                        work.Spend();
+                        // Hashing and comparing read the whole value
+                        work.SpendValue(node.Value);
 
-                        if (!seen.Add(node.Value))
+                        if (!seen.Add(node.Value) && !Add(Violation(rule, node, work)))
                         {
-                            violations.Add(Violation(rule, node));
+                            return new ToonRuleResult(violations, truncated: true);
                         }
                     }
 
@@ -197,15 +212,24 @@ public sealed class ToonRuleSet
             }
         }
 
-        return new ToonRuleResult(violations);
+        return new ToonRuleResult(violations, truncated: false);
+
+        // Collects a violation; false when that was the last one allowed
+        bool Add(ToonRuleViolation violation)
+        {
+            violations.Add(violation);
+            return violations.Count < max;
+        }
     }
 
-    private static ToonRuleViolation Violation(ToonRule rule, ToonPathEvaluator.Node node)
+    private static ToonRuleViolation Violation(ToonRule rule, ToonPathEvaluator.Node node, EvaluationBudget work)
     {
         var path = ToonPathEvaluator.Location.Format(node.Location);
+        work.SpendText(path.Length);
         return new ToonRuleViolation(rule, path, Format(rule.Message, path, node.Value), node.Value);
     }
 
+    /// <summary>Fills in <c>{path}</c> and <c>{value}</c> in one pass, so text from the document is not read as a placeholder.</summary>
     private static string Format(string message, string path, ToonValue? value)
     {
         if (!message.Contains('{'))
@@ -213,8 +237,27 @@ public sealed class ToonRuleSet
             return message;
         }
 
-        return message.Replace("{path}", path, StringComparison.Ordinal)
-                      .Replace("{value}", value == null ? "" : Describe(value), StringComparison.Ordinal);
+        var text = new StringBuilder(message.Length + path.Length);
+
+        for (var i = 0; i < message.Length; i++)
+        {
+            if (string.CompareOrdinal(message, i, "{path}", 0, 6) == 0)
+            {
+                text.Append(path);
+                i += 5;
+            }
+            else if (string.CompareOrdinal(message, i, "{value}", 0, 7) == 0)
+            {
+                text.Append(value == null ? "" : Describe(value));
+                i += 6;
+            }
+            else
+            {
+                text.Append(message[i]);
+            }
+        }
+
+        return text.ToString();
     }
 
     /// <summary>A short text of a value for a message: a primitive as written, an object or array by its size.</summary>
@@ -228,7 +271,14 @@ public sealed class ToonRuleSet
             _ => value.ToString() ?? ""
         };
 
-        return text.Length <= 100 ? text : text[..100] + "...";
+        if (text.Length <= 100)
+        {
+            return text;
+        }
+
+        // Not between the halves of a surrogate pair
+        var cut = char.IsHighSurrogate(text[99]) ? 99 : 100;
+        return text[..cut] + "...";
     }
 
     /// <summary>Equality of values by their data, as <see cref="ToonValue.DeepEquals"/>, with a hash that agrees with it.</summary>
@@ -363,10 +413,17 @@ public sealed record ToonRuleViolation(ToonRule Rule, string Path, string Messag
 /// <summary>The result of checking a document against a <see cref="ToonRuleSet"/>.</summary>
 public sealed class ToonRuleResult
 {
-    internal ToonRuleResult(IReadOnlyList<ToonRuleViolation> violations)
+    internal ToonRuleResult(IReadOnlyList<ToonRuleViolation> violations, bool truncated)
     {
         Violations = violations;
+        IsTruncated = truncated;
     }
+
+    /// <summary>
+    ///     Whether validation stopped at <see cref="ToonRuleSet.MaxViolations"/>, so there may be more violations than
+    ///     <see cref="Violations"/> has.
+    /// </summary>
+    public bool IsTruncated { get; }
 
     /// <summary>Whether no rule of severity <see cref="ToonRuleSeverity.Error"/> was broken.</summary>
     public bool IsValid => Violations.All(v => v.Severity != ToonRuleSeverity.Error);

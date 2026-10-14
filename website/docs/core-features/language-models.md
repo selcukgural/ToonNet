@@ -105,7 +105,7 @@ for (var attempt = 0; attempt < 3; attempt++)
     {
         return ToonPrompt.DeserializeValidated<Summary>(answer, rules);
     }
-    catch (ToonException ex)   // ToonParseException, ToonRuleException or ToonSerializationException
+    catch (ToonException ex)   // ToonParseException, ToonRuleException, ToonSerializationException, ToonPathLimitException
     {
         prompt += $"\n\nYour answer could not be used: {ex.Message}. Answer again with the same shape.";
     }

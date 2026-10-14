@@ -217,6 +217,6 @@ public class ToonPromptTests
 
         var ex = Assert.Throws<ToonRuleException>(() =>
             ToonPrompt.DeserializeValidated<Order>("Lines[2]{Sku,Quantity}:\n  a,0\n  b,1", rules));
-        Assert.Equal("The document breaks 2 rules: $['Lines'][0]: Quantity must be positive; $.Customer: Customer is missing", ex.Message);
+        Assert.Equal("The document has 2 rule violations: $['Lines'][0]: Quantity must be positive; $.Customer: Customer is missing", ex.Message);
     }
 }

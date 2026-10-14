@@ -16,13 +16,16 @@ namespace ToonNet.Core.Paths;
 ///     </para>
 ///     <para>
 ///         Register functions before the paths that use them are compiled; a compiled path keeps the functions it found.
-///         The functions are called from the threads that evaluate paths, so they should not change shared state.
+///         The functions are called from the threads that evaluate paths, so they should not change shared state. An
+///         exception a function throws is not caught: check the kind of a value (<c>value is ToonObject obj</c>) before
+///         reading it as one. Passing a value to a function spends steps of the evaluation budget in proportion to its
+///         size; the function's own work is not counted.
 ///     </para>
 /// </remarks>
 /// <example>
 ///     <code>
 ///     var functions = new ToonPathFunctions()
-///         .AddPredicate("is_vip", customer => customer?["tier"]?.GetValue&lt;string&gt;() == "gold")
+///         .AddPredicate("is_vip", customer => customer is ToonObject c &amp;&amp; c["tier"] is ToonString { Value: "gold" })
 ///         .AddFunction("net", total => total is ToonNumber n ? new ToonNumber(n.Value / 1.2) : null);
 ///
 ///     var path = ToonPath.Parse("$.orders[?is_vip(@.customer) &amp;&amp; net(@.total) &gt; 100]", new ToonPathOptions { Functions = functions });
@@ -232,8 +235,9 @@ internal sealed class PathFunction(string name, ExpressionType[] parameters, Exp
     }
 
     /// <summary>
-    ///     The sum, minimum, maximum or average of numbers: exact (decimal) while every number is, otherwise as doubles.
-    ///     Nothing when a value is not a number, and for the minimum, maximum and average of no values; the sum of none is 0.
+    ///     The sum, minimum, maximum or average of numbers: exact (decimal) while every number is and the result fits,
+    ///     otherwise as doubles. Nothing when a value is not a number or the result is not finite, and for the minimum,
+    ///     maximum and average of no values; the sum of none is 0.
     /// </summary>
     private static ToonValue? Aggregate(IReadOnlyList<ToonValue> values, Aggregation aggregation)
     {
@@ -242,51 +246,77 @@ internal sealed class PathFunction(string name, ExpressionType[] parameters, Exp
             return aggregation == Aggregation.Sum ? new ToonNumber(0L) : null;
         }
 
-        var exact = true;
-        decimal exactResult = 0;
-        double result = 0;
+        var numbers = new ToonNumber[values.Count];
 
-        for (var i = 0; i < values.Count; i++)
+        for (var i = 0; i < numbers.Length; i++)
         {
-            if (values[i] is not ToonNumber number)
+            if (values[i] is not ToonNumber { IsFinite: true } number)
             {
                 return null;
             }
 
-            if (exact && number.DecimalValue is { } d)
-            {
-                try
-                {
-                    exactResult = i == 0 ? d : aggregation switch
-                    {
-                        Aggregation.Min => Math.Min(exactResult, d),
-                        Aggregation.Max => Math.Max(exactResult, d),
-                        _ => exactResult + d
-                    };
-                }
-                catch (OverflowException)
-                {
-                    exact = false;
-                }
-            }
-            else
-            {
-                exact = false;
-            }
-
-            result = i == 0 ? number.Value : aggregation switch
-            {
-                Aggregation.Min => Math.Min(result, number.Value),
-                Aggregation.Max => Math.Max(result, number.Value),
-                _ => result + number.Value
-            };
+            numbers[i] = number;
         }
 
-        if (aggregation == Aggregation.Average)
+        if (TryAggregateExactly(numbers, aggregation, out var exact))
         {
-            return exact ? new ToonNumber(exactResult / values.Count) : new ToonNumber(result / values.Count);
+            return new ToonNumber(exact);
         }
 
-        return exact ? new ToonNumber(exactResult) : new ToonNumber(result);
+        // An average of doubles adds the parts, so large values do not overflow
+        var result = aggregation switch
+        {
+            Aggregation.Min => numbers.Min(n => n.Value),
+            Aggregation.Max => numbers.Max(n => n.Value),
+            Aggregation.Sum => numbers.Sum(n => n.Value),
+            _ => numbers.Sum(n => n.Value / numbers.Length)
+        };
+
+        return double.IsFinite(result) ? new ToonNumber(result) : null;
+    }
+
+    private static bool TryAggregateExactly(ToonNumber[] numbers, Aggregation aggregation, out decimal result)
+    {
+        result = 0;
+
+        foreach (var number in numbers)
+        {
+            if (number.DecimalValue == null)
+            {
+                return false;
+            }
+        }
+
+        try
+        {
+            result = aggregation switch
+            {
+                Aggregation.Min => numbers.Min(n => n.DecimalValue!.Value),
+                Aggregation.Max => numbers.Max(n => n.DecimalValue!.Value),
+                Aggregation.Sum => numbers.Sum(n => n.DecimalValue!.Value),
+                _ => numbers.Sum(n => n.DecimalValue!.Value) / numbers.Length
+            };
+
+            return true;
+        }
+        catch (OverflowException) when (aggregation == Aggregation.Average)
+        {
+            // The sum does not fit: average the differences from the first value, which stay small for values that are
+            // close (and are exact for equal ones)
+            try
+            {
+                var first = numbers[0].DecimalValue!.Value;
+                result = first + numbers.Sum(n => (n.DecimalValue!.Value - first) / numbers.Length);
+                return true;
+            }
+            catch (OverflowException)
+            {
+                return false;
+            }
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
     }
 }

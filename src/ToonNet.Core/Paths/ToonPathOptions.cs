@@ -11,7 +11,7 @@ namespace ToonNet.Core.Paths;
 ///     var limits = new ToonPathOptions { MaxLength = 256, MaxNesting = 8, MaxSteps = 100_000, MaxStepsPerValue = 4,
 ///                                       Timeout = TimeSpan.FromMilliseconds(200) };
 ///     var path = ToonPath.Parse(filterFromClient, limits);   // ToonPathException when longer or deeper
-///     var rows = path.SelectFrom(toon);                      // InvalidOperationException (too much work), TimeoutException
+///     var rows = path.SelectFrom(toon);                      // ToonPathLimitException: too much work, or too long
 ///
 ///     // The serializer's path methods take the limits from the options
 ///     var options = new ToonSerializerOptions { PathOptions = limits };
@@ -62,7 +62,9 @@ public sealed class ToonPathOptions
 
     /// <summary>
     ///     The steps every evaluation may take, whatever the size of the document (default 1,000,000). A step is a value
-    ///     visited or selected, or a filter tested.
+    ///     visited or selected, a filter tested, or 16 characters of a string an operation reads (comparing, searching,
+    ///     <c>lower</c>, <c>length</c>, ...); comparing or passing an object or array to a function costs a step per value
+    ///     in it.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is less than 1.</exception>
     public long MaxSteps
@@ -74,7 +76,7 @@ public sealed class ToonPathOptions
     /// <summary>
     ///     The steps an evaluation may take per value of the document, beyond <see cref="MaxSteps"/> (default 16; 0 makes
     ///     <see cref="MaxSteps"/> the whole budget). Beyond the budget, evaluation throws
-    ///     <see cref="InvalidOperationException"/>: nested descendant segments (<c>$..*..*..*</c>) multiply the values a
+    ///     <see cref="ToonPathLimitException"/>: nested descendant segments (<c>$..*..*..*</c>) multiply the values a
     ///     query visits.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is negative.</exception>
@@ -85,7 +87,7 @@ public sealed class ToonPathOptions
     }
 
     /// <summary>
-    ///     The longest an evaluation may run (default 10 seconds); beyond it, evaluation throws <see cref="TimeoutException"/>.
+    ///     The longest an evaluation may run (default 10 seconds); beyond it, evaluation throws <see cref="ToonPathLimitException"/> (<see cref="ToonPathLimitException.IsTimeout"/>).
     ///     <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> turns it off. The time is checked every thousand or so
     ///     steps, so the cost is negligible.
     /// </summary>

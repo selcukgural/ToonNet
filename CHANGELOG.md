@@ -22,8 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   throw `ToonPathException` with the position of the error. Regular expressions run in linear time, and
   `ToonPathOptions` bound the length (4,096 characters) and nesting (64) of a path, the length of a pattern (1,024), and
   the work (a million steps plus 16 per value of the document) and time (10 seconds) of an evaluation, so paths from
-  untrusted input cannot hang a query, exhaust the stack, or multiply the work with nested `..` segments. Stricter limits
-  go to `ToonPath.Parse(path, limits)` or `ToonSerializerOptions.PathOptions`.
+  untrusted input cannot hang a query, exhaust the stack, or multiply the work with nested `..` segments; reading a large
+  string or object (comparing it, `lower`, `match`, ...) costs steps in proportion to its size. Beyond a limit,
+  evaluation throws `ToonPathLimitException`. Stricter limits go to `ToonPath.Parse(path, options)` or
+  `ToonSerializerOptions.PathOptions`.
 - **ToonNet.Core:** Filters can call ToonNet's string, type and aggregate functions besides the five of RFC 9535:
   `starts_with`, `ends_with`, `contains` (a substring, or an item of an array), `equals_ignore_case` (ordinal),
   `lower`, `upper`, `trim`, `type` (`'string'`, `'number'`, ...), and `sum`, `min`, `max`, `avg` over the values a query
@@ -37,8 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths and filter expressions, as Schematron does for XML: `Rule(path, assertion, message)` (the assertion must hold
   for each selected value: `.Rule("$.orders[*]", "sum(@.lines[*].price) == @.total", "...")`), `Required`, `Forbidden`
   (`$..password`) and `Unique` (`$.orders[*].id`), with error or warning severity. `Validate` gives each violation with
-  its normalized path, message (`{path}` and `{value}` placeholders) and value; `ThrowIfInvalid` throws
-  `ToonRuleException`. `ToonPrompt.DeserializeValidated<T>(answer, rules)` checks a model's answer before it is read,
+  its normalized path, message (`{path}` and `{value}` placeholders) and value, up to `MaxViolations` (1,000);
+  `ThrowIfInvalid` throws `ToonRuleException`. `ToonPrompt.DeserializeValidated<T>(answer, rules)` checks a model's answer before it is read,
   so the exception's message can go back to the model.
 - **ToonNet.Core:** `ToonMergePatch` applies a JSON Merge Patch (RFC 7386) to a `ToonValue` tree (`Apply`, in place) and
   creates the patch between two trees (`Create`), so a partial update can be sent and applied as TOON.

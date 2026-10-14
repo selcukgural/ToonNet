@@ -57,8 +57,66 @@ internal sealed class EvaluationBudget
 
             if (Environment.TickCount64 > _deadline)
             {
-                throw new TimeoutException($"The path took longer than its timeout of {Options.Timeout} (see ToonPathOptions).");
+                throw new ToonPathLimitException($"The path took longer than its timeout of {Options.Timeout} (see ToonPathOptions).", isTimeout: true);
             }
+        }
+    }
+
+    /// <summary>
+    ///     Spends in proportion to the work an operation on a value does (comparing, copying or searching it): a step per
+    ///     value inside it and per 16 characters of its strings, before the operation, so a large value cannot make one
+    ///     step cost as much as the whole document.
+    /// </summary>
+    public void SpendValue(ToonValue? value)
+    {
+        switch (value)
+        {
+            case ToonString text:
+                SpendText(text.Value.Length);
+                break;
+            case ToonObject or ToonArray:
+            {
+                var pending = new Stack<ToonValue>();
+                pending.Push(value);
+
+                while (pending.TryPop(out var current))
+                {
+                    Spend();
+
+                    switch (current)
+                    {
+                        case ToonString inner:
+                            SpendText(inner.Value.Length);
+                            break;
+                        case ToonObject obj:
+                            foreach (var (key, member) in obj.Properties)
+                            {
+                                SpendText(key.Length);
+                                pending.Push(member);
+                            }
+
+                            break;
+                        case ToonArray array:
+                            foreach (var item in array.Items)
+                            {
+                                pending.Push(item);
+                            }
+
+                            break;
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
+    /// <summary>Spends a step per 16 characters of text an operation reads or writes.</summary>
+    public void SpendText(int length)
+    {
+        if (length >= 16)
+        {
+            Spend(length / 16);
         }
     }
 
@@ -75,8 +133,9 @@ internal sealed class EvaluationBudget
             }
         }
 
-        throw new InvalidOperationException(
-            "The path does too much work for the size of the document (see ToonPathOptions); nested descendant segments (..) multiply the values a query visits.");
+        throw new ToonPathLimitException(
+            "The path does too much work for the size of the document (see ToonPathOptions); nested descendant segments (..) multiply the values a query visits.",
+            isTimeout: false);
     }
 
     private static long CountValues(ToonValue root)
@@ -421,7 +480,18 @@ internal static class ToonPathEvaluator
                     ? SelectSingular(query, root, current) != null
                     : Select(query, root, query.Absolute ? root : current, track: false, work).Count != 0;
             case ComparisonExpression comparison:
-                return Compare(Evaluate(comparison.Left, root, current, work), comparison.Operator, Evaluate(comparison.Right, root, current, work));
+            {
+                var left = Evaluate(comparison.Left, root, current, work);
+                var right = Evaluate(comparison.Right, root, current, work);
+
+                // Comparing strings, objects and arrays reads them
+                if (left is not (null or ToonNumber or ToonBoolean or ToonNull) && right is not (null or ToonNumber or ToonBoolean or ToonNull))
+                {
+                    work.SpendValue(left.ValueType <= right.ValueType ? left : right);
+                }
+
+                return Compare(left, comparison.Operator, right);
+            }
             case FunctionExpression function:
                 return TestFunction(function, root, current, work);
             default:
@@ -486,7 +556,14 @@ internal static class ToonPathEvaluator
         switch (function.Function)
         {
             case FunctionKind.Length:
-                return Evaluate(function.Arguments[0], root, current, work) switch
+                var measured = Evaluate(function.Arguments[0], root, current, work);
+
+                if (measured is ToonString counted)
+                {
+                    work.SpendText(counted.Value.Length);
+                }
+
+                return measured switch
                 {
                     ToonString text => new ToonNumber((long)CountScalars(text.Value)),
                     ToonArray array => new ToonNumber((long)array.Items.Count),
@@ -512,9 +589,17 @@ internal static class ToonPathEvaluator
 
         for (var i = 0; i < arguments.Length; i++)
         {
-            arguments[i] = custom.Parameters[i] == ExpressionType.Nodes
-                ? SelectNodes(function.Arguments[i], root, current, work).ConvertAll(n => n.Value)
-                : Evaluate(function.Arguments[i], root, current, work);
+            if (custom.Parameters[i] == ExpressionType.Nodes)
+            {
+                arguments[i] = SelectNodes(function.Arguments[i], root, current, work).ConvertAll(n => n.Value);
+            }
+            else
+            {
+                // A function may read all of a value (lower, contains, ...): spend for it first
+                var argument = Evaluate(function.Arguments[i], root, current, work);
+                work.SpendValue(argument);
+                arguments[i] = argument;
+            }
         }
 
         return custom.Invoke(arguments);
@@ -532,6 +617,7 @@ internal static class ToonPathEvaluator
             return false;
         }
 
+        work.SpendText(text.Value.Length);
         var full = function.Function == FunctionKind.Match;
         var regex = function.HasLiteralRegex
             ? function.LiteralRegex

@@ -398,7 +398,7 @@ await foreach (var order in ToonSerializer.DeserializeAsyncEnumerableAt<Order>(s
 // ToonNet functions in filters, and your own
 var admins = ToonSerializer.DeserializeAll<User>(toon, "$.users[?ends_with(@.email, '@firma.com') && contains(@.roles, 'admin')]");
 var big = ToonSerializer.DeserializeAll<Order>(toon, "$.orders[?sum(@.lines[*].price) > 1000]");
-var options = new ToonPathOptions { Functions = new ToonPathFunctions().AddPredicate("is_vip", c => IsVip(c)) };
+var options = new ToonPathOptions { Functions = new ToonPathFunctions().AddPredicate("is_vip", c => c is ToonObject o && IsVip(o)) };
 
 // Paths from clients: limits on length, nesting, work and time
 var safe = new ToonSerializerOptions { PathOptions = new ToonPathOptions { MaxLength = 256, Timeout = TimeSpan.FromMilliseconds(200) } };

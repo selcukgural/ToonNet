@@ -202,9 +202,9 @@ public class ToonPathTests
         var path = ToonPath.Parse("$..*..*..*..*..*..*..*..*");
         var watch = Stopwatch.StartNew();
 
-        Assert.Throws<InvalidOperationException>(() => path.Select(ToonDocument.Parse(deep).Root));
-        Assert.Throws<InvalidOperationException>(() => path.SelectFrom(deep));
-        Assert.Throws<InvalidOperationException>(() => ToonPath.Parse("$[?@..[?@..[?@..[?@..[?@..b]]]]]").Select(ToonDocument.Parse(deep).Root));
+        Assert.False(Assert.Throws<ToonPathLimitException>(() => path.Select(ToonDocument.Parse(deep).Root)).IsTimeout);
+        Assert.Throws<ToonPathLimitException>(() => path.SelectFrom(deep));
+        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$[?@..[?@..[?@..[?@..[?@..b]]]]]").Select(ToonDocument.Parse(deep).Root));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), watch.Elapsed.ToString());
 
         // A large document gets a budget in proportion to its size
@@ -254,13 +254,13 @@ public class ToonPathTests
         var tight = new ToonPathOptions { MaxSteps = 100, MaxStepsPerValue = 0 };
         var path = ToonPath.Parse("$.rows[?@.a > 5]", tight);
 
-        Assert.Throws<InvalidOperationException>(() => path.Select(ToonDocument.Parse(rows).Root));
-        Assert.Throws<InvalidOperationException>(() => path.SelectFrom(rows));
+        Assert.Throws<ToonPathLimitException>(() => path.Select(ToonDocument.Parse(rows).Root));
+        Assert.Throws<ToonPathLimitException>(() => path.SelectFrom(rows));
         Assert.Equal(994, ToonPath.Parse("$.rows[?@.a > 5]").SelectFrom(rows).Count);
 
         // The serializer's path methods take the limits from the options
         var options = new ToonSerializerOptions { PathOptions = tight };
-        Assert.Throws<InvalidOperationException>(() => ToonSerializer.DeserializeAll<int>(rows, "$.rows[*].a", options));
+        Assert.Throws<ToonPathLimitException>(() => ToonSerializer.DeserializeAll<int>(rows, "$.rows[*].a", options));
         Assert.Equal(1000, ToonSerializer.DeserializeAll<int>(rows, "$.rows[*].a").Count);
         Assert.Throws<ToonPathException>(() => ToonSerializer.DeserializeAt<int>(rows, "$.rows[0].a",
                                                                                 new ToonSerializerOptions { PathOptions = new ToonPathOptions { MaxLength = 5 } }));
@@ -275,9 +275,10 @@ public class ToonPathTests
         var path = ToonPath.Parse("$..*..*..*..*..*..*..*", limits);
         var watch = Stopwatch.StartNew();
 
-        var ex = Assert.Throws<TimeoutException>(() => path.Select(ToonDocument.Parse(deep).Root));
+        var ex = Assert.Throws<ToonPathLimitException>(() => path.Select(ToonDocument.Parse(deep).Root));
+        Assert.True(ex.IsTimeout);
         Assert.StartsWith("The path took longer than its timeout of 00:00:00.0500000", ex.Message);
-        Assert.Throws<TimeoutException>(() => path.SelectFrom(deep));
+        Assert.True(Assert.Throws<ToonPathLimitException>(() => path.SelectFrom(deep)).IsTimeout);
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), watch.Elapsed.ToString());
 
         Assert.Equal(TimeSpan.FromSeconds(10), ToonPathOptions.Default.Timeout);
@@ -285,5 +286,63 @@ public class ToonPathTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new ToonPathOptions { MaxSteps = 0 });
         Assert.Throws<ArgumentOutOfRangeException>(() => new ToonPathOptions { MaxNesting = 1000 });
         Assert.Equal(Timeout.InfiniteTimeSpan, new ToonPathOptions { Timeout = Timeout.InfiniteTimeSpan }.Timeout);
+    }
+
+    [Fact]
+    public void LargeValues_SpendInProportion()
+    {
+        // One step per item used to read the whole string each time: 80 GB allocated for lower($.s)
+        var toon = "s: " + new string('A', 2_000_000) + "\nitems[20000]: " + string.Join(',', Enumerable.Range(0, 20000));
+        var watch = Stopwatch.StartNew();
+
+        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?lower($.s) == 'x']").SelectFrom(toon));
+        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?length($.s) == 1]").SelectFrom(toon));
+        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?$.s == 'x']").Select(ToonDocument.Parse(toon).Root));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), watch.Elapsed.ToString());
+
+        // The timeout comes when expected, not after the next thousand steps
+        var options = new ToonPathOptions { MaxSteps = long.MaxValue / 4, Timeout = TimeSpan.FromMilliseconds(200) };
+        watch.Restart();
+        Assert.True(Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$.items[?length($.s) == 1]", options).SelectFrom(toon)).IsTimeout);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), watch.Elapsed.ToString());
+    }
+
+    [Fact]
+    public void NumberLiterals_ReadLikeToon()
+    {
+        const string toon = "items[3]:\n  - a: 0\n  - a: 1e-30\n  - a: -0";
+
+        foreach (var filter in (string[])["@.a == 1e-30", "@.a < 1e-30", "@.a > 0", "@.a == 0"])
+        {
+            var path = ToonPath.Parse($"$.items[?{filter}]");
+            var tree = path.Select(ToonDocument.Parse(toon).Root);
+            Assert.Equal(tree.Count, path.SelectFrom(toon).Count);
+        }
+
+        Assert.Single(ToonPath.Parse("$.items[?@.a == 1e-30]").Select(ToonDocument.Parse(toon).Root));
+    }
+
+    [Fact]
+    public void RepeatedKeys_OverText_AreParseErrors()
+    {
+        const string toon = "items[2]:\n  - name: x\n  - name: y\n    name: z";
+
+        Assert.Throws<ToonParseException>(() => ToonPath.Parse("$.items[?lower(@.name) == 'z']").SelectFrom(toon));
+        var options = new ToonOptions { StrictMode = false };
+        Assert.Single(ToonPath.Parse("$.items[?lower(@.name) == 'z']").SelectFrom(toon, options));
+    }
+
+    [Fact]
+    public void DeepPaths_DoNotOverflowTheStack()
+    {
+        var options = new ToonPathOptions { MaxNesting = 256 };
+        var path = "$[?" + string.Concat(Enumerable.Repeat("lower(", 254)) + "@" + new string(')', 254) + " == 'a']";
+        Exception? error = null;
+
+        var thread = new Thread(() => error = Record.Exception(() => ToonPath.Parse(path, options)), 128 * 1024);
+        thread.Start();
+        thread.Join();
+
+        Assert.IsType<ToonPathException>(error);
     }
 }

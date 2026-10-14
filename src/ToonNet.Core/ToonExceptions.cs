@@ -394,7 +394,7 @@ public sealed class ToonRuleException : ToonException
     {
         ArgumentNullException.ThrowIfNull(violations);
         var text = new System.Text.StringBuilder();
-        text.Append("The document breaks ").Append(violations.Count).Append(violations.Count == 1 ? " rule: " : " rules: ");
+        text.Append("The document has ").Append(violations.Count).Append(violations.Count == 1 ? " rule violation: " : " rule violations: ");
         text.AppendJoin("; ", violations.Take(10));
 
         if (violations.Count > 10)
@@ -404,4 +404,22 @@ public sealed class ToonRuleException : ToonException
 
         return text.ToString();
     }
+}
+
+/// <summary>
+///     Exception thrown when evaluating a path, or validating rules, goes beyond a limit of its
+///     <see cref="Paths.ToonPathOptions"/>: the step budget or the timeout.
+/// </summary>
+public sealed class ToonPathLimitException : ToonException
+{
+    /// <summary>Initializes a new instance of the ToonPathLimitException class.</summary>
+    /// <param name="message">The message.</param>
+    /// <param name="isTimeout">Whether the timeout was reached (otherwise the step budget).</param>
+    public ToonPathLimitException(string message, bool isTimeout) : base(message)
+    {
+        IsTimeout = isTimeout;
+    }
+
+    /// <summary>Whether the evaluation took longer than <see cref="Paths.ToonPathOptions.Timeout"/>; false for the step budget.</summary>
+    public bool IsTimeout { get; }
 }

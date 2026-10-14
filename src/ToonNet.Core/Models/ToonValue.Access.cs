@@ -277,6 +277,12 @@ public abstract partial class ToonValue
             return a == b;
         }
 
+        // NaN and infinities have no canonical text ("null"): compare them as doubles (NaN equals nothing)
+        if (!left.IsFinite || !right.IsFinite)
+        {
+            return left.Value == right.Value;
+        }
+
         if (left.ParsedText is { } leftText && right.ParsedText is { } rightText &&
             BigInteger.TryParse(leftText, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var leftInteger) &&
             BigInteger.TryParse(rightText, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var rightInteger))
