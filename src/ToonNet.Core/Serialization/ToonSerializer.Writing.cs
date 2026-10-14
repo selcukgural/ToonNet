@@ -167,6 +167,13 @@ public static partial class ToonSerializer
     /// </summary>
     private static ToonArray SerializeCollection(IEnumerable enumerable, ToonSerializerOptions options, int depth, SerializerState state)
     {
+        // A multidimensional array enumerates all its items in one sequence, which would lose its shape
+        if (enumerable is Array { Rank: > 1 } multidimensional)
+        {
+            throw ToonEncodingException.AtPath(
+                $"Multidimensional arrays ({multidimensional.GetType().Name}) are not supported; use an array of arrays (int[][])", state.Path);
+        }
+
         var array = new ToonArray(new List<ToonValue>(enumerable is ICollection collection ? collection.Count : 0));
         var index = 0;
 

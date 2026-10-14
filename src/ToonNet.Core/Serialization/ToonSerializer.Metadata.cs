@@ -192,6 +192,14 @@ public static partial class ToonSerializer
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static TypeMetadata GetTypeMetadata(Type type)
     {
+        // A value tuple keeps its items in fields, which the serializer does not read: it would be written as an empty
+        // object and read back empty
+        if (type is { IsValueType: true, IsGenericType: true, Namespace: "System" } && type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal))
+        {
+            throw new NotSupportedException(
+                $"Value tuples ({type.Name}) are not supported: their items are fields, not properties. Use a record or a class.");
+        }
+
         return TypeMetadataCache.GetOrAdd(type, static t =>
         {
             var properties = new List<(PropertyMetadata Metadata, int Order, int Index)>();

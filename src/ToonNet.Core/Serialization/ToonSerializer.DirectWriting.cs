@@ -930,6 +930,11 @@ public static partial class ToonSerializer
         {
             EnterValue(depth);
 
+            if (enumerable is Array { Rank: > 1 })
+            {
+                throw new NotSupportedException(); // any error makes the tree-based path run, which reports it
+            }
+
             // Arrays and lists of primitives are written from their typed items, without boxing each one
             if (!_hasConverters && !_generatedOnly && PrimitiveListWriter.For(enumerable.GetType()) is { } primitives)
             {

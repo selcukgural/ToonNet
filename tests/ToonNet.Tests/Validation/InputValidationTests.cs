@@ -32,8 +32,8 @@ public class InputValidationTests
         // Act
         var doc = parser.Parse("");
 
-        // Assert
-        Assert.NotNull(doc);
+        // Assert: an empty document is an empty object
+        Assert.Empty(doc.AsObject().Properties);
     }
 
     #endregion
@@ -73,8 +73,7 @@ public class InputValidationTests
         var result = encoder.Encode(document);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Contains("key", result);
+        Assert.Equal("key: value", result);
     }
 
     #endregion
@@ -87,9 +86,9 @@ public class InputValidationTests
         // Act
         var parser = new ToonParser(null);
 
-        // Assert - Should not throw, parser should work with defaults
-        var doc = parser.Parse("key: value");
-        Assert.NotNull(doc);
+        // Assert: the defaults, such as strict mode, apply
+        Assert.Equal("value", parser.Parse("key: value").Root["key"]!.GetValue<string>());
+        Assert.Throws<ToonParseException>(() => parser.Parse("a: 1\na: 2"));
     }
 
     [Fact]
@@ -98,10 +97,9 @@ public class InputValidationTests
         // Act
         var encoder = new ToonEncoder(null);
 
-        // Assert - Should not throw, encoder should work with defaults
-        var doc = new ToonDocument(new ToonObject());
-        var result = encoder.Encode(doc);
-        Assert.NotNull(result);
+        // Assert: the defaults (two spaces, commas) apply
+        var doc = new ToonDocument(new ToonObject { ["a"] = new ToonObject { ["b"] = new ToonArray([1, 2]) } });
+        Assert.Equal("a:\n  b[2]: 1,2", encoder.Encode(doc));
     }
 
     #endregion
@@ -117,12 +115,12 @@ public class InputValidationTests
         // Act
         var doc = parser.Parse("   \n   \n   ");
 
-        // Assert
-        Assert.NotNull(doc);
+        // Assert: blank lines only are an empty document
+        Assert.Empty(doc.AsObject().Properties);
     }
 
     [Fact]
-    public void ToonEncoder_WithInvalidOptions_ThrowsDuringConstruction()
+    public void ToonOptions_InvalidIndentSize_ThrowsWhenSet()
     {
         // Arrange - Create options with invalid values will throw during property set
         // Act & Assert

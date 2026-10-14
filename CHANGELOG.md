@@ -75,6 +75,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Parse`/`Deserialize` read it in non-strict mode, so a miscounted length or a repeated key does not fail the answer.
 
 ### Fixed
+- **ToonNet.Core:** A number read into an enum wrapped around its underlying type (`300` into a `byte` enum gave 44,
+  `-1` gave 255, `4294967297` into an `int` enum gave 1); it is checked like a number of that type, and the error names
+  the enum. Multidimensional arrays (`int[,]`) are rejected with a clear error: they were written flattened and failed
+  with an `InvalidCastException` when read. A conversion error no longer keeps the parser's exception as its inner
+  exception, whose message quoted the value (`String 'jane@x.com' was not recognized as a valid Boolean`) into
+  `ToString()` and logs. Value tuples, whose items are fields, throw `NotSupportedException` instead of becoming empty
+  objects. `Queue<T>`, `Stack<T>`, `ConcurrentQueue<T>`, `ConcurrentStack<T>` and the `IImmutableList<T>`-style
+  interfaces, which could be written but not read, are read back (stacks in the same order).
 - **ToonNet.Extensions.Json:** `ToJson` with `Indented = true` wrote arrays of numbers on one line with a misplaced
   bracket (`[1,2,3\n  ]`); numbers are now indented like other values. A JSON string with an unpaired surrogate escape
   (`"\uD800"`) throws `JsonException`, as documented, instead of `InvalidOperationException`.

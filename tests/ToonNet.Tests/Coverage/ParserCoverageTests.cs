@@ -283,7 +283,7 @@ nul: null";
         var obj = doc.AsObject();
 
         var path = ((ToonString)obj["path"]!).Value;
-        Assert.Contains("\\", path);
+        Assert.Equal(@"C:\Users", path);
     }
 
     [Fact]
@@ -313,7 +313,7 @@ nul: null";
     }
 
     [Fact]
-    public void TabularArray_StrictMode_LengthMismatch()
+    public void ExpandedList_StrictMode_LengthMismatch()
     {
         var options = new ToonOptions { StrictMode = true };
         var parser = new ToonParser(options);
@@ -324,7 +324,7 @@ nul: null";
     }
 
     [Fact]
-    public void TabularArray_NonStrictMode_LengthMismatch()
+    public void ExpandedList_NonStrictMode_LengthMismatch()
     {
         var options = new ToonOptions { StrictMode = false };
         var parser = new ToonParser(options);
@@ -347,7 +347,10 @@ nul: null";
         var ex = Assert.Throws<ToonParseException>(() => new ToonParser().Parse(toon));
 
         Assert.Contains("Blank lines", ex.Message);
-        Assert.NotNull(new ToonParser(new ToonOptions { StrictMode = false }).Parse(toon));
+
+        // Non-strict mode reads the item as if the blank line were not there
+        var lenient = new ToonParser(new ToonOptions { StrictMode = false }).Parse(toon);
+        Assert.True(ToonValue.DeepEquals(new ToonParser().Parse(toon.Replace("\n\n", "\n")).Root, lenient.Root));
     }
 
     [Theory]
@@ -357,7 +360,8 @@ nul: null";
     [InlineData("items[1]:\n\n  - x")]
     public void StrictMode_BlankLineOutsideArraySpans_IsIgnored(string toon)
     {
-        Assert.NotNull(new ToonParser().Parse(toon));
+        // The same document as without the blank line
+        Assert.True(ToonValue.DeepEquals(new ToonParser().Parse(toon.Replace("\n\n", "\n")).Root, new ToonParser().Parse(toon).Root));
     }
 
     [Fact]

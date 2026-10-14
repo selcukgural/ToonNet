@@ -120,8 +120,8 @@ age: 30"; // Unterminated string
         _output.WriteLine(ex.ToString());
         _output.WriteLine("=================================");
 
-        Assert.NotNull(ex);
-        Assert.Contains("string", ex.Message.ToLower());
+        Assert.Equal("Unterminated string", ex.Reason);
+        Assert.Equal((1, 7), (ex.Line, ex.Column));
     }
 
     [Fact]
@@ -163,12 +163,22 @@ age: 30"; // Unterminated string
     [InlineData("Age: jane.doe@example.com", typeof(AgeHolder))]
     [InlineData("Age: 98765432109876", typeof(AgeHolder))]
     [InlineData("Level: jane.doe@example.com", typeof(LevelHolder))]
+    [InlineData("Flag: jane.doe@example.com", typeof(PrimitiveHolder))]
+    [InlineData("When: jane.doe@example.com", typeof(PrimitiveHolder))]
+    [InlineData("Offset: jane.doe@example.com", typeof(PrimitiveHolder))]
+    [InlineData("Day: jane.doe@example.com", typeof(PrimitiveHolder))]
+    [InlineData("At: jane.doe@example.com", typeof(PrimitiveHolder))]
+    [InlineData("Wait: jane.doe@example.com", typeof(PrimitiveHolder))]
+    [InlineData("Id: jane.doe@example.com", typeof(PrimitiveHolder))]
+    [InlineData("Big: jane.doe@example.com", typeof(PrimitiveHolder))]
     public void DeserializationErrors_DoNotQuoteTheValue(string toon, Type type)
     {
         var ex = Assert.Throws<ToonSerializationException>(() => ToonNet.Core.Serialization.ToonSerializer.Deserialize(toon, type));
         var value = toon[(toon.IndexOf(": ", StringComparison.Ordinal) + 2)..];
 
+        // Not in the message, and not in an inner exception either: loggers write ex.ToString()
         Assert.DoesNotContain(value, ex.Message);
+        Assert.DoesNotContain(value, ex.ToString());
         Assert.Contains("$.", ex.Message);
         Assert.Equal(value, ex.Value?.ToString());
     }
@@ -181,5 +191,17 @@ age: 30"; // Unterminated string
     public sealed class LevelHolder
     {
         public DayOfWeek Level { get; set; }
+    }
+
+    public sealed class PrimitiveHolder
+    {
+        public bool Flag { get; set; }
+        public DateTime When { get; set; }
+        public DateTimeOffset Offset { get; set; }
+        public DateOnly Day { get; set; }
+        public TimeOnly At { get; set; }
+        public TimeSpan Wait { get; set; }
+        public Guid Id { get; set; }
+        public Int128 Big { get; set; }
     }
 }

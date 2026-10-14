@@ -170,7 +170,8 @@ public static partial class ToonSerializer
                 return new ReadTypeInfo { Kind = ReadKind.Dictionary, Target = target, AcceptsNull = acceptsNull, Dictionary = dictionary };
             }
 
-            if (typeof(IDictionary).IsAssignableFrom(target))
+            // Multidimensional arrays are not supported: the tree-based path reports it
+            if (typeof(IDictionary).IsAssignableFrom(target) || (target.IsArray && target.GetArrayRank() > 1))
             {
                 return Info(ReadKind.Tree);
             }

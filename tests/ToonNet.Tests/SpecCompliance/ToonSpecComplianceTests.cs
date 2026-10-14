@@ -341,10 +341,13 @@ products[3]:
         var doc = ParseToon(toonString);
         var obj = (ToonObject)doc.Root;
 
-        // Verify quoted keys work
-        Assert.NotNull(obj["key with spaces"]);
-        Assert.NotNull(obj["quoted-key"]);
-        Assert.NotNull(obj["key:with:colons"]);
+        // Keys and values keep every character
+        Assert.Equal("value", obj["key with spaces"]!.GetValue<string>());
+        Assert.Equal("quoted-value", obj["quoted-key"]!.GetValue<string>());
+        Assert.Equal("value,with,commas", obj["key:with:colons"]!.GetValue<string>());
+        Assert.Equal("data", obj["key[with]brackets"]!.GetValue<string>());
+        Assert.True(obj["@special"]!.GetValue<bool>());
+        Assert.Equal(5, obj.Properties.Count);
     }
 
     /// <summary>
@@ -524,7 +527,9 @@ NAME: ALICE";
 
         // All three should exist as separate keys
         Assert.Equal(3, obj.Properties.Count);
-        Assert.NotEqual(obj["Name"], obj["name"]);
+        Assert.Equal("Alice", obj["Name"]!.GetValue<string>());
+        Assert.Equal("alice", obj["name"]!.GetValue<string>());
+        Assert.Equal("ALICE", obj["NAME"]!.GetValue<string>());
     }
 
     /// <summary>
