@@ -657,7 +657,7 @@ public static partial class ToonSerializer
             }
         }
 
-        private string PathText() => "$." + string.Join('.', target!);
+        private string PathText() => target!.Aggregate(new StringBuilder("$"), ToonErrorText.AppendMember).ToString();
 
         /// <summary>The key of a member line (<c>name: ...</c>, <c>"quoted name"[2]: ...</c>) and what follows it.</summary>
         private static bool TryReadKey(ReadOnlySpan<char> content, out string key, out ReadOnlySpan<char> rest)

@@ -720,8 +720,8 @@ internal sealed class ToonPathParser
         {
             return new FunctionExpression(function, arguments.ToArray())
             {
-                HasLiteralRegex = true,
-                LiteralRegex = pattern is ToonString text ? ToonPathRegex.Get(text.Value, function == FunctionKind.Match, _limits.MaxPatternLength) : null
+                HasLiteralPattern = true,
+                LiteralPattern = pattern is ToonString text ? ToonPathRegex.Get(text.Value, function == FunctionKind.Match, _limits.MaxPatternLength) : null
             };
         }
 

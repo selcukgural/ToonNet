@@ -74,7 +74,7 @@ internal sealed class ToonPathTextEvaluator
             {
                 if (name != null)
                 {
-                    text.Append('.').Append(name);
+                    ToonErrorText.AppendMember(text, name); // keys come from the document: escaped and shortened
                 }
                 else
                 {

@@ -468,12 +468,8 @@ public static partial class ToonSerializer
                     }
                     else
                     {
-                        if (!name.StartsWith('['))
-                        {
-                            sb.Append('.');
-                        }
-
-                        sb.Append(name);
+                        // Keys come from documents: escaped and shortened (ToonErrorText)
+                        ToonErrorText.AppendMember(sb, name);
                     }
                 }
 

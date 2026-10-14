@@ -100,11 +100,11 @@ public class ResourceLimitTests
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"{stopwatch.Elapsed.TotalSeconds:F1} s for 60,000 fields");
 
         var duplicate = Assert.Throws<ToonParseException>(() => ToonDocument.Parse($"[0]{{a,{fields},b,a}}:"));
-        Assert.Contains("Duplicate field 'a'", duplicate.Message);
+        Assert.Contains("Duplicate field \"a\"", duplicate.Message);
 
         // With several repeated names, the first one is reported, as for short lists
         var first = Assert.Throws<ToonParseException>(() => ToonDocument.Parse($"[0]{{x,{fields},y,y,x}}:"));
-        Assert.Contains("Duplicate field 'x'", first.Message);
+        Assert.Contains("Duplicate field \"x\"", first.Message);
     }
 
     [Fact]

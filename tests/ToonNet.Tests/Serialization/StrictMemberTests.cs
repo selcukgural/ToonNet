@@ -73,7 +73,7 @@ public class StrictMemberTests
     public void UnknownKeys_AreErrors_WithTheirPath()
     {
         var ex = Fails<Account>("Name: a\nNmae: b", Disallow);
-        Assert.Equal("The key 'Nmae' matches no property or constructor parameter (path: $.Nmae, target type: Account)", ex.Message);
+        Assert.Equal("The key matches no property or constructor parameter (path: $.Nmae, target type: Account)", ex.Message);
 
         ex = Fails<Account>("Name: a\nAddresses[1]{City,Zip}:\n  x,1", Disallow);
         Assert.Equal("$.Addresses[0].Zip", ex.Path);

@@ -149,7 +149,7 @@ age: 30"; // Unterminated string
     }
 
     [Theory]
-    [InlineData("a: 1\na: 2", "Duplicate key 'a' (line 2, column 1)")]
+    [InlineData("a: 1\na: 2", "Duplicate key \"a\" (line 2, column 1)")]
     [InlineData("Age: x", "The string is not a number (path: $.Age, target type: Int32)")]
     public void Messages_AreOneLineWithoutSymbols(string toon, string expected)
     {

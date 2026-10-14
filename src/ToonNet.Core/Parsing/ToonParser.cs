@@ -978,7 +978,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         if (duplicate)
         {
             ref readonly var line = ref _lines[cursor.PendingLineIndex];
-            throw new ToonParseException($"Duplicate key '{key}'", line.Number, line.Indent + 1);
+            throw new ToonParseException($"Duplicate key {ToonErrorText.Quote(key)}", line.Number, line.Indent + 1);
         }
     }
 
@@ -2138,7 +2138,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         }
 
         static ToonParseException DuplicateField(string name, in Line line) =>
-            new($"Duplicate field '{name}' in field list", line.Number, line.Indent + 1);
+            new($"Duplicate field {ToonErrorText.Quote(name)} in field list", line.Number, line.Indent + 1);
     }
 
     #endregion

@@ -111,10 +111,10 @@ internal sealed class FunctionExpression(FunctionKind function, PathExpression[]
     /// <summary>The function of <see cref="FunctionKind.Custom"/>.</summary>
     public PathFunction? Custom { get; init; }
 
-    /// <summary>The compiled regular expression of <c>match</c> or <c>search</c> when the pattern is a literal (null when invalid).</summary>
-    public System.Text.RegularExpressions.Regex? LiteralRegex { get; init; }
+    /// <summary>The compiled pattern of <c>match</c> or <c>search</c> when the pattern is a literal (null when invalid).</summary>
+    public PathPattern? LiteralPattern { get; init; }
 
-    public bool HasLiteralRegex { get; init; }
+    public bool HasLiteralPattern { get; init; }
 }
 
 internal sealed class ComparisonExpression(PathExpression left, ComparisonOperator op, PathExpression right) : PathExpression

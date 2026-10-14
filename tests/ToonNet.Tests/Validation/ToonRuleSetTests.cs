@@ -117,7 +117,7 @@ public class ToonRuleSetTests
         var rules = new ToonRuleSet().Unique("$.items[*]", "{value} repeats");
         var result = rules.Validate("items[6]:\n  - a: 1\n    b: 2\n  - b: 2\n    a: 1\n  - [2]: 1,2\n  - [2]: 2,1\n  - x\n  - \"x\"");
 
-        Assert.Equal(["$['items'][1]: an object of 2 members repeats", "$['items'][5]: x repeats"], result.Violations.Select(v => v.ToString()));
+        Assert.Equal(["$['items'][1]: an object of 2 members repeats", "$['items'][5]: \"x\" repeats"], result.Violations.Select(v => v.ToString()));
     }
 
     [Fact]
@@ -173,11 +173,26 @@ public class ToonRuleSetTests
     [Fact]
     public void LongValues_AreShortenedWholeCharacters()
     {
-        var text = new string('a', 99) + "😀";
+        var text = new string('a', 63) + "😀";
         var result = new ToonRuleSet().Rule("$.s", "@ == 'x'", "{value}").Validate("s: " + text);
 
         var message = Assert.Single(result.Violations).Message;
-        Assert.Equal(new string('a', 99) + "...", message);
+        Assert.Equal("\"" + new string('a', 63) + "...\"", message);
+    }
+
+    [Theory]
+    [InlineData("zz; $['orders'][3]['status']: bad status fake", "\"zz; $['orders'][3]['status']: bad status fake\"")]
+    [InlineData("x\n$.forged: fake violation", "\"x\\n$.forged: fake violation\"")]
+    [InlineData("a\"b\\c\u2028d\u202Ee", "\"a\\\"b\\\\c\\u2028d\\u202Ee\"")]
+    public void StringValues_AreQuotedAndEscaped_SoTheyCannotForgeViolations(string value, string expected)
+    {
+        var document = new ToonDocument(new ToonObject { ["s"] = new ToonString(value) });
+
+        var result = new ToonRuleSet().Rule("$.s", "@ == 'ok'", "bad status {value}").Validate(document.Root);
+
+        Assert.Equal("bad status " + expected, Assert.Single(result.Violations).Message);
+        Assert.DoesNotContain('\n', result.ToString());
+        Assert.Contains("1 rule violation:", Assert.Throws<ToonRuleException>(result.ThrowIfInvalid).Message);
     }
 
     [Fact]

@@ -59,8 +59,9 @@ orders. Add `Required` when the values must be there.
 Each `ToonRuleViolation` has:
 
 - `Path`: the normalized path of the value (`$['orders'][3]['total']`), or the rule's path for `Required`
-- `Message`: the rule's message, with `{path}` and `{value}` filled in (`{value}` is a primitive's text, or the size of
-  an object or array)
+- `Message`: the rule's message, with `{path}` and `{value}` filled in. `{value}` is a string in quotes, escaped and
+  cut to 64 characters (so it cannot add lines or forged violations to the message), another primitive's text, or the
+  size of an object or array.
 - `Value`: the value that broke the rule (null for `Required`)
 - `Rule` and `Severity`: the rule, and whether it is an error or a warning
 

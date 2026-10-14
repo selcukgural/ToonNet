@@ -1180,7 +1180,7 @@ public static partial class ToonSerializer
     private static ToonSerializationException UnmappedKeyError(string key, Type targetType, ToonValue value, SerializerState state)
     {
         state.Push(key);
-        return Error($"The key '{key}' matches no property or constructor parameter", targetType, value, state);
+        return Error("The key matches no property or constructor parameter", targetType, value, state); // the path names it
     }
 
     /// <summary>The error for a required property without a key, with required members respected.</summary>

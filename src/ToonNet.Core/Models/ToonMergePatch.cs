@@ -48,16 +48,25 @@ public static class ToonMergePatch
         }
 
         // A snapshot: the patch may be the target itself, or inside it
+        HashSet<string>? removed = null;
+
         foreach (var (key, value) in members.Properties.ToArray())
         {
             if (value is ToonNull)
             {
-                result.Properties.Remove(key);
+                (removed ??= new HashSet<string>(StringComparer.Ordinal)).Add(key);
             }
             else
             {
                 result.Properties[key] = Merge(result[key], value);
             }
+        }
+
+        // At once, after the other members (whose keys differ): removing them one by one is quadratic in the size of the
+        // target. The order of the remaining and added members is the same either way.
+        if (removed != null)
+        {
+            result.Properties.RemoveKeys(removed);
         }
 
         return result;

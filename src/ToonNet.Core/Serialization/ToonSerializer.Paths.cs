@@ -651,5 +651,5 @@ public static partial class ToonSerializer
         return true;
     }
 
-    private static void AppendName(StringBuilder path, string name) => path.Append('.').Append(name);
+    private static void AppendName(StringBuilder path, string name) => ToonErrorText.AppendMember(path, name);
 }

@@ -47,7 +47,7 @@ public class ToonException : Exception
     internal static string PrependPath(string prefix, string? path) => path is { Length: > 1 } ? prefix + path[1..] : prefix;
 
     /// <summary>The path of a property or dictionary key, as the serializer writes it: <c>$.Name</c>.</summary>
-    internal static string PathOf(string name) => name.StartsWith('[') ? "$" + name : "$." + name;
+    internal static string PathOf(string name) => ToonErrorText.AppendMember(new System.Text.StringBuilder("$"), name).ToString();
 
     /// <summary>The path of an item: <c>$[2]</c>.</summary>
     internal static string PathOf(int index) => "$[" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
@@ -355,7 +355,7 @@ public sealed class ToonPathException : ToonException
     /// <param name="position">The 0-based position of the error in the path.</param>
     public ToonPathException(string reason, string path, int position)
         : base(WithDetails(reason, ("position", position.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-                           ("path", path.Length <= 200 ? path : path[..200] + "...")))
+                           ("path", ToonErrorText.EscapeControls(path.Length <= 200 ? path : path[..200] + "..."))))
     {
         Reason = reason;
         Path = path;

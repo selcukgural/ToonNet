@@ -40,7 +40,9 @@ namespace ToonNet.Core.Validation;
 /// </example>
 public sealed class ToonRuleSet
 {
-    private readonly List<ToonRule> _rules = [];
+    // Copied on each addition, so a validation that runs meanwhile checks the rules it started with
+    private volatile ToonRule[] _rules = [];
+    private readonly object _gate = new();
 
     /// <summary>Creates an empty rule set.</summary>
     /// <param name="options">The options of its paths and assertions (functions, limits); defaults when null.</param>
@@ -68,7 +70,7 @@ public sealed class ToonRuleSet
     }
 
     /// <summary>The rules, in the order they were added (and are checked).</summary>
-    public IReadOnlyList<ToonRule> Rules => _rules;
+    public IReadOnlyList<ToonRule> Rules => Array.AsReadOnly(_rules);
 
     /// <summary>
     ///     Adds a rule: for each value <paramref name="path"/> selects, <paramref name="assertion"/> must hold.
@@ -128,7 +130,11 @@ public sealed class ToonRuleSet
     private ToonRuleSet Add(ToonRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule.Message);
-        _rules.Add(rule);
+        lock (_gate)
+        {
+            _rules = [.. _rules, rule];
+        }
+
         return this;
     }
 
@@ -243,8 +249,7 @@ public sealed class ToonRuleSet
 
     private static ToonRuleViolation Violation(ToonRule rule, ToonPathEvaluator.Node node, EvaluationBudget work)
     {
-        var path = ToonPathEvaluator.Location.Format(node.Location);
-        work.SpendText(path.Length);
+        var path = ToonPathEvaluator.Location.Format(node.Location, work);
         return new ToonRuleViolation(rule, path, Format(rule.Message, path, node.Value), node.Value);
     }
 
@@ -279,25 +284,22 @@ public sealed class ToonRuleSet
         return text.ToString();
     }
 
-    /// <summary>A short text of a value for a message: a primitive as written, an object or array by its size.</summary>
+    /// <summary>
+    ///     A short text of a value for a message: a string in quotes, escaped and shortened to 64 characters; another
+    ///     primitive as written; an object or array by its size.
+    /// </summary>
     private static string Describe(ToonValue value)
     {
         var text = value switch
         {
             ToonObject obj => $"an object of {obj.Properties.Count} member{(obj.Properties.Count == 1 ? "" : "s")}",
             ToonArray array => $"an array of {array.Count} item{(array.Count == 1 ? "" : "s")}",
-            ToonString s => s.Value,
+            // Quoted and escaped: a string cannot add a line, or text that reads as another violation, to the message
+            ToonString s => ToonErrorText.Quote(s.Value),
             _ => value.ToString() ?? ""
         };
 
-        if (text.Length <= 100)
-        {
-            return text;
-        }
-
-        // Not between the halves of a surrogate pair
-        var cut = char.IsHighSurrogate(text[99]) ? 99 : 100;
-        return text[..cut] + "...";
+        return text;
     }
 
     /// <summary>Equality of values by their data, as <see cref="ToonValue.DeepEquals"/>, with a hash that agrees with it.</summary>

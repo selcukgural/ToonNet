@@ -51,7 +51,8 @@ public sealed class ToonPathOptions
 
     /// <summary>
     ///     The longest regular expression of <c>match()</c> and <c>search()</c>, in characters (default 1,024); a longer
-    ///     pattern is not valid, and the function is false. Patterns always run in linear time.
+    ///     pattern is not valid, and the function is false. Patterns run in time linear in the length of the text and the
+    ///     size of their automaton, and a match spends a step per 64 characters and states before it runs.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value is less than 1.</exception>
     public int MaxPatternLength
@@ -74,7 +75,8 @@ public sealed class ToonPathOptions
     }
 
     /// <summary>
-    ///     The steps an evaluation may take per value of the document, beyond <see cref="MaxSteps"/> (default 16; 0 makes
+    ///     The steps an evaluation may take per value of the document (per line, when the path is evaluated over TOON
+    ///     text), beyond <see cref="MaxSteps"/> (default 16; 0 makes
     ///     <see cref="MaxSteps"/> the whole budget). Beyond the budget, evaluation throws
     ///     <see cref="ToonPathLimitException"/>: nested descendant segments (<c>$..*..*..*</c>) multiply the values a
     ///     query visits.

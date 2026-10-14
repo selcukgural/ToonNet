@@ -183,19 +183,25 @@ To read the items of an array inside a document from a stream as they arrive, se
 
 ## Paths From Untrusted Input
 
-Regular expressions run on .NET's non-backtracking engine (linear time), and `ToonPathOptions` bound everything else.
-Each descendant segment (`..`) visits the whole subtree, so nested ones multiply the work (`$..*..*..*..*` on a small,
-deep document would visit billions of values); the step budget and the timeout stop such queries. A step is a value
-visited, a filter tested, or 16 characters of a string an operation reads (comparisons, `lower`, `match`, ...);
+`ToonPathOptions` bound the work of a query. Each descendant segment (`..`) visits the whole subtree, so nested ones
+multiply the work (`$..*..*..*..*` on a small, deep document would visit billions of values); the step budget and the
+timeout stop such queries. A step is a value visited, a filter tested, a segment of a normalized path
+`SelectMatches` writes, or 16 characters of a string an operation reads (comparisons, `lower`, `contains`, ...);
 comparing or passing an object or array costs a step per value in it, so `$.items[?lower($.bigText) == 'x']` cannot
 read a large string once per item for free.
+
+Regular expressions run on .NET's non-backtracking engine: linear in the length of the text, but also in the size of
+the pattern's automaton (`[a-z]{1000}` has a thousand states). A match spends a step per 64 characters and states before
+it runs, so a large pattern on a long text stops at the budget instead of running for seconds. Patterns that come from a
+document (`match(@.code, @.pattern)`) are charged the same way, and the states a pattern builds while matching are not
+kept beyond the evaluation (except for a few small patterns).
 
 | Limit | Default | Beyond it |
 |-------|---------|-----------|
 | `MaxLength` | 4,096 characters | `ToonPathException` when compiling |
 | `MaxNesting` | 64 levels of filters, parentheses, function calls | `ToonPathException` when compiling |
 | `MaxPatternLength` | 1,024 characters | the pattern is not valid: `match()`/`search()` are false |
-| `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document | `ToonPathLimitException` when evaluating |
+| `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document (per line when evaluating text) | `ToonPathLimitException` when evaluating |
 | `Timeout` | 10 seconds (`Timeout.InfiniteTimeSpan` turns it off) | `ToonPathLimitException` (`IsTimeout`) when evaluating |
 | `Functions`, `StandardFunctionsOnly` | none; extensions allowed | an unknown function is a `ToonPathException` |
 

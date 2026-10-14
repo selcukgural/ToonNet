@@ -28,11 +28,18 @@ internal sealed class EvaluationBudget
         _root = options.MaxStepsPerValue > 0 ? root : null;
     }
 
-    /// <summary>A budget for a document of <paramref name="length"/> characters (each value takes at least one).</summary>
-    public EvaluationBudget(int length, ToonPathOptions options) : this(options)
+    /// <summary>
+    ///     A budget for a document evaluated as text: its lines are counted when <see cref="ToonPathOptions.MaxSteps"/> is
+    ///     used up, a value per line (not a step per character, which a long string would turn into steps for the rest of
+    ///     the query).
+    /// </summary>
+    public EvaluationBudget(Parsing.ToonText text, ToonPathOptions options) : this(options)
     {
-        _remaining = options.MaxSteps + (long)options.MaxStepsPerValue * length;
+        _remaining = options.MaxSteps;
+        _text = options.MaxStepsPerValue > 0 ? text : (Parsing.ToonText?)null;
     }
+
+    private Parsing.ToonText? _text;
 
     private EvaluationBudget(ToonPathOptions options)
     {
@@ -111,6 +118,60 @@ internal sealed class EvaluationBudget
         }
     }
 
+    /// <summary>A pattern from the document (<c>match(@.v, @.pattern)</c>), compiled once per evaluation.</summary>
+    public PathPattern? Pattern(string pattern, bool full)
+    {
+        // Compiling a pattern costs about its length in steps (it is cached, but other documents can fill the cache)
+        SpendText(pattern.Length);
+        return ToonPathRegex.Get(pattern, full, Options.MaxPatternLength);
+    }
+
+    /// <summary>
+    ///     The regular expression of a pattern, after spending for a match on a text of <paramref name="length"/>
+    ///     characters: a step per 64 characters and states of the automaton. A heavy pattern is compiled for this
+    ///     evaluation (and spends for that), so the states it builds are released with the evaluation; a light one may
+    ///     come from the small shared cache.
+    /// </summary>
+    public System.Text.RegularExpressions.Regex RegexFor(PathPattern pattern, int length)
+    {
+        SpendMany((long)length * pattern.Weight / 64 + 1);
+
+        if (ToonPathRegex.GetShared(pattern) is { } shared)
+        {
+            return shared;
+        }
+
+        if (_regexes != null && _regexes.TryGetValue(pattern, out var regex))
+        {
+            return regex;
+        }
+
+        SpendMany(pattern.Weight + 64L);
+        regex = pattern.Compile();
+
+        // A few patterns are kept for the evaluation; more (each value with its own pattern) are compiled for each use
+        if ((_regexes ??= new Dictionary<PathPattern, System.Text.RegularExpressions.Regex>(ReferenceEqualityComparer.Instance)).Count < 16)
+        {
+            _regexes[pattern] = regex;
+        }
+
+        return regex;
+    }
+
+    private Dictionary<PathPattern, System.Text.RegularExpressions.Regex>? _regexes;
+
+    /// <summary>Spends more steps than an <see cref="int"/> holds.</summary>
+    public void SpendMany(long steps)
+    {
+        while (steps > int.MaxValue)
+        {
+            Spend(int.MaxValue);
+            steps -= int.MaxValue;
+        }
+
+        Spend((int)steps);
+    }
+
     /// <summary>Spends a step per 16 characters of text an operation reads or writes.</summary>
     public void SpendText(int length)
     {
@@ -133,8 +194,19 @@ internal sealed class EvaluationBudget
             }
         }
 
+        if (_text is { } text)
+        {
+            _remaining += Options.MaxStepsPerValue * (text.Span.Count('\n') + 1L);
+            _text = null;
+
+            if (_remaining >= 0)
+            {
+                return;
+            }
+        }
+
         throw new ToonPathLimitException(
-            "The path does too much work for the size of the document (see ToonPathOptions); nested descendant segments (..) multiply the values a query visits.",
+            "The path does too much work for the size of the document (see ToonPathOptions.MaxSteps and MaxStepsPerValue): nested descendant segments (..), patterns and functions over long text, and paths of many values all spend steps.",
             isTimeout: false);
     }
 
@@ -194,7 +266,12 @@ internal static class ToonPathEvaluator
         public int Index { get; } = index;
 
         /// <summary>The normalized path (RFC 9535 §2.7): <c>$['users'][0]</c>.</summary>
-        public static string Format(Location? location)
+        /// <param name="location">The location.</param>
+        /// <param name="work">
+        ///     The budget of the evaluation, which pays for the path first: a step per segment and per 16 characters of its
+        ///     names (paths of deep values with long keys are long, and each selected value has one).
+        /// </param>
+        public static string Format(Location? location, EvaluationBudget work)
         {
             if (location == null)
             {
@@ -202,11 +279,16 @@ internal static class ToonPathEvaluator
             }
 
             var chain = new List<Location>();
+            var names = 0L;
 
             for (var l = location; l != null; l = l.Parent)
             {
                 chain.Add(l);
+                work.Spend();
+                names += l.Name?.Length ?? 0;
             }
+
+            work.SpendMany(names / 16);
 
             var text = new StringBuilder("$");
 
@@ -624,11 +706,13 @@ internal static class ToonPathEvaluator
 
         work.SpendText(text.Value.Length);
         var full = function.Function == FunctionKind.Match;
-        var regex = function.HasLiteralRegex
-            ? function.LiteralRegex
-            : Evaluate(function.Arguments[1], root, current, work) is ToonString pattern ? ToonPathRegex.Get(pattern.Value, full, work.Options.MaxPatternLength) : null;
+        var pattern = function.HasLiteralPattern
+            ? function.LiteralPattern
+            : Evaluate(function.Arguments[1], root, current, work) is ToonString literal ? work.Pattern(literal.Value, full) : null;
 
-        return regex != null && regex.IsMatch(text.Value);
+        // A match takes time in proportion to the length of the text and the size of the pattern's automaton, and
+        // cannot be stopped once it runs: spend for it first
+        return pattern != null && work.RegexFor(pattern, text.Value.Length).IsMatch(text.Value);
     }
 
     /// <summary>The number of Unicode scalar values (a surrogate pair is one).</summary>

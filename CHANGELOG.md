@@ -92,6 +92,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Extensions.Yaml:** Keys that differ only in their tag (`a` and `!!str a`) are duplicate keys, as in TOON,
   instead of the second replacing the first. `ToYaml` quotes `<<`, `=` and text starting with a byte order mark, which
   YAML 1.1 readers would read as a merge key, a value key or without the mark. Tag errors no longer repeat the value.
+- **ToonNet.Core:** Keys from documents in error messages (the path of a conversion error, a duplicate key) are escaped
+  and cut to 64 characters: a key with a line break or a bidirectional control cannot forge a log line or change how a
+  message reads, and a long key cannot make a huge message. Paths write such keys as `$['a b']`; the unknown-key error
+  of `UnmappedMemberHandling.Disallow` names the key only in its path.
 
 ### Fixed
 - **ToonNet.Core:** A number read into an enum wrapped around its underlying type (`300` into a `byte` enum gave 44,

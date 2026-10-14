@@ -35,6 +35,7 @@ public sealed class ToonPathFunctions
 {
     // Replaced on each change, so paths being compiled on other threads read a consistent set
     private volatile Dictionary<string, PathFunction> _functions = new(StringComparer.Ordinal);
+    private readonly object _gate = new();
 
     /// <summary>The names of the registered functions.</summary>
     public IReadOnlyCollection<string> Names => _functions.Keys;
@@ -121,7 +122,7 @@ public sealed class ToonPathFunctions
             throw new ArgumentException($"'{name}' is a built-in function.", nameof(name));
         }
 
-        lock (this)
+        lock (_gate)
         {
             if (_functions.ContainsKey(name))
             {

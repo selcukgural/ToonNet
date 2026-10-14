@@ -181,6 +181,47 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     }
 
     /// <summary>
+    ///     Removes the properties with the given keys at once, in time linear in the number of properties (removing them
+    ///     one by one shifts the following properties each time); the others keep their order.
+    /// </summary>
+    /// <returns>The number of properties removed.</returns>
+    internal int RemoveKeys(HashSet<string> keys)
+    {
+        var write = 0;
+
+        for (var read = 0; read < _count; read++)
+        {
+            if (!keys.Contains(_entries[read].Key))
+            {
+                _entries[write++] = _entries[read];
+            }
+        }
+
+        var removed = _count - write;
+
+        if (removed == 0)
+        {
+            return 0;
+        }
+
+        Array.Clear(_entries, write, removed);
+        _count = write;
+        _version++;
+
+        if (_indexes != null)
+        {
+            _indexes.Clear();
+
+            for (var i = 0; i < _count; i++)
+            {
+                _indexes[_entries[i].Key] = i;
+            }
+        }
+
+        return removed;
+    }
+
+    /// <summary>
     ///     Removes all properties.
     /// </summary>
     public void Clear()
