@@ -253,6 +253,12 @@ public static partial class ToonSerializer
                 $"Value tuples ({type.Name}) are not supported: their items are fields, not properties. Use a record or a class.");
         }
 
+        if (type is { IsValueType: true, IsGenericType: true } && (type.GetGenericTypeDefinition() == typeof(Memory<>) ||
+                                                                   type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>)))
+        {
+            throw new NotSupportedException($"{type.Name} is not supported: its items are not properties. Use an array ({type.GetGenericArguments()[0].Name}[]).");
+        }
+
         return TypeMetadataCache.GetOrAdd(type, static t =>
         {
             var properties = new List<(PropertyMetadata Metadata, int Order, int Index)>();
@@ -278,7 +284,8 @@ public static partial class ToonSerializer
 
             foreach (var prop in declared)
             {
-                if (prop.GetIndexParameters().Length > 0 || prop.GetGetMethod() == null ||
+                // A ref struct (Span<T>) cannot be boxed into a value: such a property is left out, as by the generator
+                if (prop.GetIndexParameters().Length > 0 || prop.GetGetMethod() == null || prop.PropertyType.IsByRefLike ||
                     prop.GetCustomAttribute<ToonIgnoreAttribute>() != null)
                 {
                     continue;

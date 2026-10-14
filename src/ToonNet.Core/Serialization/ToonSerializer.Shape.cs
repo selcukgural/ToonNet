@@ -35,6 +35,9 @@ public static partial class ToonSerializer
         private readonly int _indent = options.ToonOptions.IndentSize;
         private readonly char _delimiter = options.ToonOptions.Delimiter;
 
+        /// <summary>Separates the choices of a placeholder: '|', or '/' when '|' is the delimiter of the cells.</summary>
+        private readonly char _or = options.ToonOptions.Delimiter == '|' ? '/' : '|';
+
         public override string ToString() => _text.ToString();
 
         public void WriteRoot(Type type)
@@ -48,6 +51,9 @@ public static partial class ToonSerializer
                     _visiting.Add(type);
                     WriteArray(null, inner!, 0);
                     break;
+                case Kind.Dictionary when KeyedColumns(inner!) is { } columns:
+                    WriteKeyedTable(null, columns, 0);
+                    break;
                 case Kind.Dictionary:
                     _visiting.Add(type);
                     WriteMember("<key>", inner!, 0);
@@ -56,6 +62,25 @@ public static partial class ToonSerializer
                     WriteFields(type, 0);
                     break;
             }
+        }
+
+        /// <summary>A cell of a table header: a name, or a name with the columns of a nested group (<c>Customer{Name,Country}</c>).</summary>
+        private sealed record Column(string Header, List<string> Placeholders);
+
+        /// <summary>Whether values of the type (or of the property) are written by a converter, whose output is unknown.</summary>
+        private bool IsConverted(Type type, PropertyMetadata? property = null) =>
+            property?.Converter != null || options.GetConverter(type) != null ||
+            (Classify(type, out _) == Kind.Object && GetTypeMetadata(type).TypeConverter != null);
+
+        /// <summary>The columns of a dictionary's value type when the serializer writes it as a keyed table (§9.5), or null.</summary>
+        private List<Column>? KeyedColumns(Type valueType) =>
+            Classify(valueType, out _) == Kind.Object && !IsConverted(valueType) && !_visiting.Contains(valueType) ? FlatColumns(valueType, 0) : null;
+
+        private void WriteKeyedTable(string? key, List<Column> columns, int depth)
+        {
+            var bracket = "[N:" + (_delimiter == ',' ? "" : _delimiter.ToString()) + "]";
+            Line(depth, $"{key}{bracket}{{{string.Join(_delimiter, columns.Select(c => c.Header))}}}:");
+            Line(depth + 1, "<key>: " + string.Join(_delimiter, columns.SelectMany(c => c.Placeholders)));
         }
 
         private static Kind Classify(Type type, out Type? inner)
@@ -98,16 +123,27 @@ public static partial class ToonSerializer
             return null;
         }
 
-        /// <summary>The placeholder of a value: <c>&lt;integer&gt;</c>, <c>&lt;Draft|Active&gt;</c>, <c>&lt;string|null&gt;</c>.</summary>
-        private static string Placeholder(Type type)
+        /// <summary>
+        ///     The placeholder of a value: <c>&lt;integer&gt;</c>, <c>&lt;Draft|Active&gt;</c>, <c>&lt;string|null&gt;</c>;
+        ///     <paramref name="mayBeNull"/> adds <c>null</c> for a nullable reference.
+        /// </summary>
+        private string Placeholder(Type type, bool mayBeNull = false, bool converted = false)
         {
             var underlying = Nullable.GetUnderlyingType(type);
             var target = underlying ?? type;
             string name;
 
-            if (target.IsEnum)
+            if (converted)
             {
-                name = string.Join('|', Enum.GetNames(target));
+                name = "any"; // what a converter writes is not known from the type
+            }
+            else if (target.IsEnum && target.IsDefined(typeof(FlagsAttribute), inherit: false))
+            {
+                name = "flags: " + string.Join(_or, Enum.GetNames(target)); // written as "Read, Write"
+            }
+            else if (target.IsEnum)
+            {
+                name = string.Join(_or, Enum.GetNames(target));
             }
             else if (target == typeof(string) || target == typeof(char))
             {
@@ -154,7 +190,7 @@ public static partial class ToonSerializer
                 name = "any";
             }
 
-            return underlying != null ? $"<{name}|null>" : $"<{name}>";
+            return underlying != null || mayBeNull ? $"<{name}{_or}null>" : $"<{name}>";
         }
 
         private void Line(int depth, string text)
@@ -180,7 +216,8 @@ public static partial class ToonSerializer
                     continue;
                 }
 
-                WriteMember(GetPropertyName(property, metadata, options), property.Property.PropertyType, depth, MayBeNull(property.Property));
+                WriteMember(GetPropertyName(property, metadata, options), property.Property.PropertyType, depth, MayBeNull(property.Property),
+                            IsConverted(property.Property.PropertyType, property));
             }
 
             _visiting.Remove(type);
@@ -195,21 +232,26 @@ public static partial class ToonSerializer
 
         private readonly System.Reflection.NullabilityInfoContext _nullability = new();
 
-        private void WriteMember(string name, Type type, int depth, bool mayBeNull = false)
+        private void WriteMember(string name, Type type, int depth, bool mayBeNull = false, bool converted = false)
         {
             var key = name == "<key>" ? name : Shared.ToonKeys.Encode(name);
 
-            switch (Classify(type, out var inner))
+            var kind = Classify(type, out var inner);
+
+            switch (converted ? Kind.Scalar : kind)
             {
                 case Kind.Scalar:
-                    var placeholder = Placeholder(type);
-                    Line(depth, $"{key}: {(mayBeNull && !placeholder.EndsWith("|null>") ? placeholder[..^1] + "|null>" : placeholder)}");
+                    Line(depth, $"{key}: {Placeholder(type, mayBeNull, converted)}");
                     break;
                 case Kind.Collection or Kind.Dictionary when !_visiting.Add(type):
                     Line(depth, $"{key}: <{type.Name}>"); // a collection within itself
                     break;
                 case Kind.Collection:
                     WriteArray(key, inner!, depth);
+                    _visiting.Remove(type);
+                    break;
+                case Kind.Dictionary when KeyedColumns(inner!) is { } columns:
+                    WriteKeyedTable(key, columns, depth);
                     _visiting.Remove(type);
                     break;
                 case Kind.Dictionary:
@@ -237,14 +279,18 @@ public static partial class ToonSerializer
         {
             var header = (key ?? "") + "[N" + (_delimiter == ',' ? "" : _delimiter.ToString()) + "]";
 
-            switch (Classify(element, out var inner))
+            var converted = IsConverted(element);
+
+            var kind = Classify(element, out var inner);
+
+            switch (converted ? Kind.Scalar : kind)
             {
                 case Kind.Scalar:
-                    Line(depth, $"{header}: {Placeholder(element)}{_delimiter}...");
+                    Line(depth, $"{header}: {Placeholder(element, converted: converted)}{_delimiter}...");
                     return;
-                case Kind.Object when !_visiting.Contains(element) && FlatFields(element) is { } fields:
-                    Line(depth, $"{header}{{{string.Join(_delimiter, fields.Select(f => f.Name))}}}:");
-                    Line(depth + 1, string.Join(_delimiter, fields.Select(f => Placeholder(f.Type))));
+                case Kind.Object when !_visiting.Contains(element) && FlatColumns(element, 0) is { } columns:
+                    Line(depth, $"{header}{{{string.Join(_delimiter, columns.Select(c => c.Header))}}}:");
+                    Line(depth + 1, string.Join(_delimiter, columns.SelectMany(c => c.Placeholders)));
                     return;
             }
 
@@ -252,28 +298,54 @@ public static partial class ToonSerializer
             WriteListItem(element, inner, depth + 1);
         }
 
-        /// <summary>The members of a type when all are scalars (a table), or null.</summary>
-        private List<(string Name, Type Type)>? FlatFields(Type type)
+        /// <summary>
+        ///     The columns of a type when the serializer writes its objects as table rows: members that are scalars, or flat
+        ///     objects themselves (a nested field group, §9.4); null otherwise.
+        /// </summary>
+        private List<Column>? FlatColumns(Type type, int level)
         {
-            var metadata = GetTypeMetadata(type);
-            var fields = new List<(string, Type)>();
-
-            foreach (var property in metadata.Properties)
+            if (level > 8 || _visiting.Contains(type))
             {
-                if (!options.IncludeReadOnlyProperties && property.Setter == null && !IsConstructorBound(metadata, property))
-                {
-                    continue;
-                }
-
-                if (Classify(property.Property.PropertyType, out _) != Kind.Scalar)
-                {
-                    return null;
-                }
-
-                fields.Add((Shared.ToonKeys.Encode(GetPropertyName(property, metadata, options)), property.Property.PropertyType));
+                return null;
             }
 
-            return fields.Count > 0 ? fields : null;
+            var metadata = GetTypeMetadata(type);
+            var columns = new List<Column>();
+            _visiting.Add(type);
+
+            try
+            {
+                foreach (var property in metadata.Properties)
+                {
+                    if (!options.IncludeReadOnlyProperties && property.Setter == null && !IsConstructorBound(metadata, property))
+                    {
+                        continue;
+                    }
+
+                    var propertyType = property.Property.PropertyType;
+                    var name = Shared.ToonKeys.Encode(GetPropertyName(property, metadata, options));
+                    var converted = IsConverted(propertyType, property);
+
+                    if (converted || Classify(propertyType, out _) == Kind.Scalar)
+                    {
+                        columns.Add(new Column(name, [Placeholder(propertyType, MayBeNull(property.Property), converted)]));
+                    }
+                    else if (Classify(propertyType, out _) == Kind.Object && FlatColumns(propertyType, level + 1) is { } group)
+                    {
+                        columns.Add(new Column($"{name}{{{string.Join(_delimiter, group.Select(c => c.Header))}}}", [.. group.SelectMany(c => c.Placeholders)]));
+                    }
+                    else
+                    {
+                        return null;
+                    }
+                }
+            }
+            finally
+            {
+                _visiting.Remove(type);
+            }
+
+            return columns.Count > 0 ? columns : null;
         }
 
         /// <summary>One list item: <c>- </c> followed by the item, whose first line shares the hyphen's line (§10).</summary>

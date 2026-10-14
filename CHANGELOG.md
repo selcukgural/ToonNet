@@ -210,6 +210,18 @@ Defaults that let documents and responses do more than the code meant, now as Sy
 - **ToonNet.Core:** Reflection reads like generated code: a getter-only override uses the setter of the property it
   overrides, `[ToonInclude]` on a private setter of a base class is honored, and a property hidden with `new` is
   written and read once, as the derived type's. Errors for nullable value types name the underlying type.
+- **ToonNet.Core:** Writing with a `ToonTypeInfo` started the document again when one value needed the reflection-based
+  serializer, which enumerated one-shot sequences twice (losing their items) and called getters twice; that value
+  alone is converted so now. `ToonTypeInfo.CreateList`/`CreateDictionary` apply the converters of the item type, as
+  the serializer does. Dictionary keys of type `DateOnly`, `TimeOnly`, `TimeSpan` and `bool` are written as their
+  values are (`TimeOnly` keys lost their seconds and collided); two keys written as the same text (`1` and `"1"` in a
+  dictionary of objects) are an error instead of losing one value. A property of a ref struct type (`Span<T>`) is left
+  out instead of failing with `InvalidProgramException`, and `Memory<T>` is a clear `NotSupportedException`.
+  `ReadOnlyCollection<T>`, `FrozenSet<T>`, `FrozenDictionary<TKey, TValue>`, `IImmutableDictionary<TKey, TValue>` and
+  types that implement only `IReadOnlyDictionary<TKey, TValue>` can be read. A canceled `SerializeCollectionToFileAsync`
+  or `SerializeDocumentsAsync` to a path no longer empties the file, and long paths in error messages are shortened.
+- **ToonNet.Core:** `ToonPrompt.DescribeShape` follows the serializer's forms: field groups and keyed tables, `|null`
+  in table cells, `[Flags]` enums, `<any>` for converted members, and `/` between choices when `|` is the delimiter.
 - **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
   so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that

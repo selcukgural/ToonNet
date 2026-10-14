@@ -427,7 +427,10 @@ public class DirectWritingParityTests
         AssertParity(new List<object> { new Dictionary<string, int> { ["Id"] = 1 }, new SameShapeA { Id = 2 } });
         AssertParity(new Renamed { A = 1, B = 2 });
         AssertParity(new Hashtable { ["k"] = 1 });
-        AssertParity(new Dictionary<object, int> { [1] = 1, ["1"] = 2 }); // keys that format alike
+        // Keys that are written alike would lose a value: an error on both paths
+        var alike = new Dictionary<object, int> { [1] = 1, ["1"] = 2 };
+        Assert.Throws<ToonEncodingException>(() => ToonSerializer.Serialize(alike));
+        Assert.Throws<ToonEncodingException>(() => ToonSerializer.SerializeToValue(alike));
         AssertParity(new List<ToonValue> { new ToonString("a"), new ToonObject() });
 
         var withConverters = new ToonSerializerOptions();

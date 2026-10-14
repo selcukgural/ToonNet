@@ -227,6 +227,30 @@ public partial class Throwing
     public int X { get; }
 }
 
+public class PlainValue
+{
+    public int P { get; set; } = 3;
+}
+
+[ToonSerializable]
+public partial class Lazy
+{
+    public int Reads;
+
+    public IEnumerable<int>? Seq { get; set; }
+
+    public int Counted
+    {
+        get
+        {
+            Reads++;
+            return 1;
+        }
+    }
+
+    public object? Any { get; set; }
+}
+
 [ToonSerializable]
 public partial class NullableHolder
 {
@@ -522,6 +546,44 @@ public class GeneratedParityTests
 
         Assert.Contains("target type: Int32", generated.Message);
         Assert.Equal(reflected.Message, generated.Message);
+    }
+
+    [Fact]
+    public void TypeInfoWriting_EnumeratesSequencesOnce_WhenAValueNeedsReflection()
+    {
+        var enumerations = 0;
+
+        IEnumerable<int> OneShot()
+        {
+            enumerations++;
+            yield return 1;
+            yield return 2;
+        }
+
+        var lazy = new Lazy { Seq = OneShot(), Any = new PlainValue() };
+
+        Assert.Equal("Seq[2]: 1,2\nCounted: 1\nAny:\n  P: 3", ToonSerializer.Serialize(lazy, Lazy.ToonTypeInfo));
+        Assert.Equal((1, 1), (enumerations, lazy.Reads));
+    }
+
+    private sealed class DeclaredConverter : IToonConverter
+    {
+        public bool CanConvert(Type type) => type == typeof(UserSummary);
+
+        public ToonNet.Core.Models.ToonValue Write(object? value, ToonSerializerOptions options) => new ToonNet.Core.Models.ToonString("U:" + ((UserSummary)value!).Name);
+
+        public object Read(ToonNet.Core.Models.ToonValue value, Type targetType, ToonSerializerOptions options) => new UserSummary();
+    }
+
+    [Fact]
+    public void ComposedTypeInfos_ConvertItemsByTheirDeclaredType()
+    {
+        var options = new ToonSerializerOptions();
+        options.AddConverter(new DeclaredConverter());
+        var users = new Dictionary<string, UserSummary> { ["a"] = new UserEntity { Name = "bob" } };
+
+        Assert.Equal("a: \"U:bob\"", ToonSerializer.Serialize(users, ToonTypeInfo.CreateDictionary(UserSummary.ToonTypeInfo), options));
+        Assert.Equal("a: \"U:bob\"", ToonSerializer.Serialize(users, options));
     }
 
     [Fact]

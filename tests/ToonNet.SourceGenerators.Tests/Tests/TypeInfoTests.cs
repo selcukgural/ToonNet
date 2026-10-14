@@ -132,10 +132,11 @@ public partial class TypeInfoTests
     [Fact]
     public void ValuesOnlyReflectionHandles_GoThroughTheGeneratedTree_WithTheSameText()
     {
-        // An object without generated code in a property typed object: the whole document is written by the generated
-        // tree-based method (read back, it is a dictionary, which needs no reflection)
+        // An object without generated code in a property typed object: that value is written through the tree, the rest
+        // directly, so sequences are enumerated and getters called once (read back, it is a dictionary, which needs
+        // no reflection)
         var node = new WriterNode { Name = "n", Anything = new PlainBox { X = 3 }, Rows = Rows() };
-        AssertSame(node, WriterNode.ToonTypeInfo, direct: false);
+        AssertSame(node, WriterNode.ToonTypeInfo);
 
         // Reading a property whose type has no generated code goes through the generated tree-based method; writing,
         // the object's own tree is written in place (no fallback of the whole document)

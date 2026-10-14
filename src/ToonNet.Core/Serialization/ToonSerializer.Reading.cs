@@ -634,6 +634,12 @@ public static partial class ToonSerializer
                 return name == "ImmutableStack" ? items => fromRange(helpers.Reverse(items)) : fromRange;
             }
 
+            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Frozen" } &&
+                FrozenFactory(targetType, "FrozenSet", "ToFrozenSet", typeof(IEnumerable<>).MakeGenericType(elementType), [elementType]) is { } frozen)
+            {
+                return items => frozen(items);
+            }
+
             if (targetType.IsInterface)
             {
                 return targetType.IsAssignableFrom(typeof(HashSet<>).MakeGenericType(elementType)) ? helpers.ToHashSet : static _ => null;
@@ -648,20 +654,49 @@ public static partial class ToonSerializer
             // Collections created from their items: Queue<T>, Stack<T>, ConcurrentQueue<T>, ConcurrentStack<T>, ...
             var enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
 
-            if (targetType.GetConstructor([enumerableType]) is not { } fromItems)
+            // (or from a list of them: ReadOnlyCollection<T>)
+            var listType = typeof(IList<>).MakeGenericType(elementType);
+
+            if ((targetType.GetConstructor([enumerableType]) ?? targetType.GetConstructor([listType])) is not { } fromItems)
             {
                 return static _ => null;
             }
 
             var list = Expression.Parameter(typeof(IList), "items");
             var construct = Expression.Lambda<Func<IList, object?>>(
-                Expression.Convert(Expression.New(fromItems, Expression.Convert(list, enumerableType)), typeof(object)), list).Compile();
+                Expression.Convert(Expression.New(fromItems, Expression.Convert(list, fromItems.GetParameters()[0].ParameterType)), typeof(object)), list).Compile();
 
             // A stack is written top first and built by pushing: reverse, so the same top comes back
             return targetType is { IsGenericType: true, Name: "Stack`1" or "ConcurrentStack`1" }
                 ? items => construct(helpers.Reverse(items))
                 : construct;
         }
+    }
+
+    /// <summary>
+    ///     A call of a System.Collections.Frozen factory (<c>FrozenSet.ToFrozenSet(items, comparer: null)</c>) on the read
+    ///     items or entries, or null when the type is not one of its results.
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
+    private static Func<object, object?>? FrozenFactory(Type targetType, string factoryName, string methodName, Type sourceType, Type[] typeArguments)
+    {
+        var method = targetType.Assembly.GetType($"System.Collections.Frozen.{factoryName}")?
+                               .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                               .FirstOrDefault(m => m.Name == methodName && m.GetGenericArguments().Length == typeArguments.Length &&
+                                                    m.GetParameters().Length == 2)?
+                               .MakeGenericMethod(typeArguments);
+
+        if (method == null || !targetType.IsAssignableFrom(method.ReturnType))
+        {
+            return null;
+        }
+
+        var source = Expression.Parameter(typeof(object), "source");
+        var call = Expression.Call(method, Expression.Convert(source, sourceType), Expression.Constant(null, method.GetParameters()[1].ParameterType));
+        return Expression.Lambda<Func<object, object?>>(Expression.Convert(call, typeof(object)), source).Compile();
     }
 
     /// <summary>
@@ -840,7 +875,8 @@ public static partial class ToonSerializer
             var dictionaryInterface = targetType.IsGenericType && targetType.GetGenericTypeDefinition() is var definition &&
                                       (definition == typeof(IDictionary<,>) || definition == typeof(IReadOnlyDictionary<,>))
                 ? targetType
-                : targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+                : targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)) ??
+                  targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>));
 
             if (dictionaryInterface == null)
             {
@@ -882,9 +918,18 @@ public static partial class ToonSerializer
                 return static entries => entries;
             }
 
+            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Frozen" } &&
+                FrozenFactory(targetType, "FrozenDictionary", "ToFrozenDictionary",
+                              typeof(IEnumerable<>).MakeGenericType(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType)), [keyType, valueType]) is { } frozen)
+            {
+                return entries => frozen(entries);
+            }
+
             if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
             {
-                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
+                // IImmutableDictionary<TKey, TValue> is created as an ImmutableDictionary<TKey, TValue>
+                var name = targetType.Name.Split('`')[0] is "IImmutableDictionary" ? "ImmutableDictionary" : targetType.Name.Split('`')[0];
+                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{name}");
                 var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
                                              .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1 &&
                                                                   m.GetGenericArguments().Length == 2)

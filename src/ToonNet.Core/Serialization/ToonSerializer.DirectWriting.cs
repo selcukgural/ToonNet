@@ -586,7 +586,7 @@ public static partial class ToonSerializer
         {
             if (_generatedOnly)
             {
-                return ToGeneratedTree(value, declaredType, depth);
+                return ToGeneratedTree(value, declaredType, propertyConverter, depth);
             }
 
             return SerializeValue(value, declaredType, _options, depth, new SerializerState(), propertyConverter);
@@ -597,11 +597,17 @@ public static partial class ToonSerializer
         ///     <see cref="ToonDocument"/> or JSON value holds one), or through the generated tree-based method of its
         ///     type; anything else needs the reflection-based serializer.
         /// </summary>
-        private ToonValue? ToGeneratedTree(object? value, Type declaredType, int depth)
+        private ToonValue? ToGeneratedTree(object? value, Type declaredType, IToonConverter? propertyConverter, int depth)
         {
             if (value == null)
             {
                 return _ignoreNulls ? null : ToonNull.Instance;
+            }
+
+            // A property's [ToonConverter] comes first, as in SerializeValue
+            if (propertyConverter != null)
+            {
+                return propertyConverter.Write(value, _options);
             }
 
             var runtimeType = value.GetType();
@@ -621,9 +627,12 @@ public static partial class ToonSerializer
                 return documentValue;
             }
 
+            // A value without generated code is converted as the generated tree-based methods convert it (through
+            // the reflection-based serializer), for this value only: starting the document again would enumerate its
+            // sequences and call its getters a second time
             return GetGeneratedSerializer(WrittenType(declaredType, runtimeType, _options), _options) is { } generated
                 ? generated.Serialize(value, _options, depth)
-                : throw new GeneratedOnlyFallbackException();
+                : SerializeForGeneratedCode(value, declaredType, _options, depth);
         }
 
         #region Objects and dictionaries
@@ -691,8 +700,16 @@ public static partial class ToonSerializer
 
             var count = 0;
 
+            // Keys of some types can be written as the same text: the tree-based path reports it
+            var keys = KeysMayCollide(info.Entries!.KeyType) ? new HashSet<string>(StringComparer.Ordinal) : null;
+
             foreach (var (rawKey, entryValue) in info.Entries!.Read(dictionary))
             {
+                if (keys != null && !keys.Add(FormatDictionaryKey(rawKey)))
+                {
+                    throw new NotSupportedException();
+                }
+
                 if (WriteField(FormatDictionaryKey(rawKey), entryValue, info.Entries.ValueType, null, lineDepth, childDepth,
                                count > 0 || !firstOnCurrentLine, depth + 1))
                 {

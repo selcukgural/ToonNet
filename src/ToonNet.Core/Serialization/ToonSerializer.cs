@@ -586,6 +586,9 @@ public static partial class ToonSerializer
     /// </summary>
     private static async ValueTask WriteFileAsync(string filePath, Func<FileStream, ValueTask> write, CancellationToken cancellationToken)
     {
+        // A canceled write does not empty the file it would replace
+        cancellationToken.ThrowIfCancellationRequested();
+
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
 
         await using (fileStream.ConfigureAwait(false))

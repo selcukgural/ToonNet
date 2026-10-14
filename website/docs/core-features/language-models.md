@@ -62,8 +62,12 @@ Lines[N]{Sku,Quantity}:
 ```
 
 Placeholders are `<string>`, `<integer>`, `<number>`, `<boolean>`, `<date-time>`, `<date>`, `<time>`, `<duration>`,
-`<uuid>`, `<uri>`, the names of an enum, and `<any>`; `|null` marks nullable values, and `<key>` the keys of a
-dictionary. `DescribeShape` uses reflection (it is not available for trimming or NativeAOT).
+`<uuid>`, `<uri>`, the names of an enum (`<flags: Read|Write>` for a `[Flags]` enum, written as `"Read, Write"`), and
+`<any>` (also for a member a converter writes); `|null` marks nullable values, and `<key>` the keys of a dictionary.
+With `|` as the delimiter, the choices of a placeholder are separated by `/` (`<string/null>`), so they do not read as
+cells. Flat nested objects in a table are field groups (`Lines[N]{Sku,Price{Amount,Currency}}:`) and a dictionary of
+flat objects is a keyed table (`Servers[N:]{Host,Port}:` with rows `<key>: <string>,<integer>`), as the serializer
+writes them. `DescribeShape` uses reflection (it is not available for trimming or NativeAOT).
 
 ## Reading an Answer
 

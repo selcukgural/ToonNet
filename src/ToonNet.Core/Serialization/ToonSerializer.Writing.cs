@@ -274,12 +274,14 @@ public static partial class ToonSerializer
             var key = FormatDictionaryKey(rawKey);
             state.Push(key);
             var itemValue = SerializeValue(entryValue, valueType, options, depth + 1, state);
-            state.Pop();
 
-            if (itemValue != null)
+            // Two keys written as the same text (1 and "1" in a dictionary of objects) would lose one value
+            if (itemValue != null && !obj.Properties.TryAdd(key, itemValue))
             {
-                obj.Properties[key] = itemValue;
+                throw ToonEncodingException.AtPath("Two keys of the dictionary are written as the same text", state.Path);
             }
+
+            state.Pop();
         }
 
         result = obj;
@@ -485,10 +487,25 @@ public static partial class ToonSerializer
             Enum e            => e.ToString(),
             DateTime dt       => ToonDateFormat.ToString(dt),
             DateTimeOffset dt => ToonDateFormat.ToString(dt),
+
+            // As values of these types are written (the default formats lose seconds or depend on the culture)
+            DateOnly d        => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            TimeOnly t        => t.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture).TrimEnd('.'),
+            TimeSpan ts       => ts.ToString("c", CultureInfo.InvariantCulture),
+            bool b            => b ? "true" : "false",
             IFormattable f    => f.ToString(null, CultureInfo.InvariantCulture),
             _                 => key.ToString() ?? string.Empty
         };
     }
+
+    /// <summary>
+    ///     Whether two different keys of the type can be written as the same text: keys of <c>object</c> and of types
+    ///     written with <c>ToString()</c>; not strings, numbers, enums, dates and times, or Guids.
+    /// </summary>
+    internal static bool KeysMayCollide(Type keyType) =>
+        !(keyType == typeof(string) || keyType.IsPrimitive || keyType.IsEnum || keyType == typeof(decimal) || keyType == typeof(Guid) ||
+          keyType == typeof(DateTime) || keyType == typeof(DateTimeOffset) || keyType == typeof(DateOnly) || keyType == typeof(TimeOnly) ||
+          keyType == typeof(TimeSpan));
 
     /// <summary>
     ///     An <see cref="IAsyncEnumerable{T}"/> is not an <see cref="IEnumerable"/>, so it would be written as an object
