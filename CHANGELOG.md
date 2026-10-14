@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** Objects whose keys come in another order than their properties (as other producers and LLMs write
   them) are read straight from the text; before, one such object made the reflection-based reader read the whole
   document again through the tree. On 200,000 list items with one reordered object: 3.4x faster, half the allocation.
+- **ToonNet.Core:** The reflection-based writer writes arrays and lists of typed primitives (and their nullable forms)
+  from their typed items instead of boxing each one, and formats `DateOnly`, `TimeOnly` and `TimeSpan` on the stack. On
+  2,000 objects with such properties: 2x faster, a third of the allocation.
+- **ToonNet.Core:** Serializing an `IAsyncEnumerable<T>` throws `ToonSerializationException`; before, it was written as an
+  object without properties (an empty document, which reads back as an empty object). The MVC output formatter and
+  `ToonResult` collect such sequences into a list first.
 
 ### Fixed
 - **ToonNet.AspNetCore.Mvc:** An `Accept` value with a charset (`application/toon; charset=utf-16`, or even
@@ -25,6 +31,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.AspNetCore.Mvc:** Calling `AddToonFormatters` more than once no longer adds the formatters twice (the last
   request body limit applies), and its options are validated at startup like those of `AddToonNet`.
 - **ToonNet.AspNetCore:** Calling `AddToonNet` more than once registers `ToonEncoder` and the options validation once.
+- **ToonNet.AspNetCore.Mvc:** A chunked or whitespace-only request body no longer binds an empty object (an empty TOON
+  document); it binds no value, or the default value when the model allows empty input, as MVC handles
+  `Content-Length: 0`. Bodies in charsets other than UTF-8 are decoded strictly, so ill-formed text is a model error
+  instead of text with U+FFFD in it.
+- **ToonNet.Core:** Tables and keyed tables apply a converter registered for a property's declared type, as the tree
+  does; before, the direct writer looked only at the runtime type. A generated row of unknown shape no longer serves as
+  the reference for the key sets of the rows after it.
+- **ToonNet.Core:** `ToonDocumentWriter` rejects strings and keys with an unpaired surrogate before anything of the
+  value is written, and a write that fails part way (the depth limit) leaves the writer faulted, so later writes throw
+  instead of producing broken text.
+- **ToonNet.SourceGenerators:** Generated code writes a collection inline only when its runtime type is `List<T>`,
+  `T[]`, `HashSet<T>` or `Dictionary<TKey, TValue>`; other types (a derived collection with a converter, a converter for
+  the runtime type, a string declared as `IEnumerable<char>`) go to the serializer, so every path writes the same text.
+- **ToonNet.SourceGenerators:** Types with properties named after C# keywords (`@class`) compile. A member named
+  `Serialize` or `Deserialize` no longer clashes with the generated static method: that method is left out and the new
+  warning TOON009 says so (the other generated members, `ToonTypeInfo` included, are still there).
+- **ToonNet.Extensions.Yaml:** `ToYaml` no longer throws `FormatException` for numbers outside 1e-6..1e21 (written in
+  exponent form).
 
 ### Added
 - **ToonNet.Core:** `SerializeAsync(Stream, value)` and `DeserializeAsync<T>(Stream)` in the shape of
