@@ -104,7 +104,7 @@ public static partial class ToonSerializer
     {
         return DirectTypeInfos.GetOrAdd(type, static t =>
         {
-            if (typeof(ToonValue).IsAssignableFrom(t))
+            if (typeof(ToonValue).IsAssignableFrom(t) || ToonJsonInterop.IsDocumentType(t))
             {
                 return new DirectTypeInfo { Kind = DirectKind.Tree };
             }
@@ -165,7 +165,7 @@ public static partial class ToonSerializer
     {
         return GeneratedOnlyTypeInfos.GetOrAdd(type, static t =>
         {
-            if (typeof(ToonValue).IsAssignableFrom(t))
+            if (typeof(ToonValue).IsAssignableFrom(t) || ToonJsonInterop.IsDocumentType(t))
             {
                 return new DirectTypeInfo { Kind = DirectKind.Tree };
             }
@@ -553,8 +553,10 @@ public static partial class ToonSerializer
         {
             if (_generatedOnly)
             {
-                // A ToonValue is its own tree; anything else needs the reflection-based serializer
-                return value as ToonValue ?? throw new GeneratedOnlyFallbackException();
+                // A ToonValue is its own tree (a ToonDocument or JSON value holds one); anything else needs the
+                // reflection-based serializer
+                return value as ToonValue ??
+                       (value != null && ToonJsonInterop.TryToToon(value, out var documentValue) ? documentValue : throw new GeneratedOnlyFallbackException());
             }
 
             return SerializeValue(value, declaredType, _options, depth, new SerializerState(), propertyConverter);

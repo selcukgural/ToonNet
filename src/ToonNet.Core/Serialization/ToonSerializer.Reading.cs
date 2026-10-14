@@ -37,6 +37,12 @@ public static partial class ToonSerializer
             return value;
         }
 
+        // A ToonDocument, JsonElement or JsonNode is created from the value (null included)
+        if (ToonJsonInterop.TryFromToon(value, targetType, out var documentValue))
+        {
+            return documentValue;
+        }
+
         var underlyingType = Nullable.GetUnderlyingType(targetType);
 
         if (value is ToonNull)

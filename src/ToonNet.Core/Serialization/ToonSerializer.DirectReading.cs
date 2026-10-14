@@ -136,7 +136,7 @@ public static partial class ToonSerializer
 
             ReadTypeInfo Info(ReadKind kind) => new() { Kind = kind, Target = target, AcceptsNull = acceptsNull };
 
-            if (typeof(ToonValue).IsAssignableFrom(t) || target == typeof(object))
+            if (typeof(ToonValue).IsAssignableFrom(t) || target == typeof(object) || ToonJsonInterop.IsDocumentType(target))
             {
                 return Info(ReadKind.Tree);
             }
@@ -424,6 +424,11 @@ public static partial class ToonSerializer
                 if (typeof(ToonValue).IsAssignableFrom(info.Target))
                 {
                     return _parser.BuildValue(value) is var tree && info.Target.IsInstanceOfType(tree) ? tree : throw new DirectReadFallbackException();
+                }
+
+                if (ToonJsonInterop.IsDocumentType(info.Target) && ToonJsonInterop.TryFromToon(_parser.BuildValue(value), info.Target, out var document))
+                {
+                    return document;
                 }
             }
 

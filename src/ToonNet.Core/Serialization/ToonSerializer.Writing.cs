@@ -45,6 +45,12 @@ public static partial class ToonSerializer
             return toonValue;
         }
 
+        // A ToonDocument, JsonElement or JsonNode is written as the value it holds
+        if (ToonJsonInterop.TryToToon(value, out var documentValue))
+        {
+            return documentValue;
+        }
+
         if (TrySerializePrimitive(value, out var primitiveValue))
         {
             return primitiveValue;
