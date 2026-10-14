@@ -65,6 +65,17 @@ public class ResourceLimitTests
     }
 
     [Fact]
+    public void HonestListLengths_AreReservedAtOnce()
+    {
+        // 10,000 items in one array (40 KB), not a series of growing arrays that ends on the large object heap
+        var text = "[10000]:\n" + string.Concat(Enumerable.Range(0, 10_000).Select(i => $"  - {i}\n"));
+        ToonSerializer.Deserialize<List<int>>(text);
+
+        var allocated = Allocated(() => ToonSerializer.Deserialize<List<int>>(text));
+        Assert.True(allocated < 64 * 1024, $"{allocated / 1024} KB for 10,000 integers");
+    }
+
+    [Fact]
     public void LineBreaks_DoNotInflateTheLineTable()
     {
         var bytes = new byte[4 * MiB];

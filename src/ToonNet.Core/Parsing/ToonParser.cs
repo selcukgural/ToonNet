@@ -193,6 +193,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _linesPooled = true;
         _position = 0;
         _depth = 0;
+        _reservedListItems = 0;
         _headerSpans = 0;
         _keyCount = 0;
         _headers.Clear();
@@ -1138,7 +1139,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 else
                 {
                     cursor.Form = ArrayForm.List;
-                    cursor.CapacityHint = Math.Min(header.Length, ListCapacityHint);
+                    cursor.CapacityHint = ReserveListItems(header.Length);
                     cursor.MayJump = !_options.StrictMode;
                 }
 
@@ -1317,10 +1318,29 @@ internal sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>
-    ///     The capacity reserved for the items of a list: its items can span several lines, so their number is not known
-    ///     without reading them, and a declared length (which the document controls) never reserves more than this.
+    ///     The capacity reserved for the items of a list once the document's budget (see <see cref="ReserveListItems"/>)
+    ///     is used up.
     /// </summary>
     private const int ListCapacityHint = 16;
+
+    /// <summary>The list item slots reserved in this document so far.</summary>
+    private int _reservedListItems;
+
+    /// <summary>
+    ///     The capacity to reserve for the items of a list with a declared length. Items can span several lines, so their
+    ///     number is not known without reading them; but each starts on a line of its own, so the declared lengths of
+    ///     an honest document add up to at most its number of lines. Declared lengths are reserved while they fit in
+    ///     that budget (a list of 10,000 items gets one array, not a series of growing ones on the large object heap);
+    ///     beyond it, lists start at <see cref="ListCapacityHint"/> and grow, so lengths the document overstates
+    ///     reserve memory only in proportion to its size.
+    /// </summary>
+    private int ReserveListItems(int declaredLength)
+    {
+        var available = Math.Max(_lineCount - _reservedListItems, ListCapacityHint);
+        var reserved = Math.Min(declaredLength, available);
+        _reservedListItems += reserved;
+        return reserved;
+    }
 
     /// <summary>
     ///     The number of rows of a tabular array: the lines that follow at the row depth (or deeper, non-strict mode),
