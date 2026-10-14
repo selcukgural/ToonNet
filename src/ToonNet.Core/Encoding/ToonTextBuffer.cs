@@ -18,8 +18,11 @@ internal sealed class ToonTextBuffer : IDisposable
     private const int InitialChunkSize = 16 * 1024;
     private const int MaxChunkSize = 1024 * 1024;
 
-    /// <summary>The size of the byte chunks <see cref="WriteUtf8Async"/> writes.</summary>
+    /// <summary>The size of the byte chunks UTF-8 output is written in.</summary>
     private const int ByteChunkSize = 16 * 1024;
+
+    /// <summary>The smallest span requested from a buffer writer: room for a surrogate pair (4 bytes) and more.</summary>
+    private const int MinByteSpan = 16;
 
     /// <summary>The chunks before the current one, each with the number of characters written to it.</summary>
     private List<(char[] Chunk, int Length)>? _previous;
@@ -135,6 +138,105 @@ internal sealed class ToonTextBuffer : IDisposable
     /// <summary>Clears the written characters so the buffer can be reused (the first chunk is kept).</summary>
     public void Clear() => Truncate(0);
 
+    /// <summary>The number of bytes the characters take as UTF-8.</summary>
+    public int GetUtf8ByteCount()
+    {
+        var count = 0L;
+        var chunkCount = ChunkCount;
+
+        for (var c = 0; c < chunkCount; c++)
+        {
+            var chunk = ChunkAt(c);
+            count += ToonTextEncoding.Utf8NoBom.GetByteCount(chunk);
+
+            // A surrogate pair split between chunks is counted as two replaced halves (3 bytes each) but takes 4 bytes
+            if (c + 1 < chunkCount && chunk.Length > 0 && char.IsHighSurrogate(chunk[^1]) && ChunkAt(c + 1) is [var next, ..] &&
+                char.IsLowSurrogate(next))
+            {
+                count -= 2;
+            }
+        }
+
+        return checked((int)count);
+    }
+
+    /// <summary>Creates an array with the characters as UTF-8 (without a byte order mark).</summary>
+    public byte[] ToUtf8Bytes()
+    {
+        var bytes = GC.AllocateUninitializedArray<byte>(GetUtf8ByteCount());
+        var encoder = ToonTextEncoding.Utf8NoBom.GetEncoder();
+        var destination = bytes.AsSpan();
+        var chunkCount = ChunkCount;
+
+        for (var c = 0; c < chunkCount; c++)
+        {
+            // The array has room for everything, so each chunk is converted at once (a high surrogate at the end of a
+            // chunk is kept by the encoder until the next one)
+            encoder.Convert(ChunkAt(c), destination, flush: c == chunkCount - 1, out _, out var bytesUsed, out _);
+            destination = destination[bytesUsed..];
+        }
+
+        return bytes;
+    }
+
+    /// <summary>Writes the characters to <paramref name="destination"/> as UTF-8 (without a byte order mark).</summary>
+    public void WriteUtf8(IBufferWriter<byte> destination)
+    {
+        var encoder = ToonTextEncoding.Utf8NoBom.GetEncoder();
+        var chunkCount = ChunkCount;
+
+        for (var c = 0; c < chunkCount; c++)
+        {
+            var chars = ChunkAt(c);
+            var last = c == chunkCount - 1;
+            bool completed;
+
+            do
+            {
+                // Room for at least a surrogate pair; a larger span lets the encoder convert more at once
+                var span = destination.GetSpan(Math.Clamp(chars.Length, MinByteSpan, ByteChunkSize));
+                encoder.Convert(chars, span, last, out var charsUsed, out var bytesUsed, out completed);
+                destination.Advance(bytesUsed);
+                chars = chars[charsUsed..];
+            }
+            while (!chars.IsEmpty || (last && !completed));
+        }
+    }
+
+    /// <summary>
+    ///     Writes the characters to <paramref name="stream"/> as UTF-8 (without a byte order mark), in chunks through a
+    ///     pooled byte buffer, so no string or full-size byte array is created.
+    /// </summary>
+    public void WriteUtf8(Stream stream)
+    {
+        var bytes = ArrayPool<byte>.Shared.Rent(ByteChunkSize);
+        var encoder = ToonTextEncoding.Utf8NoBom.GetEncoder();
+
+        try
+        {
+            var chunkCount = ChunkCount;
+
+            for (var c = 0; c < chunkCount; c++)
+            {
+                var chars = ChunkAt(c);
+                var last = c == chunkCount - 1;
+                bool completed;
+
+                do
+                {
+                    encoder.Convert(chars, bytes, last, out var charsUsed, out var bytesUsed, out completed);
+                    chars = chars[charsUsed..];
+                    stream.Write(bytes, 0, bytesUsed);
+                }
+                while (!completed && (!chars.IsEmpty || last));
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(bytes, clearArray: true);
+        }
+    }
+
     /// <summary>
     ///     Writes the characters to <paramref name="stream"/> as UTF-8 (without a byte order mark), in chunks through a
     ///     pooled byte buffer, so no string or full-size byte array is created.
@@ -146,7 +248,7 @@ internal sealed class ToonTextBuffer : IDisposable
 
         try
         {
-            var chunkCount = (_previous?.Count ?? 0) + 1;
+            var chunkCount = ChunkCount;
 
             for (var c = 0; c < chunkCount; c++)
             {
@@ -163,7 +265,7 @@ internal sealed class ToonTextBuffer : IDisposable
                     completed = done;
                     await stream.WriteAsync(bytes.AsMemory(0, bytesUsed), cancellationToken).ConfigureAwait(false);
                 }
-                while (!completed);
+                while (!completed && (position < length || last));
             }
         }
         finally
@@ -177,6 +279,20 @@ internal sealed class ToonTextBuffer : IDisposable
             encoder.Convert(chars, bytes, flush, out var charsUsed, out var bytesUsed, out var completed);
             return (charsUsed, bytesUsed, completed);
         }
+    }
+
+    private int ChunkCount => (_previous?.Count ?? 0) + 1;
+
+    /// <summary>The written characters of the chunk at <paramref name="index"/> (the current chunk is the last).</summary>
+    private ReadOnlySpan<char> ChunkAt(int index)
+    {
+        if (_previous != null && index < _previous.Count)
+        {
+            var (chunk, length) = _previous[index];
+            return chunk.AsSpan(0, length);
+        }
+
+        return _current.AsSpan(0, _currentLength);
     }
 
     /// <summary>Writes the characters to <paramref name="writer"/>, chunk by chunk.</summary>

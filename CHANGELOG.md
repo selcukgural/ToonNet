@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a pooled buffer that the parser reads in place and that is cleared before it goes back to the pool; a large document
   no longer allocates a string twice its size on the large object heap. Ill-formed UTF-8 is a `ToonParseException`,
   as before.
+- **ToonNet.Core:** UTF-8 output without an intermediate string: `ToonSerializer.SerializeToUtf8Bytes`,
+  `ToonSerializer.Serialize` to an `IBufferWriter<byte>` (a `PipeWriter`, an `ArrayBufferWriter<byte>`) or to a
+  `Stream` (synchronously), each generic and with a `Type`, and `ToonEncoder.EncodeToUtf8Bytes` and
+  `ToonEncoder.Encode(ToonDocument, IBufferWriter<byte>)` for the NativeAOT-safe path. The bytes are exactly the
+  UTF-8 of the string output. Measured on 10,000 records against going through a string: reading bytes is 4–15%
+  faster with 21–46% less allocation, `SerializeToUtf8Bytes` is 2–11% faster with 48–67% less, and writing flat
+  tables to a reused buffer writer allocates about 1 KB.
 
 ### Changed
 - **ToonNet.Core:** `DeserializeFromStreamAsync`, `DeserializeFromFileAsync` and the other stream and file readers

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using ToonNet.Core.Encoding;
 
@@ -7,6 +8,127 @@ namespace ToonNet.Core.Serialization;
 // created (a large one would be allocated on the large object heap).
 public static partial class ToonSerializer
 {
+    #region UTF-8 serialization
+
+    /// <summary>
+    ///     Serializes an object to UTF-8 encoded TOON text (without a byte order mark), without creating an intermediate
+    ///     string.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize.</typeparam>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <returns>The UTF-8 encoded TOON text.</returns>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static byte[] SerializeToUtf8Bytes<T>(T? value, ToonSerializerOptions? options = null)
+    {
+        return SerializeToUtf8Bytes(value, typeof(T), options);
+    }
+
+    /// <summary>
+    ///     Serializes an object of the specified type to UTF-8 encoded TOON text (without a byte order mark), without
+    ///     creating an intermediate string.
+    /// </summary>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="type">The type of object to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <returns>The UTF-8 encoded TOON text.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="type"/> is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static byte[] SerializeToUtf8Bytes(object? value, Type type, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        using var buffer = new ToonTextBuffer();
+        SerializeTo(buffer, value, type, options ?? ToonSerializerOptions.Default);
+        return buffer.ToUtf8Bytes();
+    }
+
+    /// <summary>
+    ///     Serializes an object and writes it as UTF-8 encoded TOON text (without a byte order mark) to a buffer writer,
+    ///     such as a <c>PipeWriter</c> or an <see cref="ArrayBufferWriter{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize.</typeparam>
+    /// <param name="utf8Destination">The buffer writer to write to; the text is written only after the value is serialized.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Destination"/> is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static void Serialize<T>(IBufferWriter<byte> utf8Destination, T? value, ToonSerializerOptions? options = null)
+    {
+        Serialize(utf8Destination, value, typeof(T), options);
+    }
+
+    /// <summary>
+    ///     Serializes an object of the specified type and writes it as UTF-8 encoded TOON text (without a byte order mark)
+    ///     to a buffer writer, such as a <c>PipeWriter</c> or an <see cref="ArrayBufferWriter{T}"/>.
+    /// </summary>
+    /// <param name="utf8Destination">The buffer writer to write to; the text is written only after the value is serialized.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="type">The type of object to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Destination"/> or <paramref name="type"/> is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static void Serialize(IBufferWriter<byte> utf8Destination, object? value, Type type, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(utf8Destination);
+        ArgumentNullException.ThrowIfNull(type);
+
+        using var buffer = new ToonTextBuffer();
+        SerializeTo(buffer, value, type, options ?? ToonSerializerOptions.Default);
+        buffer.WriteUtf8(utf8Destination);
+    }
+
+    /// <summary>
+    ///     Serializes an object and writes it as UTF-8 encoded TOON text (without a byte order mark) to a stream, through
+    ///     pooled buffers.
+    /// </summary>
+    /// <typeparam name="T">The type of object to serialize.</typeparam>
+    /// <param name="utf8Stream">The stream to write to; it is left open. The text is written only after the value is serialized.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static void Serialize<T>(Stream utf8Stream, T? value, ToonSerializerOptions? options = null)
+    {
+        Serialize(utf8Stream, value, typeof(T), options);
+    }
+
+    /// <summary>
+    ///     Serializes an object of the specified type and writes it as UTF-8 encoded TOON text (without a byte order mark)
+    ///     to a stream, through pooled buffers.
+    /// </summary>
+    /// <param name="utf8Stream">The stream to write to; it is left open. The text is written only after the value is serialized.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="type">The type of object to serialize.</param>
+    /// <param name="options">Optional serialization options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="type"/> is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when serialization fails.</exception>
+    /// <exception cref="IOException">Thrown when stream I/O fails.</exception>
+    [RequiresUnreferencedCode(ReflectionMessage)]
+    [RequiresDynamicCode(ReflectionMessage)]
+    public static void Serialize(Stream utf8Stream, object? value, Type type, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(utf8Stream);
+        ArgumentNullException.ThrowIfNull(type);
+
+        using var buffer = new ToonTextBuffer();
+        SerializeTo(buffer, value, type, options ?? ToonSerializerOptions.Default);
+        buffer.WriteUtf8(utf8Stream);
+    }
+
+    #endregion
+
     #region UTF-8 and span deserialization
 
     /// <summary>

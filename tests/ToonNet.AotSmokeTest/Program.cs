@@ -34,11 +34,21 @@ const string expected = """
 var text = new ToonEncoder().Encode(Catalog.Serialize(catalog));
 var again = new ToonEncoder().Encode(Catalog.Serialize(Catalog.Deserialize(ToonDocument.Parse(text))));
 
+// The same through UTF-8 bytes, without intermediate strings
+var utf8 = new ToonEncoder().EncodeToUtf8Bytes(Catalog.Serialize(catalog));
+var utf8Again = new ToonEncoder().EncodeToUtf8Bytes(Catalog.Serialize(Catalog.Deserialize(ToonDocument.Parse(utf8))));
+
 Console.WriteLine(text);
 
 if (text != expected || again != text)
 {
     Console.WriteLine("FAILED: the text differs from the expected text or does not round-trip");
+    return 1;
+}
+
+if (!utf8.AsSpan().SequenceEqual(System.Text.Encoding.UTF8.GetBytes(expected)) || !utf8Again.AsSpan().SequenceEqual(utf8))
+{
+    Console.WriteLine("FAILED: the UTF-8 output differs from the expected text or does not round-trip");
     return 1;
 }
 

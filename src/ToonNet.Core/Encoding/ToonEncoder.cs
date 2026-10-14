@@ -10,9 +10,10 @@ namespace ToonNet.Core.Encoding;
 ///     the default options (<see cref="ToonOptions.Default"/>) will be used.
 /// </param>
 /// <remarks>
-///     The output follows the canonical encoding of TOON spec v3.3.2: arrays of uniform primitive-only objects use the
-///     tabular form, primitive arrays are written inline, other arrays as expanded lists, empty arrays as <c>[]</c>,
-///     numbers in canonical decimal form, and strings and keys are quoted only when the spec requires it.
+///     The output follows the canonical encoding of TOON spec v4.4: arrays of uniform objects use the tabular form (with
+///     nested field groups and the keyed form where they apply), primitive arrays are written inline, other arrays as
+///     expanded lists, empty arrays as <c>[]</c>, numbers in canonical decimal form, and strings and keys are quoted only
+///     when the spec requires it.
 ///     The document has LF line endings, no trailing spaces and no trailing newline.
 ///     An instance is not thread-safe; use one encoder per thread.
 /// </remarks>
@@ -53,6 +54,41 @@ public sealed class ToonEncoder(ToonOptions? options = null)
         using var buffer = new ToonTextBuffer();
         Write(document, buffer);
         return buffer.ToString();
+    }
+
+    /// <summary>
+    ///     Encodes a TOON document into UTF-8 encoded text (without a byte order mark), without creating an intermediate
+    ///     string.
+    /// </summary>
+    /// <param name="document">The document to encode.</param>
+    /// <returns>The UTF-8 encoded TOON text.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a document is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when encoding exceeds the maximum depth specified in the options.</exception>
+    public byte[] EncodeToUtf8Bytes(ToonDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        using var buffer = new ToonTextBuffer();
+        Write(document, buffer);
+        return buffer.ToUtf8Bytes();
+    }
+
+    /// <summary>
+    ///     Encodes a TOON document and writes it as UTF-8 encoded text (without a byte order mark) to a buffer writer,
+    ///     such as a <c>PipeWriter</c> or an <see cref="System.Buffers.ArrayBufferWriter{T}"/>.
+    /// </summary>
+    /// <param name="document">The document to encode.</param>
+    /// <param name="utf8Destination">The buffer writer to write to; the text is written only after the document is encoded.</param>
+    /// <exception cref="ArgumentNullException">Thrown when a document or the destination is null.</exception>
+    /// <exception cref="ToonEncodingException">Thrown when encoding exceeds the maximum depth specified in the options.</exception>
+    public void Encode(ToonDocument document, System.Buffers.IBufferWriter<byte> utf8Destination)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(utf8Destination);
+
+        using var buffer = new ToonTextBuffer();
+        Write(document, buffer);
+        buffer.WriteUtf8(utf8Destination);
     }
 
     /// <summary>
