@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using ToonNet.Core;
 using ToonNet.Core.Models;
+using ToonNet.Core.Parsing;
 using ToonNet.Core.Paths;
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Validation;
@@ -130,9 +131,29 @@ public class ToonPathResourceTests
         var toon = text.ToString();
         var path = ToonPath.Parse("$.d..*..*..*..*..*");
 
-        LimitedQuickly(() => path.SelectFrom(toon));
-        LimitedQuickly(() => ToonSerializer.DeserializeAll<int?>(toon, "$.d..*..*..*..*..*"));
-        LimitedQuickly(() => path.Select(ToonDocument.Parse(toon).Root));
+        // The steps the document buys: MaxSteps, MaxStepsPerValue per value (line), and enough to read the 8 million
+        // characters twice (a step per 16), about 2 million in all; a step per character would be over 9 million
+        foreach (var budget in new[] { new EvaluationBudget((ToonText)toon, ToonPathOptions.Default), new EvaluationBudget(ToonDocument.Parse(toon).Root, ToonPathOptions.Default) })
+        {
+            var steps = 0L;
+
+            void SpendAll()
+            {
+                while (true)
+                {
+                    budget.Spend();
+                    steps++;
+                }
+            }
+
+            Assert.Throws<ToonPathLimitException>(SpendAll);
+            Assert.InRange(steps, 1_000_000 + 2 * (8_000_000 / 16), 1_000_000 + 2 * (8_000_000 / 16) + 16 * 200 + 1_000);
+        }
+
+        // An upper bound on the time only (shared CI runners are several times slower than a workstation)
+        Fast(() => Assert.Throws<ToonPathLimitException>(() => path.SelectFrom(toon)), 5_000);
+        Fast(() => Assert.Throws<ToonPathLimitException>(() => ToonSerializer.DeserializeAll<int?>(toon, "$.d..*..*..*..*..*")), 5_000);
+        Fast(() => Assert.Throws<ToonPathLimitException>(() => path.Select(ToonDocument.Parse(toon).Root)), 5_000);
     }
 
     [Theory]
