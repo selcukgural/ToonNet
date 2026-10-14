@@ -96,7 +96,8 @@ await foreach (var order in ToonSerializer.DeserializeAsyncEnumerableAt<Order>(r
 
 - For a path of member names (`$.data.orders`, `$['the data'].rows`), the lines before the array are only followed by
   their indentation and keys to find it, the items are read in batches as above, and the stream is read no further than
-  the end of the array. The content before and after the array is not checked.
+  the end of the array. Strict mode reports the lines before the array that break indentation or are not members (as
+  `DeserializeAt` does); the rest of that content, and everything after the array, is not checked.
 - Other singular paths (`$.pages[0].rows`) read the whole document first.
 - A document without the path gives no items; a value at the path that is not an array throws
   `ToonSerializationException`. Errors in the array have the line and column of the whole document.

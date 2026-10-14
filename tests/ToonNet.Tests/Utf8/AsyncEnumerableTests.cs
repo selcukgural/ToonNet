@@ -341,6 +341,23 @@ public class AsyncEnumerableTests
     }
 
     [Theory]
+    [InlineData("meta:\n\tx: 1\ndata:\n  rows[1]{Id}:\n    1")]
+    [InlineData("meta:\n   x: 1\ndata:\n  rows[1]{Id}:\n    1")]
+    [InlineData("a: 1\nhello\ndata:\n  rows[1]{Id}:\n    1")]
+    [InlineData("data:\n  - x\n  rows[1]{Id}:\n    1")]
+    [InlineData("data:\n  count\n  rows[1]{Id}:\n    1")]
+    public async Task StrictMode_ReportsBadLinesBeforeTheArray(string text)
+    {
+        // These lines used to be stepped over (or end the search), giving the items or none instead of the error
+        var whole = Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeAt<List<Item>>(text, "$.data.rows"));
+        var streamed = await Assert.ThrowsAsync<ToonParseException>(() =>
+            ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.rows")));
+
+        Assert.Equal(whole.Message, streamed.Message);
+        Assert.Equal(whole.Line, streamed.Line);
+    }
+
+    [Theory]
     [MemberData(nameof(InvalidArrays))]
     public async Task NestedErrors_MatchDeserializeAt(string root)
     {
@@ -440,16 +457,6 @@ public class AsyncEnumerableTests
 
         var items = await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$['a\"b']['r:s']"));
         Assert.Equal(7, Assert.Single(items)!.Id);
-    }
-
-    [Fact]
-    public async Task At_SkipsLinesBeforeTheArray_WithoutCheckingThem()
-    {
-        // A badly indented sibling is an error for DeserializeAt, which reads it; the stream only follows keys
-        const string text = "other:\n   bad: 1\ndata:\n  rows[1]{Id}:\n    3";
-
-        Assert.Throws<ToonParseException>(() => ToonSerializer.DeserializeAt<List<Item>>(text, "$.data.rows"));
-        Assert.Equal(3, Assert.Single(await ReadAll(ToonSerializer.DeserializeAsyncEnumerableAt<Item>(new MemoryStream(Text.Encoding.UTF8.GetBytes(text)), "$.data.rows")))!.Id);
     }
 
     [Fact]

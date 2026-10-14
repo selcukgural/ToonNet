@@ -229,6 +229,9 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   `MaxViolations` errors were found. `ToonPrompt.Extract` skips an empty unmarked block, reads indented fences (an
   answer in a list item), and when there is no block, ignores lone fence lines, blocks of other languages and the
   indentation all lines share.
+- **ToonNet.Core:** `DeserializeAsyncEnumerableAt` in strict mode reports a line before the array that is
+  indented with a tab or by a number of spaces the indent size does not divide, or that is not a member of the object
+  being searched, as `DeserializeAt` does; it stepped over such lines or gave no items.
 - **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
   so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that

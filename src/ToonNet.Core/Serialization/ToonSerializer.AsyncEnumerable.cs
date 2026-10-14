@@ -100,8 +100,9 @@ public static partial class ToonSerializer
     /// <exception cref="ToonParseException">Thrown while enumerating when the array is not valid TOON (with the line in the whole document).</exception>
     /// <exception cref="ToonSerializationException">Thrown while enumerating when the value is not an array or an item cannot be converted.</exception>
     /// <remarks>
-    ///     The lines before the array are only followed by their indentation and keys to find it, and the stream is read
-    ///     no further than the end of the array, so the rest of the document is not checked. The array's items are read
+    ///     The lines before the array are only followed by their indentation and keys to find it (strict mode reports
+    ///     the indentation and member lines it does not allow), and the stream is read no further than the end of the
+    ///     array, so the rest of the document is not checked. The array's items are read
     ///     and checked in batches as with <see cref="DeserializeAsyncEnumerable{T}(Stream, ToonSerializerOptions, CancellationToken)"/>.
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
@@ -315,6 +316,9 @@ public static partial class ToonSerializer
 
         /// <summary>With a target: the document has no value at the path.</summary>
         private bool _missing;
+
+        /// <summary>With a target: a member line was read, so the document is an object.</summary>
+        private bool _memberSeen;
 
         public ToonText Text => _text.Text;
 
@@ -588,6 +592,14 @@ public static partial class ToonSerializer
         {
             if (content[0] == '\t' || spaces % options.IndentSize != 0)
             {
+                // Strict mode: the error the parser reports (the target is only read in strict mode, or for tests)
+                if (options.StrictMode)
+                {
+                    throw content[0] == '\t'
+                        ? new ToonParseException("Tabs are not allowed in indentation", _lineNumber, spaces + 1)
+                        : new ToonParseException($"Indentation of {spaces} spaces is not a multiple of the indent size {options.IndentSize}", _lineNumber, 1);
+                }
+
                 return; // not a line of a valid document at the depth searched (the target, if any, is still found)
             }
 
@@ -598,12 +610,28 @@ public static partial class ToonSerializer
                 return; // inside the value of another member
             }
 
-            if (depth < _level || !TryReadKey(content, out var key, out var rest))
+            if (depth < _level)
             {
-                // The object being searched ended, or the value searched is not an object
+                _missing = _ended = true; // the object being searched ended
+                return;
+            }
+
+            if (!TryReadKey(content, out var key, out var rest))
+            {
+                // The first line of a document that is not an object (a root array or primitive) has no members;
+                // elsewhere a line of an object that is not a member is an error
+                if (options.StrictMode && (_level > 0 || _memberSeen))
+                {
+                    throw new ToonParseException(
+                        content[0] == '-' && (content.Length == 1 || content[1] == ' ') ? "List items require an array header such as 'key[N]:'" : "Missing colon after key",
+                        _lineNumber, spaces + 1);
+                }
+
                 _missing = _ended = true;
                 return;
             }
+
+            _memberSeen = true;
 
             if (key != target![_level])
             {

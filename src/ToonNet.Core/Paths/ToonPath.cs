@@ -281,7 +281,7 @@ public sealed class ToonPath
     /// <summary>
     ///     Sets the value at a singular path (member names and indexes only), creating the objects and arrays on the way
     ///     that are missing: a missing member becomes an object, or an array when an index follows it. An index equal to
-    ///     the length of the array appends.
+    ///     the length of the array appends. The whole path is checked first, so when it fails the tree is unchanged.
     /// </summary>
     /// <param name="root">The value <c>$</c> stands for.</param>
     /// <param name="value">The value to set; null sets <see cref="ToonNull.Instance"/>.</param>
@@ -392,7 +392,7 @@ public sealed class ToonPath
 
     /// <summary>Removes every value the path selects from the object or array it is in.</summary>
     /// <param name="root">The value <c>$</c> stands for.</param>
-    /// <returns>The number of values removed.</returns>
+    /// <returns>The number of values removed; a value the path selects more than once (<c>[0,0]</c>) counts once.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the path selects the root itself.</exception>
     public int RemoveAll(ToonValue root)
