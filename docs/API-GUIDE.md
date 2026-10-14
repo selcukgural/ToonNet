@@ -312,6 +312,54 @@ await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(strea
 The root must be an array: an array under a key (`users[200000]{id,name}:`) is an object and throws a
 `ToonSerializationException`. Errors and line numbers are those of reading the whole document.
 
+### An Array Inside a Document
+
+`DeserializeAsyncEnumerableAt` streams the items of an array at a path of member names, such as the rows of a
+response envelope; the stream is read no further than the end of the array:
+
+```csharp
+await foreach (var order in ToonSerializer.DeserializeAsyncEnumerableAt<Order>(response, "$.data.orders"))
+{
+    Process(order);
+}
+```
+
+---
+
+## 🔎 **Querying, Editing and Language Models**
+
+### JSONPath (RFC 9535)
+
+```csharp
+using ToonNet.Core.Paths;
+
+var root = ToonDocument.Parse(toon).Root;
+var ids = root.Select("$.orders[?@.total > 100 && @.paid == true].id");   // on a tree
+var fromText = ToonPath.Parse("$.orders[?@.total > 100]").SelectFrom(toon); // straight from text, building only the matches
+
+var orders = ToonSerializer.DeserializeAt<List<Order>>(toon, "$.data.orders");      // one value, the rest skipped
+var big = ToonSerializer.DeserializeAll<Order>(toon, "$.data.orders[?@.total > 100]"); // every match, into objects
+```
+
+Like `JsonNode`, values have indexers, `GetValue<T>()`, `DeepClone()` and `ToonValue.DeepEquals`; paths set and remove
+values (`root.SetValue("$.meta.by", "x")`, `root.RemoveAll("$.users[?@.active == false]")`), and `ToonMergePatch`
+applies and creates JSON Merge Patches (RFC 7386).
+
+`ToonSerializer.Deserialize<T>(ToonDocumentReader reader)` reads the value a reader is on, as `JsonSerializer` reads
+from a `Utf8JsonReader`.
+
+### Prompts and Answers
+
+```csharp
+using ToonNet.Core.Llm;
+
+var context = ToonPrompt.Serialize(orders, new ToonPromptOptions { MaxArrayItems = 50 }); // shortened, "# 380 more items"
+var shape = ToonPrompt.DescribeShape<Summary>();       // a TOON template of the answer
+var summary = ToonPrompt.Deserialize<Summary>(answer); // the ```toon block of the answer, in non-strict mode
+```
+
+See the website pages *Querying*, *Editing Trees* and *Language Models* for details.
+
 ### Use Cases
 
 | Use Case | Description |

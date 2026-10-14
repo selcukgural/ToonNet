@@ -114,7 +114,36 @@ while (reader.Read())
 rules and errors of `ToonDocument.Parse` (a `ToonParseException` with line and column), and the end of the document when
 `Read` returns false. UTF-8 input is decoded into a pooled buffer; dispose the reader to return it.
 
+### Values Into Objects
+
+`ToonSerializer.Deserialize<T>(reader)` converts the value the reader is on, straight from the text, as
+`JsonSerializer` reads from a `Utf8JsonReader`. A large document can be read partly by hand and partly into objects:
+
+```csharp
+using var reader = new ToonDocumentReader(utf8Bytes);
+
+while (reader.Read())
+{
+    if (reader.TokenType == ToonTokenType.PropertyName && reader.GetPropertyName() == "orders")
+    {
+        reader.Read();                                    // StartArray
+
+        while (reader.Read() && reader.TokenType != ToonTokenType.EndArray)
+        {
+            var order = ToonSerializer.Deserialize<Order>(reader);   // one row at a time
+            Process(order);
+        }
+    }
+}
+```
+
+The reader is on a property name (its value is read), the start of a value, or a primitive; afterwards it is on the
+value's last token, as after `ReadValue`. A reader that has not read yet starts at the root. Results and errors are those
+of `Deserialize<T>(string)`; after an error, the reader cannot be used. The reader's own options decide how the text is
+parsed. With a `ToonTypeInfo`, it reads without reflection.
+
 ## See Also
 
+- [Querying](querying): `DeserializeAt` and `DeserializeAll` read values at a path without a loop like this one
 - [Serialization](serialization) and [Deserialization](deserialization): .NET objects to and from TOON
 - [Streaming](streaming): multi-document files

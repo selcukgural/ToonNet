@@ -538,11 +538,15 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 | `Deserialize<T>(ReadOnlySpan<char> toon, options)` | Deserialize a span of characters (also with a `Type`) | Slices of larger text |
 | `Deserialize<T>(Stream, options)` | Read UTF-8 from a stream synchronously (also with a `Type`) | Synchronous I/O |
 | `Deserialize<T>(string \| bytes \| chars \| Stream, ToonTypeInfo<T>, options)` | Without reflection, through generated code (also `DeserializeFromStreamAsync`) | Trimming, NativeAOT |
-| `DeserializeFromValue<T>(ToonValue value, options)` | Convert a `ToonValue` tree without text | Data from `ToonDocument.Parse` or `SerializeToValue` |
+| `DeserializeFromValue<T>(ToonValue value, options)` | Convert a `ToonValue` tree without text (also with a `ToonTypeInfo`) | Data from `ToonDocument.Parse` or `SerializeToValue` |
+| `DeserializeAt<T>(toon, "$.data.orders", options)` | The value at a path only, skipping the rest (string, bytes, `DeserializeAtAsync` for streams) | Response envelopes, one section of a large document; see [Querying](querying) |
+| `DeserializeAll<T>(toon, "$.orders[?@.total > 100]", options)` | Every value a path selects, straight from the text | Filtering rows without reading them all |
+| `Deserialize<T>(ToonDocumentReader reader, options)` | The value a reader is on | Mixing token reading and objects; see [Reader and Writer](reader-writer) |
 | `DeserializeAsync<T>(string toon, options, ct)` | Deserialize from string (`ValueTask<T?>`) | Async call sites |
 | `DeserializeFromStreamAsync<T>(Stream, options, ct)` | Read UTF-8 from a stream (also with a `Type`) | Network data |
 | `DeserializeFromFileAsync<T>(string filePath, options, ct)` | Read UTF-8 from a file | File input |
 | `DeserializeDocumentsAsync<T>(string filePath \| StreamReader, ...)` | Yield one object per document | Multi-document files, see [Streaming](streaming) |
+| `DeserializeAsyncEnumerable<T>(Stream, options, ct)` / `DeserializeAsyncEnumerableAt<T>(Stream, path, ...)` | Yield the items of a root array, or of the array at a path | Large arrays, see [Streaming](streaming) |
 
 ## Parsing Rules and Strict Mode
 

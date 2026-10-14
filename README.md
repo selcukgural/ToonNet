@@ -46,6 +46,8 @@ ToonNet focuses on three things:
 2. **📐 Spec conformance** - Encoder and decoder follow TOON spec v4.4, pass every official fixture and write the
    same text as the official library
 3. **🔧 Familiar API** - `Serialize`/`Deserialize` methods in the style of System.Text.Json
+4. **🔎 Query, edit, stream** - JSONPath (RFC 9535) over trees and straight over text, `DeserializeAt` for one part of
+   a large document, JSON Merge Patch, and helpers for prompts and model answers
 
 ### 🤖 AI Token Optimization
 
@@ -219,6 +221,9 @@ them straight from it, with code generated for each type.
 | Options | indent, delimiter, strict, naming policies, null handling, read-only properties, converters, max depth | indent, delimiter, strict |
 | Exact `decimal` / `ulong` | ✅ | rounded through `double` |
 | Multi-document streaming | ✅ `SerializeDocumentsAsync` / `DeserializeDocumentsAsync` | single document per stream |
+| Queries | ✅ JSONPath (RFC 9535, 715/715 compliance cases) over trees and text; `DeserializeAt`, `DeserializeAll` | – |
+| Editing | ✅ indexers, `GetValue<T>`, `DeepClone`, `DeepEquals`, `SetValue`/`RemoveAll` by path, JSON Merge Patch | `JsonNode` |
+| LLM helpers | ✅ `ToonPrompt`: shortened arrays, answer templates, lenient reading of answers | – |
 | ASP.NET Core | input/output formatters, `ToonResult`, configuration provider | – |
 | JSON / YAML conversion | ✅ `ToonConvert`, `ToonYamlConvert` | via `JsonNode` |
 
@@ -374,6 +379,39 @@ while (reader.Read())
 }
 ```
 
+### Querying and Editing
+
+Paths are JSONPath (RFC 9535); they select values in a tree, straight from text, or straight into objects:
+
+```csharp
+// Only the value at a path: the rest is skipped, not built (about 20x faster for a small part of a large document)
+var orders = ToonSerializer.DeserializeAt<List<Order>>(toon, "$.data.orders");
+
+// Every value a filter selects, read straight into objects
+var big = ToonSerializer.DeserializeAll<Order>(toon, "$.data.orders[?@.total > 100 && @.paid == true]");
+
+// The items of an array inside a document, streamed
+await foreach (var order in ToonSerializer.DeserializeAsyncEnumerableAt<Order>(stream, "$.data.orders")) { }
+
+// Trees: navigate, query, change, patch
+var root = ToonDocument.Parse(toon).Root;
+string name = root["users"]![0]["name"]!.GetValue<string>();
+var ids = root.Select("$.orders[?@.total > 100].id");
+root.SetValue("$.meta.updatedBy", "selcuk");
+root.RemoveAll("$.users[?@.active == false]");
+root = ToonMergePatch.Apply(root, patch);     // JSON Merge Patch (RFC 7386)
+```
+
+### Language Models
+
+```csharp
+using ToonNet.Core.Llm;
+
+var context = ToonPrompt.Serialize(orders, new ToonPromptOptions { MaxArrayItems = 50 }); // "# 380 more items"
+var shape   = ToonPrompt.DescribeShape<Summary>();      // Lines[N]{Sku,Quantity}: <string>,<integer> ...
+var summary = ToonPrompt.Deserialize<Summary>(answer);  // the ```toon block, read leniently
+```
+
 ### Format Conversion (String-based)
 
 > **Note:** JSON conversion methods are in `ToonNet.Extensions.Json` package. Add `using ToonNet.Extensions.Json;`
@@ -429,6 +467,12 @@ string yaml = ToonYamlConvert.ToYaml(toonString);
 | `SerializeToUtf8Bytes<T>(obj)` | Core | C# Object | UTF-8 bytes | Network, caches |
 | `Serialize<T>(IBufferWriter<byte> \| Stream, obj)` | Core | C# Object | UTF-8 | Pipelines, synchronous I/O |
 | `Deserialize<T>(utf8)` | Core | UTF-8 bytes, chars or stream | C# Object | Read bytes without a string |
+| `DeserializeAt<T>(toon, path)` | Core | TOON text | C# Object | One part of a large document |
+| `DeserializeAll<T>(toon, path)` | Core | TOON text | List of objects | Rows that pass a filter |
+| `DeserializeAsyncEnumerableAt<T>(stream, path)` | Core | UTF-8 stream | Items as they arrive | A large array inside a document |
+| `ToonPath.Parse(path).Select(root)` / `.SelectFrom(toon)` | Core | Tree or TOON text | Values | Queries |
+| `ToonMergePatch.Apply(target, patch)` | Core | Trees | Tree | Partial updates |
+| `ToonPrompt.Serialize` / `DescribeShape` / `Deserialize` | Core | Objects, model answers | TOON, templates, objects | LLM prompts and answers |
 | `FromJson(json)` | Extensions.Json | JSON string | TOON string | Convert JSON to TOON |
 | `ToJson(toon)` | Extensions.Json | TOON string | JSON string | Convert TOON to JSON |
 | `DeserializeFromJson<T>(json)` | Extensions.Json | JSON string | C# Object | Parse JSON (System.Text.Json) |

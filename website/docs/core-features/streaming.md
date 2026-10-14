@@ -68,12 +68,35 @@ await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(strea
 - The root must be an array: a tabular array (`[N]{fields}:`), an expanded list (`[N]:` with `- ` items) or an inline
   array. An array under a key (`users[N]{fields}:`) is an object with one property, not a root array, and throws a
   `ToonSerializationException` ("Expected an array but got Object"); `ToonSerializer.Serialize(list)` writes a root
-  array. Rows and list items are read in batches of about 32 KB of text, so memory stays flat however long the array
+  array, and `DeserializeAsyncEnumerableAt` (below) reads an array under a key. Rows and list items are read in batches of about 32 KB of text, so memory stays flat however long the array
   is; on 200,000 rows it is also a little faster than reading the whole document, which keeps the decoded text and the
   list (47 MB here) in memory.
 - Errors are those of reading the whole document, with the line in the whole document; items before an error have
   been returned by then. In strict mode the declared length is checked when the array ends.
 - `DeserializeAsyncEnumerable(stream, MyType.ToonTypeInfo)` reads without reflection (trimming, NativeAOT).
+
+### An Array Inside a Document
+
+`DeserializeAsyncEnumerableAt` streams the items of an array at a path, such as the rows of a response envelope:
+
+```csharp
+// status: ok
+// data:
+//   orders[200000]{id,customer,total}:
+//     ...
+await foreach (var order in ToonSerializer.DeserializeAsyncEnumerableAt<Order>(response, "$.data.orders"))
+{
+    Process(order);
+}
+```
+
+- For a path of member names (`$.data.orders`, `$['the data'].rows`), the lines before the array are only followed by
+  their indentation and keys to find it, the items are read in batches as above, and the stream is read no further than
+  the end of the array. The content before and after the array is not checked.
+- Other singular paths (`$.pages[0].rows`) read the whole document first.
+- A document without the path gives no items; a value at the path that is not an array throws
+  `ToonSerializationException`. Errors in the array have the line and column of the whole document.
+- `DeserializeAsyncEnumerableAt(stream, path, MyType.ToonTypeInfo)` reads without reflection.
 
 For a file of separate documents (one per item), use `SerializeDocumentsAsync` and `DeserializeDocumentsAsync` below.
 
