@@ -23,6 +23,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   faster with 21–46% less allocation, `SerializeToUtf8Bytes` is 2–11% faster with 48–67% less, and writing flat
   tables to a reused buffer writer allocates about 1 KB.
 
+- **ToonNet.Core, ToonNet.SourceGenerators:** `ToonTypeInfo<T>` and `ToonSerializer` overloads that take one
+  (`Serialize`, `SerializeToUtf8Bytes`, `Serialize` to an `IBufferWriter<byte>` or `Stream`, `SerializeToStreamAsync`,
+  `Deserialize` from a string, bytes, characters or a stream, `DeserializeFromStreamAsync`), which need no reflection
+  and are compatible with trimming and NativeAOT. Every `[ToonSerializable]` type gets a static `ToonTypeInfo`
+  property (`ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo)`); `ToonTypeInfo.CreateList`, `CreateArray` and
+  `CreateDictionary` compose type infos for collection roots, and `ToonTypeInfo.GetGenerated<T>()` serves generic
+  code. They write and read straight from text like the other overloads, with the same output: on 10,000 records as
+  fast as `ToonSerializer` with generated code, and 2.4–4x faster at serializing and 1.6–2x faster at deserializing
+  than the previous NativeAOT path through `ToonDocument` and `ToonEncoder`. A value only reflection would handle (an
+  object without generated code in a property typed `object`, a derived instance) makes the document go through the
+  generated tree-based methods, with the same text; options with converters are not supported.
+
+### Fixed
+- **ToonNet.SourceGenerators:** A `[ToonSerializable]` type derived from another `[ToonSerializable]` type no longer
+  produces CS0108 warnings for the generated static members it hides on purpose, which broke builds that treat
+  warnings as errors.
+
 ### Changed
 - **ToonNet.Core:** `DeserializeFromStreamAsync`, `DeserializeFromFileAsync` and the other stream and file readers
   decode into pooled buffers instead of reading the whole text into a string first.

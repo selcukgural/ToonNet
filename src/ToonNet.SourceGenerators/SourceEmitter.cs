@@ -47,6 +47,7 @@ internal sealed class SourceEmitter
         code.AppendLine("#nullable enable annotations");
         code.AppendLine("#nullable disable warnings");
         code.AppendLine("#pragma warning disable CS0612, CS0618 // Obsolete members are serialized like any other");
+        code.AppendLine("#pragma warning disable CS0108, CS0109 // The static members of a generated base type are hidden on purpose (always called through the type)");
         code.AppendLine();
 
         if (_model.Namespace != null)
@@ -145,6 +146,24 @@ internal sealed class SourceEmitter
         _code.AppendLine(HiddenAttribute);
         _code.AppendLine($"internal static void __ToonRegister() => {Helpers}.Register<{_model.FullyQualifiedName}>(__ToonSerializeValue, {deserialize}{writer});");
         _code.AppendLine("#pragma warning restore CA2255");
+        _code.AppendLine();
+
+        if (_model.TypeInfoProperty == TypeInfoProperty.None)
+        {
+            return;
+        }
+
+        if (_model.Documentation)
+        {
+            _code.AppendLine("/// <summary>");
+            _code.AppendLine("/// The serialization code of this type for the <see cref=\"global::ToonNet.Core.Serialization.ToonSerializer\"/> overloads that take a");
+            _code.AppendLine("/// type info, which need no reflection (trimming and NativeAOT).");
+            _code.AppendLine("/// </summary>");
+        }
+
+        var modifier = _model.TypeInfoProperty == TypeInfoProperty.EmitNew ? "new " : "";
+        _code.AppendLine($"{Accessibility()} {modifier}static global::ToonNet.Core.Serialization.ToonTypeInfo<{_model.FullyQualifiedName}> ToonTypeInfo => " +
+                         $"global::ToonNet.Core.Serialization.ToonTypeInfo.GetGenerated<{_model.FullyQualifiedName}>();");
         _code.AppendLine();
     }
 

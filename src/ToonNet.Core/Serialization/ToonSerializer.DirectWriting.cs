@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -50,6 +51,12 @@ public static partial class ToonSerializer
             new ToonEncoder(options.ToonOptions).Write(new ToonDocument(toonValue ?? ToonNull.Instance), buffer);
         }
     }
+
+    /// <summary>
+    ///     Thrown when writing or reading with a <see cref="ToonTypeInfo"/> meets a value that only reflection would handle
+    ///     directly; the generated tree-based methods then convert the whole document.
+    /// </summary>
+    private sealed class GeneratedOnlyFallbackException : Exception;
 
     /// <summary>How a value is written.</summary>
     private enum DirectKind : byte
@@ -140,11 +147,98 @@ public static partial class ToonSerializer
                 ? new DirectTypeInfo { Kind = DirectKind.Collection }
                 : new DirectTypeInfo { Kind = DirectKind.Object, Metadata = metadata };
         });
+    }
 
-        static bool IsDistinctlyFormattedKey(Type keyType) =>
-            keyType == typeof(string) || keyType == typeof(int) || keyType == typeof(long) || keyType == typeof(short) ||
-            keyType == typeof(byte) || keyType == typeof(sbyte) || keyType == typeof(ushort) || keyType == typeof(uint) ||
-            keyType == typeof(ulong) || keyType == typeof(char) || keyType == typeof(Guid) || keyType.IsEnum;
+    private static readonly ConcurrentDictionary<Type, DirectTypeInfo> GeneratedOnlyTypeInfos = new();
+
+    /// <summary>
+    ///     Classifies a runtime type like <see cref="GetDirectTypeInfo"/> without reflection metadata, for writing with a
+    ///     <see cref="ToonTypeInfo"/>: everything that would need it (objects without generated code, types with
+    ///     <c>[ToonConverter]</c>, dictionaries without <see cref="IDictionary"/>) is <see cref="DirectKind.Tree"/>, which
+    ///     ends direct writing in favor of the generated tree.
+    /// </summary>
+    private static DirectTypeInfo GetGeneratedOnlyTypeInfo(Type type)
+    {
+        return GeneratedOnlyTypeInfos.GetOrAdd(type, static t =>
+        {
+            if (typeof(ToonValue).IsAssignableFrom(t))
+            {
+                return new DirectTypeInfo { Kind = DirectKind.Tree };
+            }
+
+            if (IsPrimitiveType(t))
+            {
+                return new DirectTypeInfo { Kind = DirectKind.Primitive };
+            }
+
+            if (FindGeneratedSerializer(t) is { } generated)
+            {
+                return new DirectTypeInfo
+                {
+                    Kind = generated.Writer != null ? DirectKind.Generated : DirectKind.Tree,
+                    HasGeneratedCode = true,
+                    Writer = generated.Writer
+                };
+            }
+
+            if (t.IsDefined(typeof(Attributes.ToonConverterAttribute), inherit: true))
+            {
+                return new DirectTypeInfo { Kind = DirectKind.Tree };
+            }
+
+            var dictionaryInterface = FindDictionaryInterface(t);
+
+            if (dictionaryInterface != null || typeof(IDictionary).IsAssignableFrom(t))
+            {
+                // The entries are read through IDictionary, which needs no generic code made at run time
+                return dictionaryInterface != null && typeof(IDictionary).IsAssignableFrom(t) && IsDistinctlyFormattedKey(dictionaryInterface[0])
+                    ? new DirectTypeInfo { Kind = DirectKind.Dictionary, Entries = new NonGenericDictionaryEntryReader(dictionaryInterface[0], dictionaryInterface[1]) }
+                    : new DirectTypeInfo { Kind = DirectKind.Tree };
+            }
+
+            return new DirectTypeInfo { Kind = typeof(IEnumerable).IsAssignableFrom(t) ? DirectKind.Collection : DirectKind.Tree };
+        });
+    }
+
+    /// <summary>The key and value types of the generic dictionary interface a type implements, or null.</summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2070",
+        Justification = "The type is the runtime type of a written value; the interfaces of a constructed type are kept.")]
+    private static Type[]? FindDictionaryInterface(Type type)
+    {
+        foreach (var candidate in type.GetInterfaces())
+        {
+            if (candidate.IsGenericType &&
+                (candidate.GetGenericTypeDefinition() == typeof(IDictionary<,>) || candidate.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)))
+            {
+                return candidate.GetGenericArguments();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether distinct keys of the type always format to distinct names (others could collide, which the tree resolves).</summary>
+    private static bool IsDistinctlyFormattedKey(Type keyType) =>
+        keyType == typeof(string) || keyType == typeof(int) || keyType == typeof(long) || keyType == typeof(short) ||
+        keyType == typeof(byte) || keyType == typeof(sbyte) || keyType == typeof(ushort) || keyType == typeof(uint) ||
+        keyType == typeof(ulong) || keyType == typeof(char) || keyType == typeof(Guid) || keyType.IsEnum;
+
+    /// <summary>Enumerates the entries of a dictionary through <see cref="IDictionary"/>, in the order of its generic enumerator.</summary>
+    private sealed class NonGenericDictionaryEntryReader(Type keyType, Type valueType) : DictionaryEntryReader
+    {
+        public override Type KeyType { get; } = keyType;
+
+        public override Type ValueType { get; } = valueType;
+
+        public override IEnumerable<(object Key, object? Value)> Read(object dictionary)
+        {
+            var enumerator = ((IDictionary)dictionary).GetEnumerator();
+
+            while (enumerator.MoveNext())
+            {
+                yield return (enumerator.Key, enumerator.Value);
+            }
+        }
     }
 
     private static readonly ConcurrentDictionary<Type, DirectTypeInfo> ReflectionTypeInfos = new();
@@ -230,9 +324,16 @@ public static partial class ToonSerializer
         private readonly bool _ignoreNulls;
         private readonly bool _includeReadOnly;
 
-        public DirectWriter(ToonTextBuffer buffer, ToonSerializerOptions options)
+        /// <summary>
+        ///     Whether only generated code may convert values (writing with a <see cref="ToonTypeInfo"/>): what would need
+        ///     reflection throws <see cref="GeneratedOnlyFallbackException"/> instead.
+        /// </summary>
+        private readonly bool _generatedOnly;
+
+        public DirectWriter(ToonTextBuffer buffer, ToonSerializerOptions options, bool generatedOnly = false)
         {
             _options = options;
+            _generatedOnly = generatedOnly;
             _writer = new ToonWriter(buffer, options.ToonOptions);
             _tree = new ToonDomWriter(_writer);
             _hasConverters = options.Converters.Count != 0;
@@ -312,6 +413,12 @@ public static partial class ToonSerializer
                 return DirectKind.Tree;
             }
 
+            if (_generatedOnly)
+            {
+                info = GetGeneratedOnlyTypeInfo(runtimeType);
+                return info.Kind;
+            }
+
             info = GetDirectTypeInfo(runtimeType);
 
             if (info.HasGeneratedCode && (_hasConverters || !_options.UseGeneratedCode))
@@ -337,6 +444,12 @@ public static partial class ToonSerializer
 
         private ToonValue? ToTree(object? value, Type declaredType, IToonConverter? propertyConverter, int depth)
         {
+            if (_generatedOnly)
+            {
+                // A ToonValue is its own tree; anything else needs the reflection-based serializer
+                return value as ToonValue ?? throw new GeneratedOnlyFallbackException();
+            }
+
             return SerializeValue(value, declaredType, _options, depth, new SerializerState(), propertyConverter);
         }
 

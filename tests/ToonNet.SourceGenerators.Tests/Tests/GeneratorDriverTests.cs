@@ -30,11 +30,43 @@ public class GeneratorDriverTests
         var generated = driver.GetRunResult().GeneratedTrees.Select(t => Path.GetFileName(t.FilePath)).ToArray();
         var errors = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
         LastGeneratedSources = driver.GetRunResult().GeneratedTrees.Select(t => t.ToString()).ToArray();
+        LastCompilationWarnings = output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Warning).ToList();
 
         return (diagnostics, errors, generated);
     }
 
     private static string[] LastGeneratedSources = [];
+
+    private static List<Diagnostic> LastCompilationWarnings = [];
+
+    [Fact]
+    public void ToonTypeInfoProperty_IsGenerated_UnlessAMemberTakesTheName()
+    {
+        var (_, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Plain { public int A { get; set; } }
+            [ToonSerializable] public partial class Derived : Plain { public int B { get; set; } }
+            [ToonSerializable] public partial class Taken { public int ToonTypeInfo { get; set; } }
+            public class UserBase { public static string ToonTypeInfo => "mine"; }
+            [ToonSerializable] public partial class FromUserBase : UserBase { public int C { get; set; } }
+            [ToonSerializable(GeneratePublicMethods = false)] public partial class Hidden { public int D { get; set; } }
+            public static class Use
+            {
+                public static object[] All() => [Plain.ToonTypeInfo, Derived.ToonTypeInfo, Hidden.ToonTypeInfo];
+            }
+            """);
+
+        Assert.Empty(errors);
+        Assert.DoesNotContain(LastCompilationWarnings, w => w.Id is "CS0108" or "CS0114");
+
+        string Source(string type) => LastGeneratedSources.Single(s => s.Contains($"partial class {type}"));
+        Assert.Contains("public static global::ToonNet.Core.Serialization.ToonTypeInfo<global::App.Plain> ToonTypeInfo", Source("Plain"));
+        Assert.Contains("public new static global::ToonNet.Core.Serialization.ToonTypeInfo<global::App.Derived> ToonTypeInfo", Source("Derived"));
+        Assert.Contains("internal static global::ToonNet.Core.Serialization.ToonTypeInfo<global::App.Hidden> ToonTypeInfo", Source("Hidden"));
+        Assert.DoesNotContain("ToonTypeInfo =>", Source("Taken"));
+        Assert.DoesNotContain("ToonTypeInfo =>", Source("FromUserBase"));
+    }
 
     [Fact]
     public void NonPartialType_ReportsToon002()

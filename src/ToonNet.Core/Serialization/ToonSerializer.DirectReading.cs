@@ -96,6 +96,38 @@ public static partial class ToonSerializer
             : ReflectionReadTypeInfos.GetOrAdd(type, static t => CreateReadTypeInfo(t, useGeneratedCode: false));
     }
 
+    private static readonly ConcurrentDictionary<Type, ReadTypeInfo> GeneratedOnlyReadTypeInfos = new();
+
+    /// <summary>
+    ///     Classifies a target type without reflection metadata, for reading with a <see cref="ToonTypeInfo"/>: scalars,
+    ///     types with generated code, and <see cref="ReadKind.Tree"/> for everything else, which ends direct reading in
+    ///     favor of the generated tree-based methods.
+    /// </summary>
+    private static ReadTypeInfo GetGeneratedOnlyReadTypeInfo(Type type)
+    {
+        return GeneratedOnlyReadTypeInfos.GetOrAdd(type, static t =>
+        {
+            var underlying = Nullable.GetUnderlyingType(t);
+            var target = underlying ?? t;
+            var acceptsNull = !t.IsValueType || underlying != null;
+
+            if (IsScalarType(target))
+            {
+                return new ReadTypeInfo { Kind = ReadKind.Primitive, Target = target, AcceptsNull = acceptsNull };
+            }
+
+            if (FindGeneratedSerializer(target) is { Deserialize: not null, Reader: { } reader })
+            {
+                return new ReadTypeInfo
+                {
+                    Kind = ReadKind.Generated, Target = target, AcceptsNull = acceptsNull, HasGeneratedReader = true, Reader = reader
+                };
+            }
+
+            return new ReadTypeInfo { Kind = ReadKind.Tree, Target = target, AcceptsNull = acceptsNull };
+        });
+    }
+
     private static ReadTypeInfo CreateReadTypeInfo(Type t, bool useGeneratedCode)
     {
         {
@@ -225,10 +257,16 @@ public static partial class ToonSerializer
     /// <summary>
     ///     Reads one document. An instance is used once and is not thread-safe.
     /// </summary>
-    private sealed class DirectReader(ToonParser parser, ToonSerializerOptions options) : IToonDeserializationHost
+    private sealed class DirectReader(ToonParser parser, ToonSerializerOptions options, bool generatedOnly = false) : IToonDeserializationHost
     {
         private readonly ToonParser _parser = parser;
         private readonly ToonSerializerOptions _options = options;
+
+        /// <summary>
+        ///     Whether only generated code may convert values (reading with a <see cref="ToonTypeInfo"/>): what would need
+        ///     reflection falls back instead.
+        /// </summary>
+        private readonly bool _generatedOnly = generatedOnly;
         private SerializerState? _state;
         private ToonReader? _reader;
 
@@ -258,9 +296,36 @@ public static partial class ToonSerializer
             }
         }
 
+        /// <summary>
+        ///     Reads one document with a type info, only through generated code; what would need reflection throws, and the
+        ///     caller then converts the document with the generated tree-based methods.
+        /// </summary>
+        public static T ReadGenerated<T>(ToonText text, ToonTypeInfo<T> typeInfo, ToonSerializerOptions options)
+        {
+            var parser = new ToonParser(options.ToonOptions);
+            parser.BeginDocument(text);
+
+            try
+            {
+                var root = parser.ReadRoot();
+                var result = typeInfo.Read!(new DirectReader(parser, options, generatedOnly: true).Reader, new ToonReaderValue(root), 0);
+                parser.EndDocument();
+                return result;
+            }
+            finally
+            {
+                parser.ReleaseDocument();
+            }
+        }
+
         /// <summary>Reads a value as <paramref name="targetType"/>, like <see cref="DeserializeValue"/> would from its tree.</summary>
         private object? ReadValue(in ToonParser.ValueRef value, Type targetType, IToonConverter? propertyConverter, int depth)
         {
+            if (_generatedOnly)
+            {
+                return ReadGeneratedValue(value, GetGeneratedOnlyReadTypeInfo(targetType), depth);
+            }
+
             var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode);
 
             if (propertyConverter != null || info.Kind == ReadKind.Tree)
@@ -302,6 +367,55 @@ public static partial class ToonSerializer
                 default:
                     return ReadDictionary(value, info, depth);
             }
+        }
+
+        /// <summary>
+        ///     Reads a value with generated code, as a scalar, or (for <see cref="object"/> and <see cref="ToonValue"/>
+        ///     targets) from its tree like <see cref="DeserializeValue"/>; anything else falls back.
+        /// </summary>
+        private object? ReadGeneratedValue(in ToonParser.ValueRef value, ReadTypeInfo info, int depth)
+        {
+            if (info.Kind == ReadKind.Generated && value.NodeKind == ToonNodeKind.Object)
+            {
+                return info.Reader!.ReadOf(Reader, new ToonReaderValue(value), depth);
+            }
+
+            if (info.Kind == ReadKind.Tree)
+            {
+                if (info.Target == typeof(object))
+                {
+                    return ToUntyped(_parser.BuildValue(value), _options, depth);
+                }
+
+                // A ToonValue target takes the tree as it is, ToonNull included
+                if (typeof(ToonValue).IsAssignableFrom(info.Target))
+                {
+                    return _parser.BuildValue(value) is var tree && info.Target.IsInstanceOfType(tree) ? tree : throw new DirectReadFallbackException();
+                }
+            }
+
+            if (value.NodeKind == ToonNodeKind.Primitive)
+            {
+                if (_parser.IsNull(value))
+                {
+                    return info.AcceptsNull ? null : throw new DirectReadFallbackException();
+                }
+
+                if (info.Kind == ReadKind.Primitive)
+                {
+                    if (info.Target == typeof(string))
+                    {
+                        return ReadString(value);
+                    }
+
+                    // The conversions of DeserializeValue for scalars; its errors are reported by the tree-based path
+                    return TryDeserializePrimitive(_parser.ReadPrimitive(value), info.Target, State, out var result)
+                        ? result
+                        : throw new DirectReadFallbackException();
+                }
+            }
+
+            throw new DirectReadFallbackException();
         }
 
         /// <summary>Builds the value's tree and converts it with <see cref="DeserializeValue"/>.</summary>

@@ -25,10 +25,24 @@ internal sealed record TypeModel(
     bool CheckRuntimeType,
     bool HasTypeConverter,
     bool RegisterWithSerializer,
+    TypeInfoProperty TypeInfoProperty,
     int? FixedNamingPolicy,
     EquatableArray<PropertyModel> Properties,
     ConstructorModel? Constructor,
     EquatableArray<DiagnosticInfo> Diagnostics);
+
+/// <summary>Whether and how the static <c>ToonTypeInfo</c> property is generated.</summary>
+internal enum TypeInfoProperty
+{
+    /// <summary>Not generated: the type is not registered, ToonNet.Core is older, or a member takes the name.</summary>
+    None,
+
+    /// <summary>Generated.</summary>
+    Emit,
+
+    /// <summary>Generated with <c>new</c>, hiding the property generated for a base type.</summary>
+    EmitNew
+}
 
 /// <summary>A property in serialization order.</summary>
 /// <param name="TypeName">Fully qualified type including nullable annotations, for declarations.</param>

@@ -48,6 +48,12 @@ public static partial class ToonSerializer
             deserialize == null ? null : (value, options, depth) => deserialize(value, options, depth),
             writer,
             reader);
+
+        // Code from a generator without readers reads through the tree
+        ToonTypeInfo<T>.Generated = new ToonTypeInfo<T>(
+            serialize,
+            deserialize,
+            deserialize == null ? null : reader != null ? reader.Read : (ToonReader r, in ToonReaderValue v, int depth) => deserialize(r.BuildTree(in v), r.Options, depth));
     }
 
     /// <summary>

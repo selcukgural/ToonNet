@@ -130,6 +130,7 @@ internal static class TypeModelBuilder
             CheckRuntimeType: !type.IsValueType && !type.IsSealed,
             HasTypeConverter: hasTypeConverter,
             RegisterWithSerializer: !hasTypeConverter && CanRegister(type, compilation),
+            TypeInfoProperty: !hasTypeConverter && CanRegister(type, compilation) ? GetTypeInfoProperty(type, compilation) : TypeInfoProperty.None,
             FixedNamingPolicy: namingPolicy,
             Properties: new EquatableArray<PropertyModel>(propertyModels),
             Constructor: type.IsAbstract ? null : constructorModel,
@@ -139,7 +140,7 @@ internal static class TypeModelBuilder
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
     {
         return new TypeModel(false, null, default, Declaration(type), type.ToDisplayString(TypeNameFormat), type.ToDisplayString(TypeOfFormat),
-                             HintName(type), type.IsValueType, true, true, true, false, false, false, false, null, default, null,
+                             HintName(type), type.IsValueType, true, true, true, false, false, false, false, TypeInfoProperty.None, null, default, null,
                              new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()));
     }
 
@@ -170,6 +171,39 @@ internal static class TypeModelBuilder
         }
 
         return compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSourceGenerationHelpers")?.GetMembers("Register").Length > 0;
+    }
+
+    /// <summary>
+    /// Whether the static <c>ToonTypeInfo</c> property can be generated: ToonNet.Core must have the type, and no member of
+    /// the type or a base type may take the name, except the property generated for a <c>[ToonSerializable]</c> base
+    /// type, which the property hides.
+    /// </summary>
+    private static TypeInfoProperty GetTypeInfoProperty(INamedTypeSymbol type, Compilation compilation)
+    {
+        const string name = "ToonTypeInfo";
+
+        if (compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonTypeInfo`1") == null || !type.GetMembers(name).IsEmpty)
+        {
+            return TypeInfoProperty.None;
+        }
+
+        for (var current = type.BaseType; current != null; current = current.BaseType)
+        {
+            var serializable = current.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonSerializableAttribute");
+
+            // A base type in this compilation gets the property from this generator run, so it is not among its members yet
+            if (serializable && current.Locations.Any(l => l.IsInSource) && CanRegister(current, compilation))
+            {
+                return TypeInfoProperty.EmitNew;
+            }
+
+            if (!current.GetMembers(name).IsEmpty)
+            {
+                return serializable ? TypeInfoProperty.EmitNew : TypeInfoProperty.None;
+            }
+        }
+
+        return TypeInfoProperty.Emit;
     }
 
     private static bool IsGeneric(INamedTypeSymbol type)

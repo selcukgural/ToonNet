@@ -136,7 +136,7 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     This method performs CPU-bound synchronous serialization with an async signature for API consistency
     ///     and cancellation support. The ValueTask optimization ensures zero allocation in the common case.
-    ///     For I/O-bound operations, use <see cref="SerializeToFileAsync{T}"/> or <see cref="SerializeToStreamAsync{T}"/>.
+    ///     For I/O-bound operations, use <see cref="SerializeToFileAsync{T}"/> or <see cref="SerializeToStreamAsync{T}(T, Stream, ToonSerializerOptions, CancellationToken)"/>.
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]
@@ -645,7 +645,7 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     This method performs CPU-bound synchronous deserialization with an async signature for API consistency
     ///     and cancellation support. The ValueTask optimization ensures zero allocation in the common case.
-    ///     For I/O-bound operations, use <see cref="DeserializeFromFileAsync{T}"/> or <see cref="DeserializeFromStreamAsync{T}"/>.
+    ///     For I/O-bound operations, use <see cref="DeserializeFromFileAsync{T}"/> or <see cref="DeserializeFromStreamAsync{T}(Stream, ToonSerializerOptions, CancellationToken)"/>.
     /// </remarks>
     [RequiresUnreferencedCode(ReflectionMessage)]
     [RequiresDynamicCode(ReflectionMessage)]

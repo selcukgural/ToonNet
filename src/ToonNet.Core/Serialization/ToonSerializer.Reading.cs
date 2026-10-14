@@ -122,6 +122,10 @@ public static partial class ToonSerializer
         };
     }
 
+    /// <summary>The error for a value of the wrong kind (an array for an object, ...), for composed type infos.</summary>
+    internal static ToonSerializationException ShapeError(string message, Type targetType, ToonValue value) =>
+        Error(message, targetType, value, SerializerState.Root);
+
     /// <remarks>
     ///     The message names the path and the type but not the value, which may be personal data and ends up in logs and
     ///     (through model state) in HTTP responses; the value is available as <see cref="ToonSerializationException.Value"/>.

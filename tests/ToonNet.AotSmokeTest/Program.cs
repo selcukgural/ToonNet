@@ -1,9 +1,10 @@
 using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
+using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
 
-// Writes and reads [ToonSerializable] types through their generated methods, which NativeAOT can compile without
-// reflection. Exits with 1 when the text read back does not write the same text again.
+// Writes and reads [ToonSerializable] types through their generated methods and through ToonSerializer with their type
+// infos, which NativeAOT can compile without reflection. Exits with 1 when the text read back does not write the same text again.
 var catalog = new Catalog
 {
     Name = "Spring",
@@ -49,6 +50,20 @@ if (text != expected || again != text)
 if (!utf8.AsSpan().SequenceEqual(System.Text.Encoding.UTF8.GetBytes(expected)) || !utf8Again.AsSpan().SequenceEqual(utf8))
 {
     Console.WriteLine("FAILED: the UTF-8 output differs from the expected text or does not round-trip");
+    return 1;
+}
+
+// ToonSerializer with type infos: straight to and from text through generated code, without reflection
+var viaTypeInfo = ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo);
+var readViaTypeInfo = ToonSerializer.Deserialize(System.Text.Encoding.UTF8.GetBytes(viaTypeInfo), Catalog.ToonTypeInfo)!;
+var list = ToonTypeInfo.CreateList(Catalog.ToonTypeInfo);
+var listText = ToonSerializer.Serialize(new List<Catalog> { catalog, readViaTypeInfo }, list);
+var listBack = ToonSerializer.Deserialize(listText, list)!;
+
+if (viaTypeInfo != expected || ToonSerializer.Serialize(readViaTypeInfo, Catalog.ToonTypeInfo) != expected ||
+    listBack.Count != 2 || ToonSerializer.Serialize(listBack[1], Catalog.ToonTypeInfo) != expected)
+{
+    Console.WriteLine("FAILED: the type info overloads differ from the expected text or do not round-trip");
     return 1;
 }
 
