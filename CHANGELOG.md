@@ -85,6 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoded text and a 47 MB list, and it is slightly faster. Errors and their line numbers are those of reading the whole
   document (checked against every decode fixture with batches of one item); the declared length is checked when the
   array ends.
+- **ToonNet.Core:** `ToonSerializerOptions.UnmappedMemberHandling` (`Skip` by default, or `Disallow`) and
+  `RespectRequiredMembers` (off by default) make reading report a key that matches no property or constructor parameter
+  and a missing key for a C# `required` property, with the path, as `JsonSerializerOptions` does. Keys of read-only
+  properties count as matched, so documents written by `ToonSerializer` read back. Types are then read with
+  reflection; the `ToonTypeInfo` overloads do not support these options. `AddToonNet(configuration)` binds them, and
+  `PropertyNameCaseInsensitive`, from configuration.
 - **ToonNet.AspNetCore.Mvc:** `HttpRequest.ReadFromToonAsync<T>()` (with options, `Type` and `ToonTypeInfo` overloads)
   and `HasToonContentType()` read TOON request bodies in Minimal APIs and middleware, like `ReadFromJsonAsync`; before,
   only MVC controllers could read TOON. A blank body reads as the default value.

@@ -3,6 +3,7 @@ using System.Text;
 using ToonNet.Core;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization;
+using ToonNet.Core.Serialization.Attributes;
 
 namespace ToonNet.SourceGenerators.Tests.Tests;
 
@@ -185,6 +186,29 @@ public partial class TypeInfoTests
     }
 
     [Fact]
+    public void StrictMemberOptions_UseReflection_AndAreNotSupportedWithATypeInfo()
+    {
+        // Generated code checks neither: off by default, so a missing required property and an unknown key are skipped
+        Assert.Null(ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2")!.Name);
+
+        foreach (var options in new[]
+                 {
+                     new ToonSerializerOptions { RespectRequiredMembers = true },
+                     new ToonSerializerOptions { UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow }
+                 })
+        {
+            const string toon = "Age: 1\nOther: 2";
+
+            Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<RequiredRow>(toon, options));
+            Assert.Throws<ToonSerializationException>(() => RequiredRow.Deserialize(ToonDocument.Parse(toon), options));
+            Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize(toon, RequiredRow.ToonTypeInfo, options));
+
+            var row = ToonSerializer.Deserialize<RequiredRow>("Name: a\nAge: 1", options)!;
+            Assert.Equal(("a", 1), (row.Name, row.Age));
+        }
+    }
+
+    [Fact]
     public void Converters_AreNotSupported()
     {
         var options = new ToonSerializerOptions();
@@ -238,4 +262,11 @@ public partial class TypeInfoTests
 
         public override BoxSize Read(ToonValue value, ToonSerializerOptions options) => new();
     }
+}
+
+[ToonSerializable]
+public partial class RequiredRow
+{
+    public required string Name { get; set; }
+    public int Age { get; set; }
 }

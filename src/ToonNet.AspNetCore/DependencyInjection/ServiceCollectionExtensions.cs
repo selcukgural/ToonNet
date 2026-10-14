@@ -230,5 +230,27 @@ public static class ServiceCollectionExtensions
                     $"Invalid {section.Path}:{nameof(ToonSerializerOptions.PropertyNamingPolicy)} value '{namingPolicy}'. " +
                     $"Expected one of: {string.Join(", ", Enum.GetNames<PropertyNamingPolicy>())}.");
         }
+
+        var caseInsensitive = section.GetValue<bool?>(nameof(ToonSerializerOptions.PropertyNameCaseInsensitive));
+        if (caseInsensitive.HasValue)
+        {
+            options.PropertyNameCaseInsensitive = caseInsensitive.Value;
+        }
+
+        var respectRequired = section.GetValue<bool?>(nameof(ToonSerializerOptions.RespectRequiredMembers));
+        if (respectRequired.HasValue)
+        {
+            options.RespectRequiredMembers = respectRequired.Value;
+        }
+
+        var unmapped = section.GetValue<string?>(nameof(ToonSerializerOptions.UnmappedMemberHandling));
+        if (!string.IsNullOrWhiteSpace(unmapped))
+        {
+            options.UnmappedMemberHandling = Enum.TryParse<ToonUnmappedMemberHandling>(unmapped, ignoreCase: true, out var handling) && Enum.IsDefined(handling)
+                ? handling
+                : throw new InvalidOperationException(
+                    $"Invalid {section.Path}:{nameof(ToonSerializerOptions.UnmappedMemberHandling)} value '{unmapped}'. " +
+                    $"Expected one of: {string.Join(", ", Enum.GetNames<ToonUnmappedMemberHandling>())}.");
+        }
     }
 }

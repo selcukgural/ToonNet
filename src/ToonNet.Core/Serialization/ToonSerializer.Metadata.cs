@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Diagnostics.CodeAnalysis;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
@@ -23,6 +24,9 @@ public static partial class ToonSerializer
 
         /// <summary>Typed access for primitive properties of classes, used when no converter applies; else null.</summary>
         public PrimitiveAccessor? Primitive { get; init; }
+
+        /// <summary>Whether the property is declared with the C# <c>required</c> modifier.</summary>
+        public bool IsRequired { get; init; }
 
         /// <summary>Serialized names per <see cref="PropertyNamingPolicy"/> value, computed on first use.</summary>
         public string?[] Names { get; } = new string?[NamingPolicyCount];
@@ -55,6 +59,12 @@ public static partial class ToonSerializer
 
         /// <summary>The type the metadata describes.</summary>
         public required Type Type { get; init; }
+
+        /// <summary>
+        ///     The indexes of the <c>required</c> properties; empty when the constructor used for reading sets them
+        ///     (<see cref="System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute"/>).
+        /// </summary>
+        public int[] RequiredProperties { get; init; } = [];
 
         /// <summary>
         ///     Property names per naming policy for direct writing (see <see cref="GetDistinctPropertyNames"/>); an empty
@@ -202,7 +212,8 @@ public static partial class ToonSerializer
                     Setter = prop.CanWrite ? CompileSetter(prop) : null,
                     AttributeName = prop.GetCustomAttribute<ToonPropertyAttribute>()?.Name,
                     Converter = CreateAttributeConverter(prop.GetCustomAttribute<ToonConverterAttribute>()),
-                    Primitive = PrimitiveAccessor.Create(prop)
+                    Primitive = PrimitiveAccessor.Create(prop),
+                    IsRequired = prop.IsDefined(typeof(RequiredMemberAttribute), inherit: false)
                 };
 
                 var order = prop.GetCustomAttribute<ToonPropertyOrderAttribute>()?.Order ?? 0;
@@ -210,11 +221,14 @@ public static partial class ToonSerializer
             }
 
             var (constructor, parameters) = SelectConstructor(t);
+            PropertyMetadata[] ordered = [.. properties.OrderBy(p => p.Order).ThenBy(p => p.Index).Select(p => p.Metadata)];
+            var setsRequired = constructor?.IsDefined(typeof(SetsRequiredMembersAttribute), inherit: false) == true;
 
             return new TypeMetadata
             {
                 Type = t,
-                Properties = [.. properties.OrderBy(p => p.Order).ThenBy(p => p.Index).Select(p => p.Metadata)],
+                Properties = ordered,
+                RequiredProperties = setsRequired ? [] : [.. Enumerable.Range(0, ordered.Length).Where(p => ordered[p].IsRequired)],
                 Constructor = constructor,
                 ConstructorParameters = parameters,
                 TypeConverter = CreateAttributeConverter(t.GetCustomAttribute<ToonConverterAttribute>()),

@@ -1304,8 +1304,8 @@ internal sealed class SourceEmitter
             return;
         }
 
-        code.AppendLine("// Converters, case-insensitive reading, null and non-object values are handled (or reported) by ToonSerializer.");
-        code.AppendLine($"if (options.Converters.Count != 0 || options.PropertyNameCaseInsensitive || value is not {Models}ToonObject __obj) return {reflection};");
+        code.AppendLine("// Converters, options generated code does not apply, null and non-object values are handled (or reported) by ToonSerializer.");
+        code.AppendLine($"if (options.Converters.Count != 0 || {Helpers}.ReadsWithReflection(options) || value is not {Models}ToonObject __obj) return {reflection};");
         EmitPolicyLocal();
 
         var arguments = new List<string>();

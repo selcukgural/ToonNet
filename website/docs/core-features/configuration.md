@@ -35,6 +35,8 @@ var options = new ToonSerializerOptions
 |----------|------|---------|-------------|
 | `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Transform property names |
 | `PropertyNameCaseInsensitive` | `bool` | `false` | Match keys to property names ignoring case when reading |
+| `UnmappedMemberHandling` | `ToonUnmappedMemberHandling` | `Skip` | `Disallow` makes a key that matches no property or constructor parameter an error when reading |
+| `RespectRequiredMembers` | `bool` | `false` | Make a missing key for a C# `required` property an error when reading |
 | `IgnoreNullValues` | `bool` | `false` | Skip null properties during serialization |
 | `IncludeReadOnlyProperties` | `bool` | `true` | Serialize get-only properties |
 | `MaxDepth` | `int` | `100` | Maximum object nesting while serializing/deserializing (1–200, or up to 1000 with `AllowExtendedLimits`) |
@@ -245,6 +247,25 @@ Set `PropertyNameCaseInsensitive = true` to match keys ignoring case (`age` then
 preferred, properties whose names differ only in case still need an exact match, and the last matching key wins.
 Types are then read with reflection; the `ToonTypeInfo` overloads do not support the option. See
 [Deserialization](deserialization#key-matching-is-case-sensitive-by-default).
+
+## Strict Reading
+
+Two options turn silent defaults into errors, as `JsonSerializerOptions` does:
+
+```csharp
+var options = new ToonSerializerOptions
+{
+    UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow, // a key that matches nothing is an error
+    RespectRequiredMembers = true                                 // a missing `required` property is an error
+};
+```
+
+Both throw a `ToonSerializationException` with the path, for example
+`The key 'Nmae' matches no property or constructor parameter (path: $.Nmae, target type: Account)` or
+`The required property 'Name' is missing (path: $, target type: Account)`. Keys of read-only properties count as
+matched, so what `ToonSerializer` writes reads back; a key with the value `null` counts as present; `required`
+properties are not checked when the constructor used for reading has `[SetsRequiredMembers]`. Types are then read with
+reflection; the `ToonTypeInfo` overloads do not support these options.
 
 ## IncludeReadOnlyProperties
 

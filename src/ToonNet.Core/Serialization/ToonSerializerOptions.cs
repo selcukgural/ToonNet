@@ -58,6 +58,30 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public bool PropertyNameCaseInsensitive { get; set; }
 
     /// <summary>
+    ///     Gets or sets what reading does with a key that matches no property or constructor parameter of the type:
+    ///     <see cref="ToonUnmappedMemberHandling.Skip"/> (the default) ignores it, <see cref="ToonUnmappedMemberHandling.Disallow"/>
+    ///     throws a <see cref="ToonSerializationException"/>. Keys of read-only properties count as matched, so
+    ///     documents written by <see cref="ToonSerializer"/> read back. Types are then read with reflection; the
+    ///     <c>ToonTypeInfo</c> overloads do not support <see cref="ToonUnmappedMemberHandling.Disallow"/>.
+    /// </summary>
+    public ToonUnmappedMemberHandling UnmappedMemberHandling { get; set; }
+
+    /// <summary>
+    ///     Gets or sets whether reading requires a key for every property declared with the C# <c>required</c> modifier,
+    ///     throwing a <see cref="ToonSerializationException"/> when one is missing, as System.Text.Json does. Not
+    ///     checked when the constructor used for reading has <c>[SetsRequiredMembers]</c>. The default value is false.
+    ///     Types are then read with reflection; the <c>ToonTypeInfo</c> overloads do not support it.
+    /// </summary>
+    public bool RespectRequiredMembers { get; set; }
+
+    /// <summary>
+    ///     Whether generated code may read with these options: it matches keys exactly and checks neither unmapped
+    ///     keys nor required properties.
+    /// </summary>
+    internal bool AllowsGeneratedReading =>
+        !PropertyNameCaseInsensitive && UnmappedMemberHandling == ToonUnmappedMemberHandling.Skip && !RespectRequiredMembers;
+
+    /// <summary>
     ///     Gets or sets a value indicating whether extended limits are allowed.
     ///     When false (default), MaxDepth is limited to 200.
     ///     When true, MaxDepth can be set up to 1000.
@@ -176,6 +200,11 @@ public sealed class ToonSerializerOptions : IValidatableObject
     /// <returns>A sequence of validation results.</returns>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        if (!Enum.IsDefined(UnmappedMemberHandling))
+        {
+            yield return new ValidationResult($"{nameof(UnmappedMemberHandling)} must be Skip or Disallow", [nameof(UnmappedMemberHandling)]);
+        }
+
         var maxAllowed = AllowExtendedLimits ? ExtendedMaxDepth : DefaultMaxDepth;
         if (MaxDepth > maxAllowed)
         {
@@ -186,6 +215,22 @@ public sealed class ToonSerializerOptions : IValidatableObject
                 [nameof(MaxDepth), nameof(AllowExtendedLimits)]);
         }
     }
+}
+
+/// <summary>
+/// What reading does with a key that matches no property or constructor parameter.
+/// </summary>
+public enum ToonUnmappedMemberHandling
+{
+    /// <summary>
+    /// The key and its value are ignored.
+    /// </summary>
+    Skip,
+
+    /// <summary>
+    /// A <see cref="ToonSerializationException"/> is thrown.
+    /// </summary>
+    Disallow
 }
 
 /// <summary>

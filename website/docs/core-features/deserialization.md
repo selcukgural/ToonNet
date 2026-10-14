@@ -319,6 +319,20 @@ exact match, and when several keys fill the same property the last one wins. Wit
 reflection rather than generated code, and the overloads that take a `ToonTypeInfo` throw `NotSupportedException`.
 Writing is not affected.
 
+### Unknown Keys and Required Properties
+
+Keys that match no property are ignored, and a `required` property without a key keeps its default value. To report
+both instead, set `UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow` and `RespectRequiredMembers = true`
+(see [Configuration](configuration#strict-reading)):
+
+```csharp
+var options = new ToonSerializerOptions { UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow };
+
+ToonSerializer.Deserialize<Person>("Name: Alice
+Aeg: 30", options);
+// ToonSerializationException: The key 'Aeg' matches no property or constructor parameter (path: $.Aeg, target type: Person)
+```
+
 ### Property Naming Policy
 
 Match serialized names with different casing:

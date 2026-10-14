@@ -168,6 +168,9 @@ Controls C# object serialization behavior:
 | `IgnoreNullValues` | `bool` | `false` | Skip properties whose value is `null` |
 | `IncludeReadOnlyProperties` | `bool` | `true` | Include read-only properties when serializing |
 | `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Key naming: `Default`, `CamelCase`, `SnakeCase`, `LowerCase` |
+| `PropertyNameCaseInsensitive` | `bool` | `false` | Match keys to property names ignoring case when reading |
+| `UnmappedMemberHandling` | `ToonUnmappedMemberHandling` | `Skip` | `Disallow`: a key that matches no property is an error |
+| `RespectRequiredMembers` | `bool` | `false` | A missing key for a C# `required` property is an error |
 | `MaxDepth` | `int` | `100` | Maximum object graph depth |
 | `AllowExtendedLimits` | `bool` | `false` | Allow `MaxDepth` above 200 (up to 1000) |
 

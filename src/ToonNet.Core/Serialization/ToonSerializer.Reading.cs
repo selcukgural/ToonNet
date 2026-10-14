@@ -69,7 +69,7 @@ public static partial class ToonSerializer
         }
 
         // Generated code reads objects; other values are reported by the checks below
-        if (generatedAllowed && value is ToonObject && !options.PropertyNameCaseInsensitive &&
+        if (generatedAllowed && value is ToonObject && options.AllowsGeneratedReading &&
             GetGeneratedSerializer(targetType, options) is { Deserialize: { } generated })
         {
             return generated(value, options, depth);
@@ -1086,6 +1086,42 @@ public static partial class ToonSerializer
         return unambiguous;
     }
 
+    /// <summary>
+    ///     Whether a key names a property (settable or not) or a constructor parameter of the type, matched as reading
+    ///     matches keys (ignoring case for unambiguous names with case-insensitive reading).
+    /// </summary>
+    private static bool IsMappedKey(TypeMetadata metadata, ToonSerializerOptions options, string key)
+    {
+        foreach (var property in metadata.Properties)
+        {
+            if (string.Equals(GetPropertyName(property, metadata, options), key, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        foreach (var argument in metadata.Activator.Arguments)
+        {
+            if (argument.Property == null && string.Equals(argument.Parameter.Name, key, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        if (options.PropertyNameCaseInsensitive)
+        {
+            foreach (var name in GetCaseInsensitiveNames(metadata, options))
+            {
+                if (string.Equals(name, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static object DeserializeObject(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, SerializerState state)
     {
         if (value is not ToonObject obj)
@@ -1109,6 +1145,31 @@ public static partial class ToonSerializer
         var activator = metadata.Activator;
         var arguments = activator.Arguments.Length == 0 ? [] : new object?[activator.Arguments.Length];
         var caseInsensitive = options.PropertyNameCaseInsensitive ? GetCaseInsensitiveNames(metadata, options) : null;
+
+        if (options.UnmappedMemberHandling == ToonUnmappedMemberHandling.Disallow)
+        {
+            foreach (var (key, _) in obj.Properties)
+            {
+                if (!IsMappedKey(metadata, options, key))
+                {
+                    state.Push(key);
+                    throw Error($"The key '{key}' matches no property or constructor parameter", targetType, value, state);
+                }
+            }
+        }
+
+        if (options.RespectRequiredMembers)
+        {
+            foreach (var p in metadata.RequiredProperties)
+            {
+                var name = GetPropertyName(metadata.Properties[p], metadata, options);
+
+                if (!TryGetKey(obj, name, caseInsensitive, out _))
+                {
+                    throw Error($"The required property '{name}' is missing", targetType, value, state);
+                }
+            }
+        }
 
         for (var i = 0; i < arguments.Length; i++)
         {

@@ -380,8 +380,9 @@ public static partial class ToonSerializer
             }
 
             // Generated code does not consult converters: with converters, it reads only types where none applies
-            // Generated code matches keys exactly: with case-insensitive reading, types are read with reflection
-            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode && !_options.PropertyNameCaseInsensitive &&
+            // Generated code matches keys exactly and checks neither unmapped keys nor required properties: with those
+            // options, types are read with reflection
+            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode && _options.AllowsGeneratedReading &&
                                                    (_converterCheck == null || _converterCheck.AllowsGeneratedCode(Nullable.GetUnderlyingType(targetType) ?? targetType)));
 
             if (propertyConverter != null || info.Kind == ReadKind.Tree || IsConverted(targetType))
@@ -533,14 +534,20 @@ public static partial class ToonSerializer
         {
             var instance = metadata.Activator.New([]);
             var properties = metadata.Properties;
+            var seen = RequiredTracking(metadata);
             var cursor = _parser.BeginObject(value);
 
             while (_parser.NextProperty(ref cursor, out var key, out var fieldValue))
             {
                 if (!lookup.TryGetSlot(key, _options.PropertyNameCaseInsensitive, out var slot) || slot.Property < 0)
                 {
-                    _parser.Skip(fieldValue);
+                    SkipUnmapped(metadata, key, fieldValue);
                     continue;
+                }
+
+                if (seen != null)
+                {
+                    seen[slot.Property] = true;
                 }
 
                 var property = properties[slot.Property];
@@ -554,7 +561,40 @@ public static partial class ToonSerializer
                 property.Setter!(instance, ReadValue(fieldValue, property.Property.PropertyType, property.Converter, depth + 1));
             }
 
+            CheckRequired(metadata, seen);
             return instance;
+        }
+
+        /// <summary>Which properties had a key, when required properties are checked; otherwise null.</summary>
+        private bool[]? RequiredTracking(TypeMetadata metadata) =>
+            _options.RespectRequiredMembers && metadata.RequiredProperties.Length > 0 ? new bool[metadata.Properties.Length] : null;
+
+        /// <summary>A missing required property is reported by the tree-based path, with its path.</summary>
+        private static void CheckRequired(TypeMetadata metadata, bool[]? seen)
+        {
+            if (seen == null)
+            {
+                return;
+            }
+
+            foreach (var p in metadata.RequiredProperties)
+            {
+                if (!seen[p])
+                {
+                    throw new DirectReadFallbackException();
+                }
+            }
+        }
+
+        /// <summary>Skips a key that fills nothing; one that matches no member at all is reported by the tree-based path when unmapped keys are disallowed.</summary>
+        private void SkipUnmapped(TypeMetadata metadata, string key, in ToonParser.ValueRef fieldValue)
+        {
+            if (_options.UnmappedMemberHandling == ToonUnmappedMemberHandling.Disallow && !IsMappedKey(metadata, _options, key))
+            {
+                throw new DirectReadFallbackException();
+            }
+
+            _parser.Skip(fieldValue);
         }
 
         /// <summary>
@@ -574,13 +614,14 @@ public static partial class ToonSerializer
             var argumentRead = new bool[arguments.Length];
             object?[]? pending = null;
             bool[]? pendingRead = null;
+            var seen = RequiredTracking(metadata);
             var cursor = _parser.BeginObject(value);
 
             while (_parser.NextProperty(ref cursor, out var key, out var fieldValue))
             {
                 if (!lookup.TryGetSlot(key, _options.PropertyNameCaseInsensitive, out var slot))
                 {
-                    _parser.Skip(fieldValue);
+                    SkipUnmapped(metadata, key, fieldValue);
                     continue;
                 }
 
@@ -592,6 +633,12 @@ public static partial class ToonSerializer
                     }
 
                     var argument = activator.Arguments[slot.Parameter];
+
+                    if (seen != null && argument.Property != null)
+                    {
+                        seen[Array.IndexOf(properties, argument.Property)] = true;
+                    }
+
                     arguments[slot.Parameter] = ReadValue(fieldValue, argument.Parameter.ParameterType, argument.Property?.Converter, depth + 1);
                     argumentRead[slot.Parameter] = true;
                 }
@@ -608,8 +655,15 @@ public static partial class ToonSerializer
                     var property = properties[slot.Property];
                     pending[slot.Property] = ReadValue(fieldValue, property.Property.PropertyType, property.Converter, depth + 1);
                     pendingRead[slot.Property] = true;
+
+                    if (seen != null)
+                    {
+                        seen[slot.Property] = true;
+                    }
                 }
             }
+
+            CheckRequired(metadata, seen);
 
             for (var i = 0; i < arguments.Length; i++)
             {

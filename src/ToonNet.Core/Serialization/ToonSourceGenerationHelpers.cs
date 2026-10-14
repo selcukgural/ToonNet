@@ -95,6 +95,12 @@ public static class ToonSourceGenerationHelpers
     }
 
     /// <summary>
+    ///     Whether the options need the reflection-based reader (case-insensitive keys, unmapped key errors, required
+    ///     properties), which generated code then defers to.
+    /// </summary>
+    public static bool ReadsWithReflection(ToonSerializerOptions options) => !options.AllowsGeneratedReading;
+
+    /// <summary>
     ///     Deserializes a value with the reflection-based serializer, continuing at the given depth.
     /// </summary>
     public static T DeserializeWithReflection<T>(ToonValue value, ToonSerializerOptions options, int depth)

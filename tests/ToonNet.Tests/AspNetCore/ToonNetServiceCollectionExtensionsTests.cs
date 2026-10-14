@@ -51,7 +51,10 @@ public sealed class ToonNetServiceCollectionExtensionsTests
                                 ["ToonNet:ToonSerializerOptions:AllowExtendedLimits"] = "true",
                                 ["ToonNet:ToonSerializerOptions:MaxDepth"] = "500",
                                 ["ToonNet:ToonSerializerOptions:IgnoreNullValues"] = "true",
-                                ["ToonNet:ToonSerializerOptions:PropertyNamingPolicy"] = "CamelCase"
+                                ["ToonNet:ToonSerializerOptions:PropertyNamingPolicy"] = "CamelCase",
+                                ["ToonNet:ToonSerializerOptions:PropertyNameCaseInsensitive"] = "true",
+                                ["ToonNet:ToonSerializerOptions:RespectRequiredMembers"] = "true",
+                                ["ToonNet:ToonSerializerOptions:UnmappedMemberHandling"] = "disallow"
                             })
                             .Build();
 
@@ -72,6 +75,9 @@ public sealed class ToonNetServiceCollectionExtensionsTests
         Assert.Equal(500, serializerOptions.MaxDepth);
         Assert.True(serializerOptions.IgnoreNullValues);
         Assert.Equal(PropertyNamingPolicy.CamelCase, serializerOptions.PropertyNamingPolicy);
+        Assert.True(serializerOptions.PropertyNameCaseInsensitive);
+        Assert.True(serializerOptions.RespectRequiredMembers);
+        Assert.Equal(ToonUnmappedMemberHandling.Disallow, serializerOptions.UnmappedMemberHandling);
         Assert.True(ReferenceEquals(serializerOptions.ToonOptions, toonOptions));
 
         Assert.NotNull(provider.GetRequiredService<ToonEncoder>());
