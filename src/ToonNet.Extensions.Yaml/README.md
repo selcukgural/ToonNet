@@ -289,33 +289,32 @@ Keys that are not plain identifiers are quoted in TOON (`"runs-on": ubuntu-lates
 
 ## ✨ YAML Features Supported
 
-Quoted and block scalars (`"42"`, `'true'`, `|`, `>`) are always strings. Plain scalars are typed by their
-text: `true`/`yes`/`on` and `false`/`no`/`off` (lowercase, capitalized or uppercase) become booleans, `null`, `~`
-and empty values become null, and numbers follow the TOON number rules (JSON number grammar plus an optional
-leading `+`, exact value when it fits in a `decimal`). Anything else stays a string, so values such as `007`,
-`1,000` or `(5)` are not changed. When converting back, strings that would otherwise read as another type are
-quoted (`"42"`, `"true"`, `"yes"`, `""`), so a TOON → YAML → TOON round trip keeps them strings.
+Quoted and block scalars (`"42"`, `'true'`, `|`, `>`) and scalars tagged `!!str` are always strings. Plain scalars
+are typed by the YAML 1.2 core schema: `true`/`false` (lowercase, capitalized or uppercase) become booleans, `null`,
+`~` and empty values become null, and integers and floats become numbers (exact when they fit in a `decimal`).
+Anything else stays a string, including the YAML 1.1 booleans `yes`/`no`/`on`/`off` and `.inf`/`.nan`, which a TOON
+number cannot hold. When converting back, strings that would otherwise read as another type are quoted (`"42"`,
+`"true"`, `"007"`, `""`, and `"yes"` for YAML 1.1 readers), so a TOON → YAML → TOON round trip keeps them strings.
 
-### Boolean Variants
+### Booleans
 ```yaml
-# All read as booleans
-enabled: true
-disabled: false
-legacy_yes: yes
-legacy_no: no
-switch_on: on
-switch_off: off
+enabled: true        # a boolean
+disabled: FALSE      # a boolean
+legacy_yes: yes      # the string "yes" (a boolean only in YAML 1.1)
+switch_on: on        # the string "on"
 ```
 
 ### Number Formats
 ```yaml
 integer: 42
 float: 3.14
+short: .5            # 0.5
 scientific: 1.5e-10
-hex: 0xFF      # kept as the string "0xFF"
-octal: 0o77    # kept as the string "0o77"
-zip: 007       # kept as the string "007" (leading zero)
-quoted: "42"   # a string
+hex: 0xFF            # 255
+octal: 0o77          # 63
+zip: 007             # 7; quote it ("007") to keep the string
+infinity: .inf       # the string ".inf"
+quoted: "42"         # a string
 ```
 
 ### Complex Structures

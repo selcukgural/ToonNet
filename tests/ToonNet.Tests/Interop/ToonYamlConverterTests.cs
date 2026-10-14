@@ -204,7 +204,7 @@ public class ToonYamlConverterTests
     }
 
     [Fact]
-    public void FromYaml_BooleanValues_ConvertCorrectly()
+    public void FromYaml_BooleanValues_FollowYaml12()
     {
         var yaml = """
                    enabled: true
@@ -220,10 +220,12 @@ public class ToonYamlConverterTests
 
         Assert.True(((ToonBoolean)root["enabled"]!).Value);
         Assert.False(((ToonBoolean)root["disabled"]!).Value);
-        Assert.True(((ToonBoolean)root["yesValue"]!).Value);
-        Assert.False(((ToonBoolean)root["noValue"]!).Value);
-        Assert.True(((ToonBoolean)root["onValue"]!).Value);
-        Assert.False(((ToonBoolean)root["offValue"]!).Value);
+
+        // The YAML 1.1 booleans are strings in YAML 1.2
+        Assert.Equal("yes", ((ToonString)root["yesValue"]!).Value);
+        Assert.Equal("no", ((ToonString)root["noValue"]!).Value);
+        Assert.Equal("on", ((ToonString)root["onValue"]!).Value);
+        Assert.Equal("off", ((ToonString)root["offValue"]!).Value);
     }
 
     [Fact]
@@ -504,14 +506,35 @@ public class ToonYamlConverterTests
     [InlineData("-1.50", "-1.5")]
     [InlineData("12345678901234567890", "12345678901234567890")]
     [InlineData("True", "true")]
-    [InlineData("NO", "false")]
+    [InlineData("FALSE", "false")]
+    [InlineData("NO", "NO")]
     [InlineData("~", "null")]
-    [InlineData("007", "\"007\"")]
+    [InlineData("007", "7")]
+    [InlineData("-007", "-7")]
+    [InlineData("000", "0")]
+    [InlineData("0xFF", "255")]
+    [InlineData("0o17", "15")]
+    [InlineData(".5", "0.5")]
+    [InlineData("-.5", "-0.5")]
+    [InlineData("5.", "5")]
+    [InlineData("1e3", "1000")]
+    [InlineData("01.50E-1", "0.15")]
     [InlineData("1,000", "\"1,000\"")]
+    [InlineData("1_000", "1_000")]
     [InlineData("(5)", "(5)")]
-    [InlineData("0xFF", "0xFF")]
+    [InlineData("+0x1F", "+0x1F")]
+    [InlineData("0x", "0x")]
+    [InlineData("0o8", "0o8")]
+    [InlineData("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF")]
+    [InlineData(".", ".")]
+    [InlineData("1e", "1e")]
     [InlineData(".inf", ".inf")]
-    public void FromYaml_PlainScalars_AreTypedWithoutChangingValues(string yaml, string toon)
+    [InlineData(".NaN", ".NaN")]
+    [InlineData("yes", "yes")]
+    [InlineData("Off", "Off")]
+    [InlineData("!!str 42", "\"42\"")]
+    [InlineData("! 42", "\"42\"")]
+    public void FromYaml_PlainScalars_FollowTheYaml12CoreSchema(string yaml, string toon)
     {
         Assert.Equal($"v: {toon}", ToonYamlConvert.FromYaml($"v: {yaml}"));
     }
@@ -545,6 +568,12 @@ public class ToonYamlConverterTests
     [InlineData("-0")]
     [InlineData("1e3")]
     [InlineData("0.5")]
+    [InlineData("007")]
+    [InlineData("0x1F")]
+    [InlineData("0o7")]
+    [InlineData(".5")]
+    [InlineData("5.")]
+    [InlineData("y")]
     public void ToYaml_EveryStringTheReaderWouldType_IsQuoted(string text)
     {
         var value = new ToonObject { ["v"] = new ToonString(text) };
@@ -553,6 +582,9 @@ public class ToonYamlConverterTests
         var back = ToonYamlConverter.FromYaml(yaml).AsObject();
 
         Assert.Equal(text, Assert.IsType<ToonString>(back["v"]).Value);
+
+        // Quoted, so YAML 1.1 readers do not type it either
+        Assert.Contains($"\"{text}\"", yaml);
     }
 
     [Fact]

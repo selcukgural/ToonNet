@@ -154,12 +154,13 @@ foreach (var service in services.Properties)
 - Mapping keys must be scalars: a sequence or mapping used as a key throws a `YamlException`. An empty key is kept as
   the TOON key `""`.
 - Merge keys (`<<: *base`) are not expanded; `<<` stays an ordinary key.
-- Quoted and block scalars are always strings (`"42"` stays a string). Plain scalars are typed by their text:
-  `true`/`false` (also `yes`/`no`, `on`/`off`, in lowercase, capitalized or uppercase), `null`/`~`/empty, and numbers
-  in JSON number grammar (optional leading `+`, exact value when it fits in a `decimal`). Everything else, such as
-  `007`, `1,000`, `0xFF` or `.inf`, stays a string.
-- `ToonYamlConvert.ToYaml` quotes strings that YAML would otherwise read as another type, so conversions round-trip,
-  and accepts `ToonOptions` for parsing the TOON input.
+- Quoted and block scalars (and scalars tagged `!!str`) are always strings (`"42"` stays a string). Plain scalars are
+  typed by the YAML 1.2 core schema: `true`/`false` (lowercase, capitalized or uppercase), `null`/`~`/empty, integers
+  (`42`, `+5`, `007` is 7, `0xFF` is 255, `0o17` is 15) and floats (`1.5`, `.5`, `1e3`), exact when they fit in a
+  `decimal`. Everything else is a string, including the YAML 1.1 booleans `yes`/`no`/`on`/`off` and `.inf`/`.nan`,
+  which a TOON number cannot hold.
+- `ToonYamlConvert.ToYaml` quotes strings that YAML would otherwise read as another type (also `yes`/`no`/`on`/`off`,
+  for YAML 1.1 readers), so conversions round-trip, and accepts `ToonOptions` for parsing the TOON input.
 - Anchors and aliases are expanded into copies; comments are not preserved.
 
 ## Use Cases

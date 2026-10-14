@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   services that read TOON from untrusted sources.
 
 ### Changed
+- **ToonNet.Extensions.Yaml:** `FromYaml` types plain scalars by the YAML 1.2 core schema: `yes`/`no`/`on`/`off` are
+  strings now (they were booleans, as in YAML 1.1), and `007`, `0xFF`, `0o17`, `.5` and `5.` are numbers (they were
+  strings). `.inf` and `.nan` stay strings, and scalars tagged `!!str` are strings. `ToYaml` still quotes
+  `yes`/`no`/`on`/`off` so that YAML 1.1 readers read them as strings too.
 - **ToonNet.Core:** Exception messages are one line without symbols, so they read well in logs and in the model errors
   that ASP.NET Core returns: `Duplicate key 'id' (line 3, column 1)` and
   `The string is not a number (path: $.Age, target type: Int32)` instead of the text followed by indented lines such as

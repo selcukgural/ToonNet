@@ -32,8 +32,8 @@ public static class ToonYamlConverter
 
     /// <summary>
     ///     The serializer used by <see cref="ToYaml(ToonValue)"/>; it keeps no state between calls. It quotes strings a
-    ///     YAML reader would otherwise resolve to another type ("42", "true", "null", ""), and every string FromYaml would
-    ///     read as something else (for example the YAML 1.1 booleans yes/no/on/off).
+    ///     YAML reader would otherwise resolve to another type ("42", "true", "null", "0x1F", ""), including the YAML 1.1
+    ///     booleans (yes/no/on/off), so YAML 1.1 readers read them as strings too.
     /// </summary>
     private static readonly ISerializer Serializer = new SerializerBuilder().WithIndentedSequences()
                                                                             .WithQuotingNecessaryStrings()
@@ -171,13 +171,17 @@ public static class ToonYamlConverter
     {
         public override void Emit(ScalarEventInfo eventInfo, IEmitter emitter)
         {
-            if (eventInfo.Source.Value is string text && ConvertPlainScalar(text) is not ToonString)
+            if (eventInfo.Source.Value is string text && (ConvertPlainScalar(text) is not ToonString || IsYaml11Boolean(text)))
             {
                 eventInfo.Style = ScalarStyle.DoubleQuoted;
             }
 
             base.Emit(eventInfo, emitter);
         }
+
+        /// <summary>The YAML 1.1 booleans (and <c>y</c>/<c>n</c>), which YAML 1.1 readers would not read as strings.</summary>
+        private static bool IsYaml11Boolean(string text) => text is "y" or "Y" or "n" or "N" or "yes" or "Yes" or "YES" or "no" or "No" or "NO" or
+            "on" or "On" or "ON" or "off" or "Off" or "OFF";
     }
 
     #region YAML to TOON Conversion
@@ -358,24 +362,27 @@ public static class ToonYamlConverter
     ///     to a null, boolean, number, or string value depending on its content.
     /// </returns>
     /// <remarks>
-    ///     Quoted and block scalars (<c>"42"</c>, <c>'true'</c>, <c>|</c>, <c>&gt;</c>) are always strings. Plain scalars
-    ///     are typed by their text: <c>null</c>, <c>~</c> or nothing is null; <c>true</c>/<c>false</c> (also
-    ///     <c>yes</c>/<c>no</c>/<c>on</c>/<c>off</c>, in lowercase, capitalized or uppercase) are booleans; numbers follow
-    ///     the TOON number rules (JSON number grammar, optional leading <c>+</c>, exact value when it fits in a
-    ///     <see cref="decimal"/>). Everything else, including <c>007</c>, <c>1,000</c>, <c>0xFF</c> and <c>.inf</c>,
-    ///     stays a string, so no value is changed silently.
+    ///     Quoted and block scalars (<c>"42"</c>, <c>'true'</c>, <c>|</c>, <c>&gt;</c>) and scalars tagged <c>!!str</c>
+    ///     or <c>!</c> are strings. Plain scalars are typed by the YAML 1.2 core schema: <c>null</c>, <c>Null</c>,
+    ///     <c>NULL</c>, <c>~</c> or nothing is null; <c>true</c>/<c>false</c> (lowercase, capitalized or uppercase) are
+    ///     booleans; integers (<c>42</c>, <c>+5</c>, <c>007</c>, <c>0x1F</c>, <c>0o17</c>) and floats (<c>1.5</c>,
+    ///     <c>.5</c>, <c>1e3</c>) are numbers, exact when they fit in a <see cref="decimal"/>. Everything else is a
+    ///     string, including the YAML 1.1 booleans <c>yes</c>/<c>no</c>/<c>on</c>/<c>off</c>, and <c>.inf</c> and
+    ///     <c>.nan</c>, which a TOON number cannot hold.
     /// </remarks>
     private static ToonValue ConvertYamlScalar(YamlScalarNode scalar)
     {
         var value = scalar.Value ?? string.Empty;
 
-        if (scalar.Style is not (ScalarStyle.Plain or ScalarStyle.Any))
+        if (scalar.Style is not (ScalarStyle.Plain or ScalarStyle.Any) || (!scalar.Tag.IsEmpty && scalar.Tag.Value is StringTag or "!"))
         {
             return new ToonString(value);
         }
 
         return ConvertPlainScalar(value);
     }
+
+    private const string StringTag = "tag:yaml.org,2002:str";
 
     /// <summary>
     ///     Types the text of a plain scalar (see <see cref="ConvertYamlScalar"/>).
@@ -386,15 +393,119 @@ public static class ToonYamlConverter
         {
             case "" or "~" or "null" or "Null" or "NULL":
                 return ToonNull.Instance;
-            case "true" or "True" or "TRUE" or "yes" or "Yes" or "YES" or "on" or "On" or "ON":
+            case "true" or "True" or "TRUE":
                 return new ToonBoolean(true);
-            case "false" or "False" or "FALSE" or "no" or "No" or "NO" or "off" or "Off" or "OFF":
+            case "false" or "False" or "FALSE":
                 return new ToonBoolean(false);
         }
 
-        var numberText = value.Length > 1 && value[0] == '+' ? value[1..] : value;
+        return ParseCoreNumber(value) ?? (ToonValue)new ToonString(value);
+    }
 
-        return ToonNumber.TryParse(numberText, out var number) ? number : new ToonString(value);
+    /// <summary>
+    ///     A number of the YAML 1.2 core schema: <c>[-+]?[0-9]+</c>, <c>0o[0-7]+</c>, <c>0x[0-9a-fA-F]+</c> or
+    ///     <c>[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?</c>; null for other text, and for integers in another
+    ///     base that do not fit in a <see cref="decimal"/>.
+    /// </summary>
+    private static ToonNumber? ParseCoreNumber(string text)
+    {
+        var span = text.AsSpan();
+
+        if (span.Length > 2 && span[0] == '0' && span[1] is 'x' or 'o')
+        {
+            var digits = span[2..];
+            var radix = span[1] == 'x' ? 16 : 8;
+            var number = System.Numerics.BigInteger.Zero;
+
+            foreach (var digit in digits)
+            {
+                var value = digit is >= '0' and <= '9' ? digit - '0'
+                    : radix == 16 && digit is >= 'a' and <= 'f' ? digit - 'a' + 10
+                    : radix == 16 && digit is >= 'A' and <= 'F' ? digit - 'A' + 10
+                    : -1;
+
+                if (value < 0 || value >= radix)
+                {
+                    return null;
+                }
+
+                number = number * radix + value;
+            }
+
+            return number <= new System.Numerics.BigInteger(decimal.MaxValue) ? new ToonNumber((decimal)number) : null;
+        }
+
+        var negative = span.Length > 0 && span[0] == '-';
+
+        if (span.Length > 0 && span[0] is '+' or '-')
+        {
+            span = span[1..];
+        }
+
+        var i = 0;
+
+        while (i < span.Length && char.IsAsciiDigit(span[i]))
+        {
+            i++;
+        }
+
+        var whole = span[..i];
+        var fraction = ReadOnlySpan<char>.Empty;
+
+        if (i < span.Length && span[i] == '.')
+        {
+            var start = ++i;
+
+            while (i < span.Length && char.IsAsciiDigit(span[i]))
+            {
+                i++;
+            }
+
+            fraction = span[start..i];
+        }
+
+        if (whole.IsEmpty && fraction.IsEmpty)
+        {
+            return null;
+        }
+
+        var exponent = ReadOnlySpan<char>.Empty;
+
+        if (i < span.Length && span[i] is 'e' or 'E')
+        {
+            var start = i++;
+
+            if (i < span.Length && span[i] is '+' or '-')
+            {
+                i++;
+            }
+
+            var digitsStart = i;
+
+            while (i < span.Length && char.IsAsciiDigit(span[i]))
+            {
+                i++;
+            }
+
+            if (i == digitsStart)
+            {
+                return null;
+            }
+
+            exponent = span[start..i];
+        }
+
+        if (i != span.Length)
+        {
+            return null;
+        }
+
+        // The same number in the JSON grammar that TOON numbers use: no leading zeros, no bare point
+        var integer = whole.TrimStart('0');
+        var json = new System.Text.StringBuilder(text.Length + 2).Append(negative ? "-" : "").Append(integer.IsEmpty ? "0" : integer)
+                                                                  .Append(fraction.IsEmpty ? "" : ".").Append(fraction).Append(exponent).ToString();
+
+        return ToonNumber.TryParse(json, out var parsed) ? parsed : null;
     }
 
     /// <summary>
