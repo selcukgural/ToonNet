@@ -10,6 +10,7 @@ using ToonNet.Core.Validation;
 namespace ToonNet.Tests.Paths;
 
 /// <summary>Work and memory of paths, rules and edits on documents built to make them expensive.</summary>
+[Collection(MeasurementCollection.Name)]
 public class ToonPathResourceTests
 {
     private static readonly ToonPathOptions Strict = new()
