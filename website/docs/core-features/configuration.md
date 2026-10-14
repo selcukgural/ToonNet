@@ -19,7 +19,7 @@ using ToonNet.Core;
 using ToonNet.Core.Serialization;
 
 // Default options
-var options = new ToonSerializerOptions();
+var defaults = new ToonSerializerOptions();
 
 // Custom options
 var options = new ToonSerializerOptions
@@ -44,8 +44,16 @@ var options = new ToonSerializerOptions
 | `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
 | `Converters` | `List<IToonConverter>` | empty | Custom type converters |
 | `ToonOptions` | `ToonOptions` | `new ToonOptions()` | Lower-level parsing and encoding options; cannot be null |
+| `PathOptions` | `ToonPathOptions?` | `null` | Limits of the paths of `DeserializeAt`, `DeserializeAll` and `DeserializeAsyncEnumerableAt` (length, nesting, steps, time); `null` uses `ToonPathOptions.Default` (see [Querying](querying)) |
 
 `IncludeTypeInformation` and `PublicOnly` were removed in 3.0 (they had no effect since 2.0).
+
+`ToonSerializerOptions.Default` and `ToonOptions.Default` return a new instance with the default settings on every
+call, so changing one never changes the defaults; `ToonPathOptions.Default` is one shared instance, and its properties
+can only be set when it is created (`init`). `options.GetConverter(type)` returns the converter of the options that
+would be used for a type (or null). Both option classes implement `IValidatableObject`: `Validate` reports the
+combinations a single setter cannot check (a `MaxDepth` above 200 without `AllowExtendedLimits`), which is what
+`AddToonNet` checks at startup.
 
 There is no option to switch indentation off: TOON expresses nesting by indentation, so output is always indented
 (see `ToonOptions.IndentSize` below).
@@ -73,19 +81,19 @@ so acronyms stay together: `URLValue` becomes `urlValue` and `url_value`, `HTTPS
 ### Examples
 
 ```csharp
-public class Person
-{
-    public string FirstName { get; set; }
-    public string LastName { get; set; }
-    public int Age { get; set; }
-}
-
 var person = new Person
 {
     FirstName = "Alice",
     LastName = "Smith",
     Age = 30
 };
+
+public class Person
+{
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public int Age { get; set; }
+}
 ```
 
 #### Default (No transformation)
@@ -175,7 +183,7 @@ var options = new ToonSerializerOptions
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase
 };
 
-Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
+Person person = ToonSerializer.Deserialize<Person>(toonInput, options)!;
 // person.FirstName = "Alice"
 // person.LastName = "Smith"
 ```
@@ -201,14 +209,14 @@ var options = new ToonSerializerOptions { IgnoreNullValues = false };
 ```
 
 ```csharp
+string toon = ToonSerializer.Serialize(user, options);
+
 public class User
 {
     public string Username { get; set; } = "alice";
     public string? Bio { get; set; } = "Engineer";
     public string? Website { get; set; } = null;
 }
-
-string toon = ToonSerializer.Serialize(user, options);
 ```
 
 **Output:**
@@ -242,7 +250,7 @@ Name: Alice
 age: 30
 """;  // lowercase 'age' won't match 'Age' property
 
-Person person = ToonSerializer.Deserialize<Person>(toonInput);
+Person person = ToonSerializer.Deserialize<Person>(toonInput)!;
 // person.Age will be 0 (default value) because 'age' doesn't match 'Age'
 ```
 
@@ -283,15 +291,15 @@ Reading sets only public setters (`set` and `init`), as System.Text.Json does. A
 property `[ToonInclude]` (namespace `ToonNet.Core.Serialization.Attributes`) to let reading use its setter:
 
 ```csharp
+var account = ToonSerializer.Deserialize<Account>("Name: Ada\nIsAdmin: true\nLogins: 3")!;
+// account.IsAdmin = false, account.Logins = 3
+
 public class Account
 {
     public string Name { get; set; } = "";
     public bool IsAdmin { get; private set; }               // not set from documents
     [ToonInclude] public int Logins { get; private set; }   // set from documents
 }
-
-var account = ToonSerializer.Deserialize<Account>("Name: Ada\nIsAdmin: true\nLogins: 3")!;
-// account.IsAdmin = false, account.Logins = 3
 ```
 
 Both properties are still written. A property with a non-public setter and no `[ToonInclude]` counts as read-only: it
@@ -304,13 +312,6 @@ Get-only properties are serialized by default. Set `IncludeReadOnlyProperties = 
 reading can set (a public setter, or a non-public one with `[ToonInclude]`):
 
 ```csharp
-public class Rectangle
-{
-    public int Width { get; set; } = 3;
-    public int Height { get; set; } = 4;
-    public int Area => Width * Height;
-}
-
 ToonSerializer.Serialize(new Rectangle());
 // Width: 3
 // Height: 4
@@ -319,6 +320,13 @@ ToonSerializer.Serialize(new Rectangle());
 ToonSerializer.Serialize(new Rectangle(), new ToonSerializerOptions { IncludeReadOnlyProperties = false });
 // Width: 3
 // Height: 4
+
+public class Rectangle
+{
+    public int Width { get; set; } = 3;
+    public int Height { get; set; } = 4;
+    public int Area => Width * Height;
+}
 ```
 
 ## SerializeRuntimeTypes
@@ -328,15 +336,17 @@ or the `T` of `Serialize<T>`. An object in a property of a base or summary type 
 type, as with System.Text.Json:
 
 ```csharp
-public class UserSummary { public string Name { get; set; } = ""; }
-public class User : UserSummary { public string PasswordHash { get; set; } = ""; }
-public class Reply { public UserSummary Author { get; set; } = new(); }
-
 var reply = new Reply { Author = new User { Name = "Ada", PasswordHash = "x9f..." } };
 
 ToonSerializer.Serialize(reply);
 // Author:
 //   Name: Ada
+
+public class UserSummary { public string Name { get; set; } = ""; }
+
+public class User : UserSummary { public string PasswordHash { get; set; } = ""; }
+
+public class Reply { public UserSummary Author { get; set; } = new(); }
 ```
 
 A value declared as an interface writes the interface's properties; a value declared as `object` is written with its
@@ -370,7 +380,8 @@ Keep `AllowExtendedLimits` off for input you do not control: deep documents cost
 
 Exceeding the limit throws `ToonEncodingException` when serializing and `ToonSerializationException` when
 deserializing (parsing the text throws `ToonParseException` for `ToonOptions.MaxDepth`).
-Circular references are detected separately and throw `ToonEncodingException` right away.
+The reflection-based serializer detects circular references separately and throws `ToonEncodingException` right
+away; generated code (`[ToonSerializable]` types) reports a cycle when it exceeds `MaxDepth`.
 
 ## Custom Converters
 
@@ -378,8 +389,8 @@ Register custom type converters for specific types.
 
 ```csharp
 var options = new ToonSerializerOptions();
-options.AddConverter(new CustomDateTimeConverter());  // throws on null
-options.Converters.Add(new CustomGuidConverter());
+options.AddConverter(new CustomDateTimeConverter());  // throws on null (the example of Custom Converters)
+options.Converters.Add(new AbsoluteUriConverter());
 
 string toon = ToonSerializer.Serialize(obj, options);
 ```
@@ -488,6 +499,9 @@ public class ToonService
 Create common configurations as presets:
 
 ```csharp
+// Usage
+string toon = ToonSerializer.Serialize(data, ToonPresets.Api);
+
 public static class ToonPresets
 {
     // Smaller output: skip nulls
@@ -517,9 +531,6 @@ public static class ToonPresets
         ToonOptions = new ToonOptions { StrictMode = false }
     };
 }
-
-// Usage
-string toon = ToonSerializer.Serialize(data, ToonPresets.Api);
 ```
 
 Use `StrictMode = false` only for documents you trust. Non-strict reading does not check array lengths and lets the
@@ -529,6 +540,10 @@ the first key. Keep the default for request bodies and other untrusted input. Se
 ## Environment-Specific Configuration
 
 ```csharp
+// Usage
+var options = ToonConfig.GetOptions(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"));
+string toon = ToonSerializer.Serialize(data, options);
+
 public static class ToonConfig
 {
     public static ToonSerializerOptions GetOptions(string environment)
@@ -547,10 +562,6 @@ public static class ToonConfig
         };
     }
 }
-
-// Usage
-var options = ToonConfig.GetOptions(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"));
-string toon = ToonSerializer.Serialize(data, options);
 ```
 
 ## Complete Configuration Example
@@ -573,7 +584,7 @@ var options = new ToonSerializerOptions
 
 // Add custom converters
 options.AddConverter(new CustomDateTimeConverter());
-options.AddConverter(new CustomGuidConverter());
+options.AddConverter(new AbsoluteUriConverter());   // both from Custom Converters
 
 // Use for serialization
 string toon = ToonSerializer.Serialize(data, options);
@@ -638,6 +649,7 @@ Only for documents you trust, such as your own exports; keep strict mode for unt
 - Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
 - Cache entries are created on demand and retained for the process lifetime (no eviction).
 - Reuse `ToonSerializerOptions` instances, but do not mutate a single instance concurrently across threads.
+- A `ToonDocumentReader` or `ToonDocumentWriter` instance is for one thread at a time.
 
 ## See Also
 

@@ -142,6 +142,9 @@ string prompt = $"Analyze this data:\n{toonString}";
 ### Scenario 2: Data Import
 
 ```csharp
+using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;
+
 // Read JSON file
 string json = File.ReadAllText("data.json");
 
@@ -159,6 +162,10 @@ File.WriteAllText("data.toon", toon);
 ### Scenario 3: Format Transformation
 
 ```csharp
+using System.Text.Json;
+using ToonNet.Core.Models;
+using ToonNet.Extensions.Json;
+
 // JSON → TOON → JSON (with formatting)
 string compactJson = """{"name":"Alice","age":30}""";
 
@@ -216,4 +223,4 @@ Console.WriteLine(prettyJson);
 ## See Also
 
 - **[YAML Integration](yaml-integration)**: Convert YAML ↔ TOON
-- **[Custom Formats](custom-formats)**: Create custom converters
+- **[Converter Examples](custom-formats)**: Converters for types with their own text form

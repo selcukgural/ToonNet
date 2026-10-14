@@ -22,7 +22,9 @@ ToonValue? missing = root["nope"];                    // null: no such member
 - `AsObject()` and `AsArray()` return the value as a `ToonObject` or `ToonArray`, or throw.
 - `GetValue<T>()` converts a primitive to a string, boolean, number, date/time, `Guid`, `Uri` or enum with the serializer's
   rules (`"2025-03-04"` to `DateOnly`, `"Friday"` to `DayOfWeek`); it throws `ToonSerializationException` when the value
-  does not convert. `TryGetValue<T>(out value)` returns false instead.
+  does not convert. `TryGetValue<T>(out value)` returns false instead. A `ToonValue` type the value is
+  (`GetValue<ToonNumber>()`) gives the value itself, and `GetValue<object>()` gives what reading the primitive into
+  `object` gives: a string, a boolean, a `long`, `decimal` or `double`, or null.
 - `Deserialize<T>(options)` converts any value with the serializer (also with a `ToonTypeInfo`):
   `var users = root["users"]!.Deserialize<List<User>>();`
 
@@ -44,7 +46,13 @@ int removed = root.RemoveAll("$.users[?@.active == false]");
 ```
 
 `SetValue` takes a path of member names and indexes; a missing member becomes an object, or an array when an index
-follows it. `RemoveAll` takes any path and removes what it selects (but not the root).
+follows it. It checks the whole path first, so a path that does not fit the tree throws `InvalidOperationException`
+and leaves the tree unchanged; a path with wildcards or filters throws too. `RemoveAll` takes any path and removes what
+it selects; a value selected twice (`[0,0]`) counts once, and `RemoveAll("$")` throws `InvalidOperationException`
+("The root cannot be removed.").
+
+`Items` of a `ToonArray` is a `List<ToonValue>`: a `null` that code adds to it is read as a TOON `null` everywhere
+(the indexer, paths, the serializer, `DeepClone`, `DeepEquals`, encoding).
 
 ## Copying and Comparing
 

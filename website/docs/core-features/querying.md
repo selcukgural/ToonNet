@@ -76,9 +76,13 @@ follow the RFC's rules for function extensions:
 Register functions with `ToonPathFunctions` and pass them in the options of the paths that call them:
 
 ```csharp
+using ToonNet.Core.Models;
+using ToonNet.Core.Paths;
+using ToonNet.Core.Serialization;
+
 var functions = new ToonPathFunctions()
     .AddPredicate("is_vip", customer => customer is ToonObject c && c["tier"] is ToonString { Value: "gold" }) // [?is_vip(@.customer)]
-    .AddPredicate("same_day", (a, b) => SameDay(a, b))                                         // two values
+    .AddPredicate("same_day", (a, b) => SameDay(a, b))                                         // two values (your method)
     .AddFunction("net", total => total is ToonNumber n ? new ToonNumber(n.Value / 1.2) : null) // [?net(@.total) > 100]
     .AddNodesPredicate("all_shipped", lines => lines.All(l => l["shipped"] is ToonBoolean { Value: true }))
     .AddNodesFunction("weight", lines => new ToonNumber(lines.Sum(l => l["kg"]!.GetValue<double>())));
@@ -104,7 +108,7 @@ function is compared; a value argument is a literal, a singular query (`@.name`)
 is any query. Names are lowercase letters, digits and underscores, starting with a letter, and cannot be those of the
 built-in functions. Register functions before compiling the paths that use them; they are called on the threads that
 evaluate paths, so they should not change shared state. Exceptions they throw are not caught: an argument can be any
-kind of value (or null), so check its kind first, as `is_vip` does. Functions and their limits also work in
+kind of value (or null), so check its kind first, as `is_vip` does. `functions.Names` lists the names registered. Functions and their limits also work in
 [rules](validation).
 
 ## On a Tree
@@ -115,12 +119,14 @@ using ToonNet.Core.Models;
 var root = ToonDocument.Parse(toon).Root;
 
 IReadOnlyList<ToonValue> big = root.Select("$.orders[?@.total > 100 && @.paid == true]");
-ToonValue? region = root.SelectSingle("$.meta.region");          // null if none; throws if several
+ToonValue? region = root.SelectSingle("$.meta.region");          // null if none; InvalidOperationException if several
 IReadOnlyList<ToonPathMatch> where = root.SelectMatches("$..id"); // with normalized paths: $['orders'][2]['id']
 ```
 
-The methods that take path text compile each path once and cache it. To keep a compiled path yourself, use
-`ToonPath.Parse` (or `ToonPath.TryParse`, which returns false instead of throwing `ToonPathException`):
+`SelectMatches` returns `ToonPathMatch` values, each with the normalized `Path` and the `Value`. The methods that take
+path text compile each path once and cache it. To keep a compiled path yourself, use `ToonPath.Parse` (or
+`ToonPath.TryParse`, which returns false instead of throwing `ToonPathException`); a `ToonPath` has its `Text`, its
+`Options`, and `IsSingular` (only member names and indexes, the paths `SetValue` and `DeserializeAt` take):
 
 ```csharp
 using ToonNet.Core.Paths;
@@ -153,7 +159,8 @@ allocated 34 KB instead of 3.5 MB.
 
 ## Into Objects
 
-`DeserializeAt<T>` reads the value at a path of member names and indexes, such as the list inside a response envelope:
+`DeserializeAt<T>` reads the value at a path of member names and indexes, such as the list inside a response envelope
+(a path with wildcards, filters or slices throws `ArgumentException`; use `DeserializeAll` for those):
 
 ```csharp
 var orders = ToonSerializer.DeserializeAt<List<Order>>(toon, "$.data.orders");
@@ -171,8 +178,8 @@ var last   = await ToonSerializer.DeserializeAtAsync<Order>(stream, "$.data.orde
 `DeserializeAll<T>` reads every value a path selects, such as the rows that pass a filter:
 
 ```csharp
-List<Order?> big = ToonSerializer.DeserializeAll<Order>(toon, "$.orders[?@.total > 100]");
-List<decimal> totals = ToonSerializer.DeserializeAll<decimal>(toon, "$.orders[*].total");
+List<Order?>? big = ToonSerializer.DeserializeAll<Order>(toon, "$.orders[?@.total > 100]");
+List<decimal>? totals = ToonSerializer.DeserializeAll<decimal>(toon, "$.orders[*].total");
 ```
 
 It is evaluated over the text like `SelectFrom`, and the matches are read straight into objects. On 10,000 rows it ran
@@ -189,7 +196,8 @@ multiply the work (`$..*..*..*..*` on a small, deep document would visit billion
 timeout stop such queries. A step is a value visited, a filter tested, a segment of a normalized path
 `SelectMatches` writes, or 16 characters of a string an operation reads (comparisons, `lower`, `contains`, ...);
 comparing or passing an object or array costs a step per value in it, so `$.items[?lower($.bigText) == 'x']` cannot
-read a large string once per item for free.
+read a large string once per item for free. The budget grows with the document's strings, so reading a long string
+once or twice (a filter over a 20 MB value) fits; comparing two strings costs as much as the shorter one.
 
 Regular expressions run on .NET's non-backtracking engine: linear in the length of the text, but also in the size of
 the pattern's automaton (`[a-z]{1000}` has a thousand states). A match spends a step per 64 characters and states before
@@ -202,7 +210,7 @@ kept beyond the evaluation (except for a few small patterns).
 | `MaxLength` | 4,096 characters | `ToonPathException` when compiling |
 | `MaxNesting` | 64 levels of filters, parentheses, function calls | `ToonPathException` when compiling |
 | `MaxPatternLength` | 1,024 characters | the pattern is not valid: `match()`/`search()` are false |
-| `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document (per line when evaluating text) | `ToonPathLimitException` when evaluating |
+| `MaxSteps` + `MaxStepsPerValue` | 1,000,000 + 16 per value of the document (per line when evaluating text), and the steps to read its strings twice | `ToonPathLimitException` when evaluating |
 | `Timeout` | 10 seconds (`Timeout.InfiniteTimeSpan` turns it off) | `ToonPathLimitException` (`IsTimeout`) when evaluating |
 | `Functions`, `StandardFunctionsOnly` | none; extensions allowed | an unknown function is a `ToonPathException` |
 

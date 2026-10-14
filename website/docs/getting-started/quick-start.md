@@ -15,9 +15,9 @@ Create a simple C# class:
 ```csharp
 public class Person
 {
-    public string Name { get; set; }
+    public string Name { get; set; } = "";
     public int Age { get; set; }
-    public string Email { get; set; }
+    public string Email { get; set; } = "";
 }
 ```
 
@@ -57,7 +57,7 @@ Age: 25
 Email: bob@example.com
 """;
 
-Person restoredPerson = ToonSerializer.Deserialize<Person>(toonInput);
+Person restoredPerson = ToonSerializer.Deserialize<Person>(toonInput)!;
 
 Console.WriteLine($"{restoredPerson.Name} is {restoredPerson.Age} years old");
 // Output: Bob Johnson is 25 years old
@@ -73,9 +73,9 @@ using ToonNet.Core.Serialization;
 // Define your model
 public class Person
 {
-    public string Name { get; set; }
+    public string Name { get; set; } = "";
     public int Age { get; set; }
-    public string Email { get; set; }
+    public string Email { get; set; } = "";
 }
 
 class Program
@@ -131,7 +131,7 @@ tokenizer.
 1. **Human-Readable**: Indentation instead of braces; strings are quoted only when required
 2. **Compact**: Tabular arrays state field names once, which usually means fewer tokens than JSON for LLM prompts
 3. **Type-Safe**: Strongly typed serialization/deserialization
-4. **Performance**: Property access goes through compiled expression trees (type metadata is read once via reflection and cached); the optional [source generator](../advanced/source-generators) avoids that metadata path
+4. **Performance**: Property access goes through compiled accessors, typed delegates and expression trees (type metadata is read once via reflection and cached); the optional [source generator](../advanced/source-generators) avoids that metadata path
 
 ## Next Steps
 

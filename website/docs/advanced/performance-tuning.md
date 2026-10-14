@@ -78,8 +78,13 @@ await ToonSerializer.SerializeDocumentsAsync(
 
 **Read back efficiently:**
 ```csharp
-// ❌ Bad: Load entire file
-var users = ToonSerializer.Deserialize<List<User>>(File.ReadAllText("users.toon"));
+// ❌ Bad: read every document into a list first (a multi-document file is not one array: Deserialize<List<User>>
+// of the whole text would fail to parse)
+var users = new List<User?>();
+await foreach (var u in ToonSerializer.DeserializeDocumentsAsync<User>("users.toon"))
+{
+    users.Add(u);
+}
 
 // ✅ Good: Stream incrementally
 await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<User>("users.toon"))
@@ -135,6 +140,7 @@ Use BenchmarkDotNet to measure performance:
 ```csharp
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
+using ToonNet.Core.Serialization;
 
 [MemoryDiagnoser]
 public class SerializationBenchmarks

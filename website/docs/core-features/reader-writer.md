@@ -12,7 +12,8 @@ entries it will have; the writer checks the count when the array ends.
 ```csharp
 using ToonNet.Core.Encoding;
 
-using var writer = new ToonDocumentWriter(stream);   // also IBufferWriter<byte> (UTF-8) or TextWriter
+using var stream = File.Create("sale.toon");
+using var writer = new ToonDocumentWriter(stream);   // also IBufferWriter<byte> (UTF-8) or TextWriter, and ToonOptions
 
 writer.WriteStartObject();
 writer.WriteString("name", "Spring sale");
@@ -74,14 +75,26 @@ items[2]:
 - The writer does not track property names: writing one twice in an object gives a document that strict readers reject
   (a repeated key).
 
+| Writer members | |
+|---------|---|
+| `WriteStartObject()`, `WriteStartObject(name)`, `WriteEndObject()` | Objects; the overloads without a name are for the root, list items and values |
+| `WriteStartArray`, `WriteStartList`, `WriteStartTable`, `WriteStartKeyedTable` (each with or without a name, with a length and the fields), `WriteRowKey(key)`, `WriteEndArray()` | Arrays and tables |
+| `WriteStringValue`, `WriteNumberValue` (`long`, `ulong`, `decimal`, `double`, `float`), `WriteBooleanValue`, `WriteNullValue` | A value where a value goes (an item, a cell) |
+| `WriteString(name, ...)`, `WriteNumber(name, ...)`, `WriteBoolean(name, bool)`, `WriteNull(name)` | A member of an object; strings also as `ReadOnlySpan<char>` |
+| `WriteValue(value)`, `WriteValue(name, value)` | A `ToonValue` tree |
+| `Flush()`, `FlushAsync(ct)`, `Dispose()`, `DisposeAsync()` | Write the collected text (disposing flushes) |
+| `Options`, `CurrentDepth`, `IsComplete` | The options it formats with, the objects and arrays not yet ended, whether the root value is complete |
+
 ## Reading
 
 The reader yields tokens that follow the data model, not the layout: tabular rows, keyed entries and list items are
 objects and arrays like any other.
 
 ```csharp
+using ToonNet.Core.Models;
 using ToonNet.Core.Parsing;
 
+byte[] utf8Bytes = File.ReadAllBytes("sale.toon");
 using var reader = new ToonDocumentReader(utf8Bytes);   // also string, ReadOnlySpan<char>, Create(stream), CreateAsync(stream)
 
 while (reader.Read())
@@ -108,11 +121,13 @@ while (reader.Read())
 | `StartArray`, `EndArray` | `ArrayLength` (declared length) on `StartArray` |
 | `PropertyName` | `GetPropertyName()` |
 | `String` | `GetString()` (unescaped) |
-| `Number` | `GetInt32()`, `GetInt64()`, `GetDecimal()`, `GetDouble()`, `TryGet...` |
+| `Number` | `GetInt32()`, `GetInt64()`, `GetDecimal()`, `GetDouble()`; `TryGetInt32`, `TryGetInt64`, `TryGetDecimal` return false when the number does not fit (the `Get` methods throw `FormatException`) |
 | `True`, `False` | `GetBoolean()` |
 | `Null` | |
 
-`ValueSpan` is the raw text of a primitive token and `LineNumber` its line. The reader checks the document with the
+A getter for another token type throws `InvalidOperationException`. `ValueSpan` is the raw text of a primitive token
+(a quoted string with its quotes and escapes), `LineNumber` its line, and `CurrentDepth` the number of objects and
+arrays entered and not yet ended. `Skip()` skips the current value (on a property name, its value) and `ReadValue()` reads it as a tree; both leave the reader on the value's last token, so the next `Read()` moves past it. The reader checks the document with the
 rules and errors of `ToonDocument.Parse` (a `ToonParseException` with line and column), and the end of the document when
 `Read` returns false. In non-strict mode a repeated key is reported each time it appears, in document order; a tree
 (`ReadValue`, `ToonDocument.Parse`) keeps the last value. UTF-8 input is decoded into a pooled buffer; dispose the reader
@@ -124,6 +139,9 @@ to return it (the getters throw `ObjectDisposedException` afterwards).
 `JsonSerializer` reads from a `Utf8JsonReader`. A large document can be read partly by hand and partly into objects:
 
 ```csharp
+using ToonNet.Core.Parsing;
+using ToonNet.Core.Serialization;
+
 using var reader = new ToonDocumentReader(utf8Bytes);
 
 while (reader.Read())

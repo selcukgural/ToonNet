@@ -32,7 +32,9 @@ orders[2]{id,customer,total}:
   # 380 more items
 ```
 
-The text is still valid TOON (parsers drop comments), and the model knows the data is incomplete. `ToonPrompt.Encode`
+The text is still valid TOON (parsers drop comments), and the model knows the data is incomplete.
+`ToonPromptOptions.SerializerOptions` sets the naming policy, the delimiter and the indentation of the prompt text
+(`new ToonPromptOptions { SerializerOptions = new() { PropertyNamingPolicy = PropertyNamingPolicy.CamelCase } }`). `ToonPrompt.Encode`
 does the same for a `ToonValue` tree, without changing it.
 
 ## The Shape of an Answer
@@ -77,8 +79,12 @@ end of the answer runs to the end.
 
 `ToonPrompt.Deserialize<T>` and `ToonPrompt.Parse` read that text in non-strict mode, so the slips models make do not
 fail the answer: a length that does not match the rows (`items[3]` with two rows), a repeated key (the last one wins),
-or an indentation level jumped. Answers that are not TOON at all still throw `ToonParseException`, and values that do
-not fit the type `ToonSerializationException`, so you can retry with the error in the prompt.
+or an indentation level jumped. Text that is not valid TOON throws `ToonParseException`, and values that do not fit the
+type `ToonSerializationException`, so you can retry with the error in the prompt. Prose is often valid TOON, though:
+"I cannot help with that" is a root string (`ToonSerializationException`: "Expected an object but got String"), and
+"Sure! Here: the count is 3" is an object with an unknown key, which reads as an object with default values and no
+error. Catch such answers with `required` members, `UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow`, or
+`DeserializeValidated` with rules.
 
 ```csharp
 try

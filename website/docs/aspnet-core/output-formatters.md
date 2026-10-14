@@ -77,12 +77,16 @@ public IResult GetUser(int id)
 // Minimal API: extension method on Results.Extensions
 app.MapGet("/users/{id}", (int id) => Results.Extensions.Toon(GetUserFromDatabase(id)));
 
+// The same with the constructor: value, options (null for the application's), status code
+app.MapGet("/v2/users/{id}", (int id) => new ToonResult(GetUserFromDatabase(id), null, StatusCodes.Status200OK));
+
 // With a status code (reading the TOON body: see Input Formatters, Minimal APIs)
 app.MapPost("/users", async (HttpRequest request) =>
     Results.Extensions.Toon(Save((await request.ReadFromToonAsync<User>())!), StatusCodes.Status201Created));
 ```
 
-`ToonResult` uses the options passed to it, otherwise the application's `IOptions<ToonSerializerOptions>`. The MVC
+`ToonResult` exposes `Value`, `StatusCode` and `ContentType` (`application/toon; charset=utf-8`), as the results of
+`Results` do. It uses the options passed to it, otherwise the application's `IOptions<ToonSerializerOptions>`. The MVC
 formatters use the same `IOptions<ToonSerializerOptions>`: `AddToonNet(...)`, `services.Configure<ToonSerializerOptions>(...)`
 and the delegate passed to `AddToonFormatters` all configure that one instance.
 

@@ -19,14 +19,6 @@ using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization.Attributes;
 
-[ToonSerializable]
-public partial class Person
-{
-    public string Name { get; set; } = "";
-    public int Age { get; set; }
-    public List<string> Hobbies { get; set; } = [];
-}
-
 var person = new Person { Name = "Alice", Age = 28, Hobbies = ["chess", "running"] };
 
 ToonDocument doc = Person.Serialize(person);
@@ -36,6 +28,14 @@ string toon = new ToonEncoder().Encode(doc);
 // Hobbies[2]: chess,running
 
 Person copy = Person.Deserialize(ToonDocument.Parse(toon));
+
+[ToonSerializable]
+public partial class Person
+{
+    public string Name { get; set; } = "";
+    public int Age { get; set; }
+    public List<string> Hobbies { get; set; } = [];
+}
 ```
 
 The generated signatures are:
@@ -106,17 +106,6 @@ warning where it calls them. Every `[ToonSerializable]` type has a static `ToonT
 `ToonSerializer` overloads that take a type info, which need no reflection:
 
 ```csharp
-[ToonSerializable(AllowReflectionFallback = false)] // every property must be converted by generated code
-public partial class Catalog
-{
-    public string Name { get; set; } = "";
-    public List<Product> Products { get; set; } = [];
-    public Dictionary<string, Warehouse> Warehouses { get; set; } = [];
-}
-
-[ToonSerializable] public partial record Product(string Sku, decimal Price);  // property types need generated code too
-[ToonSerializable] public partial record Warehouse(string City, int Stock);
-
 var catalog = new Catalog { Name = "Spring", Products = [new("A-1", 9.5m)], Warehouses = { ["ist"] = new("Istanbul", 40) } };
 
 string toon = ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo);
@@ -129,6 +118,17 @@ Catalog? fromBytes = ToonSerializer.Deserialize(utf8, Catalog.ToonTypeInfo);
 // Collection roots: compose the type info of the elements
 var catalogs = ToonTypeInfo.CreateList(Catalog.ToonTypeInfo);           // also CreateArray, CreateDictionary
 string many = ToonSerializer.Serialize(new List<Catalog> { catalog }, catalogs);
+
+[ToonSerializable(AllowReflectionFallback = false)] // every property must be converted by generated code
+public partial class Catalog
+{
+    public string Name { get; set; } = "";
+    public List<Product> Products { get; set; } = [];
+    public Dictionary<string, Warehouse> Warehouses { get; set; } = [];
+}
+
+[ToonSerializable] public partial record Product(string Sku, decimal Price);  // property types need generated code too
+[ToonSerializable] public partial record Warehouse(string City, int Stock);
 ```
 
 These overloads write and read straight from text, like the others and with the same output, at the same speed: on
@@ -173,10 +173,12 @@ AOT apps:
 | Nested types, generic types, the global namespace | ✅ containing types must be `partial` too |
 | Abstract types | `Serialize` only |
 
-Known differences from `ToonSerializer`:
+Known differences from the reflection-based serializer:
 
-- A circular reference is reported as "maximum depth exceeded" instead of "circular reference" (both throw
-  `ToonEncodingException`).
+- Generated code does not track the objects it writes: a circular reference is reported as "Maximum depth of 100
+  exceeded during serialization (property: $.Next.Next...)" instead of "A circular reference was detected (property:
+  $.Next)". Both throw `ToonEncodingException`. This holds for the generated methods and for `ToonSerializer`, which
+  uses the generated code of `[ToonSerializable]` types.
 
 ## Attribute options
 
@@ -220,7 +222,9 @@ public partial class User
 </PropertyGroup>
 ```
 
-The files are written to `obj/<configuration>/<tfm>/generated/ToonNet.SourceGenerators/`. In Visual Studio and Rider
+The files are written to
+`obj/<configuration>/<tfm>/generated/ToonNet.SourceGenerators/ToonNet.SourceGenerators.ToonSerializableGenerator/`
+(`<Type>.<hash>.g.cs`). In Visual Studio and Rider
 they are also listed under **Dependencies → Analyzers → ToonNet.SourceGenerators**.
 
 ## Requirements

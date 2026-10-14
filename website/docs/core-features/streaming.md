@@ -464,10 +464,13 @@ writeOptions: new ToonMultiDocumentWriteOptions { BatchSize = 200 }
 **Solution**: Match write and read options:
 ```csharp
 // Write
-await SerializeDocumentsAsync(..., ToonMultiDocumentWriteOptions.ExplicitSeparator);
+await ToonSerializer.SerializeDocumentsAsync(items, "export.toon", null, ToonMultiDocumentWriteOptions.ExplicitSeparator);
 
 // Read
-await DeserializeDocumentsAsync(..., ToonMultiDocumentReadOptions.ExplicitSeparator);
+await foreach (var item in ToonSerializer.DeserializeDocumentsAsync<Item>("export.toon", null, ToonMultiDocumentReadOptions.ExplicitSeparator))
+{
+    Process(item);
+}
 ```
 
 ## See Also
@@ -475,5 +478,5 @@ await DeserializeDocumentsAsync(..., ToonMultiDocumentReadOptions.ExplicitSepara
 - **[Serialization](serialization)**: Core serialization guide
 - **[Deserialization](deserialization)**: Core deserialization guide
 - **[Performance Tuning](../advanced/performance-tuning)**: Optimization strategies
-- **[API Guide](../api-guide)**: Complete API reference
+- **[API Guide](../api-guide)**: The API at a glance
 

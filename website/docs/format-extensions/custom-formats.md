@@ -1,64 +1,22 @@
-# Custom Formats
+# Converter Examples
 
-Create custom converters to handle specific types or implement custom serialization logic.
+More converters for types that need another text form than the default one. The interface, the base class, the
+order in which converters are chosen and the `[ToonConverter]` attribute are described in
+[Custom Converters](../advanced/custom-converters), which also has a `DateTime` converter with a fixed format.
 
-## IToonConverter Interface
+`Write` is never called with `null`; `Read` receives a `ToonNull` for null values.
 
-Base interface for custom converters (namespace `ToonNet.Core.Serialization`). Usually you derive from
-`ToonConverter<T>`, which implements the non-generic members:
+## Value Converters
 
-```csharp
-public interface IToonConverter
-{
-    bool CanConvert(Type type);
-    ToonValue? Write(object? value, ToonSerializerOptions options);
-    object? Read(ToonValue value, Type targetType, ToonSerializerOptions options);
-}
-
-public interface IToonConverter<T> : IToonConverter
-{
-    ToonValue? Write(T? value, ToonSerializerOptions options);
-    T? Read(ToonValue value, ToonSerializerOptions options);
-}
-```
-
-`Write` is never called with `null`; `Read` receives a `ToonNull` for null values. See
-[Custom Converters](../advanced/custom-converters) for details and the `[ToonConverter]` attribute.
-
-## Creating a Custom Converter
-
-### Example: Custom DateTime Converter
-
-```csharp
-using System.Globalization;
-using ToonNet.Core;
-using ToonNet.Core.Models;
-using ToonNet.Core.Serialization;
-
-public class CustomDateTimeConverter : ToonConverter<DateTime>
-{
-    public override ToonValue? Write(DateTime value, ToonSerializerOptions options)
-    {
-        // Custom format: "YYYY-MM-DD HH:MM:SS"
-        string formatted = value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-        return new ToonString(formatted);
-    }
-
-    public override DateTime Read(ToonValue value, ToonSerializerOptions options)
-    {
-        if (value is not ToonString str)
-            throw new ToonSerializationException("Expected string value");
-
-        return DateTime.ParseExact(str.Value, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-    }
-}
-```
-
-### Example: Guid Converter
+### Guid Without Hyphens
 
 `Guid` is supported out of the box; a converter lets you pick another format:
 
 ```csharp
+using ToonNet.Core;
+using ToonNet.Core.Models;
+using ToonNet.Core.Serialization;
+
 public class GuidConverter : ToonConverter<Guid>
 {
     public override ToonValue? Write(Guid value, ToonSerializerOptions options)
@@ -80,7 +38,7 @@ public class GuidConverter : ToonConverter<Guid>
 
 ```csharp
 var options = new ToonSerializerOptions();
-options.AddConverter(new CustomDateTimeConverter());
+options.AddConverter(new CustomDateTimeConverter());   // from Custom Converters
 options.AddConverter(new GuidConverter());
 
 // Use for serialization
@@ -168,6 +126,7 @@ public class CustomListConverter<T> : ToonConverter<List<T>>
 
 ## See Also
 
-- **[JSON Integration](json-integration)**: JSON converter implementation
-- **[YAML Integration](yaml-integration)**: YAML converter implementation
+- **[Custom Converters](../advanced/custom-converters)**: The converter interface and how converters are chosen
+- **[JSON Integration](json-integration)**: Converting JSON documents to and from TOON
+- **[YAML Integration](yaml-integration)**: Converting YAML documents to and from TOON
 - **[Type System](../core-features/type-system)**: ToonValue types

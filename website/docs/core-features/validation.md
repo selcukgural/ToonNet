@@ -44,6 +44,10 @@ selected, and `$` is the root of the document, so rules can compare with other p
 `type`, `sum`, ...) and your own [registered functions](querying#your-own-functions):
 
 ```csharp
+using ToonNet.Core.Models;
+using ToonNet.Core.Paths;
+using ToonNet.Core.Validation;
+
 // IsValidIban: your own check
 var functions = new ToonPathFunctions().AddPredicate("is_iban", v => v is ToonString s && IsValidIban(s.Value));
 
@@ -65,6 +69,10 @@ Each `ToonRuleViolation` has:
 - `Value`: the value that broke the rule (null for `Required`)
 - `Rule` and `Severity`: the rule, and whether it is an error or a warning
 
+A `ToonRule` (also in `ToonRuleSet.Rules`) has `Kind` (`ToonRuleKind.Assertion`, `Required`, `Forbidden` or
+`Unique`), `Path`, `Assertion` (null for the other kinds), `Message` and `Severity`. `ToonRuleSet.Options` are the
+path options it was created with.
+
 Rules have a severity: `ToonRuleSeverity.Error` (the default) makes `IsValid` false, `ToonRuleSeverity.Warning` is
 reported without it. `result.Errors` and `result.Warnings` separate them, and `result.ThrowIfInvalid()` throws a
 `ToonRuleException` whose message lists the errors on one line:
@@ -75,6 +83,37 @@ The document has 2 rule violations: $['orders'][1]['total']: An order total cann
 
 A validation collects at most `MaxViolations` violations (1,000 by default) and then stops, with `result.IsTruncated`
 true, so a large document full of bad values cannot make a huge result.
+
+## Checking the Text Only: ToonValidator
+
+`ToonValidator.Validate(toon, options)` (also for a `ToonDocument`) checks that text is valid TOON without converting
+it to a type, and returns every problem as data instead of throwing:
+
+```csharp
+using ToonNet.Core.Validation;
+
+var result = ToonValidator.Validate("a: 1\na: 2");
+
+foreach (var error in result.Errors)
+{
+    // TOON_PARSE_ERROR: Duplicate key "a" (line 2, column 1), at LineNumber 1, ColumnNumber 0
+    Console.WriteLine($"{error.Code}: {error.Message}, at LineNumber {error.LineNumber}, ColumnNumber {error.ColumnNumber}");
+}
+```
+
+- `ValidationResult` has `IsValid` (no errors), `Errors` and `Warnings`; each `ValidationError` has `Code`, `Message`,
+  `Severity` (`ValidationSeverity`), `LineNumber`, `ColumnNumber` and `Path`.
+- `LineNumber` and `ColumnNumber` are zero-based, unlike `ToonParseException.Line` and `Column` and the
+  "(line 2, column 1)" in the message, which count from 1.
+- In strict mode the first error stops the check. With `StrictMode = false`, what only strict mode rejects (such as a
+  duplicate key) comes back as a warning with the code `TOON_STRICT_VIOLATION`, and `IsValid` is true.
+- The codes are the constants of `ToonValidationErrorCodes`: `TOON_PARSE_ERROR`, `TOON_STRICT_VIOLATION`,
+  `TOON_OPTIONS_INVALID` and `TOON_MAX_DEPTH_EXCEEDED`.
+- `ValidationResult` has the same name as `System.ComponentModel.DataAnnotations.ValidationResult`; in a file that uses
+  both namespaces, write `ToonNet.Core.Validation.ValidationResult` or add a using alias.
+
+Use `ToonRuleSet` for rules about the data, `ToonValidator` to report syntax errors with their positions (an editor,
+an upload form).
 
 ## Answers From Language Models
 

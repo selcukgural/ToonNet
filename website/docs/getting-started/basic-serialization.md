@@ -1,6 +1,8 @@
 # Basic Serialization
 
-Learn the fundamentals of TOON serialization with practical examples.
+Learn the fundamentals of TOON serialization with practical examples. The samples need `using ToonNet.Core.Serialization;`
+(and `using ToonNet.Core;` for the exception types); put the types they declare after the statements, or in their own
+files.
 
 ## Primitive Types
 
@@ -12,7 +14,7 @@ string toon = ToonSerializer.Serialize(text);
 // Output: "Hello, ToonNet!"
 // (quoted because it contains the delimiter ','; plain strings like Hello World are written unquoted)
 
-string restored = ToonSerializer.Deserialize<string>(toon);
+string? restored = ToonSerializer.Deserialize<string>(toon);
 ```
 
 ### Numbers
@@ -98,13 +100,6 @@ Charlie: 92
 ### Simple Object
 
 ```csharp
-public class Product
-{
-    public string Name { get; set; }
-    public decimal Price { get; set; }
-    public bool InStock { get; set; }
-}
-
 var product = new Product
 {
     Name = "Laptop",
@@ -113,6 +108,13 @@ var product = new Product
 };
 
 string toon = ToonSerializer.Serialize(product);
+
+public class Product
+{
+    public string Name { get; set; } = "";
+    public decimal Price { get; set; }
+    public bool InStock { get; set; }
+}
 ```
 
 **Output:**
@@ -125,19 +127,6 @@ InStock: true
 ### Nested Objects
 
 ```csharp
-public class Address
-{
-    public string Street { get; set; }
-    public string City { get; set; }
-    public string ZipCode { get; set; }
-}
-
-public class Customer
-{
-    public string Name { get; set; }
-    public Address Address { get; set; }
-}
-
 var customer = new Customer
 {
     Name = "John Doe",
@@ -150,6 +139,19 @@ var customer = new Customer
 };
 
 string toon = ToonSerializer.Serialize(customer);
+
+public class Address
+{
+    public string Street { get; set; } = "";
+    public string City { get; set; } = "";
+    public string ZipCode { get; set; } = "";
+}
+
+public class Customer
+{
+    public string Name { get; set; } = "";
+    public Address Address { get; set; }
+}
 ```
 
 **Output:**
@@ -166,13 +168,6 @@ Strings that would otherwise read as a number, boolean or `null` (such as `"1000
 ### Collections of Objects
 
 ```csharp
-public class Employee
-{
-    public string Name { get; set; }
-    public string Department { get; set; }
-    public int Salary { get; set; }
-}
-
 var employees = new List<Employee>
 {
     new() { Name = "Alice", Department = "Engineering", Salary = 85000 },
@@ -181,6 +176,13 @@ var employees = new List<Employee>
 };
 
 string toon = ToonSerializer.Serialize(employees);
+
+public class Employee
+{
+    public string Name { get; set; } = "";
+    public string Department { get; set; } = "";
+    public int Salary { get; set; }
+}
 ```
 
 **Output:**
@@ -196,12 +198,6 @@ string toon = ToonSerializer.Serialize(employees);
 ### Nullable Value Types
 
 ```csharp
-public class NullableExample
-{
-    public int? Age { get; set; }
-    public DateTime? BirthDate { get; set; }
-}
-
 var example1 = new NullableExample { Age = 25, BirthDate = null };
 string toon1 = ToonSerializer.Serialize(example1);
 // Output:
@@ -213,18 +209,17 @@ string toon2 = ToonSerializer.Serialize(example2);
 // Output:
 // Age: null
 // BirthDate: "2026-01-24T17:00:00Z"
+
+public class NullableExample
+{
+    public int? Age { get; set; }
+    public DateTime? BirthDate { get; set; }
+}
 ```
 
 ### Nullable Reference Types
 
 ```csharp
-public class Person
-{
-    public string Name { get; set; } = string.Empty;
-    public string? MiddleName { get; set; }
-    public string? Email { get; set; }
-}
-
 var person = new Person
 {
     Name = "John",
@@ -233,6 +228,13 @@ var person = new Person
 };
 
 string toon = ToonSerializer.Serialize(person);
+
+public class Person
+{
+    public string Name { get; set; } = string.Empty;
+    public string? MiddleName { get; set; }
+    public string? Email { get; set; }
+}
 ```
 
 **Output:**
@@ -247,6 +249,9 @@ Email: john@example.com
 ### Simple Enum
 
 ```csharp
+var task = new TodoItem { Title = "Review PR", Status = Status.Active };
+string toon = ToonSerializer.Serialize(task);
+
 public enum Status
 {
     Pending,
@@ -255,14 +260,11 @@ public enum Status
     Cancelled
 }
 
-public class Task
+public class TodoItem
 {
-    public string Title { get; set; }
+    public string Title { get; set; } = "";
     public Status Status { get; set; }
 }
-
-var task = new Task { Title = "Review PR", Status = Status.Active };
-string toon = ToonSerializer.Serialize(task);
 ```
 
 **Output:**
@@ -274,6 +276,10 @@ Status: Active
 ### Enum Flags
 
 ```csharp
+var permissions = Permissions.Read | Permissions.Write;
+string toon = ToonSerializer.Serialize(permissions);
+// Output: "Read, Write"
+
 [Flags]
 public enum Permissions
 {
@@ -283,22 +289,11 @@ public enum Permissions
     Execute = 4,
     Delete = 8
 }
-
-var permissions = Permissions.Read | Permissions.Write;
-string toon = ToonSerializer.Serialize(permissions);
-// Output: "Read, Write"
 ```
 
 ## DateTime and DateTimeOffset
 
 ```csharp
-public class Event
-{
-    public string Name { get; set; }
-    public DateTime EventDate { get; set; }
-    public DateTimeOffset RegisteredAt { get; set; }
-}
-
 var evt = new Event
 {
     Name = "Conference 2026",
@@ -307,6 +302,13 @@ var evt = new Event
 };
 
 string toon = ToonSerializer.Serialize(evt);
+
+public class Event
+{
+    public string Name { get; set; } = "";
+    public DateTime EventDate { get; set; }
+    public DateTimeOffset RegisteredAt { get; set; }
+}
 ```
 
 **Output:**
@@ -321,14 +323,6 @@ RegisteredAt: "2026-01-24T17:00:00+00:00"
 ### Optional Properties
 
 ```csharp
-public class User
-{
-    public int Id { get; set; }
-    public string Username { get; set; }
-    public string? Bio { get; set; }  // Optional
-    public string? Website { get; set; }  // Optional
-}
-
 var user = new User
 {
     Id = 123,
@@ -338,6 +332,14 @@ var user = new User
 };
 
 string toon = ToonSerializer.Serialize(user);
+
+public class User
+{
+    public int Id { get; set; }
+    public string Username { get; set; } = "";
+    public string? Bio { get; set; }  // Optional
+    public string? Website { get; set; }  // Optional
+}
 ```
 
 **Output:**
@@ -351,12 +353,6 @@ Website: null
 ### Nested Collections
 
 ```csharp
-public class Department
-{
-    public string Name { get; set; }
-    public List<string> Teams { get; set; }
-}
-
 var dept = new Department
 {
     Name = "Engineering",
@@ -364,6 +360,12 @@ var dept = new Department
 };
 
 string toon = ToonSerializer.Serialize(dept);
+
+public class Department
+{
+    public string Name { get; set; } = "";
+    public List<string> Teams { get; set; }
+}
 ```
 
 **Output:**
@@ -379,33 +381,37 @@ Teams[3]: Backend,Frontend,DevOps
 ```csharp
 string toonInput = """
 Name: Alice
-Age: 30
 Email: alice@example.com
 """;
 
-var person = ToonSerializer.Deserialize<Person>(toonInput);
+var person = ToonSerializer.Deserialize<Person>(toonInput);   // the Person of "Nullable Reference Types"
 ```
 
 ### From File
 
 ```csharp
-// Async file deserialization
+// Async file deserialization; AppConfig is your settings class
 var config = await ToonSerializer.DeserializeFromFileAsync<AppConfig>("appsettings.toon");
 ```
 
 ### From Stream
 
 ```csharp
-using var stream = new MemoryStream(Encoding.UTF8.GetBytes(toonString));
-var data = await ToonSerializer.DeserializeFromStreamAsync<MyData>(stream);
+using System.Text;
+
+using var stream = new MemoryStream(Encoding.UTF8.GetBytes("Name: Alice\nEmail: alice@example.com"));
+var person = await ToonSerializer.DeserializeFromStreamAsync<Person>(stream);   // also an HTTP response or file stream
 ```
 
 ## Error Handling
 
 ```csharp
+using ToonNet.Core;
+using ToonNet.Core.Serialization;
+
 try
 {
-    var person = ToonSerializer.Deserialize<Person>(invalidToonString);
+    var person = ToonSerializer.Deserialize<Person>("Name: Alice\nAge: abc");
 }
 catch (ToonParseException ex)
 {
@@ -416,7 +422,13 @@ catch (ToonSerializationException ex)
 {
     // Valid TOON that does not fit the target type, e.g. "Age: abc"
     Console.WriteLine($"Serialization error: {ex.Message}");
-    Console.WriteLine($"Path: {ex.Path}, Type: {ex.TargetType}");  // e.g. Path: $.Age, Type: System.Int32
+    Console.WriteLine($"Path: {ex.Path}, Type: {ex.TargetType}");  // Path: $.Age, Type: System.Int32
+}
+
+public class Person
+{
+    public string Name { get; set; } = "";
+    public int Age { get; set; }
 }
 ```
 

@@ -56,8 +56,8 @@ Age: 30
 ## Media Type
 
 The input formatter handles:
-- **Content-Type**: `application/toon`
-- **Content-Type**: `text/toon`
+- **Content-Type**: `application/toon` (`ToonFormatterDefaults.MediaType`)
+- **Content-Type**: `text/toon` (`ToonFormatterDefaults.TextMediaType`)
 
 Note that `[Consumes("application/toon")]` limits the action to that media type, so a `text/toon` request to the action
 above gets `415 Unsupported Media Type`.
@@ -83,6 +83,10 @@ marked `[ToonInclude]`. They are the application's
 `IOptions<ToonSerializerOptions>`, so settings made with `AddToonNet` or `services.Configure<ToonSerializerOptions>`
 apply too. The options are validated when the application starts, and calling `AddToonFormatters` again replaces the
 formatters instead of adding a second pair (the last request body limit applies).
+
+To register the formatters yourself, create them with the options:
+`mvcOptions.InputFormatters.Add(new ToonInputFormatter(serializerOptions, maxRequestBodySize))` (the limit is optional)
+and `mvcOptions.OutputFormatters.Add(new ToonOutputFormatter(serializerOptions))`.
 
 ## Limits
 
@@ -127,7 +131,8 @@ app.MapPost("/users", async (HttpRequest request) =>
 ```
 
 It uses the application's `IOptions<ToonSerializerOptions>` (or the options you pass), and there is an overload with a
-`ToonTypeInfo<T>` for trimmed and NativeAOT applications. The request must have a TOON content type, otherwise it
+`ToonTypeInfo<T>` for trimmed and NativeAOT applications, and one with a `Type`
+(`request.ReadFromToonAsync(typeof(User))`) for code that knows the type at run time. The request must have a TOON content type, otherwise it
 throws `InvalidOperationException` (check with `request.HasToonContentType()`); invalid TOON throws a `ToonException`.
 A body with only whitespace reads as the default value.
 

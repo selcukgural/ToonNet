@@ -183,4 +183,4 @@ foreach (var service in services.Properties)
 ## See Also
 
 - **[JSON Integration](json-integration)**: Convert JSON ↔ TOON
-- **[Custom Formats](custom-formats)**: Create custom converters
+- **[Converter Examples](custom-formats)**: Converters for types with their own text form

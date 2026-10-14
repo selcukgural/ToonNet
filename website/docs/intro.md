@@ -20,10 +20,16 @@ using ToonNet.Core.Serialization;
 
 // Serialize
 var person = new Person { Name = "Alice", Age = 30 };
-string toon = ToonSerializer.Serialize(person);
+string toon = ToonSerializer.Serialize(person);   // Name: Alice\nAge: 30
 
 // Deserialize
 var restored = ToonSerializer.Deserialize<Person>(toon);
+
+public class Person
+{
+    public string Name { get; set; } = "";
+    public int Age { get; set; }
+}
 ```
 
 ## Key Features
@@ -34,7 +40,7 @@ var restored = ToonSerializer.Deserialize<Person>(toon);
 - 📐 **Spec v4.4** - All 564 official conformance fixtures pass; output is identical to the official .NET library
 - 🎯 **.NET 8 and .NET 10** - Builds for both
 - 💻 **Developer Friendly** - System.Text.Json-style API
-- 🔄 **Streaming Support** - Multi-document streaming from `IAsyncEnumerable<T>` without materialising the whole dataset
+- 🔄 **Streaming Support** - Multi-document streaming from `IAsyncEnumerable<T>` without materializing the whole dataset
 - 🔧 **ASP.NET Core** - Input/output formatters, configuration provider
 - 📦 **Format Extensions** - JSON/YAML bidirectional conversion
 - 🎯 **Source Generators** - Optional generated `Serialize`/`Deserialize` methods with the same output as `ToonSerializer`
@@ -68,6 +74,8 @@ Start here if you're new to ToonNet:
 Deep dive into ToonNet's core functionality:
 - **[Serialization](core-features/serialization)** - Convert objects to TOON
 - **[Deserialization](core-features/deserialization)** - Convert TOON to objects
+- **[Streaming](core-features/streaming)** - Multi-document files and the items of large arrays, one at a time
+- **[Reader and Writer](core-features/reader-writer)** - Token-level reading and writing without a tree
 - **[Querying](core-features/querying)** - JSONPath with ToonNet functions, over trees, text and into objects
 - **[Rules and Validation](core-features/validation)** - Business rules written as paths
 - **[Editing Trees](core-features/editing)** - Navigate, change and patch documents
@@ -79,7 +87,7 @@ Deep dive into ToonNet's core functionality:
 Convert between different data formats:
 - **[JSON Integration](format-extensions/json-integration)** - JSON ↔ TOON conversion
 - **[YAML Integration](format-extensions/yaml-integration)** - YAML ↔ TOON conversion
-- **[Custom Formats](format-extensions/custom-formats)** - Create custom converters
+- **[Converter Examples](format-extensions/custom-formats)** - Converters for dates, identifiers and value objects
 
 ### 🌐 ASP.NET Core
 Integrate ToonNet with ASP.NET Core:
@@ -97,8 +105,9 @@ Optimization and customization:
 
 ### 📚 Reference
 Additional resources:
-- **[API Guide](api-guide)** - Complete API reference
+- **[API Guide](api-guide)** - The API at a glance, in the style of System.Text.Json
 - **[TOON Spec](toon-spec)** - TOON spec v4.4 conformance and implementation notes
+- **[ToonNet vs Toon.Format](comparison)** - Features and measurements next to the official library
 
 ## Quick Links
 
@@ -106,7 +115,9 @@ Additional resources:
 |-------|------|
 | Installation | [Getting Started](getting-started/installation) |
 | First Example | [Quick Start](getting-started/quick-start) |
-| API Reference | [API Guide](api-guide) |
+| API Overview | [API Guide](api-guide) |
+| Large Files | [Streaming](core-features/streaming) |
+| Compared With Toon.Format | [ToonNet vs Toon.Format](comparison) |
 | GitHub Repository | [ToonNet on GitHub](https://github.com/selcukgural/ToonNet) |
 
 ## Community & Support
@@ -120,8 +131,5 @@ ToonNet is open-source software licensed under the [MIT License](https://github.
 
 ## Thread-Safety
 
-- `ToonSerializer` methods are safe to call concurrently across threads.
-- A `ToonEncoder` instance keeps no per-call state and can be shared across threads (it is registered as a singleton by `AddToonNet`).
-- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
-- Cache entries are created on demand and retained for the process lifetime (no eviction).
-- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
+`ToonSerializer` and a shared `ToonEncoder` are safe to use from several threads; see [Configuration](core-features/configuration#thread-safety) for the caches and options.
+

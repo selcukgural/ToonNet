@@ -44,20 +44,23 @@ function QuickExample() {
             <Heading as="h2">Quick Example</Heading>
             <p>Get started with ToonNet in seconds. No configuration needed.</p>
             <pre style={{backgroundColor: 'var(--ifm-code-background)', padding: '1rem', borderRadius: '8px', overflow: 'auto'}}>
-              <code className="language-csharp">{`// Install via NuGet
-dotnet add package ToonNet.Core
+              <code className="language-bash">{`dotnet add package ToonNet.Core`}</code>
+            </pre>
+            <pre style={{backgroundColor: 'var(--ifm-code-background)', padding: '1rem', borderRadius: '8px', overflow: 'auto'}}>
+              <code className="language-csharp">{`using ToonNet.Core.Serialization;
 
 // Serialize
-var person = new Person 
-{ 
-  Name = "Alice", 
-  Age = 30 
-};
+var person = new Person { Name = "Alice", Age = 30 };
 string toon = ToonSerializer.Serialize(person);
 
 // Deserialize
-var restored = ToonSerializer
-  .Deserialize<Person>(toon);`}</code>
+var restored = ToonSerializer.Deserialize<Person>(toon);
+
+public class Person
+{
+  public string Name { get; set; } = "";
+  public int Age { get; set; }
+}`}</code>
             </pre>
           </div>
           <div className="col col--6">
@@ -65,10 +68,11 @@ var restored = ToonSerializer
             <p>Clean, readable, and token-efficient data format.</p>
             <pre style={{backgroundColor: 'var(--ifm-code-background)', padding: '1rem', borderRadius: '8px', overflow: 'auto'}}>
               <code className="language-toon">{`Name: Alice
-Age: 30
-
-// The same data as JSON
-{
+Age: 30`}</code>
+            </pre>
+            <p>The same data as JSON:</p>
+            <pre style={{backgroundColor: 'var(--ifm-code-background)', padding: '1rem', borderRadius: '8px', overflow: 'auto'}}>
+              <code className="language-json">{`{
   "Name": "Alice",
   "Age": 30
 }`}</code>

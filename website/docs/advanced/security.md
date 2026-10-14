@@ -11,7 +11,7 @@ describes.
 |---------|------------------|
 | Strict mode (`ToonOptions.StrictMode = true`) | Duplicate keys (one parser takes the first, another the last), lengths that do not match the rows, tabs in indentation |
 | `MaxDepth` 100 for parsing and serialization; at most 200 without `AllowExtendedLimits` | Stack exhaustion and deep recursion |
-| Declared lengths (`items[2147483647]`) reserve nothing | Memory reserved before the data is there |
+| Declared lengths (`items[2147483647]`) reserve at most what the following lines can hold | Memory reserved before the data is there |
 | Strict UTF-8 (ill-formed bytes are an error, not U+FFFD) | Text that differs from what was checked |
 | Only public setters are set from documents | A document setting what the code keeps for itself (`IsAdmin { get; private set; }`) |
 | Values are written as their declared type | Members of a derived type (a password hash) reaching a response through a narrower type |
@@ -51,10 +51,14 @@ collection, the value type of a dictionary, or the `T` of `Serialize<T>`. An ent
 writes only the summary's members:
 
 ```csharp
-public class UserSummary { public string Name { get; set; } = ""; }
-public class UserEntity : UserSummary { public string PasswordHash { get; set; } = ""; }
-
+var entity = new UserEntity { Name = "Ada", PasswordHash = "..." };
 ToonSerializer.Serialize(new Envelope { User = entity });   // User: Name only
+
+public class Envelope { public UserSummary? User { get; set; } }
+
+public class UserSummary { public string Name { get; set; } = ""; }
+
+public class UserEntity : UserSummary { public string PasswordHash { get; set; } = ""; }
 ```
 
 A value declared as `object` is written as what it is. `SerializeRuntimeTypes = true` writes every object with the
@@ -80,7 +84,8 @@ the type you mean to send.
 ## Paths, Rules and Patterns From Untrusted Sources
 
 `ToonPathOptions` bound every evaluation: the length and nesting of a path, the length of regular expression patterns,
-a budget of steps (a million plus 16 per value of the document, or per line when evaluating text) and a timeout of 10
+a budget of steps (a million plus 16 per value of the document, or per line when evaluating text, and enough to read
+its strings twice) and a timeout of 10
 seconds. Regular expressions run on .NET's non-backtracking engine and spend steps for the size of their automaton
 before they run, so a large pattern on a long text stops at the budget. Use stricter options for paths and rules that
 clients send:

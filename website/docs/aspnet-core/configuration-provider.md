@@ -52,15 +52,21 @@ Values are stored as strings: booleans become `True`/`False`, and numbers are wr
 digits than a `decimal` holds (about 28) is rounded to the nearest `double`. Quote a value (`Version: "1.0"`) to keep
 its text exactly. `AddToonFile` accepts both relative and absolute paths.
 
+`AddToonFile(path)`, `AddToonFile(path, optional)` and `AddToonFile(path, optional, reloadOnChange)` read from the
+application's file provider; `AddToonFile(provider, path, optional, reloadOnChange, toonOptions)` takes an
+`IFileProvider` (a `PhysicalFileProvider` for another folder, an embedded or in-memory provider in tests). The
+`ToonConfigurationSource` it adds has the `ToonOptions` the file is parsed with (`Options`), and builds a
+`ToonConfigurationProvider`.
+
 ## Reading Configuration
 
 ```csharp
 // Read simple values
-string appName = builder.Configuration["AppName"];
-string version = builder.Configuration["Version"];
+string? appName = builder.Configuration["AppName"];
+string? version = builder.Configuration["Version"];
 
 // Read nested values
-string connectionString = builder.Configuration["Database:ConnectionString"];
+string? connectionString = builder.Configuration["Database:ConnectionString"];
 int maxRetries = builder.Configuration.GetValue<int>("Database:MaxRetries");
 
 // Bind to strongly-typed objects
@@ -70,17 +76,19 @@ var dbConfig = builder.Configuration.GetSection("Database").Get<DatabaseConfig>(
 ## Strongly-Typed Configuration
 
 ```csharp
-public class DatabaseConfig
-{
-    public string ConnectionString { get; set; }
-    public int MaxRetries { get; set; }
-    public int Timeout { get; set; }
-}
+using Microsoft.Extensions.Options;
 
 // Register as options
 builder.Services.Configure<DatabaseConfig>(
     builder.Configuration.GetSection("Database")
 );
+
+public class DatabaseConfig
+{
+    public string ConnectionString { get; set; } = "";
+    public int MaxRetries { get; set; }
+    public int Timeout { get; set; }
+}
 
 // Use in services
 public class DataService

@@ -48,7 +48,8 @@ When reading:
 - A missing key for a `required` property throws a `ToonSerializationException` (`RespectRequiredMembers`, on by
   default since 4.0).
 - Errors include the path of the failing value, for example `$.Items[2].Price`.
-- Serializing an object graph with a cycle throws a `ToonEncodingException` instead of recursing until `MaxDepth`.
+- Serializing an object graph with a cycle throws a `ToonEncodingException`: the reflection-based serializer names the
+  back-reference, generated code (`[ToonSerializable]` types) reports exceeding `MaxDepth`.
 
 ## ToonValue Hierarchy
 
@@ -147,7 +148,9 @@ string text = big.ToString();        // "9007199254740993" (canonical TOON form)
 ```
 
 `ToString()` returns the canonical TOON form (spec §2): no exponent between 1e-6 and 1e21, no trailing zeros,
-`-0` as `0`, and `null` for NaN and infinities.
+`-0` as `0`, and `null` for NaN and infinities. `IsFinite` is false for NaN and infinities (written as `null`), and
+`ToonNumber.TryParse("12.50", out var n)` parses a TOON number token (the JSON grammar without leading zeros, so `05`
+is not a number), keeping the exact value when it fits in a `decimal`.
 
 ## ToonString
 
@@ -217,7 +220,7 @@ foreach (var kvp in obj.Properties)
 {
     string key = kvp.Key;
     ToonValue value = kvp.Value;
-    Console.WriteLine($"{key}: {value}");
+    Console.WriteLine($"{key}: {value}");   // primitives print their value; objects and arrays their type name
 }
 ```
 
@@ -246,8 +249,11 @@ string city = ((ToonString)address["City"]!).Value;
 // Update existing property
 obj["Age"] = 31;
 
-// Remove property
+// Remove property (also Remove(key, out var removed) to get its value)
 obj.Properties.Remove("Email");
+
+// Add a property unless the key exists (Add throws for an existing key)
+bool added = obj.Properties.TryAdd("Email", "ada@example.com");
 
 // Clear all properties
 obj.Properties.Clear();
@@ -522,9 +528,18 @@ if (root["Employees"] is ToonArray employees)
 
 ## Type Conversion Helpers
 
-ToonNet does not ship helpers like these; you can add your own extension methods:
+`GetValue<T>()` converts a primitive and throws `ToonSerializationException` when it cannot; `TryGetValue<T>(out value)`
+returns `false` instead. For defaults, add your own extension methods:
 
 ```csharp
+using ToonNet.Core.Models;
+
+// Usage
+ToonObject obj = ToonDocument.Parse("Name: Ada\nAge: 36\nIsActive: true").Root.AsObject();
+string name = obj["Name"].AsString("Unknown");
+int age = obj["Age"].AsInt(0);
+bool isActive = obj["IsActive"].AsBool(false);
+
 // Safe conversions
 public static class ToonValueExtensions
 {
@@ -543,12 +558,6 @@ public static class ToonValueExtensions
         return value is ToonBoolean b ? b.Value : defaultValue;
     }
 }
-
-// Usage
-ToonObject obj = ...;
-string name = obj["Name"].AsString("Unknown");
-int age = obj["Age"].AsInt(0);
-bool isActive = obj["IsActive"].AsBool(false);
 ```
 
 ## Pattern Matching
@@ -581,7 +590,7 @@ string result = value switch
 
 ```csharp
 // Good: Type-safe deserialization
-Person person = ToonSerializer.Deserialize<Person>(toonInput)!;
+Person? person = ToonSerializer.Deserialize<Person>(toonInput)!;
 
 // OK: Manual manipulation when needed
 ToonObject obj = ToonDocument.Parse(toonInput).AsObject();
