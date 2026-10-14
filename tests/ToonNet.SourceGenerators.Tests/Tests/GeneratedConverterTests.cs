@@ -123,6 +123,30 @@ public class GeneratedConverterTests
         Assert.Equal(1.5m, ConvertedLine.Deserialize(ToonDocument.Parse("a@1.5"), options).Price);
     }
 
+    [Fact]
+    public void ItemsAreConvertedByTheirRuntimeTypeOnly()
+    {
+        // The converter applies to exactly the base type: not to derived items, which have no declared type of their own
+        var options = With(new ExactShapeConverter());
+        var shapes = new ShapeBox { Main = new ConvertedShape { Name = "m" }, Items = [new ConvertedShape { Name = "a" }, new DerivedShape { Name = "b", Sides = 3 }] };
+        var expected = ToonSerializer.Serialize(shapes, ReflectionOnly.Options(options));
+
+        Assert.Contains("shape:m", expected);
+        Assert.Contains("Sides: 3", expected);
+        Assert.Equal(expected, ToonSerializer.Serialize(shapes, options));
+        Assert.Equal(expected, ToonSerializer.Serialize(shapes, ShapeBox.ToonTypeInfo, options));
+        Assert.Equal(expected, new ToonEncoder().Encode(ShapeBox.Serialize(shapes, options)));
+    }
+
+    private sealed class ExactShapeConverter : IToonConverter
+    {
+        public bool CanConvert(Type type) => type == typeof(ConvertedShape);
+
+        public ToonValue Write(object? value, ToonSerializerOptions options) => new ToonString("shape:" + ((ConvertedShape)value!).Name);
+
+        public object Read(ToonValue value, Type targetType, ToonSerializerOptions options) => new ConvertedShape { Name = ((ToonString)value).Value[6..] };
+    }
+
     /// <summary>The reflection-based serializer's metadata cache (private), to prove it was not used.</summary>
     private static ICollection CachedTypes()
     {
@@ -300,3 +324,21 @@ public partial class AotItem
 
 [ToonSerializable(AllowReflectionFallback = false)]
 public partial record struct AotMoney(decimal Amount, string Currency);
+
+[ToonSerializable]
+public partial class ConvertedShape
+{
+    public string Name { get; set; } = "";
+}
+
+public sealed class DerivedShape : ConvertedShape
+{
+    public int Sides { get; set; }
+}
+
+[ToonSerializable]
+public partial class ShapeBox
+{
+    public ConvertedShape? Main { get; set; }
+    public List<ConvertedShape> Items { get; set; } = [];
+}

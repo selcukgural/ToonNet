@@ -297,11 +297,6 @@ public static partial class ToonSerializer
         /// <summary>Per target type, whether a converter of the options reads it (types are looked up once per document).</summary>
         private Dictionary<Type, bool>? _convertedTypes;
 
-        /// <summary>
-        ///     Whether a converter of the options reads values of <paramref name="type"/>, directly or (for a nullable value
-        ///     type) through its underlying type, as <see cref="DeserializeValue"/> checks; such values are read from their
-        ///     tree.
-        /// </summary>
         /// <summary>Whether generated code (if the type has any) may read the type with the options.</summary>
         private bool GeneratedCodeReads(Type type)
         {
@@ -313,6 +308,11 @@ public static partial class ToonSerializer
             return _options.AllowsGeneratedReading || FindGeneratedSerializer(type)?.ReadsWith(_options) != false;
         }
 
+        /// <summary>
+        ///     Whether a converter of the options reads values of <paramref name="type"/>, directly or (for a nullable value
+        ///     type) through its underlying type, as <see cref="DeserializeValue"/> checks; such values are read from their
+        ///     tree.
+        /// </summary>
         private bool IsConverted(Type type)
         {
             if (!_hasConverters)
@@ -446,7 +446,7 @@ public static partial class ToonSerializer
         {
             if (info.Kind == ReadKind.Generated && value.NodeKind == ToonNodeKind.Object)
             {
-                if (!_options.AllowsGeneratedReading && info.Reader!.FeatureLevel < 1)
+                if (!_options.AllowsGeneratedReading && GetFeatureLevel(info.Target) < 1)
                 {
                     throw new DirectReadFallbackException(); // code from an older generator
                 }

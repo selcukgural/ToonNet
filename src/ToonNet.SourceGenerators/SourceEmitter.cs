@@ -233,7 +233,8 @@ internal sealed class SourceEmitter
 
         code.AppendLine($"{Helpers}.CheckSerializationDepth(options, depth);");
 
-        var reflection = $"{Helpers}.SerializeWithReflection<{model.FullyQualifiedName}>(value, options, depth)";
+        // Callers have asked for a converter of the value's declared type
+        var reflection = $"{Helpers}.SerializeConvertedWithReflection<{model.FullyQualifiedName}>(value, options, depth)";
 
         if (model.HasTypeConverter)
         {
@@ -371,7 +372,7 @@ internal sealed class SourceEmitter
             ValueKind.Primitive => $"{Helpers}.WritePrimitive<{plan.ValueTypeName}>({value})",
             ValueKind.Raw => value,
             ValueKind.Generated => $"{plan.ValueTypeName}.__ToonSerializeValue({value}, options, {depth})",
-            ValueKind.Reflection => $"{Helpers}.SerializeWithReflection<{plan.ValueTypeName}>({value}, options, {depth})",
+            ValueKind.Reflection => $"{Helpers}.SerializeConvertedWithReflection<{plan.ValueTypeName}>({value}, options, {depth})",
             _ => $"{WriterName(plan)}({value}, options, {depth})"
         };
     }
@@ -1070,6 +1071,12 @@ internal sealed class SourceEmitter
         var unambiguous = UnambiguousNames(constructor);
         var matchesIgnoringCase = Enumerable.Range(0, 4).Any(policy => slots.Any(slot => unambiguous[policy].Contains(slot.Names[policy])));
 
+        // Which names are unambiguous can depend on the policy through other members (read-only properties) too
+        var ignoreCasePolicyArgument = policyArgument.Length != 0 ||
+                                       (model.FixedNamingPolicy == null && Enumerable.Range(1, 3).Any(policy => !unambiguous[policy].SetEquals(unambiguous[0])))
+            ? ", __policy"
+            : "";
+
         code.AppendLine("var __ci = options.PropertyNameCaseInsensitive;");
         code.AppendLine($"var __disallow = options.UnmappedMemberHandling == {Serialization}ToonUnmappedMemberHandling.Disallow;");
         code.AppendLine("var __fields = reader.BeginObject(in value);");
@@ -1078,7 +1085,7 @@ internal sealed class SourceEmitter
 
         if (matchesIgnoringCase)
         {
-            code.AppendLine($"if (__slot < 0 && __ci) __slot = __ToonSlotIgnoreCase(__key{policyArgument});");
+            code.AppendLine($"if (__slot < 0 && __ci) __slot = __ToonSlotIgnoreCase(__key{ignoreCasePolicyArgument});");
         }
 
         code.BeginBlock("switch (__slot)");
@@ -1129,7 +1136,7 @@ internal sealed class SourceEmitter
 
         if (matchesIgnoringCase)
         {
-            EmitSlotLookupIgnoringCase(slots, unambiguous, policyArgument.Length != 0);
+            EmitSlotLookupIgnoringCase(slots, unambiguous, ignoreCasePolicyArgument.Length != 0);
         }
 
         EmitObjectReaderClass();
@@ -1823,7 +1830,7 @@ internal sealed class SourceEmitter
 
         // Another runtime type than the ones generated code knows (a derived type, one with a converter) goes to the
         // reflection-based serializer, which writes the runtime type
-        code.AppendLine($"if (!({KnownCollectionCondition(plan, "value")})) return {Helpers}.SerializeWithReflection<{plan.ValueTypeName}>(value, options, depth);");
+        code.AppendLine($"if (!({KnownCollectionCondition(plan, "value")})) return {Helpers}.SerializeConvertedWithReflection<{plan.ValueTypeName}>(value, options, depth);");
         code.AppendLine(ConvertLocal);
 
         if (plan.Kind == ValueKind.Dictionary)

@@ -12,7 +12,8 @@ public static partial class ToonSerializer
     /// <summary>
     ///     The generated methods of a <c>[ToonSerializable]</c> type, registered by its module initializer.
     /// </summary>
-    private sealed class GeneratedSerializer(Func<object, ToonSerializerOptions, int, ToonValue> serialize,
+    private sealed class GeneratedSerializer(Type type,
+                                             Func<object, ToonSerializerOptions, int, ToonValue> serialize,
                                              Func<ToonValue, ToonSerializerOptions, int, object?>? deserialize,
                                              ToonObjectWriter? writer,
                                              ToonObjectReader? reader)
@@ -28,8 +29,14 @@ public static partial class ToonSerializer
         /// <summary>Null when the type has no constructor generated code can use.</summary>
         public Func<ToonValue, ToonSerializerOptions, int, object?>? Deserialize { get; } = deserialize;
 
-        /// <summary>What the generated code applies itself (see <see cref="ToonObjectWriter.FeatureLevel"/>).</summary>
-        public int FeatureLevel { get; } = Math.Max(writer?.FeatureLevel ?? 0, reader?.FeatureLevel ?? 0);
+        /// <summary>What the generated code of this type applies itself (see <see cref="ToonObjectWriter.FeatureLevel"/>).</summary>
+        public int OwnFeatureLevel { get; } = Math.Max(writer?.FeatureLevel ?? 0, reader?.FeatureLevel ?? 0);
+
+        /// <summary>
+        ///     What the generated code applies, counting the generated code of the types it calls directly (which may come
+        ///     from an older generator in another assembly).
+        /// </summary>
+        public int FeatureLevel => GetFeatureLevel(type);
 
         /// <summary>Whether the generated code may read with the options (code from older generators ignores some).</summary>
         public bool ReadsWith(ToonSerializerOptions options) => options.AllowsGeneratedReading || FeatureLevel >= 1;
@@ -50,6 +57,7 @@ public static partial class ToonSerializer
         ArgumentNullException.ThrowIfNull(serialize);
 
         RegisteredGeneratedSerializers[typeof(T)] = new GeneratedSerializer(
+            typeof(T),
             (value, options, depth) => serialize((T)value, options, depth),
             deserialize == null ? null : (value, options, depth) => deserialize(value, options, depth),
             writer,
@@ -60,9 +68,47 @@ public static partial class ToonSerializer
             serialize,
             deserialize,
             deserialize == null ? null : reader != null ? reader.Read : (ToonReader r, in ToonReaderValue v, int depth) => deserialize(r.BuildTree(in v), r.Options, depth),
-            Math.Max(writer?.FeatureLevel ?? 0, reader?.FeatureLevel ?? 0),
+            static () => GetFeatureLevel(typeof(T)),
             static check => check.AllowsGeneratedCode(typeof(T)));
     }
+
+    /// <summary>Per type with generated code, the lowest feature level of its generated code and what it calls directly.</summary>
+    private static readonly ConcurrentDictionary<Type, int> FeatureLevels = new();
+
+    /// <summary>
+    ///     The lowest <see cref="ToonObjectWriter.FeatureLevel"/> of the generated code of a type and of the types with
+    ///     generated code it reaches (listed in <see cref="ToonObjectWriter.InlineTypes"/>), whose generated methods it
+    ///     calls directly; 0 for a type without generated code.
+    /// </summary>
+    private static int GetFeatureLevel(Type type) => FeatureLevels.GetOrAdd(type, static t =>
+    {
+        var level = int.MaxValue;
+        var pending = new Stack<Type>();
+        var visited = new HashSet<Type> { t };
+        pending.Push(t);
+
+        while (pending.TryPop(out var current))
+        {
+            if (FindGeneratedSerializer(current) is not { } generated)
+            {
+                continue;
+            }
+
+            level = Math.Min(level, generated.OwnFeatureLevel);
+
+            foreach (var inlineType in generated.Writer?.InlineTypes ?? [])
+            {
+                var target = Nullable.GetUnderlyingType(inlineType) ?? inlineType;
+
+                if (visited.Add(target))
+                {
+                    pending.Push(target);
+                }
+            }
+        }
+
+        return level == int.MaxValue ? 0 : level;
+    });
 
     /// <summary>
     ///     Finds the generated serializer for exactly <paramref name="type"/>.

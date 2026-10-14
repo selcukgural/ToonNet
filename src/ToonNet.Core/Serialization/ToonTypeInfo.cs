@@ -57,7 +57,7 @@ public abstract class ToonTypeInfo
             (list, options, depth) => SerializeItems(list, list?.Count ?? 0, elementInfo, options, depth),
             elementInfo.Deserialize == null ? null : (value, options, depth) => DeserializeItems(value, elementInfo, options, depth)!,
             elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)!,
-            elementInfo.FeatureLevel,
+            () => elementInfo.FeatureLevel,
             check => check.GetConverter(typeof(List<T>)) == null && elementInfo.ConvertsDirectly(check));
     }
 
@@ -71,7 +71,7 @@ public abstract class ToonTypeInfo
             (array, options, depth) => SerializeItems(array, array?.Length ?? 0, elementInfo, options, depth),
             elementInfo.Deserialize == null ? null : (value, options, depth) => DeserializeItems(value, elementInfo, options, depth)?.ToArray()!,
             elementInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadItems(reader, value, elementInfo, depth)?.ToArray()!,
-            elementInfo.FeatureLevel,
+            () => elementInfo.FeatureLevel,
             check => check.GetConverter(typeof(T[])) == null && elementInfo.ConvertsDirectly(check));
     }
 
@@ -88,7 +88,7 @@ public abstract class ToonTypeInfo
             (dictionary, options, depth) => SerializeEntries(dictionary, valueInfo, options, depth),
             valueInfo.Deserialize == null ? null : (value, options, depth) => DeserializeEntries(value, valueInfo, options, depth)!,
             valueInfo.Read == null ? null : (ToonReader reader, in ToonReaderValue value, int depth) => ReadEntries(reader, value, valueInfo, depth)!,
-            valueInfo.FeatureLevel,
+            () => valueInfo.FeatureLevel,
             check => check.GetConverter(typeof(Dictionary<string, TValue>)) == null && valueInfo.ConvertsDirectly(check));
     }
 
@@ -298,12 +298,12 @@ public sealed class ToonTypeInfo<T> : ToonTypeInfo
     internal static ToonTypeInfo<T>? Generated;
 
     internal ToonTypeInfo(Func<T, ToonSerializerOptions, int, ToonValue> serialize, Func<ToonValue, ToonSerializerOptions, int, T>? deserialize,
-                          ReadMethod? read, int featureLevel, Func<ToonSerializer.ConverterCheck, bool> convertsDirectly)
+                          ReadMethod? read, Func<int> featureLevel, Func<ToonSerializer.ConverterCheck, bool> convertsDirectly)
     {
         Serialize = serialize;
         Deserialize = deserialize;
         Read = read;
-        FeatureLevel = featureLevel;
+        _featureLevel = featureLevel;
         ConvertsDirectly = convertsDirectly;
     }
 
@@ -320,7 +320,9 @@ public sealed class ToonTypeInfo<T> : ToonTypeInfo
     internal ReadMethod? Read { get; }
 
     /// <summary>What the generated code applies itself (see <see cref="ToonObjectWriter.FeatureLevel"/>; the lowest of the parts).</summary>
-    internal int FeatureLevel { get; }
+    internal int FeatureLevel => _featureLevel();
+
+    private readonly Func<int> _featureLevel;
 
     /// <summary>
     ///     For options with converters: whether no converter applies to the type or to what its generated code converts

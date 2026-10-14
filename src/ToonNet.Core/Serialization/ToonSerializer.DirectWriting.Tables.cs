@@ -37,28 +37,37 @@ public static partial class ToonSerializer
 
             /// <summary>The number of nested field group levels.</summary>
             public int GroupDepth;
+
+            /// <summary>The dictionary entries columns come from (by <see cref="PlanColumn.Property"/>), when some do.</summary>
+            public List<(DictionaryEntryReader Reader, object Key)>? Entries;
         }
 
-        /// <summary>Where a column's values come from: a property (or dictionary entry) of the objects at its level.</summary>
-        /// <param name="Property">The index of the property.</param>
+        /// <summary>
+        ///     Where a column's values come from: a property of the objects at its level, or (with neither
+        ///     <paramref name="Metadata"/> nor <paramref name="Writer"/>) the dictionary entry at <paramref name="Property"/>
+        ///     in <see cref="TablePlan.Entries"/>.
+        /// </summary>
+        /// <param name="Property">The index of the property (or of the entry).</param>
         /// <param name="Metadata">The property, for objects with reflection metadata.</param>
         /// <param name="Writer">The generated writer of the objects, for objects with generated code.</param>
         /// <param name="ReadAsObject">For a cell: write the value read as an object rather than the typed property.</param>
-        /// <param name="Entries">The entry reader, for dictionaries (the column is the entry with <paramref name="Key"/>).</param>
-        /// <param name="Key">The key of the entry, for dictionaries.</param>
-        private readonly record struct PlanColumn(int Property, PropertyMetadata? Metadata, ToonObjectWriter? Writer, bool ReadAsObject,
-                                                  DictionaryEntryReader? Entries = null, object? Key = null)
-        {
-            /// <summary>The value of the column in an object of its level.</summary>
-            public object? ValueOf(object item)
-            {
-                if (Entries != null)
-                {
-                    return Entries.TryGetValue(item, Key!, out var value) ? value : null;
-                }
+        private readonly record struct PlanColumn(int Property, PropertyMetadata? Metadata, ToonObjectWriter? Writer, bool ReadAsObject);
 
-                return Metadata is { } property ? property.Getter(item) : Writer!.GetValueOf(item, Property);
+        /// <summary>The value of a column in an object of its level.</summary>
+        private static object? ValueOf(TablePlan plan, in PlanColumn source, object item)
+        {
+            if (source.Metadata is { } property)
+            {
+                return property.Getter(item);
             }
+
+            if (source.Writer is { } writer)
+            {
+                return writer.GetValueOf(item, source.Property);
+            }
+
+            var (reader, key) = plan.Entries![source.Property];
+            return reader.TryGetValue(item, key, out var value) ? value : null;
         }
 
         /// <summary>Plans the tabular form for collection items (all objects of one type).</summary>
@@ -493,7 +502,8 @@ public static partial class ToonSerializer
                 }
 
                 // Entry values are written by their runtime type
-                var result = AddColumn(plan, name, values, typeof(object), new PlanColumn(-1, null, null, true, entries, rawKey), level);
+                (plan.Entries ??= []).Add((entries, rawKey));
+                var result = AddColumn(plan, name, values, typeof(object), new PlanColumn(plan.Entries.Count - 1, null, null, true), level);
 
                 if (result is PlanResult.NotTabular or PlanResult.Unknown)
                 {
@@ -654,7 +664,7 @@ public static partial class ToonSerializer
 
                 if (columns[i].IsGroupAt(i))
                 {
-                    first = WriteCells(source.ValueOf(item)!, plan, i + 1, columns[i].End, first);
+                    first = WriteCells(ValueOf(plan, in source, item)!, plan, i + 1, columns[i].End, first);
                     continue;
                 }
 
@@ -679,7 +689,7 @@ public static partial class ToonSerializer
                     continue;
                 }
 
-                var value = source.ValueOf(item);
+                var value = ValueOf(plan, in source, item);
 
                 if (value is null)
                 {

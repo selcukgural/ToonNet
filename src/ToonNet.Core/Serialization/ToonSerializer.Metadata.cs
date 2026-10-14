@@ -389,13 +389,6 @@ public static partial class ToonSerializer
     private const int NamingPolicyCount = (int)PropertyNamingPolicy.LowerCase + 1;
 
     /// <summary>
-    /// Tracks the property path for error messages and the objects being serialized for cycle detection.
-    /// </summary>
-    /// <remarks>
-    /// The path is kept as segments (a name, or an array index) and only turned into text for an error, so walking
-    /// a collection does not format a string per item. The lists are created on first use.
-    /// </remarks>
-    /// <summary>
     ///     Puts the path of the state in front of the path of an error that generated code raised (relative to the value
     ///     it was given), as the error leaves generated code. Returns false, for use as an exception filter.
     /// </summary>
@@ -409,6 +402,13 @@ public static partial class ToonSerializer
         return false;
     }
 
+    /// <summary>
+    /// Tracks the property path for error messages and the objects being serialized for cycle detection.
+    /// </summary>
+    /// <remarks>
+    /// The path is kept as segments (a name, or an array index) and only turned into text for an error, so walking
+    /// a collection does not format a string per item. The lists are created on first use.
+    /// </remarks>
     private sealed class SerializerState
     {
         /// <summary>A state for reads that never push a segment or track objects (primitive reads from generated code).</summary>

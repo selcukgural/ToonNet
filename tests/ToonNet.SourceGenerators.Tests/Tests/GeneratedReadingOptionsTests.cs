@@ -122,6 +122,13 @@ public class GeneratedReadingOptionsTests
     }
 
     [Fact]
+    public void AmbiguityThatDependsOnThePolicy()
+    {
+        // Under snake_case the read-only UserId is named user_id, which makes User_Id ambiguous ignoring case
+        AssertParity(OptionPolicyClash.ToonTypeInfo, OptionPolicyClash.Deserialize, "user_id: 5", "User_Id: 6", "USER_ID: 7\nuserId: 8");
+    }
+
+    [Fact]
     public void NestedObjectsAndLists()
     {
         AssertParity(OptionOrder.ToonTypeInfo, OptionOrder.Deserialize,
@@ -169,6 +176,67 @@ public class GeneratedReadingOptionsTests
         var cached = CachedTypes().Cast<Type>().ToList();
         Assert.DoesNotContain(typeof(NoReflectionShipment), cached);
         Assert.DoesNotContain(typeof(NoReflectionItem), cached);
+    }
+
+    [Fact]
+    public void CodeThatReachesOlderGeneratedCode_IsNotUsedWithTheOptions()
+    {
+        LegacyGenerated.Register();
+        ModernHolder.Register();
+        var options = new ToonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        // Its own code applies the option, but it calls the older code of LegacyGenerated directly
+        var ex = Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("inner:\n  name: x", ToonTypeInfo.GetGenerated<ModernHolder>(), options));
+        Assert.Contains("a type it reaches", ex.Message);
+        Assert.Throws<NotSupportedException>(() => ToonSerializer.Serialize(new ModernHolder(), ToonTypeInfo.GetGenerated<ModernHolder>(), WithAnyConverter()));
+    }
+
+    private static ToonSerializerOptions WithAnyConverter()
+    {
+        var options = new ToonSerializerOptions();
+        options.AddConverter(new NeverConverter());
+        return options;
+    }
+
+    private sealed class NeverConverter : IToonConverter
+    {
+        public bool CanConvert(Type type) => false;
+
+        public ToonValue Write(object? value, ToonSerializerOptions options) => throw new InvalidOperationException();
+
+        public object Read(ToonValue value, Type targetType, ToonSerializerOptions options) => throw new InvalidOperationException();
+    }
+
+    /// <summary>Stands for code from the current generator whose type holds a <see cref="LegacyGenerated"/> (only the parts the checks use).</summary>
+    private sealed class ModernHolder
+    {
+        public LegacyGenerated? Inner { get; set; }
+
+        public static void Register() =>
+            ToonSourceGenerationHelpers.Register<ModernHolder>(static (_, _, _) => new ToonObject(), static (_, _, _) => new ModernHolder(), new Writer(), new Reader());
+
+        private sealed class Writer : ToonObjectWriter<ModernHolder>
+        {
+            public override int FeatureLevel => 1;
+            public override Type[] InlineTypes { get; } = [typeof(LegacyGenerated)];
+            public override int PropertyCount => 1;
+            public override string GetName(int index, ToonSerializerOptions options) => "inner";
+            public override int WriteFields(ModernHolder value, ToonNet.Core.Encoding.ToonWriter writer, int lineDepth, int childDepth, bool firstOnCurrentLine, int depth) => 0;
+            public override ToonRowShape GetRowShape(ModernHolder value, ToonNet.Core.Encoding.ToonWriter writer, Span<bool> columns) => ToonRowShape.NotRow;
+            public override void WriteRow(ModernHolder value, ToonNet.Core.Encoding.ToonWriter writer, ReadOnlySpan<bool> columns) { }
+            public override bool MayBeKeyed(ModernHolder value, ToonNet.Core.Encoding.ToonWriter writer) => false;
+            public override ToonPropertyKind GetPropertyKind(int index) => ToonPropertyKind.Object;
+            public override bool IsReadOnlyProperty(int index) => false;
+            public override object? GetValue(ModernHolder value, int index) => value.Inner;
+            public override void WriteValue(ModernHolder value, int index, ToonNet.Core.Encoding.ToonWriter writer) { }
+        }
+
+        private sealed class Reader : ToonObjectReader<ModernHolder>
+        {
+            public override int FeatureLevel => 1;
+
+            public override ModernHolder Read(ToonReader reader, in ToonReaderValue value, int depth) => new();
+        }
     }
 
     [Fact]
@@ -318,4 +386,13 @@ public partial class NoReflectionItem
 {
     public string Label { get; set; } = "";
     public int Qty { get; set; }
+}
+
+[ToonSerializable]
+public partial class OptionPolicyClash
+{
+    [ToonProperty("User_Id")]
+    public int A { get; set; }
+
+    public int UserId => 0;
 }

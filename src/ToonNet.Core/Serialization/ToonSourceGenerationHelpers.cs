@@ -95,6 +95,16 @@ public static class ToonSourceGenerationHelpers
     }
 
     /// <summary>
+    ///     Serializes a value with the reflection-based serializer, continuing at the given depth, after generated code
+    ///     has asked <see cref="TryWriteConverted{T}"/> for a converter: the serializer then looks one up only for the
+    ///     value's runtime type (as for collection items, which have no declared type of their own).
+    /// </summary>
+    public static ToonValue SerializeConvertedWithReflection<T>(T value, ToonSerializerOptions options, int depth)
+    {
+        return ToonSerializer.SerializeForGeneratedCode(value, value?.GetType() ?? typeof(T), options, depth);
+    }
+
+    /// <summary>
     ///     Whether the options need the reflection-based reader (case-insensitive keys, unmapped key errors, required
     ///     properties), which code from older generators defers to.
     /// </summary>

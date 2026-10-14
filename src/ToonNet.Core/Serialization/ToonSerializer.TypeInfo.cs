@@ -264,8 +264,9 @@ public static partial class ToonSerializer
         if (options.Converters.Count != 0 && typeInfo.FeatureLevel < 1)
         {
             throw new NotSupportedException(
-                $"The generated code of {typeof(T).Name} is from an older ToonNet.SourceGenerators that hands converters to the reflection-based " +
-                "serializer; rebuild with the current generator, or use the overloads without a type info.");
+                $"The generated code of {typeof(T).Name} (or of a type it reaches) hands converters to the reflection-based serializer: it is from " +
+                "an older ToonNet.SourceGenerators (rebuild with the current one), or the type has a [ToonConverter] of its own; use the overloads " +
+                "without a type info.");
         }
 
         return options;
@@ -315,8 +316,9 @@ public static partial class ToonSerializer
         if (!options.AllowsGeneratedReading && typeInfo.FeatureLevel < 1)
         {
             throw new NotSupportedException(
-                $"The generated code of {typeof(T).Name} is from an older ToonNet.SourceGenerators that does not apply PropertyNameCaseInsensitive, " +
-                "UnmappedMemberHandling.Disallow or RespectRequiredMembers; rebuild with the current generator, or use the overloads without a type info.");
+                $"The generated code of {typeof(T).Name} (or of a type it reaches) does not apply PropertyNameCaseInsensitive, " +
+                "UnmappedMemberHandling.Disallow or RespectRequiredMembers: it is from an older ToonNet.SourceGenerators (rebuild with the current " +
+                "one), or the type has a [ToonConverter] of its own; use the overloads without a type info.");
         }
 
         var deserialize = typeInfo.Deserialize ?? throw new NotSupportedException(
