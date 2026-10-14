@@ -113,8 +113,8 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 - **Cursor parser** - One quote-aware scan per line, values read from spans, the line table and buffers rented from
   `ArrayPool`, repeated keys and headers shared instead of allocated again
 - **UTF-8 in and out** - Bytes, spans, streams and `IBufferWriter<byte>` (a `PipeWriter`) are read and written through
-  pooled buffers, without intermediate strings: reading bytes is 4–15% faster and allocates 21–46% less than going
-  through a string
+  pooled buffers, without intermediate strings: reading bytes allocates 22–43% less than going through a string, and
+  `SerializeToUtf8Bytes` is 5–14% faster with a third of the allocation
 - **NativeAOT and trimming** - `ToonNet.Core` is annotated; `ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo)`
   and the other overloads that take a generated type info need no reflection and keep the fast path (tested with
   NativeAOT in CI)

@@ -541,8 +541,8 @@ await foreach (var logEntry in ToonSerializer.DeserializeStreamAsync<LogEntry>("
 3. **Metadata is cached**: the first call for a type builds and caches its metadata; later calls reuse it
 4. **Stream large collections**: use `SerializeStreamAsync` instead of building one huge string
 5. **Write bytes directly**: when the destination wants UTF-8, `SerializeToUtf8Bytes` or a buffer writer skips the
-   string (on 10,000 records: 2–11% faster, about half the allocation; a reused `ArrayBufferWriter<byte>` makes
-   writing flat tables almost allocation-free)
+   string (on 10,000 records: 5–14% faster with a third of the allocation; a reused `ArrayBufferWriter<byte>` is
+   8–27% faster and makes writing flat tables almost allocation-free)
 6. **Profile your code**: Use BenchmarkDotNet for optimization
 
 ```csharp

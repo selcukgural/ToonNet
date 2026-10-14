@@ -23,9 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ToonSerializer.Serialize` to an `IBufferWriter<byte>` (a `PipeWriter`, an `ArrayBufferWriter<byte>`) or to a
   `Stream` (synchronously), each generic and with a `Type`, and `ToonEncoder.EncodeToUtf8Bytes` and
   `ToonEncoder.Encode(ToonDocument, IBufferWriter<byte>)` for the NativeAOT-safe path. The bytes are exactly the
-  UTF-8 of the string output. Measured on 10,000 records against going through a string: reading bytes is 4–15%
-  faster with 21–46% less allocation, `SerializeToUtf8Bytes` is 2–11% faster with 48–67% less, and writing flat
-  tables to a reused buffer writer allocates about 1 KB.
+  UTF-8 of the string output. Measured on 10,000 records against going through a string: reading bytes takes about
+  the same time (−5% to +7%) with 22–43% less allocation, `SerializeToUtf8Bytes` is 5–14% faster with 59–67% less,
+  and a reused buffer writer is 8–27% faster and allocates under 1 KB for flat tables.
 
 - **ToonNet.Core, ToonNet.SourceGenerators:** `ToonTypeInfo<T>` and `ToonSerializer` overloads that take one
   (`Serialize`, `SerializeToUtf8Bytes`, `Serialize` to an `IBufferWriter<byte>` or `Stream`, `SerializeToStreamAsync`,
