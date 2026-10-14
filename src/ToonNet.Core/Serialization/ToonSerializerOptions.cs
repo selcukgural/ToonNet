@@ -145,7 +145,23 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     For the converters last seen, per type with generated code, whether no converter applies to what its generated
     ///     code converts itself (see <see cref="ToonObjectWriter.InlineTypes"/>).
     /// </summary>
-    internal ToonSerializer.ConverterCheck? ConverterCheck { get; set; }
+    internal ToonSerializer.ConverterCheck? ConverterCheck
+    {
+        get => _rare?.ConverterCheck;
+        set => (_rare ??= new RareSettings()).ConverterCheck = value;
+    }
+
+    /// <summary>
+    ///     Settings few options use, in an object of their own, so the options of every call (<see cref="Default"/> creates
+    ///     one each time) stay small.
+    /// </summary>
+    private sealed class RareSettings
+    {
+        public ToonSerializer.ConverterCheck? ConverterCheck;
+        public Paths.ToonPathOptions? PathOptions;
+    }
+
+    private RareSettings? _rare;
 
     /// <summary>
     ///     Gets or sets whether to include read-only properties in serialization.
@@ -159,7 +175,11 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     an evaluation. Null (the default) uses <see cref="Paths.ToonPathOptions.Default"/>. Set stricter limits when
     ///     paths come from clients.
     /// </summary>
-    public Paths.ToonPathOptions? PathOptions { get; set; }
+    public Paths.ToonPathOptions? PathOptions
+    {
+        get => _rare?.PathOptions;
+        set => (_rare ??= new RareSettings()).PathOptions = value;
+    }
 
     /// <summary>
     ///     Gets a new instance with the default settings. Each call returns a new instance, so changing one does not change

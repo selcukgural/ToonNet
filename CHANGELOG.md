@@ -74,6 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Parse`/`Deserialize` read it in non-strict mode, so a miscounted length or a repeated key does not fail the answer.
 
 ### Fixed
+- **ToonNet.Core:** Reading a document with many objects of the same keys sometimes allocated a new string for two of the
+  keys on every object (about 14% more memory for 10,000 orders): the parser's key cache used string hashes, which are
+  randomized per process, so two keys shared a slot in some runs and not in others. The cache now uses a fixed hash and
+  two slots per key.
 - **ToonNet.Core:** `DeserializeAsyncEnumerable` reported conversion errors with the index of the item in its batch
   (`$[780].Id` for item 15,780); errors now name the item of the whole array.
 

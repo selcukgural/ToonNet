@@ -2227,14 +2227,40 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return text.ToString();
         }
 
-        var slot = (int)((uint)string.GetHashCode(text) % KeyCacheSize);
+        // A hash that is the same in every process (string hashes are randomized per process, which made two keys of a
+        // document share a slot in some runs and not in others), and two slots per key, so two keys whose first slot
+        // is the same do not push each other out on every row
+        var hash = KeyHash(text);
+        var first = (int)(hash % KeyCacheSize);
 
-        if (_keys[slot] is { } cached && text.SequenceEqual(cached))
+        if (_keys[first] is { } cached && text.SequenceEqual(cached))
         {
             return cached;
         }
 
-        return _keys[slot] = text.ToString();
+        var second = (int)((hash >> 8) % KeyCacheSize);
+
+        if (_keys[second] is { } other && text.SequenceEqual(other))
+        {
+            return other;
+        }
+
+        var key = text.ToString();
+        _keys[_keys[first] == null || _keys[second] != null ? first : second] = key;
+        return key;
+    }
+
+    /// <summary>FNV-1a over the characters of a key.</summary>
+    private static uint KeyHash(ReadOnlySpan<char> text)
+    {
+        var hash = 2166136261u;
+
+        foreach (var c in text)
+        {
+            hash = (hash ^ c) * 16777619u;
+        }
+
+        return hash;
     }
 
     /// <summary>
