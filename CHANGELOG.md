@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   document again through the tree. On 200,000 list items with one reordered object: 3.4x faster, half the allocation.
 
 ### Added
+- **ToonNet.Core:** `ToonSerializerOptions.PropertyNameCaseInsensitive` matches keys to property and constructor
+  parameter names ignoring case when reading (`name` fills `Name`), as documents from other producers and LLMs often
+  differ in case. An exact match is preferred, names that differ only in case still need an exact match, and the last
+  matching key wins. Types are then read with reflection; the `ToonTypeInfo` overloads do not support the option.
+- **ToonNet.Core:** `ToonDocument`, `JsonElement`, `JsonDocument` and `JsonNode` values are written as the value they
+  hold (JSON numbers with every digit) and read back from it; before, they were written as objects of their
+  properties (`Root:`, `ValueKind: Object`).
 - **ToonNet.Core:** `ToonSerializer.DeserializeAsyncEnumerable<T>(Stream)` (and an overload with a `ToonTypeInfo`) reads
   the items of a root array (tabular, list or inline) as they arrive, a batch of about 32 KB at a time, without holding
   the document in memory: on 200,000 rows the live memory stays flat where reading the whole document keeps the

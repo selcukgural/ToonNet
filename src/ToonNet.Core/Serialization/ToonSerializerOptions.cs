@@ -46,6 +46,18 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public PropertyNamingPolicy PropertyNamingPolicy { get; set; } = PropertyNamingPolicy.Default;
 
     /// <summary>
+    ///     Gets or sets whether reading matches keys to property and constructor parameter names ignoring case
+    ///     (<c>name</c> fills <c>Name</c>), as documents from other producers and LLMs often differ in case. A key that
+    ///     matches exactly is preferred; names that differ only in case (<c>Id</c> and <c>ID</c>) still need an exact
+    ///     match, and when several keys fill the same property the last one wins. The default value is false.
+    /// </summary>
+    /// <remarks>
+    ///     With this option types are read with reflection rather than generated code, and the overloads that take a
+    ///     <see cref="ToonTypeInfo"/> do not support it. Writing is not affected.
+    /// </remarks>
+    public bool PropertyNameCaseInsensitive { get; set; }
+
+    /// <summary>
     ///     Gets or sets a value indicating whether extended limits are allowed.
     ///     When false (default), MaxDepth is limited to 200.
     ///     When true, MaxDepth can be set up to 1000.

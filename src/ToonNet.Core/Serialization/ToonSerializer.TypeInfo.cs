@@ -264,6 +264,7 @@ public static partial class ToonSerializer
                 "use the overloads without a type info.");
         }
 
+
         return options;
     }
 
@@ -296,6 +297,13 @@ public static partial class ToonSerializer
     /// </summary>
     private static T? DeserializeText<T>(ToonText text, ToonTypeInfo<T> typeInfo, ToonSerializerOptions options)
     {
+        if (options.PropertyNameCaseInsensitive)
+        {
+            throw new NotSupportedException(
+                "Reading with a ToonTypeInfo does not support PropertyNameCaseInsensitive, which needs the reflection-based serializer; " +
+                "use the overloads without a type info.");
+        }
+
         var deserialize = typeInfo.Deserialize ?? throw new NotSupportedException(
             $"Generated code cannot create {typeof(T).Name}: it needs a public parameterless constructor or a constructor whose parameters match its properties.");
 

@@ -69,7 +69,8 @@ public static partial class ToonSerializer
         }
 
         // Generated code reads objects; other values are reported by the checks below
-        if (generatedAllowed && value is ToonObject && GetGeneratedSerializer(targetType, options) is { Deserialize: { } generated })
+        if (generatedAllowed && value is ToonObject && !options.PropertyNameCaseInsensitive &&
+            GetGeneratedSerializer(targetType, options) is { Deserialize: { } generated })
         {
             return generated(value, options, depth);
         }
@@ -941,6 +942,62 @@ public static partial class ToonSerializer
     ///     Deserializes an object, using the constructor selected for the type (binding parameters by name, as for
     ///     positional records) and then setting the remaining writable properties. Unknown keys are ignored.
     /// </summary>
+    /// <summary>
+    ///     The value of a name's key: the exact key, or with case-insensitive reading (<paramref name="caseInsensitive"/>
+    ///     holds the names that may match so) the last key that equals the name ignoring case, as direct reading sets a
+    ///     property for each such key in order.
+    /// </summary>
+    private static bool TryGetKey(ToonObject obj, string name, HashSet<string>? caseInsensitive, out ToonValue value)
+    {
+        if (caseInsensitive == null || !caseInsensitive.Contains(name))
+        {
+            return obj.Properties.TryGetValue(name, out value!);
+        }
+
+        var found = false;
+        value = null!;
+
+        foreach (var (key, keyValue) in obj.Properties)
+        {
+            if (string.Equals(key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = keyValue;
+                found = true;
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    ///     The names of a type's properties and constructor parameters (without a property) that no other name equals
+    ///     ignoring case: only these are matched ignoring case.
+    /// </summary>
+    private static HashSet<string> GetCaseInsensitiveNames(TypeMetadata metadata, ToonSerializerOptions options)
+    {
+        var policy = metadata.FixedNamingPolicy ?? options.PropertyNamingPolicy;
+
+        if ((uint)policy < NamingPolicyCount && metadata.CaseInsensitiveNames[(int)policy] is { } cached)
+        {
+            return cached;
+        }
+
+        var names = metadata.Properties.Select(property => GetPropertyName(property, metadata, options))
+                            .Concat(metadata.Activator.Arguments.Where(argument => argument.Property == null).Select(argument => argument.Parameter.Name!));
+
+        var unambiguous = names.GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
+                               .Where(group => group.Distinct(StringComparer.Ordinal).Count() == 1)
+                               .Select(group => group.Key)
+                               .ToHashSet(StringComparer.Ordinal);
+
+        if ((uint)policy < NamingPolicyCount)
+        {
+            metadata.CaseInsensitiveNames[(int)policy] = unambiguous;
+        }
+
+        return unambiguous;
+    }
+
     private static object DeserializeObject(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, SerializerState state)
     {
         if (value is not ToonObject obj)
@@ -963,13 +1020,14 @@ public static partial class ToonSerializer
 
         var activator = metadata.Activator;
         var arguments = activator.Arguments.Length == 0 ? [] : new object?[activator.Arguments.Length];
+        var caseInsensitive = options.PropertyNameCaseInsensitive ? GetCaseInsensitiveNames(metadata, options) : null;
 
         for (var i = 0; i < arguments.Length; i++)
         {
             var (parameter, property, missingValue) = activator.Arguments[i];
             var name = property != null ? GetPropertyName(property, metadata, options) : parameter.Name!;
 
-            if (obj.Properties.TryGetValue(name, out var argumentValue))
+            if (TryGetKey(obj, name, caseInsensitive, out var argumentValue))
             {
                 state.Push(name);
                 arguments[i] = DeserializeValue(argumentValue, parameter.ParameterType, options, depth + 1, state, property?.Converter);
@@ -1004,7 +1062,7 @@ public static partial class ToonSerializer
 
             var name = GetPropertyName(property, metadata, options);
 
-            if (!obj.Properties.TryGetValue(name, out var toonValue))
+            if (!TryGetKey(obj, name, caseInsensitive, out var toonValue))
             {
                 continue;
             }

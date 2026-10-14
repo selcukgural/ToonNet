@@ -65,6 +65,9 @@ public static partial class ToonSerializer
         /// <summary>Key lookups for direct reading per naming policy (see <see cref="GetReadLookup"/>).</summary>
         public ReadLookup?[] ReadLookups { get; } = new ReadLookup?[NamingPolicyCount];
 
+        /// <summary>Per naming policy: the names no other name of the type equals ignoring case (case-insensitive reading).</summary>
+        public HashSet<string>?[] CaseInsensitiveNames { get; } = new HashSet<string>?[NamingPolicyCount];
+
         private ObjectActivator? _activator;
 
         /// <summary>

@@ -197,12 +197,20 @@ public static partial class ToonSerializer
     ///     For each key of an object type: the constructor parameter and the settable property (not bound to the
     ///     constructor) it fills, by index (-1 for none).
     /// </summary>
-    private sealed class ReadLookup(Dictionary<string, (int Parameter, int Property)> slots, bool shared)
+    private sealed class ReadLookup(Dictionary<string, (int Parameter, int Property)> slots, bool shared,
+                                    Dictionary<string, (int Parameter, int Property)> caseInsensitiveSlots)
     {
         public Dictionary<string, (int Parameter, int Property)> Slots { get; } = slots;
 
         /// <summary>Whether a key fills both a parameter and a property (read separately by the tree-based path).</summary>
         public bool HasSharedKeys { get; } = shared;
+
+        /// <summary>The slots of the names no other name equals ignoring case, matched ignoring case.</summary>
+        public Dictionary<string, (int Parameter, int Property)> CaseInsensitiveSlots { get; } = caseInsensitiveSlots;
+
+        /// <summary>The slot of a key: an exact match, else (with case-insensitive reading) a match ignoring case.</summary>
+        public bool TryGetSlot(string key, bool ignoreCase, out (int Parameter, int Property) slot) =>
+            Slots.TryGetValue(key, out slot) || (ignoreCase && CaseInsensitiveSlots.TryGetValue(key, out slot));
     }
 
     private static ReadLookup GetReadLookup(TypeMetadata metadata, string[] names, ToonSerializerOptions options)
@@ -243,7 +251,18 @@ public static partial class ToonSerializer
             }
         }
 
-        var lookup = new ReadLookup(slots, shared);
+        var unambiguous = GetCaseInsensitiveNames(metadata, options);
+        var caseInsensitive = new Dictionary<string, (int Parameter, int Property)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, slot) in slots)
+        {
+            if (unambiguous.Contains(name))
+            {
+                caseInsensitive[name] = slot;
+            }
+        }
+
+        var lookup = new ReadLookup(slots, shared, caseInsensitive);
 
         if ((uint)policy < NamingPolicyCount)
         {
@@ -358,7 +377,8 @@ public static partial class ToonSerializer
             }
 
             // Generated code does not consult converters: with converters, it reads only types where none applies
-            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode &&
+            // Generated code matches keys exactly: with case-insensitive reading, types are read with reflection
+            var info = GetReadTypeInfo(targetType, _options.UseGeneratedCode && !_options.PropertyNameCaseInsensitive &&
                                                    (_converterCheck == null || _converterCheck.AllowsGeneratedCode(Nullable.GetUnderlyingType(targetType) ?? targetType)));
 
             if (propertyConverter != null || info.Kind == ReadKind.Tree || IsConverted(targetType))
@@ -514,7 +534,7 @@ public static partial class ToonSerializer
 
             while (_parser.NextProperty(ref cursor, out var key, out var fieldValue))
             {
-                if (!lookup.Slots.TryGetValue(key, out var slot) || slot.Property < 0)
+                if (!lookup.TryGetSlot(key, _options.PropertyNameCaseInsensitive, out var slot) || slot.Property < 0)
                 {
                     _parser.Skip(fieldValue);
                     continue;
@@ -555,7 +575,7 @@ public static partial class ToonSerializer
 
             while (_parser.NextProperty(ref cursor, out var key, out var fieldValue))
             {
-                if (!lookup.Slots.TryGetValue(key, out var slot))
+                if (!lookup.TryGetSlot(key, _options.PropertyNameCaseInsensitive, out var slot))
                 {
                     _parser.Skip(fieldValue);
                     continue;

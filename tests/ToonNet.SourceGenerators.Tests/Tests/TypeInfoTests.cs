@@ -170,6 +170,21 @@ public partial class TypeInfoTests
     }
 
     [Fact]
+    public void CaseInsensitiveReading_UsesReflection_AndIsNotSupportedWithATypeInfo()
+    {
+        var options = new ToonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        var row = ToonSerializer.Deserialize<WriterRow>("id: 5\nNAME: x\nmood: busy", options)!;
+        Assert.Equal((5, "x", Mood.Busy), (row.Id, row.Name, row.Mood));
+
+        var fromTree = WriterRow.Deserialize(ToonDocument.Parse("id: 6\nname: y"), options);
+        Assert.Equal((6, "y"), (fromTree.Id, fromTree.Name));
+
+        Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("Id: 1", WriterRow.ToonTypeInfo, options));
+        Assert.Equal(ToonSerializer.Serialize(row), ToonSerializer.Serialize(row, WriterRow.ToonTypeInfo, options)); // writing is not affected
+    }
+
+    [Fact]
     public void Converters_AreNotSupported()
     {
         var options = new ToonSerializerOptions();
