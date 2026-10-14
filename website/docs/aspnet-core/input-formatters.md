@@ -132,9 +132,9 @@ throws `InvalidOperationException` (check with `request.HasToonContentType()`); 
 A body with only whitespace reads as the default value.
 
 Bodies larger than **4 MB** (`ToonFormatterDefaults.MaxRequestBodySize`, the limit of the input formatter) are rejected
-with `413 Payload Too Large` (a `BadHttpRequestException` with status code 413). An endpoint that sets its own limit
-(`[RequestSizeLimit]` or `[DisableRequestSizeLimit]` metadata) keeps the server's limit instead, which is the one it
-sets. Give an endpoint that needs larger bodies its own limit:
+with `413 Payload Too Large` (a `BadHttpRequestException` with status code 413). An action or endpoint that sets its
+own limit (`[RequestSizeLimit]` or `[DisableRequestSizeLimit]` metadata) keeps the server's limit instead, which is the
+one it sets, for the MVC formatter and `ReadFromToonAsync` alike. Give an endpoint that needs larger bodies its own limit:
 
 ```csharp
 using Microsoft.AspNetCore.Mvc;

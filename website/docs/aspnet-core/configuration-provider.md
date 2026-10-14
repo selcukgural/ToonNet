@@ -40,14 +40,17 @@ Features[3]: Authentication,Caching,Compression
 ```
 
 Nested objects become `Section:Key` paths and array items become index keys (`Features:0`, `Features:1`, ...). An
-empty object or array (`Features: []`) sets its key to null, which clears values from earlier sources, as in JSON
-configuration files. Strict mode applies by default (pass a `ToonOptions` as the last argument of `AddToonFile` to
-change it). Like the JSON provider, the file throws a `FormatException` when it is not valid TOON, when its root is not
-an object, or when two keys differ only in case (configuration keys are case-insensitive).
+empty object or array (`Features: []`) sets its key to null, which clears values from earlier sources (JSON
+configuration files do so for an empty object, and set an empty array to `""`). Strict mode applies by default (pass a
+`ToonOptions` as the last argument of `AddToonFile` to change it). A file that is not valid TOON, whose root is not an
+object, or with two keys that differ only in case (configuration keys are case-insensitive) makes `Build()` throw an
+`InvalidDataException` ("Failed to load configuration from file ...") with a `FormatException` that says why as its
+`InnerException`, as the JSON provider does.
 
-Values are stored as strings: booleans become `True`/`False`, and numbers keep their exact value in canonical TOON
-form (spec §2): `12345678901234567890` stays as written, while `1.0` becomes `1` and `1.50` becomes `1.5`. Quote a value
-(`Version: "1.0"`) to keep its text exactly. `AddToonFile` accepts both relative and absolute paths.
+Values are stored as strings: booleans become `True`/`False`, and numbers are written in canonical TOON form (spec
+§2): `12345678901234567890` stays as written, while `1.0` becomes `1` and `1.50` becomes `1.5`. A number with more
+digits than a `decimal` holds (about 28) is rounded to the nearest `double`. Quote a value (`Version: "1.0"`) to keep
+its text exactly. `AddToonFile` accepts both relative and absolute paths.
 
 ## Reading Configuration
 

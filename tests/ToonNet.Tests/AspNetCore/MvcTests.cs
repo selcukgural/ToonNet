@@ -791,6 +791,24 @@ public class MvcTests
         Assert.NotNull(await request.ReadFromToonAsync<TestModel>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToonInputFormatter_ActionsWithTheirOwnSizeLimit_AreLimitedByTheServer(bool disable)
+    {
+        // [RequestSizeLimit(16 MB)] on an action used to be cut at the formatter's 4 MB anyway
+        var formatter = new ToonInputFormatter(new ToonSerializerOptions(), maxRequestBodySize: 64);
+        var body = System.Text.Encoding.UTF8.GetBytes("Name: " + new string('x', 100));
+        var context = CreateInputContext(body, ToonFormatterDefaults.MediaType, contentLength: body.Length);
+        object metadata = disable ? new Microsoft.AspNetCore.Mvc.DisableRequestSizeLimitAttribute() : new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(1_000);
+        context.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(metadata), "large"));
+
+        var result = await formatter.ReadAsync(context);
+
+        Assert.False(result.HasError);
+        Assert.Equal(new string('x', 100), ((TestModel)result.Model!).Name);
+    }
+
     [Fact]
     public async Task ToonResult_WithoutRequestServices_UsesTheDefaultOptions()
     {

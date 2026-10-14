@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Net.Http.Headers;
 using ToonNet.Core;
@@ -30,7 +31,10 @@ public sealed class ToonInputFormatter : TextInputFormatter
     ///     Initializes a new instance of <see cref="ToonInputFormatter"/> with a custom request body size limit.
     /// </summary>
     /// <param name="options">Options for deserialization.</param>
-    /// <param name="maxRequestBodySize">The maximum size of the request body in bytes.</param>
+    /// <param name="maxRequestBodySize">
+    ///     The maximum size of the request body in bytes, for actions without a size limit of their own: the server
+    ///     limits an action with <c>[RequestSizeLimit]</c> or <c>[DisableRequestSizeLimit]</c>.
+    /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxRequestBodySize"/> is not positive.</exception>
     public ToonInputFormatter(ToonSerializerOptions options, long maxRequestBodySize)
     {
@@ -67,13 +71,17 @@ public sealed class ToonInputFormatter : TextInputFormatter
         var httpContext = context.HttpContext;
         var request = httpContext.Request;
 
-        if (request.ContentLength > _maxRequestBodySize)
+        // An endpoint with a size limit of its own ([RequestSizeLimit], [DisableRequestSizeLimit]) is limited by the
+        // server, as with ReadFromToonAsync; others by the formatter
+        var limit = httpContext.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>() != null ? long.MaxValue : _maxRequestBodySize;
+
+        if (request.ContentLength > limit)
         {
             throw CreatePayloadTooLargeException();
         }
 
         // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
-        var body = new LimitedReadStream(request.Body, _maxRequestBodySize, CreatePayloadTooLargeException);
+        var body = new LimitedReadStream(request.Body, limit, CreatePayloadTooLargeException);
 
         // UTF-8 bodies are checked for content as they are read; others once decoded
         string? content = null;

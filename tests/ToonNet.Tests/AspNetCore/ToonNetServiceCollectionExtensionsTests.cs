@@ -192,6 +192,8 @@ public sealed class ToonNetServiceCollectionExtensionsTests
     [Theory]
     [InlineData("SnakeCas")]
     [InlineData("7")]
+    [InlineData("1")]                     // a number of a defined policy
+    [InlineData("CamelCase,SnakeCase")]   // Enum.TryParse combines the list into another policy
     public void AddToonNet_WithMisspelledNamingPolicy_Throws(string policy)
     {
         var configuration = new ConfigurationBuilder()
@@ -204,6 +206,40 @@ public sealed class ToonNetServiceCollectionExtensionsTests
 
         var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value);
         Assert.Contains("PropertyNamingPolicy", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(" camelCase ", "PropertyNamingPolicy", "CamelCase")]
+    [InlineData("disallow", "UnmappedMemberHandling", "Disallow")]
+    public void AddToonNet_WithConfiguration_ReadsEnumNamesInAnyCase(string configured, string key, string expected)
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { [$"ToonNet:ToonSerializerOptions:{key}"] = configured })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+
+        Assert.Equal(expected, key == "PropertyNamingPolicy" ? options.PropertyNamingPolicy.ToString() : options.UnmappedMemberHandling.ToString());
+    }
+
+    [Theory]
+    [InlineData("Skip,Disallow")]
+    [InlineData("1")]
+    public void AddToonNet_WithAListOrNumberForUnmappedMembers_Throws(string configured)
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["ToonNet:ToonSerializerOptions:UnmappedMemberHandling"] = configured })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value);
+        Assert.Equal($"Invalid ToonNet:ToonSerializerOptions:UnmappedMemberHandling value '{configured}'. Expected one of: Skip, Disallow.", ex.Message);
     }
 
     [Theory]

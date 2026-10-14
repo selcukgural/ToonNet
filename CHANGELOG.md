@@ -248,6 +248,12 @@ Defaults that let documents and responses do more than the code meant, now as Sy
   the string overload does; a property name with an unpaired surrogate escape is a `JsonException` (it was an
   `InvalidOperationException`); `ToJson` writes trees of the greatest depth TOON allows (Utf8JsonWriter stopped one
   level short of `MaxDepth = 1000`).
+- **ToonNet.AspNetCore.Mvc:** The input formatter leaves actions with a size limit of their own
+  (`[RequestSizeLimit]`, `[DisableRequestSizeLimit]`) to the server's limit, as `ReadFromToonAsync` does; their bodies
+  were cut at the formatter's 4 MB anyway.
+- **ToonNet.AspNetCore:** `AddToonNet(IConfiguration)` accepts only the names of `PropertyNamingPolicy` and
+  `UnmappedMemberHandling` values; a number or a comma-separated list (`CamelCase,SnakeCase`, which combined into
+  another policy) fails at startup.
 - **ToonNet.Core:** Generated code registers only from the module of its type, and a type's first registration stays,
   so other code cannot replace how a type (or a framework type) is serialized for the whole process.
 - **ToonNet.SourceGenerators:** `[ToonSerializable]` on a static class, a ref struct or a file-local type gave code that

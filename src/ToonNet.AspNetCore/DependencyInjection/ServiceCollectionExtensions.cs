@@ -233,7 +233,7 @@ public static class ServiceCollectionExtensions
         if (!string.IsNullOrWhiteSpace(namingPolicy))
         {
             // A misspelled policy fails at startup instead of silently keeping the default
-            options.PropertyNamingPolicy = Enum.TryParse<PropertyNamingPolicy>(namingPolicy, ignoreCase: true, out var policy) && Enum.IsDefined(policy)
+            options.PropertyNamingPolicy = TryParseName<PropertyNamingPolicy>(namingPolicy, out var policy)
                 ? policy
                 : throw new InvalidOperationException(
                     $"Invalid {section.Path}:{nameof(ToonSerializerOptions.PropertyNamingPolicy)} value '{namingPolicy}'. " +
@@ -255,11 +255,32 @@ public static class ServiceCollectionExtensions
         var unmapped = section.GetValue<string?>(nameof(ToonSerializerOptions.UnmappedMemberHandling));
         if (!string.IsNullOrWhiteSpace(unmapped))
         {
-            options.UnmappedMemberHandling = Enum.TryParse<ToonUnmappedMemberHandling>(unmapped, ignoreCase: true, out var handling) && Enum.IsDefined(handling)
+            options.UnmappedMemberHandling = TryParseName<ToonUnmappedMemberHandling>(unmapped, out var handling)
                 ? handling
                 : throw new InvalidOperationException(
                     $"Invalid {section.Path}:{nameof(ToonSerializerOptions.UnmappedMemberHandling)} value '{unmapped}'. " +
                     $"Expected one of: {string.Join(", ", Enum.GetNames<ToonUnmappedMemberHandling>())}.");
         }
+    }
+
+    /// <summary>
+    ///     One of the names of the enum, in any case; not a number or a comma-separated list, which
+    ///     <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/> would combine into another value.
+    /// </summary>
+    private static bool TryParseName<TEnum>(string text, out TEnum value) where TEnum : struct, Enum
+    {
+        var name = text.Trim();
+
+        foreach (var candidate in Enum.GetNames<TEnum>())
+        {
+            if (string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = Enum.Parse<TEnum>(candidate);
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 }

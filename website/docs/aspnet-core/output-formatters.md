@@ -90,6 +90,11 @@ A null value is written as the TOON document `null` (status 200), like `Results.
 because an empty TOON document means an empty object. In controllers, MVC still answers a null `ObjectResult` with
 `204 No Content` unless `HttpNoContentOutputFormatter.TreatNullValueAsNoContent` is turned off.
 
+The response value itself is written as its runtime type, as System.Text.Json does for MVC responses (an action that
+returns `object` or a base type writes the members of the object it returns); members inside it are written as their
+declared types unless `SerializeRuntimeTypes` is on. An `IAsyncEnumerable<T>` value is collected into a list before it
+is written, because a TOON array header carries the number of items.
+
 ## Content Negotiation
 
 Client specifies desired format via `Accept` header:

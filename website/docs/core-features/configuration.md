@@ -408,14 +408,14 @@ var options = new ToonSerializerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `IndentSize` | `int` | `2` | Spaces per indentation level, from 1 to 100 |
+| `IndentSize` | `int` | `2` | Spaces per indentation level, from 1 to 100, written and expected when reading (strict mode rejects other indentation) |
 | `Delimiter` | `char` | `','` | Delimiter for inline arrays and tabular rows: `','`, `'\t'` or `'\|'` |
 | `StrictMode` | `bool` | `true` | Enforce the spec §14 errors while parsing (see [Deserialization](deserialization#parsing-rules-and-strict-mode)) |
 | `MaxDepth` | `int` | `100` | Maximum nesting depth while parsing and encoding (1–200, or up to 1000 with `AllowExtendedLimits`) |
 | `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
 
-Invalid values throw from the setter: `ArgumentOutOfRangeException` for `IndentSize` and `MaxDepth` (outside 1–1000),
-`ArgumentException` for `Delimiter`. A `MaxDepth` above 200 without `AllowExtendedLimits` throws
+Invalid values throw from the setter: `ArgumentOutOfRangeException` for `IndentSize` outside 1–100 and `MaxDepth`
+outside 1–1000, `ArgumentException` for `Delimiter`. A `MaxDepth` above 200 without `AllowExtendedLimits` throws
 `InvalidOperationException` when parsing or encoding.
 
 ### Indent Configuration

@@ -37,7 +37,10 @@ public static class ToonHttpRequestExtensions
     /// <typeparam name="T">The type to read.</typeparam>
     /// <param name="request">The request.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>The value, or the default value when the document is <c>null</c> or the body is blank.</returns>
+    /// <returns>
+    ///     The value; the default value when the body is blank, and null when the document is <c>null</c> (an error for a
+    ///     non-nullable value type).
+    /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
     /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
@@ -49,7 +52,10 @@ public static class ToonHttpRequestExtensions
     /// <param name="request">The request.</param>
     /// <param name="options">The serializer options; the application's <c>IOptions&lt;ToonSerializerOptions&gt;</c> when null.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>The value, or the default value when the document is <c>null</c> or the body is blank.</returns>
+    /// <returns>
+    ///     The value; the default value when the body is blank, and null when the document is <c>null</c> (an error for a
+    ///     non-nullable value type).
+    /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
     /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <typeparamref name="T"/>.</exception>
@@ -65,7 +71,10 @@ public static class ToonHttpRequestExtensions
     /// <param name="request">The request.</param>
     /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>The value, or the default value when the document is <c>null</c> or the body is blank.</returns>
+    /// <returns>
+    ///     The value; the default value when the body is blank, and null when the document is <c>null</c> (an error for a
+    ///     non-nullable value type).
+    /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
     /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="NotSupportedException">Thrown when the generated code is from an older generator that does not apply the options.</exception>
@@ -83,7 +92,10 @@ public static class ToonHttpRequestExtensions
     /// <param name="type">The type to read.</param>
     /// <param name="options">The serializer options; the application's <c>IOptions&lt;ToonSerializerOptions&gt;</c> when null.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>The value, or the default value of <paramref name="type"/> when the document is <c>null</c> or the body is blank.</returns>
+    /// <returns>
+    ///     The value; the default value of <paramref name="type"/> when the body is blank, and null when the document is
+    ///     <c>null</c> (an error for a non-nullable value type).
+    /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when the request does not have a TOON content type or its charset is unknown.</exception>
     /// <exception cref="BadHttpRequestException">Thrown with status 413 when the body is larger than its limit (see the remarks of the class).</exception>
     /// <exception cref="ToonException">Thrown when the body is not valid TOON or does not fit <paramref name="type"/>.</exception>
