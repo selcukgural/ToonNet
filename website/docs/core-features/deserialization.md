@@ -507,6 +507,7 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 | `Deserialize<T>(ReadOnlySpan<byte> utf8, options)` | Deserialize UTF-8 bytes without a string (also with a `Type`) | Network, caches, byte APIs |
 | `Deserialize<T>(ReadOnlySpan<char> toon, options)` | Deserialize a span of characters (also with a `Type`) | Slices of larger text |
 | `Deserialize<T>(Stream, options)` | Read UTF-8 from a stream synchronously (also with a `Type`) | Synchronous I/O |
+| `Deserialize<T>(string \| bytes \| chars \| Stream, ToonTypeInfo<T>, options)` | Without reflection, through generated code (also `DeserializeFromStreamAsync`) | Trimming, NativeAOT |
 | `DeserializeFromValue<T>(ToonValue value, options)` | Convert a `ToonValue` tree without text | Data from `ToonDocument.Parse` or `SerializeToValue` |
 | `DeserializeAsync<T>(string toon, options, ct)` | Deserialize from string (`ValueTask<T?>`) | Async call sites |
 | `DeserializeFromStreamAsync<T>(Stream, options, ct)` | Read UTF-8 from a stream (also with a `Type`) | Network data |

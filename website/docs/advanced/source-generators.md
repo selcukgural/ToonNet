@@ -94,10 +94,10 @@ The generator does not make serialization allocation-free. For trimmed and Nativ
 
 ## NativeAOT and trimming
 
-`ToonNet.Core` is annotated for trimming and NativeAOT. `ToonSerializer` converts types with reflection, so its methods
-carry `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]` and a trimmed or AOT app gets a warning where it calls
-them. The generated methods need no reflection: write and read `[ToonSerializable]` types with them, `ToonEncoder` and
-`ToonDocument.Parse`:
+`ToonNet.Core` is annotated for trimming and NativeAOT. The `ToonSerializer` overloads that take a type convert it with
+reflection, so they carry `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]` and a trimmed or AOT app gets a
+warning where it calls them. Every `[ToonSerializable]` type has a static `ToonTypeInfo` property instead; pass it to the
+`ToonSerializer` overloads that take a type info, which need no reflection:
 
 ```csharp
 [ToonSerializable(AllowReflectionFallback = false)] // every property must be converted by generated code
@@ -108,19 +108,36 @@ public partial class Catalog
     public Dictionary<string, Warehouse> Warehouses { get; set; } = [];
 }
 
-string toon = new ToonEncoder().Encode(Catalog.Serialize(catalog));
-Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
+string toon = ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo);
+Catalog? copy = ToonSerializer.Deserialize(toon, Catalog.ToonTypeInfo);
 
-// The same with UTF-8 bytes, without intermediate strings
-byte[] utf8 = new ToonEncoder().EncodeToUtf8Bytes(Catalog.Serialize(catalog));
-Catalog fromBytes = Catalog.Deserialize(ToonDocument.Parse(utf8));
+// UTF-8, buffer writers and streams work the same way
+byte[] utf8 = ToonSerializer.SerializeToUtf8Bytes(catalog, Catalog.ToonTypeInfo);
+Catalog? fromBytes = ToonSerializer.Deserialize(utf8, Catalog.ToonTypeInfo);
+
+// Collection roots: compose the type info of the elements
+var catalogs = ToonTypeInfo.CreateList(Catalog.ToonTypeInfo);           // also CreateArray, CreateDictionary
+string many = ToonSerializer.Serialize(new List<Catalog> { catalog }, catalogs);
 ```
 
-`ToonEncoder.Encode(document, IBufferWriter<byte>)` writes the UTF-8 to a buffer writer such as a `PipeWriter`.
+These overloads write and read straight from text, like the others and with the same output, at the same speed: on
+10,000 records they serialize 2.4–4x and deserialize 1.6–2x faster than going through a `ToonDocument`. A value that
+only reflection would handle directly (an object without generated code in a property typed `object`, a derived
+instance) makes the whole document go through the generated tree-based methods, with the same text. Options with
+converters are not supported (generated code hands converters to the reflection-based serializer), and
+`ToonTypeInfo.GetGenerated<T>()` returns the same type info for generic code or a type whose own member is named
+`ToonTypeInfo`.
 
-This holds as long as the options contain no converters and objects are of their declared types (a derived instance
-is handed to the reflection-based serializer). The repository's CI publishes such an app with NativeAOT and fails on
-any trim or AOT warning.
+The generated `Serialize`/`Deserialize` methods with `ToonEncoder` and `ToonDocument.Parse` need no reflection either:
+
+```csharp
+string toon = new ToonEncoder().Encode(Catalog.Serialize(catalog));
+Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
+byte[] utf8 = new ToonEncoder().EncodeToUtf8Bytes(Catalog.Serialize(catalog));  // or Encode(document, bufferWriter)
+```
+
+This holds as long as objects are of their declared types (a derived instance is handed to the reflection-based
+serializer). The repository's CI publishes an app that uses both with NativeAOT and fails on any trim or AOT warning.
 
 ## Supported shapes
 

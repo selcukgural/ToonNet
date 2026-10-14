@@ -115,8 +115,9 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 - **UTF-8 in and out** - Bytes, spans, streams and `IBufferWriter<byte>` (a `PipeWriter`) are read and written through
   pooled buffers, without intermediate strings: reading bytes is 4–15% faster and allocates 21–46% less than going
   through a string
-- **NativeAOT and trimming** - `ToonNet.Core` is annotated; generated `Serialize`/`Deserialize` methods with
-  `ToonEncoder` and `ToonDocument.Parse` (text or UTF-8) run in NativeAOT apps (tested in CI)
+- **NativeAOT and trimming** - `ToonNet.Core` is annotated; `ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo)`
+  and the other overloads that take a generated type info need no reflection and keep the fast path (tested with
+  NativeAOT in CI)
 - **.NET 8 and .NET 10** - Builds for both; `ToonNet.Core` has no package dependencies
 
 **Async I/O:**
@@ -216,7 +217,7 @@ them straight from it, with code generated for each type.
 | Targets | .NET 8, .NET 10 | .NET 10, .NET Standard 2.0 |
 | Typed API | `ToonSerializer.Serialize`/`Deserialize` (text, streams, files) | `ToonEncoder.Encode<T>`/`ToonDecoder.Decode<T>` via System.Text.Json |
 | Source generator | ✅ `[ToonSerializable]` | – |
-| NativeAOT / trimming | ✅ generated code, tested in CI | – |
+| NativeAOT / trimming | ✅ `ToonSerializer` with generated type infos, tested in CI | – |
 | Document model | `ToonDocument` / `ToonValue` | `JsonNode` |
 | Options | indent, delimiter, strict, naming policies, null handling, read-only properties, converters, max depth | indent, delimiter, strict |
 | Exact `decimal` / `ulong` | ✅ | rounded through `double` |

@@ -24,8 +24,8 @@ public static partial class ToonSerializer
 {
     /// <summary>Why the serializer's methods are not compatible with trimming and NativeAOT.</summary>
     internal const string ReflectionMessage =
-        "ToonSerializer converts .NET types with reflection, which trimming and NativeAOT cannot analyze. For " +
-        "[ToonSerializable] types, use the generated Serialize and Deserialize methods with ToonEncoder and ToonDocument.Parse.";
+        "This overload converts .NET types with reflection, which trimming and NativeAOT cannot analyze. For " +
+        "[ToonSerializable] types, use the overloads that take a ToonTypeInfo, such as Serialize(value, MyType.ToonTypeInfo).";
 
     /// <summary>
     ///     Why the reflection-based code may be trimmed and compiled ahead of time: it runs only under the methods above

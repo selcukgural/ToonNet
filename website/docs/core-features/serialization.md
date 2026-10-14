@@ -571,6 +571,7 @@ All methods take an optional `ToonSerializerOptions? options = null`; the async 
 | `SerializeToUtf8Bytes(object value, Type type, options)` | Same, with a runtime type | Non-generic code |
 | `Serialize<T>(IBufferWriter<byte>, T value, options)` | Write UTF-8 to a buffer writer (also with a `Type`) | Pipelines, pooled buffers |
 | `Serialize<T>(Stream, T value, options)` | Write UTF-8 to a stream synchronously (also with a `Type`) | Synchronous I/O |
+| `Serialize<T>(T value, ToonTypeInfo<T>, options)` | Without reflection, through generated code (also `SerializeToUtf8Bytes`, buffer writer, stream, `SerializeToStreamAsync`) | Trimming, NativeAOT |
 | `SerializeToValue<T>(T value, options)` | Convert to a `ToonValue` tree without text | Inspect or modify before encoding |
 | `SerializeAsync<T>(T value, options, ct)` | Serialize to string (`ValueTask<string>`) | Async call sites |
 | `SerializeToStreamAsync<T>(T value, Stream, options, ct)` | Write UTF-8 to a stream | Network, files |

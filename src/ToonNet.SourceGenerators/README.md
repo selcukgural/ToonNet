@@ -54,8 +54,8 @@ from TOON text, without building `ToonValue` objects: keys are encoded and match
 enum names are written without boxing, and values are read into typed locals. The static `Serialize` and
 `Deserialize` methods still work with a `ToonDocument`.
 
-The library itself is not yet annotated for trimming or Native AOT, so the generator makes no AOT guarantee, and it
-makes no zero-allocation promise.
+Each type also gets a static `ToonTypeInfo` property for the `ToonSerializer` overloads that need no reflection
+(trimming and NativeAOT); see below.
 
 ---
 
@@ -186,15 +186,20 @@ they are also listed under **Dependencies → Analyzers → ToonNet.SourceGenera
 
 ## 🪶 NativeAOT and trimming
 
-The generated `Serialize`/`Deserialize` methods need no reflection, so apps that write and read `[ToonSerializable]`
-types with them, `ToonEncoder` and `ToonDocument.Parse` can be trimmed and published with NativeAOT (use
-`AllowReflectionFallback = false` so every property is converted by generated code). `ToonSerializer` itself uses
-reflection and is annotated with `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]`.
+Pass a type's `ToonTypeInfo` to `ToonSerializer`: those overloads write and read straight from text through generated
+code, with the same output and speed as the others, but without reflection, so the app can be trimmed and published
+with NativeAOT (use `AllowReflectionFallback = false` so every property is converted by generated code). The overloads
+that take a `Type` use reflection and are annotated with `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]`.
 
 ```csharp
-string toon = new ToonEncoder().Encode(Catalog.Serialize(catalog));
-Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
+string toon = ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo);
+Catalog? copy = ToonSerializer.Deserialize(toon, Catalog.ToonTypeInfo);
+
+var catalogs = ToonTypeInfo.CreateList(Catalog.ToonTypeInfo);  // collection roots
 ```
+
+The generated `Serialize`/`Deserialize` methods with `ToonEncoder` and `ToonDocument.Parse` need no reflection either.
+Options with converters are not supported without reflection.
 
 ---
 
