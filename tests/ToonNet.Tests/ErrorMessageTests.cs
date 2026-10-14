@@ -27,8 +27,8 @@ public class ErrorMessageTests
 
         // Assert
         Assert.Contains("Missing colon", message);
-        Assert.Contains("Line 5, Column 10", message);
-        Assert.Contains("💡 Suggestion", message);
+        Assert.Contains("Missing colon after key 'name' (line 5, column 10)", ex.Message);
+        Assert.Contains("Suggestion: Add a colon", message);
         Assert.Contains("name: value", message);
 
         _output.WriteLine("=== PARSE EXCEPTION EXAMPLE ===");
@@ -48,8 +48,8 @@ public class ErrorMessageTests
 
         // Assert
         Assert.Contains("circular reference", message);
-        Assert.Contains("Property: User.Friends.User", message);
-        Assert.Contains("💡 Suggestion", message);
+        Assert.Equal("Cannot encode circular reference (property: User.Friends.User, value type: String)", ex.Message);
+        Assert.Contains("Suggestion: Use [ToonIgnore]", message);
         Assert.Contains("[ToonIgnore]", message);
 
         _output.WriteLine("=== ENCODING EXCEPTION EXAMPLE ===");
@@ -69,12 +69,10 @@ public class ErrorMessageTests
 
         // Assert
         Assert.Contains("Cannot deserialize", message);
-        Assert.Contains("Target Type: Int32", message);
-        Assert.Contains("Property: Age", message);
-        Assert.Contains("Value type: String", message);
+        Assert.Equal("Cannot deserialize value to target type (target type: Int32, property: Age, value type: String)", ex.Message);
         Assert.DoesNotContain("not-a-number", message); // values may be personal data; they stay out of messages
         Assert.Equal("not-a-number", ex.Value);
-        Assert.Contains("💡 Suggestion", message);
+        Assert.Contains("Suggestion: Ensure", message);
 
         _output.WriteLine("=== SERIALIZATION EXCEPTION EXAMPLE ===");
         _output.WriteLine(message);
@@ -93,7 +91,7 @@ public class ErrorMessageTests
 
         // Assert
         Assert.Contains("Missing value", message);
-        Assert.Contains("📝 Code:", message);
+        Assert.Contains("Code:\n  key: value", message);
         Assert.Contains("key: value", message);
         Assert.Contains("nestedKey: nestedValue", message);
 
@@ -148,6 +146,17 @@ age: 30"; // Unterminated string
         Assert.Equal(typeof(string), ex.TargetType);
         Assert.Equal("Name", ex.Path);
         Assert.Equal(123, ex.Value);
+    }
+
+    [Theory]
+    [InlineData("a: 1\na: 2", "Duplicate key 'a' (line 2, column 1)")]
+    [InlineData("Age: x", "The string is not a number (path: $.Age, target type: Int32)")]
+    public void Messages_AreOneLineWithoutSymbols(string toon, string expected)
+    {
+        var ex = Assert.ThrowsAny<ToonException>(() => ToonNet.Core.Serialization.ToonSerializer.Deserialize<AgeHolder>(toon));
+
+        Assert.Equal(expected, ex.Message);
+        Assert.DoesNotContain('\n', ex.Message);
     }
 
     [Theory]

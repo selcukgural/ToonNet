@@ -175,7 +175,7 @@ public class ToonSerializerTypeSupportTests
         var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Numbers>(toon));
 
         Assert.Contains(expected, ex.Message);
-        Assert.Contains("Path: $.", ex.Message);
+        Assert.Contains("(path: $.", ex.Message);
     }
 
     [Fact]

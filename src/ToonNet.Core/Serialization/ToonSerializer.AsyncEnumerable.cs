@@ -207,7 +207,7 @@ public static partial class ToonSerializer
             }
 
             var line = error.Line == 1 ? _headerLineNumber : _textFirstLine + error.Line - 2;
-            var message = error.Message.Split("\n  📍 Position:")[0];
+            var message = error.Reason;
 
             // The batch declares its own count; the error names the counts of the whole array
             const string mismatch = "Array length mismatch: expected ";

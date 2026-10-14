@@ -19,6 +19,28 @@ public class ToonException : Exception
     public ToonException(string message, Exception innerException) : base(message, innerException) { }
 
     /// <summary>
+    ///     Appends the details that have a value to a message, on one line: <c>message (path: $.Age, target type: Int32)</c>.
+    /// </summary>
+    internal static string WithDetails(string message, params (string Name, string? Value)[] details)
+    {
+        var text = new System.Text.StringBuilder(message);
+        var first = true;
+
+        foreach (var (name, value) in details)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                continue;
+            }
+
+            text.Append(first ? " (" : ", ").Append(name).Append(": ").Append(value);
+            first = false;
+        }
+
+        return first ? message : text.Append(')').ToString();
+    }
+
+    /// <summary>
     ///     Optional suggestion for fixing the error.
     /// </summary>
     public string? Suggestion { get; init; }
@@ -38,12 +60,12 @@ public class ToonException : Exception
 
         if (!string.IsNullOrEmpty(Suggestion))
         {
-            result += $"\n\n💡 Suggestion: {Suggestion}";
+            result += $"\n\nSuggestion: {Suggestion}";
         }
 
         if (!string.IsNullOrEmpty(CodeSnippet))
         {
-            result += $"\n\n📝 Code:\n{CodeSnippet}";
+            result += $"\n\nCode:\n{CodeSnippet}";
         }
 
         return result;
@@ -63,9 +85,13 @@ public sealed class ToonParseException : ToonException
     /// <param name="column">The column number where the error occurred.</param>
     public ToonParseException(string message, int line, int column) : base(FormatMessage(message, line, column))
     {
+        Reason = message;
         Line = line;
         Column = column;
     }
+
+    /// <summary>The message without the position.</summary>
+    internal string Reason { get; }
 
     /// <summary>
     ///     Gets the line number where the error occurred.
@@ -78,7 +104,7 @@ public sealed class ToonParseException : ToonException
     public int Column { get; }
     
     /// <summary>
-    ///     Formats the error message with line and column information.
+    ///     Formats the error message with line and column information, on one line: <c>Duplicate key 'id' (line 3, column 1)</c>.
     /// </summary>
     /// <param name="message">The error message.</param>
     /// <param name="line">The line number.</param>
@@ -91,7 +117,7 @@ public sealed class ToonParseException : ToonException
             return message;
         }
 
-        return $"{message}\n  📍 Position: Line {line}, Column {column}";
+        return $"{message} (line {line}, column {column})";
     }
 
     /// <summary>
@@ -148,18 +174,8 @@ public sealed class ToonEncodingException : ToonException
     public static ToonEncodingException Create(string message, string? propertyPath = null, object? problematicValue = null,
                                                string? suggestion = null)
     {
-        var fullMessage = message;
-
-        if (!string.IsNullOrEmpty(propertyPath))
-        {
-            fullMessage += $"\n  📍 Property: {propertyPath}";
-        }
-
         // The value itself stays out of the message (it may be personal data); it is available as ProblematicValue
-        if (problematicValue != null)
-        {
-            fullMessage += $"\n  ⚠️  Value type: {problematicValue.GetType().Name}";
-        }
+        var fullMessage = WithDetails(message, ("property", propertyPath), ("value type", problematicValue?.GetType().Name));
 
         var ex = new ToonEncodingException(fullMessage)
         {
@@ -218,23 +234,8 @@ public sealed class ToonSerializationException : ToonException
     public static ToonSerializationException Create(string message, Type? targetType = null, string? propertyName = null, object? value = null,
                                                     string? suggestion = null)
     {
-        var fullMessage = message;
-
-        if (targetType != null)
-        {
-            fullMessage += $"\n  🎯 Target Type: {targetType.Name}";
-        }
-
-        if (!string.IsNullOrEmpty(propertyName))
-        {
-            fullMessage += $"\n  📍 Property: {propertyName}";
-        }
-
         // The value itself stays out of the message (it may be personal data); it is available as Value
-        if (value != null)
-        {
-            fullMessage += $"\n  ⚠️  Value type: {value.GetType().Name}";
-        }
+        var fullMessage = WithDetails(message, ("target type", targetType?.Name), ("property", propertyName), ("value type", value?.GetType().Name));
 
         var ex = new ToonSerializationException(fullMessage)
         {

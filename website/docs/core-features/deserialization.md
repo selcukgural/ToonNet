@@ -604,7 +604,7 @@ path).
 ```csharp
 // Wrong: trying to deserialize string to int
 string toonInput = "Age: NotANumber";
-// Throws ToonSerializationException: "The string is not a number" (Path: $.Age, Target Type: Int32)
+// Throws ToonSerializationException: "The string is not a number (path: $.Age, target type: Int32)"
 
 // Correct:
 string toonInput = "Age: 30";

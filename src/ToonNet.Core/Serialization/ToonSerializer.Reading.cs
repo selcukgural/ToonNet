@@ -122,7 +122,7 @@ public static partial class ToonSerializer
 
     internal static ToonSerializationException DepthError(string message, Type targetType, string? path)
     {
-        return new ToonSerializationException(path == null ? message : $"{message}\n  📍 Path: {path}")
+        return new ToonSerializationException(ToonException.WithDetails(message, ("path", path)))
         {
             TargetType = targetType,
             Path = path
@@ -140,7 +140,7 @@ public static partial class ToonSerializer
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
     {
         var path = state.Path;
-        var text = $"{message}\n  📍 Path: {path}\n  🎯 Target Type: {targetType.Name}";
+        var text = ToonException.WithDetails(message, ("path", path), ("target type", targetType.Name));
 
         return inner == null
             ? new ToonSerializationException(text) { TargetType = targetType, Path = path, Value = value }

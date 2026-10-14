@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   services that read TOON from untrusted sources.
 
 ### Changed
+- **ToonNet.Core:** Exception messages are one line without symbols, so they read well in logs and in the model errors
+  that ASP.NET Core returns: `Duplicate key 'id' (line 3, column 1)` and
+  `The string is not a number (path: $.Age, target type: Int32)` instead of the text followed by indented lines such as
+  `📍 Position: Line 3, Column 1`. `Line`, `Column`, `Path` and `TargetType` are unchanged; code that matched the old
+  message text needs updating.
 - **ToonNet.Core:** Objects whose keys come in another order than their properties (as other producers and LLMs write
   them) are read straight from the text; before, one such object made the reflection-based reader read the whole
   document again through the tree. On 200,000 list items with one reordered object: 3.4x faster, half the allocation.
