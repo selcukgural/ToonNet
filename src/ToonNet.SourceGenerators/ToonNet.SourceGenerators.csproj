@@ -12,7 +12,7 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.SourceGenerators</PackageId>
-        <Version>3.2.0</Version>
+        <Version>3.3.0</Version>
         <Title>ToonNet Source Generators</Title>
         <Description>Roslyn source generator for ToonNet: adds static Serialize/Deserialize methods to partial classes, structs and records marked with [ToonSerializable]. Use together with ToonNet.Core.</Description>
         <PackageTags>toon;source-generator;roslyn;codegen;serialization</PackageTags>

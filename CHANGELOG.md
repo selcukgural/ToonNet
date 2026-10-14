@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-14
+
+> All packages move to 3.3.0. Rebuild with the 3.3 generator: generated code now applies `PropertyNameCaseInsensitive`,
+> `UnmappedMemberHandling`, `RespectRequiredMembers` and the converters of the options itself, so the overloads that
+> take a `ToonTypeInfo` (no reflection, for trimming and NativeAOT) support all of them, and errors raised in generated
+> code carry the path to the value (`$.Items[1].Price`). Code from the 3.2 generator keeps working with 3.3 packages
+> and leaves those options to reflection as before. Dictionaries in tables are written straight to text. Measured on
+> 10,000 records (benchmark/ToonNet.Comparison/RESULTS.md), ToonNet stays 18–27x faster at serializing and 4.4–7x
+> faster at deserializing than Toon.Format, at the speed of 3.2 on the measured shapes.
+
 ### Added
 - **ToonNet.SourceGenerators:** Generated code applies `PropertyNameCaseInsensitive`, `UnmappedMemberHandling.Disallow`
   and `RespectRequiredMembers` itself, with the same results and errors as `ToonSerializer`, so types are no longer read
@@ -1376,7 +1386,8 @@ Each release includes:
 
 ---
 
-[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/selcukgural/ToonNet/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/selcukgural/ToonNet/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/selcukgural/ToonNet/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/selcukgural/ToonNet/compare/v2.0.0...v3.0.0

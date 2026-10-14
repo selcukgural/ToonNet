@@ -141,8 +141,8 @@ smaller for deeply nested or irregular data. Measure with your own payloads and 
 ## ToonNet vs the official Toon.Format library
 
 [Toon.Format](https://www.nuget.org/packages/Toon.Format) is the official .NET implementation of TOON, from the
-authors of the spec. Both libraries implement spec v4.4 and **write the same text**; ToonNet does it **8–28x faster
-when serializing and 2.5–7.5x faster when deserializing, with 6–55x less memory**, and adds a source generator, NativeAOT
+authors of the spec. Both libraries implement spec v4.4 and **write the same text**; ToonNet does it **8–27x faster
+when serializing and 2.4–7x faster when deserializing, with 6–55x less memory**, and adds a source generator, NativeAOT
 support, exact decimals and ASP.NET Core integration.
 
 ### Same output
@@ -182,24 +182,24 @@ reference. Setup checks that both TOON libraries produce identical text first.
 
 | Data | Toon.Format | ToonNet | ToonNet (reflection) | System.Text.Json |
 |------|------------:|--------:|---------------------:|-----------------:|
-| Employees (tabular) | 45.73 ms · 51.8 MB | **1.97 ms · 1.7 MB** (23.2x faster) | 2.63 ms · 1.7 MB | 2.23 ms · 3.3 MB |
-| Orders (nested objects, arrays) | 77.85 ms · 85.0 MB | **2.76 ms · 4.6 MB** (28.2x faster) | 4.07 ms · 4.6 MB | 2.94 ms · 4.1 MB |
-| Products (nested field groups) | 48.97 ms · 53.1 MB | **2.68 ms · 1.0 MB** (18.2x faster) | 3.18 ms · 1.0 MB | 2.95 ms · 2.7 MB |
-| Servers (keyed table) | 23.69 ms · 27.6 MB | **0.89 ms · 1.0 MB** (26.6x faster) | 0.98 ms · 1.0 MB | 0.92 ms · 1.5 MB |
+| Employees (tabular) | 45.58 ms · 51.8 MB | **2.01 ms · 1.7 MB** (22.7x faster) | 2.64 ms · 1.7 MB | 2.22 ms · 3.3 MB |
+| Orders (nested objects, arrays) | 73.86 ms · 85.0 MB | **2.75 ms · 4.6 MB** (26.9x faster) | 3.93 ms · 4.6 MB | 3.10 ms · 4.1 MB |
+| Products (nested field groups) | 49.09 ms · 53.1 MB | **2.74 ms · 1.0 MB** (17.9x faster) | 3.19 ms · 1.0 MB | 2.98 ms · 2.7 MB |
+| Servers (keyed table) | 21.47 ms · 27.6 MB | **0.94 ms · 1.0 MB** (22.8x faster) | 0.99 ms · 1.0 MB | 0.93 ms · 1.5 MB |
 
 **Deserialize**
 
 | Data | Toon.Format | ToonNet | ToonNet (reflection) | System.Text.Json |
 |------|------------:|--------:|---------------------:|-----------------:|
-| Employees (tabular) | 31.49 ms · 34.3 MB | **4.79 ms · 2.3 MB** (6.6x faster) | 5.64 ms · 2.3 MB | 4.22 ms · 2.5 MB |
-| Orders (nested objects, arrays) | 68.39 ms · 78.3 MB | **9.14 ms · 5.4 MB** (7.5x faster) | 10.80 ms · 5.4 MB | 8.49 ms · 5.7 MB |
-| Products (nested field groups) | 30.92 ms · 28.8 MB | **4.85 ms · 3.4 MB** (6.4x faster) | 5.50 ms · 3.4 MB | 6.31 ms · 3.5 MB |
-| Servers (keyed table) | 15.53 ms · 21.9 MB | **3.50 ms · 3.1 MB** (4.4x faster) | 3.70 ms · 3.1 MB | 2.81 ms · 2.5 MB |
+| Employees (tabular) | 31.61 ms · 34.3 MB | **5.06 ms · 2.3 MB** (6.2x faster) | 5.42 ms · 2.3 MB | 4.17 ms · 2.5 MB |
+| Orders (nested objects, arrays) | 64.70 ms · 78.3 MB | **9.29 ms · 5.4 MB** (7.0x faster) | 10.75 ms · 5.4 MB | 8.44 ms · 5.7 MB |
+| Products (nested field groups) | 30.68 ms · 28.8 MB | **4.80 ms · 3.4 MB** (6.4x faster) | 5.58 ms · 3.4 MB | 6.31 ms · 3.5 MB |
+| Servers (keyed table) | 15.30 ms · 21.9 MB | **3.49 ms · 3.1 MB** (4.4x faster) | 3.72 ms · 3.1 MB | 2.75 ms · 2.5 MB |
 
-With 100 items ToonNet serializes 10–12.5x and deserializes 2.9–3.2x faster than Toon.Format. The overloads that take
-a `ToonTypeInfo` (no reflection, for trimming and NativeAOT) are as fast as "ToonNet": 18–28x and 4.8–7.2x faster than
-Toon.Format with 10,000 items. ToonNet writes faster than System.Text.Json (0.88–0.99x its time) and takes 0.8–1.6x its
-time when reading (less for nested field groups), while its TOON output is much smaller than the JSON. Full results, including 100 items: [benchmark/ToonNet.Comparison/RESULTS.md](https://github.com/selcukgural/ToonNet/blob/master/benchmark/ToonNet.Comparison/RESULTS.md).
+With 100 items ToonNet serializes 10–12.7x and deserializes 2.9–3.5x faster than Toon.Format. The overloads that take
+a `ToonTypeInfo` (no reflection, for trimming and NativeAOT) are as fast as "ToonNet": 18.6–27x and 4.7–7.1x faster
+than Toon.Format with 10,000 items. ToonNet writes as fast as System.Text.Json or faster (0.89–1.01x its time) and
+takes 0.76–1.27x its time when reading (less for nested field groups), while its TOON output is much smaller than the JSON. Full results, including 100 items: [benchmark/ToonNet.Comparison/RESULTS.md](https://github.com/selcukgural/ToonNet/blob/master/benchmark/ToonNet.Comparison/RESULTS.md).
 Run them on your hardware with `dotnet run -c Release --project benchmark/ToonNet.Comparison -- --filter "*"`.
 
 **Why:** Toon.Format serializes a value with System.Text.Json into a `JsonNode` tree and encodes the tree, and decodes
