@@ -88,9 +88,11 @@ public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResul
         // Resolve options from DI if not provided
         var options = _options ?? httpContext.RequestServices.GetService<IOptions<ToonSerializerOptions>>()?.Value ?? ToonSerializerOptions.Default;
 
-        // A null value is written as the TOON document `null`; an empty body would read back as an empty object
-        var objectType = _value?.GetType() ?? typeof(object);
-        await ToonSerializer.SerializeToStreamAsync(objectType, _value, httpContext.Response.Body, options, httpContext.RequestAborted)
+        // A null value is written as the TOON document `null`; an empty body would read back as an empty object. An
+        // asynchronous sequence is collected first (its array header needs the number of items)
+        var (value, objectType) = await AsyncEnumerableBuffer.CollectIfAsyncAsync(_value, _value?.GetType() ?? typeof(object), httpContext.RequestAborted)
+                                                              .ConfigureAwait(false);
+        await ToonSerializer.SerializeToStreamAsync(objectType, value, httpContext.Response.Body, options, httpContext.RequestAborted)
             .ConfigureAwait(false);
     }
 }

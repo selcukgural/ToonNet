@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Net.Http.Headers;
+using ToonNet.AspNetCore.Mvc.Http;
 using ToonNet.Core.Serialization;
 
 namespace ToonNet.AspNetCore.Mvc.Formatters;
@@ -51,18 +52,20 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
 
         // A null value (reached when MVC does not turn it into 204 No Content) is written as `null`, because an empty
         // TOON document means an empty object.
-        var type = context.Object?.GetType() ?? context.ObjectType ?? typeof(object);
+        // An asynchronous sequence is collected first: its array header needs the number of items
+        var (value, type) = await AsyncEnumerableBuffer.CollectIfAsyncAsync(context.Object, context.Object?.GetType() ?? context.ObjectType ?? typeof(object),
+                                                                            httpContext.RequestAborted).ConfigureAwait(false);
 
         if (selectedEncoding.CodePage == Encoding.UTF8.CodePage)
         {
             // UTF-8 (the common case) is written by the serializer in pooled chunks, without an intermediate string
-            await ToonSerializer.SerializeToStreamAsync(type, context.Object, response.Body, _options, httpContext.RequestAborted)
+            await ToonSerializer.SerializeToStreamAsync(type, value, response.Body, _options, httpContext.RequestAborted)
                                 .ConfigureAwait(false);
             return;
         }
 
         // Other encodings: serialize first, then write with the negotiated encoding so the body matches the charset
-        var toonString = ToonSerializer.Serialize(context.Object, type, _options);
+        var toonString = ToonSerializer.Serialize(value, type, _options);
 
         var writer = context.WriterFactory(response.Body, selectedEncoding);
 

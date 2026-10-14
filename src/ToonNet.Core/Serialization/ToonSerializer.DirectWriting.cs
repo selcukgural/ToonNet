@@ -143,9 +143,13 @@ public static partial class ToonSerializer
                     : new DirectTypeInfo { Kind = DirectKind.Tree };
             }
 
-            return typeof(IEnumerable).IsAssignableFrom(t)
-                ? new DirectTypeInfo { Kind = DirectKind.Collection }
-                : new DirectTypeInfo { Kind = DirectKind.Object, Metadata = metadata };
+            if (typeof(IEnumerable).IsAssignableFrom(t))
+            {
+                return new DirectTypeInfo { Kind = DirectKind.Collection };
+            }
+
+            ThrowIfAsyncEnumerable(t);
+            return new DirectTypeInfo { Kind = DirectKind.Object, Metadata = metadata };
         });
     }
 

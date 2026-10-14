@@ -285,10 +285,27 @@ public static partial class ToonSerializer
     }
 
     /// <summary>
+    ///     An <see cref="IAsyncEnumerable{T}"/> is not an <see cref="IEnumerable"/>, so it would be written as an object
+    ///     without properties: an empty document, read back as an empty object. It is an error instead.
+    /// </summary>
+    /// <exception cref="ToonSerializationException">Thrown when <paramref name="type"/> is an asynchronous sequence.</exception>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ReflectionJustification)]
+    private static void ThrowIfAsyncEnumerable(Type type)
+    {
+        if (type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>)))
+        {
+            throw new ToonSerializationException(
+                $"{type.Name} is an IAsyncEnumerable<T>, which cannot be serialized synchronously; collect its items first " +
+                "(for example into a List<T>), or write them one document at a time with SerializeStreamAsync");
+        }
+    }
+
+    /// <summary>
     ///     Serializes an object's properties using its runtime type.
     /// </summary>
     private static ToonObject SerializeObject(object value, Type type, ToonSerializerOptions options, int depth, SerializerState state)
     {
+        ThrowIfAsyncEnumerable(type);
         var metadata = GetTypeMetadata(type);
         var obj = new ToonObject(metadata.Properties.Length);
 

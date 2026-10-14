@@ -336,6 +336,37 @@ public class MvcTests
         return System.Text.Encoding.UTF8.GetString(stream.ToArray());
     }
 
+    private static async IAsyncEnumerable<TestModel> ModelsAsync()
+    {
+        for (var i = 1; i <= 2; i++)
+        {
+            await Task.Yield();
+            yield return new TestModel { Name = $"n{i}", Age = i };
+        }
+    }
+
+    [Fact]
+    public async Task AsyncSequences_AreWrittenAsArrays()
+    {
+        var expected = ToonSerializer.Serialize(new List<TestModel> { new() { Name = "n1", Age = 1 }, new() { Name = "n2", Age = 2 } });
+
+        Assert.Equal(expected, await ExecuteToonResultAsync(ModelsAsync()));
+
+        var formatter = new ToonOutputFormatter(new ToonSerializerOptions());
+        var httpContext = new DefaultHttpContext();
+        var stream = new MemoryStream();
+        httpContext.Response.Body = stream;
+        var context = new OutputFormatterWriteContext(httpContext, (s, e) => new StreamWriter(s, e, leaveOpen: true),
+                                                      typeof(IAsyncEnumerable<TestModel>), ModelsAsync());
+
+        await formatter.WriteResponseBodyAsync(context, System.Text.Encoding.UTF8);
+        Assert.Equal(expected, System.Text.Encoding.UTF8.GetString(stream.ToArray()));
+
+        // The serializer itself does not write an asynchronous sequence as an empty object
+        Assert.Throws<ToonNet.Core.ToonSerializationException>(() => ToonSerializer.Serialize(ModelsAsync()));
+        Assert.Throws<ToonNet.Core.ToonSerializationException>(() => ToonSerializer.Serialize(new { Items = ModelsAsync() }));
+    }
+
     [Fact]
     public async Task ToonResult_StatusCode_IsWritten()
     {
