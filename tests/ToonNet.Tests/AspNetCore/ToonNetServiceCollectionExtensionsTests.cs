@@ -226,6 +226,27 @@ public sealed class ToonNetServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddToonNet_WithConfiguration_BindsSerializeRuntimeTypes_AndRequiredMembers()
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?>
+                            {
+                                ["ToonNet:ToonSerializerOptions:SerializeRuntimeTypes"] = "true",
+                                ["ToonNet:ToonSerializerOptions:RespectRequiredMembers"] = "false"
+                            })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+
+        Assert.True(options.SerializeRuntimeTypes);
+        Assert.False(options.RespectRequiredMembers);
+        Assert.True(new ToonSerializerOptions().RespectRequiredMembers);
+    }
+
+    [Fact]
     public void AddToonNet_WithConfiguration_BindsIncludeReadOnlyProperties()
     {
         var configuration = new ConfigurationBuilder()
@@ -238,6 +259,7 @@ public sealed class ToonNetServiceCollectionExtensionsTests
 
         Assert.True(new ToonSerializerOptions().IncludeReadOnlyProperties);
         Assert.False(provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value.IncludeReadOnlyProperties);
+        Assert.False(provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value.SerializeRuntimeTypes);
     }
 
     [Fact]

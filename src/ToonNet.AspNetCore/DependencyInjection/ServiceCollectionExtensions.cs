@@ -217,6 +217,12 @@ public static class ServiceCollectionExtensions
             options.IncludeReadOnlyProperties = includeReadOnlyProperties.Value;
         }
 
+        var serializeRuntimeTypes = section.GetValue<bool?>(nameof(ToonSerializerOptions.SerializeRuntimeTypes));
+        if (serializeRuntimeTypes.HasValue)
+        {
+            options.SerializeRuntimeTypes = serializeRuntimeTypes.Value;
+        }
+
         var maxDepth = section.GetValue<int?>(nameof(ToonSerializerOptions.MaxDepth));
         if (maxDepth.HasValue)
         {

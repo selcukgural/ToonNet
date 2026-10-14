@@ -24,15 +24,16 @@ jobs:
     name: CI
     uses: ./.github/workflows/ci.yml
 
-  publish:
-    name: Pack and publish
+  # Packing runs third-party code (restore, MSBuild targets of packages): it gets no secrets and no write access
+  pack:
+    name: Pack
     needs: ci
     # Publish only from master; a dry run may come from any branch
     if: ${{ github.ref == 'refs/heads/master' || inputs.dry-run }}
     runs-on: ubuntu-latest
-    environment: nuget
+    timeout-minutes: 20
     permissions:
-      contents: write # create the GitHub release
+      contents: read
 
     steps:
       - name: Checkout
@@ -48,11 +49,10 @@ jobs:
             10.0.x
 
       - name: Pack packages with new versions
-        id: pack
         run: |
           set -euo pipefail
           mkdir -p nupkgs
-          : > published.txt
+          : > nupkgs/published.txt
 
           for project in src/*/*.csproj; do
             package_id=$(dotnet msbuild "$project" -getProperty:PackageId)
@@ -69,16 +69,49 @@ jobs:
 
             echo "📦 Packing $package_id $version"
             dotnet pack "$project" --configuration Release --output ./nupkgs
-            echo "$package_id $version" >> published.txt
+            echo "$package_id $version" >> nupkgs/published.txt
           done
 
           echo "Packages to publish:"
-          cat published.txt
+          cat nupkgs/published.txt
 
-      - name: Push to NuGet.org
-        if: ${{ !inputs.dry-run }}
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nupkgs
+          path: nupkgs/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Pushing gets a short-lived NuGet key through Trusted Publishing (OIDC) in the protected environment; it runs no
+  # code from the repository or its packages (no checkout, no restore)
+  push:
+    name: Push to NuGet.org
+    needs: pack
+    if: ${{ github.ref == 'refs/heads/master' && !inputs.dry-run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nupkgs
+          path: nupkgs
+
+      - name: NuGet login (Trusted Publishing)
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push packages
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -89,32 +122,53 @@ jobs:
               --skip-duplicate
           done
 
-      - name: Create GitHub release
-        if: ${{ !inputs.dry-run }}
+  release:
+    name: Create GitHub release
+    needs: push
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the release
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nupkgs
+          path: nupkgs
+
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if [ ! -s published.txt ]; then
+          if [ ! -s nupkgs/published.txt ]; then
             echo "Nothing was published; no release created."
             exit 0
           fi
 
-          core_version=$(dotnet msbuild src/ToonNet.Core/ToonNet.Core.csproj -getProperty:Version)
-          tag="v$core_version"
-
-          if gh release view "$tag" > /dev/null 2>&1; then
-            echo "Release $tag already exists; uploading packages to it."
-            gh release upload "$tag" ./nupkgs/*.nupkg --clobber
-          else
-            {
-              echo "## Published packages"
-              echo
-              sed 's/^/- /' published.txt
-            } > release-notes.md
-            gh release create "$tag" ./nupkgs/*.nupkg \
-              --target "$GITHUB_SHA" \
-              --title "$tag" \
-              --notes-file release-notes.md \
-              --generate-notes
+          # The tag is the version of ToonNet.Core, or of the first package published without it
+          version=$(awk '$1 == "ToonNet.Core" { print $2 }' nupkgs/published.txt)
+          if [ -z "$version" ]; then
+            version=$(awk 'NR == 1 { print $2 }' nupkgs/published.txt)
           fi
+          tag="v$version"
+
+          # An existing release keeps its assets: packages built from another commit are not attached to its tag
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "::warning::Release $tag already exists; the new packages are on NuGet.org but not attached to it."
+            exit 0
+          fi
+
+          {
+            echo "## Published packages"
+            echo
+            sed 's/^/- /' nupkgs/published.txt
+          } > release-notes.md
+
+          gh release create "$tag" nupkgs/*.nupkg \
+            --target "$GITHUB_SHA" \
+            --title "$tag" \
+            --notes-file release-notes.md \
+            --generate-notes
