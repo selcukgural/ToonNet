@@ -72,8 +72,23 @@ internal static class DiagnosticHelper
                                                                                Category, DiagnosticSeverity.Warning, true);
 
     /// <summary>
+    /// Error: a static class, a ref struct or a file-local type cannot have generated serialization code.
+    /// </summary>
+    public static readonly DiagnosticDescriptor UnsupportedTypeKind = new("TOON010", "Type cannot be serialized",
+                                                                          "Type '{0}' cannot use [ToonSerializable]: {1}", Category,
+                                                                          DiagnosticSeverity.Error, true);
+
+    /// <summary>
+    /// Error: the project references a ToonNet.Core the generated code does not fit (older, or another major version).
+    /// </summary>
+    public static readonly DiagnosticDescriptor CoreVersionMismatch = new("TOON011", "ToonNet.Core does not match the source generator",
+                                                                          "ToonNet.SourceGenerators {0} needs ToonNet.Core {0} or a later {2}.x version, but the project references ToonNet.Core {1}; reference the same version of both packages",
+                                                                          Category, DiagnosticSeverity.Error, true);
+
+    /// <summary>
     /// Looks up a descriptor by id (used when replaying diagnostics stored in the generator model).
     /// </summary>
+
     public static DiagnosticDescriptor Get(string id) => id switch
     {
         "TOON002" => InvalidClassStructure,
@@ -83,6 +98,7 @@ internal static class DiagnosticHelper
         "TOON007" => ReflectionFallbackNotAllowed,
         "TOON008" => InvalidPropertyName,
         "TOON009" => GeneratedMethodNameTaken,
+        "TOON010" => UnsupportedTypeKind,
         _         => GenerationError
     };
 }

@@ -33,6 +33,10 @@ public static partial class ToonSerializer
             return options.IgnoreNullValues ? null : ToonNull.Instance;
         }
 
+        // Converters run before the depth check, and one can serialize its values again (a cyclic graph): a stack check
+        // turns what would end the process into an exception
+        System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack();
+
         var runtimeType = value.GetType();
         var converter = propertyConverter ?? options.GetConverter(runtimeType) ?? options.GetConverter(declaredType);
 
@@ -47,7 +51,7 @@ public static partial class ToonSerializer
         }
 
         // A ToonDocument, JsonElement or JsonNode is written as the value it holds
-        if (ToonJsonInterop.TryToToon(value, out var documentValue))
+        if (ToonJsonInterop.TryToToon(value, options.MaxDepth, out var documentValue))
         {
             return documentValue;
         }
@@ -57,7 +61,10 @@ public static partial class ToonSerializer
             return primitiveValue;
         }
 
-        if (generatedAllowed && GetGeneratedSerializer(runtimeType, options) is { } generated)
+        // An object is written as the type it is declared as (unless the options say otherwise)
+        var writtenType = WrittenType(declaredType, runtimeType, options);
+
+        if (generatedAllowed && GetGeneratedSerializer(writtenType, options) is { } generated)
         {
             try
             {
@@ -69,7 +76,7 @@ public static partial class ToonSerializer
             }
         }
 
-        if (GetTypeMetadata(runtimeType).TypeConverter is { } typeConverter)
+        if (GetTypeMetadata(writtenType).TypeConverter is { } typeConverter)
         {
             return typeConverter.Write(value, options);
         }
@@ -100,15 +107,64 @@ public static partial class ToonSerializer
 
             if (value is IEnumerable enumerable)
             {
-                return SerializeCollection(enumerable, options, depth, state);
+                return SerializeCollection(enumerable, declaredType, options, depth, state);
             }
 
-            return SerializeObject(value, runtimeType, options, depth, state);
+            return SerializeObject(value, writtenType, options, depth, state);
         }
         finally
         {
             state.Visiting.Remove(value);
         }
+    }
+
+    /// <summary>
+    ///     The type whose properties an object is written with: the type it is declared as, when that is a class or an
+    ///     interface (not <c>object</c>) the value is assignable to and the value is written as an object (not a
+    ///     primitive, collection, dictionary or document); otherwise, or with
+    ///     <see cref="ToonSerializerOptions.SerializeRuntimeTypes"/>, its runtime type.
+    /// </summary>
+    /// <summary>
+    ///     The type the items of a collection are declared as: the item type of its declared type
+    ///     (<c>IEnumerable&lt;Summary&gt;</c> holding a <c>List&lt;Entity&gt;</c> declares <c>Summary</c>, as collections are
+    ///     covariant), or of its runtime type when the declared type has none (<c>object</c>, <c>IEnumerable</c>) or with
+    ///     <see cref="ToonSerializerOptions.SerializeRuntimeTypes"/>.
+    /// </summary>
+    internal static Type ItemTypeOf(Type declaredType, Type runtimeType, ToonSerializerOptions options) =>
+        (declaredType != runtimeType && !options.SerializeRuntimeTypes ? GetElementType(declaredType) : null) ?? GetElementType(runtimeType) ?? typeof(object);
+
+    internal static Type WrittenType(Type declaredType, Type runtimeType, ToonSerializerOptions options) =>
+        runtimeType == declaredType || options.SerializeRuntimeTypes ? runtimeType : NarrowedType(declaredType, runtimeType);
+
+    private static readonly ConcurrentDictionary<(Type Declared, Type Runtime), Type> NarrowedTypes = new();
+
+    /// <summary>The value types <see cref="TrySerializePrimitive"/> writes as primitives.</summary>
+    private static bool IsWrittenAsPrimitive(Type type) =>
+        type.IsPrimitive || type.IsEnum || type == typeof(decimal) || type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
+        type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan) || type == typeof(Guid) || type == typeof(Half) ||
+        type == typeof(BigInteger) || type == typeof(Int128) || type == typeof(UInt128) || Nullable.GetUnderlyingType(type) != null;
+
+    private static Type NarrowedType(Type declaredType, Type runtimeType)
+    {
+        if (declaredType == typeof(object) || declaredType.IsValueType)
+        {
+            return runtimeType;
+        }
+
+        return NarrowedTypes.GetOrAdd((declaredType, runtimeType), static key =>
+        {
+            var (declared, runtime) = key;
+            // A struct is narrowed only to an interface (a boxed struct held as IThing), never when it is written as a
+            // primitive (an int held as IComparable)
+            var writtenAsObject = (runtime.IsClass || (runtime.IsValueType && declared.IsInterface && !IsWrittenAsPrimitive(runtime))) &&
+                                  runtime != typeof(string) && runtime != typeof(Uri) && !typeof(IEnumerable).IsAssignableFrom(runtime) &&
+                                  !typeof(ToonValue).IsAssignableFrom(runtime) && !ToonJsonInterop.IsDocumentType(runtime);
+
+            // An asynchronous sequence keeps its runtime type, which the writer rejects with a clear error
+            var asynchronous = declared.IsGenericType && declared.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>);
+
+            return writtenAsObject && !asynchronous && declared.IsAssignableFrom(runtime) && !typeof(IEnumerable).IsAssignableFrom(declared) ? declared : runtime;
+        });
     }
 
     /// <summary>
@@ -165,15 +221,25 @@ public static partial class ToonSerializer
     /// <summary>
     ///     Serializes a sequence as an array. Null items are always kept so that indexes are preserved.
     /// </summary>
-    private static ToonArray SerializeCollection(IEnumerable enumerable, ToonSerializerOptions options, int depth, SerializerState state)
+    private static ToonArray SerializeCollection(IEnumerable enumerable, Type declaredType, ToonSerializerOptions options, int depth, SerializerState state)
     {
+        // A multidimensional array enumerates all its items in one sequence, which would lose its shape
+        if (enumerable is Array { Rank: > 1 } multidimensional)
+        {
+            throw ToonEncodingException.AtPath(
+                $"Multidimensional arrays ({multidimensional.GetType().Name}) are not supported; use an array of arrays (int[][])", state.Path);
+        }
+
         var array = new ToonArray(new List<ToonValue>(enumerable is ICollection collection ? collection.Count : 0));
         var index = 0;
+
+        // The items are declared as the item type of the collection's declared type
+        var itemType = ItemTypeOf(declaredType, enumerable.GetType(), options);
 
         foreach (var item in enumerable)
         {
             state.Push(index++);
-            array.Items.Add(SerializeValue(item, item?.GetType() ?? typeof(object), options, depth + 1, state) ?? ToonNull.Instance);
+            array.Items.Add(SerializeValue(item, itemType, options, depth + 1, state) ?? ToonNull.Instance);
             state.Pop();
         }
 
@@ -200,17 +266,22 @@ public static partial class ToonSerializer
 
         var obj = new ToonObject(value is ICollection collection ? collection.Count : 0);
 
+        // The values are declared as the dictionary's value type
+        var valueType = GetDictionaryEntryReader(value.GetType())?.ValueType ?? typeof(object);
+
         foreach (var (rawKey, entryValue) in entries)
         {
             var key = FormatDictionaryKey(rawKey);
             state.Push(key);
-            var itemValue = SerializeValue(entryValue, entryValue?.GetType() ?? typeof(object), options, depth + 1, state);
-            state.Pop();
+            var itemValue = SerializeValue(entryValue, valueType, options, depth + 1, state);
 
-            if (itemValue != null)
+            // Two keys written as the same text (1 and "1" in a dictionary of objects) would lose one value
+            if (itemValue != null && !obj.Properties.TryAdd(key, itemValue))
             {
-                obj.Properties[key] = itemValue;
+                throw ToonEncodingException.AtPath("Two keys of the dictionary are written as the same text", state.Path);
             }
+
+            state.Pop();
         }
 
         result = obj;
@@ -416,10 +487,25 @@ public static partial class ToonSerializer
             Enum e            => e.ToString(),
             DateTime dt       => ToonDateFormat.ToString(dt),
             DateTimeOffset dt => ToonDateFormat.ToString(dt),
+
+            // As values of these types are written (the default formats lose seconds or depend on the culture)
+            DateOnly d        => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            TimeOnly t        => t.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture).TrimEnd('.'),
+            TimeSpan ts       => ts.ToString("c", CultureInfo.InvariantCulture),
+            bool b            => b ? "true" : "false",
             IFormattable f    => f.ToString(null, CultureInfo.InvariantCulture),
             _                 => key.ToString() ?? string.Empty
         };
     }
+
+    /// <summary>
+    ///     Whether two different keys of the type can be written as the same text: keys of <c>object</c> and of types
+    ///     written with <c>ToString()</c>; not strings, numbers, enums, dates and times, or Guids.
+    /// </summary>
+    internal static bool KeysMayCollide(Type keyType) =>
+        !(keyType == typeof(string) || keyType.IsPrimitive || keyType.IsEnum || keyType == typeof(decimal) || keyType == typeof(Guid) ||
+          keyType == typeof(DateTime) || keyType == typeof(DateTimeOffset) || keyType == typeof(DateOnly) || keyType == typeof(TimeOnly) ||
+          keyType == typeof(TimeSpan));
 
     /// <summary>
     ///     An <see cref="IAsyncEnumerable{T}"/> is not an <see cref="IEnumerable"/>, so it would be written as an object

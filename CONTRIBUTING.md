@@ -251,9 +251,17 @@ Publishing to NuGet is manual:
 3. Run the **Publish to NuGet** workflow from the Actions tab. Use **dry-run** first to see which packages would
    be published.
 
-The workflow runs CI again, then packs and pushes only packages whose version is not yet on NuGet.org, and creates
-a GitHub release `v<ToonNet.Core version>` with the packages attached. It uses the `NUGET_API_KEY` secret of the
-`nuget` environment; protect that environment with required reviewers.
+The workflow runs CI again, then packs (in a job without secrets) and pushes only packages whose version is not yet on
+NuGet.org, and creates a GitHub release `v<ToonNet.Core version>` with the packages attached. It pushes with NuGet
+Trusted Publishing: the push job of the `nuget` environment exchanges its GitHub OIDC token for a short-lived NuGet
+key, so the repository holds no NuGet API key. This needs, once:
+
+- a Trusted Publishing policy on nuget.org for the repository `selcukgural/ToonNet`, the workflow `publish.yml` and
+  the environment `nuget`
+- the repository variable `NUGET_USER` with the nuget.org user name that owns the packages
+- the `nuget` environment limited to the `master` branch, with a required reviewer
+
+Report security problems privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## Questions?
 

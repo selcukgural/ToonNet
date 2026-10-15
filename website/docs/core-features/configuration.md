@@ -19,7 +19,7 @@ using ToonNet.Core;
 using ToonNet.Core.Serialization;
 
 // Default options
-var options = new ToonSerializerOptions();
+var defaults = new ToonSerializerOptions();
 
 // Custom options
 var options = new ToonSerializerOptions
@@ -36,15 +36,24 @@ var options = new ToonSerializerOptions
 | `PropertyNamingPolicy` | `PropertyNamingPolicy` | `Default` | Transform property names |
 | `PropertyNameCaseInsensitive` | `bool` | `false` | Match keys to property names ignoring case when reading |
 | `UnmappedMemberHandling` | `ToonUnmappedMemberHandling` | `Skip` | `Disallow` makes a key that matches no property or constructor parameter an error when reading |
-| `RespectRequiredMembers` | `bool` | `false` | Make a missing key for a C# `required` property an error when reading |
+| `RespectRequiredMembers` | `bool` | `true` | Make a missing key for a C# `required` property an error when reading (`false` before 4.0) |
 | `IgnoreNullValues` | `bool` | `false` | Skip null properties during serialization |
-| `IncludeReadOnlyProperties` | `bool` | `true` | Serialize get-only properties |
+| `IncludeReadOnlyProperties` | `bool` | `true` | Serialize get-only properties (and properties whose setter is not public, unless `[ToonInclude]`) |
+| `SerializeRuntimeTypes` | `bool` | `false` | Write objects with the properties of their runtime type instead of their declared type (`true` before 4.0) |
 | `MaxDepth` | `int` | `100` | Maximum object nesting while serializing/deserializing (1–200, or up to 1000 with `AllowExtendedLimits`) |
 | `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
 | `Converters` | `List<IToonConverter>` | empty | Custom type converters |
 | `ToonOptions` | `ToonOptions` | `new ToonOptions()` | Lower-level parsing and encoding options; cannot be null |
+| `PathOptions` | `ToonPathOptions?` | `null` | Limits of the paths of `DeserializeAt`, `DeserializeAll` and `DeserializeAsyncEnumerableAt` (length, nesting, steps, time); `null` uses `ToonPathOptions.Default` (see [Querying](querying)) |
 
 `IncludeTypeInformation` and `PublicOnly` were removed in 3.0 (they had no effect since 2.0).
+
+`ToonSerializerOptions.Default` and `ToonOptions.Default` return a new instance with the default settings on every
+call, so changing one never changes the defaults; `ToonPathOptions.Default` is one shared instance, and its properties
+can only be set when it is created (`init`). `options.GetConverter(type)` returns the converter of the options that
+would be used for a type (or null). Both option classes implement `IValidatableObject`: `Validate` reports the
+combinations a single setter cannot check (a `MaxDepth` above 200 without `AllowExtendedLimits`), which is what
+`AddToonNet` checks at startup.
 
 There is no option to switch indentation off: TOON expresses nesting by indentation, so output is always indented
 (see `ToonOptions.IndentSize` below).
@@ -72,19 +81,19 @@ so acronyms stay together: `URLValue` becomes `urlValue` and `url_value`, `HTTPS
 ### Examples
 
 ```csharp
-public class Person
-{
-    public string FirstName { get; set; }
-    public string LastName { get; set; }
-    public int Age { get; set; }
-}
-
 var person = new Person
 {
     FirstName = "Alice",
     LastName = "Smith",
     Age = 30
 };
+
+public class Person
+{
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public int Age { get; set; }
+}
 ```
 
 #### Default (No transformation)
@@ -174,7 +183,7 @@ var options = new ToonSerializerOptions
     PropertyNamingPolicy = PropertyNamingPolicy.CamelCase
 };
 
-Person person = ToonSerializer.Deserialize<Person>(toonInput, options);
+Person person = ToonSerializer.Deserialize<Person>(toonInput, options)!;
 // person.FirstName = "Alice"
 // person.LastName = "Smith"
 ```
@@ -184,6 +193,10 @@ converted by generated code or by reflection.
 
 Naming policies apply to property names only. Dictionary keys are written as they are, and a `[ToonProperty("name")]`
 attribute overrides the policy for that property.
+
+Keep the names distinct after the policy: ToonNet does not check it. Two properties that become the same key
+(`UserId` and `userId` under `CamelCase`) are written as one key, with the value of the last, and reading sets both
+from it.
 
 ## IgnoreNullValues
 
@@ -196,14 +209,14 @@ var options = new ToonSerializerOptions { IgnoreNullValues = false };
 ```
 
 ```csharp
+string toon = ToonSerializer.Serialize(user, options);
+
 public class User
 {
     public string Username { get; set; } = "alice";
     public string? Bio { get; set; } = "Engineer";
     public string? Website { get; set; } = null;
 }
-
-string toon = ToonSerializer.Serialize(user, options);
 ```
 
 **Output:**
@@ -237,7 +250,7 @@ Name: Alice
 age: 30
 """;  // lowercase 'age' won't match 'Age' property
 
-Person person = ToonSerializer.Deserialize<Person>(toonInput);
+Person person = ToonSerializer.Deserialize<Person>(toonInput)!;
 // person.Age will be 0 (default value) because 'age' doesn't match 'Age'
 ```
 
@@ -250,36 +263,55 @@ Generated code and the `ToonTypeInfo` overloads apply it too. See
 
 ## Strict Reading
 
-Two options turn silent defaults into errors, as `JsonSerializerOptions` does:
+Two options turn silent defaults into errors, as `JsonSerializerOptions` does. `RespectRequiredMembers` is on by
+default since ToonNet 4.0; `UnmappedMemberHandling` is off by default:
 
 ```csharp
 var options = new ToonSerializerOptions
 {
     UnmappedMemberHandling = ToonUnmappedMemberHandling.Disallow, // a key that matches nothing is an error
-    RespectRequiredMembers = true                                 // a missing `required` property is an error
+    RespectRequiredMembers = true                                 // the default: a missing `required` property is an error
 };
 ```
 
 Both throw a `ToonSerializationException` with the path, for example
-`The key 'Nmae' matches no property or constructor parameter (path: $.Nmae, target type: Account)` or
-`The required property 'Name' is missing (path: $, target type: Account)`. Keys of read-only properties count as
-matched, so what `ToonSerializer` writes reads back; a key with the value `null` counts as present; `required`
-properties are not checked when the constructor used for reading has `[SetsRequiredMembers]`. Generated code and the
-`ToonTypeInfo` overloads apply these options too (code generated before ToonNet 3.3 leaves them to reflection).
+`The key matches no property or constructor parameter (path: $.Nmae, target type: Account)` or
+`The required property 'Name' is missing (path: $, target type: Account)`. The unknown key appears only in the path,
+escaped and cut to 64 characters; a key that is not a simple identifier is written as `$['first name']`. Keys of
+read-only properties count as matched, so what `ToonSerializer` writes reads back; a key with the value `null` counts
+as present; `required` properties are not checked when the constructor used for reading has `[SetsRequiredMembers]`.
+Set `RespectRequiredMembers = false` to leave a missing `required` property at its default value, as before 4.0.
+Generated code and the `ToonTypeInfo` overloads apply these options too (code generated before ToonNet 3.3 leaves them
+to reflection).
+
+## Non-Public Setters and [ToonInclude]
+
+Reading sets only public setters (`set` and `init`), as System.Text.Json does. A property whose setter is `private`,
+`protected` or `internal` is not set from a document, so a client cannot set what the code keeps for itself. Mark the
+property `[ToonInclude]` (namespace `ToonNet.Core.Serialization.Attributes`) to let reading use its setter:
+
+```csharp
+var account = ToonSerializer.Deserialize<Account>("Name: Ada\nIsAdmin: true\nLogins: 3")!;
+// account.IsAdmin = false, account.Logins = 3
+
+public class Account
+{
+    public string Name { get; set; } = "";
+    public bool IsAdmin { get; private set; }               // not set from documents
+    [ToonInclude] public int Logins { get; private set; }   // set from documents
+}
+```
+
+Both properties are still written. A property with a non-public setter and no `[ToonInclude]` counts as read-only: it
+is left out when `IncludeReadOnlyProperties` is `false`, and its key counts as matched for
+`UnmappedMemberHandling.Disallow`. Generated code follows the same rules.
 
 ## IncludeReadOnlyProperties
 
 Get-only properties are serialized by default. Set `IncludeReadOnlyProperties = false` to write only properties that
-have a setter:
+reading can set (a public setter, or a non-public one with `[ToonInclude]`):
 
 ```csharp
-public class Rectangle
-{
-    public int Width { get; set; } = 3;
-    public int Height { get; set; } = 4;
-    public int Area => Width * Height;
-}
-
 ToonSerializer.Serialize(new Rectangle());
 // Width: 3
 // Height: 4
@@ -288,7 +320,43 @@ ToonSerializer.Serialize(new Rectangle());
 ToonSerializer.Serialize(new Rectangle(), new ToonSerializerOptions { IncludeReadOnlyProperties = false });
 // Width: 3
 // Height: 4
+
+public class Rectangle
+{
+    public int Width { get; set; } = 3;
+    public int Height { get; set; } = 4;
+    public int Area => Width * Height;
+}
 ```
+
+## SerializeRuntimeTypes
+
+Writing uses the type a value is declared as: a property's type, a collection's item type, a dictionary's value type,
+or the `T` of `Serialize<T>`. An object in a property of a base or summary type writes only the properties of that
+type, as with System.Text.Json:
+
+```csharp
+var reply = new Reply { Author = new User { Name = "Ada", PasswordHash = "x9f..." } };
+
+ToonSerializer.Serialize(reply);
+// Author:
+//   Name: Ada
+
+public class UserSummary { public string Name { get; set; } = ""; }
+
+public class User : UserSummary { public string PasswordHash { get; set; } = ""; }
+
+public class Reply { public UserSummary Author { get; set; } = new(); }
+```
+
+A value declared as an interface writes the interface's properties; a value declared as `object` is written with its
+runtime type. Collections, dictionaries and primitives are written as what they are. Converters registered for an item's or a dictionary
+value's declared type apply to it, as they do for properties.
+
+`SerializeRuntimeTypes = true` writes every object with the properties of its runtime type, as ToonNet did before 4.0
+(the sample above would also write `PasswordHash`). Members of derived types then reach the output, which can expose
+data a narrower type was meant to hide. Prefer declaring the type you want to write, or `object` where any type is
+meant.
 
 ## MaxDepth
 
@@ -307,9 +375,13 @@ var options = new ToonSerializerOptions
 };
 ```
 
+Keep `AllowExtendedLimits` off for input you do not control: deep documents cost more stack and time to read. See
+[Security](../advanced/security).
+
 Exceeding the limit throws `ToonEncodingException` when serializing and `ToonSerializationException` when
 deserializing (parsing the text throws `ToonParseException` for `ToonOptions.MaxDepth`).
-Circular references are detected separately and throw `ToonEncodingException` right away.
+The reflection-based serializer detects circular references separately and throws `ToonEncodingException` right
+away; generated code (`[ToonSerializable]` types) reports a cycle when it exceeds `MaxDepth`.
 
 ## Custom Converters
 
@@ -317,8 +389,8 @@ Register custom type converters for specific types.
 
 ```csharp
 var options = new ToonSerializerOptions();
-options.AddConverter(new CustomDateTimeConverter());  // throws on null
-options.Converters.Add(new CustomGuidConverter());
+options.AddConverter(new CustomDateTimeConverter());  // throws on null (the example of Custom Converters)
+options.Converters.Add(new AbsoluteUriConverter());
 
 string toon = ToonSerializer.Serialize(obj, options);
 ```
@@ -351,14 +423,14 @@ var options = new ToonSerializerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `IndentSize` | `int` | `2` | Spaces per indentation level, from 1 to 100 |
+| `IndentSize` | `int` | `2` | Spaces per indentation level, from 1 to 100, written and expected when reading (strict mode rejects other indentation) |
 | `Delimiter` | `char` | `','` | Delimiter for inline arrays and tabular rows: `','`, `'\t'` or `'\|'` |
 | `StrictMode` | `bool` | `true` | Enforce the spec §14 errors while parsing (see [Deserialization](deserialization#parsing-rules-and-strict-mode)) |
 | `MaxDepth` | `int` | `100` | Maximum nesting depth while parsing and encoding (1–200, or up to 1000 with `AllowExtendedLimits`) |
 | `AllowExtendedLimits` | `bool` | `false` | Raise the `MaxDepth` ceiling from 200 to 1000 |
 
-Invalid values throw from the setter: `ArgumentOutOfRangeException` for `IndentSize` and `MaxDepth` (outside 1–1000),
-`ArgumentException` for `Delimiter`. A `MaxDepth` above 200 without `AllowExtendedLimits` throws
+Invalid values throw from the setter: `ArgumentOutOfRangeException` for `IndentSize` outside 1–100 and `MaxDepth`
+outside 1–1000, `ArgumentException` for `Delimiter`. A `MaxDepth` above 200 without `AllowExtendedLimits` throws
 `InvalidOperationException` when parsing or encoding.
 
 ### Indent Configuration
@@ -427,6 +499,9 @@ public class ToonService
 Create common configurations as presets:
 
 ```csharp
+// Usage
+string toon = ToonSerializer.Serialize(data, ToonPresets.Api);
+
 public static class ToonPresets
 {
     // Smaller output: skip nulls
@@ -448,7 +523,7 @@ public static class ToonPresets
         IgnoreNullValues = true
     };
     
-    // Hand-edited configuration files (snake_case, lenient parsing)
+    // Hand-edited configuration files you trust (snake_case, lenient parsing)
     public static readonly ToonSerializerOptions Config = new()
     {
         PropertyNamingPolicy = PropertyNamingPolicy.SnakeCase,
@@ -456,14 +531,19 @@ public static class ToonPresets
         ToonOptions = new ToonOptions { StrictMode = false }
     };
 }
-
-// Usage
-string toon = ToonSerializer.Serialize(data, ToonPresets.Api);
 ```
+
+Use `StrictMode = false` only for documents you trust. Non-strict reading does not check array lengths and lets the
+last of duplicate keys win, so a document can read differently here than in a strict reader or a check that looked at
+the first key. Keep the default for request bodies and other untrusted input. See [Security](../advanced/security).
 
 ## Environment-Specific Configuration
 
 ```csharp
+// Usage
+var options = ToonConfig.GetOptions(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"));
+string toon = ToonSerializer.Serialize(data, options);
+
 public static class ToonConfig
 {
     public static ToonSerializerOptions GetOptions(string environment)
@@ -482,10 +562,6 @@ public static class ToonConfig
         };
     }
 }
-
-// Usage
-var options = ToonConfig.GetOptions(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"));
-string toon = ToonSerializer.Serialize(data, options);
 ```
 
 ## Complete Configuration Example
@@ -508,7 +584,7 @@ var options = new ToonSerializerOptions
 
 // Add custom converters
 options.AddConverter(new CustomDateTimeConverter());
-options.AddConverter(new CustomGuidConverter());
+options.AddConverter(new AbsoluteUriConverter());   // both from Custom Converters
 
 // Use for serialization
 string toon = ToonSerializer.Serialize(data, options);
@@ -540,6 +616,8 @@ var options = new ToonSerializerOptions
 };
 ```
 
+Only for files you trust; keep strict mode for untrusted input.
+
 ### Scenario 3: Logging/Debugging
 
 ```csharp
@@ -561,6 +639,9 @@ var options = new ToonSerializerOptions
 };
 ```
 
+Only for documents you trust, such as your own exports; keep strict mode for untrusted input
+(see [Security](../advanced/security)).
+
 ## Thread-Safety
 
 - `ToonSerializer` methods are safe to call concurrently across threads.
@@ -568,6 +649,7 @@ var options = new ToonSerializerOptions
 - Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
 - Cache entries are created on demand and retained for the process lifetime (no eviction).
 - Reuse `ToonSerializerOptions` instances, but do not mutate a single instance concurrently across threads.
+- A `ToonDocumentReader` or `ToonDocumentWriter` instance is for one thread at a time.
 
 ## See Also
 

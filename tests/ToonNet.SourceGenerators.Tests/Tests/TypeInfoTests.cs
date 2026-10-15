@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using ToonNet.Core;
 using ToonNet.Core.Models;
+using ToonNet.Core.Parsing;
 using ToonNet.Core.Serialization;
 using ToonNet.Core.Serialization.Attributes;
 
@@ -51,6 +52,24 @@ public partial class TypeInfoTests
 
             var reference = ToonSerializer.Deserialize<T>(expected, options);
             Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(read, options));
+            Assert.Equal(ToonSerializer.Serialize(reference, options),
+                         ToonSerializer.Serialize(ToonDocument.Parse(expected, options.ToonOptions).Root.Deserialize(typeInfo, options), options));
+
+            using (var reader = new ToonDocumentReader(expected, options.ToonOptions))
+            {
+                readFallbacks = ToonSerializer.DirectReadFallbacks;
+                var viaReader = ToonSerializer.Deserialize(reader, typeInfo, options);
+                Assert.Equal(directRead, readFallbacks == ToonSerializer.DirectReadFallbacks);
+                Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(viaReader, options));
+                Assert.False(reader.Read());
+            }
+
+            Assert.Equal(ToonSerializer.Serialize(reference, options),
+                         ToonSerializer.Serialize(ToonSerializer.DeserializeAt(expected, "$", typeInfo, options), options));
+            Assert.Equal(ToonSerializer.Serialize(reference, options),
+                         ToonSerializer.Serialize(ToonSerializer.DeserializeAt(utf8, "$", typeInfo, options), options));
+            Assert.Equal(ToonSerializer.Serialize(reference, options),
+                         ToonSerializer.Serialize(Assert.Single(ToonSerializer.DeserializeAll(expected, "$", typeInfo, options)), options));
             Assert.Equal(ToonSerializer.Serialize(reference, options), ToonSerializer.Serialize(ToonSerializer.Deserialize(utf8, typeInfo, options), options));
             Assert.Equal(ToonSerializer.Serialize(reference, options),
                          ToonSerializer.Serialize(ToonSerializer.Deserialize(expected.AsSpan(), typeInfo, options), options));
@@ -113,10 +132,11 @@ public partial class TypeInfoTests
     [Fact]
     public void ValuesOnlyReflectionHandles_GoThroughTheGeneratedTree_WithTheSameText()
     {
-        // An object without generated code in a property typed object: the whole document is written by the generated
-        // tree-based method (read back, it is a dictionary, which needs no reflection)
+        // An object without generated code in a property typed object: that value is written through the tree, the rest
+        // directly, so sequences are enumerated and getters called once (read back, it is a dictionary, which needs
+        // no reflection)
         var node = new WriterNode { Name = "n", Anything = new PlainBox { X = 3 }, Rows = Rows() };
-        AssertSame(node, WriterNode.ToonTypeInfo, direct: false);
+        AssertSame(node, WriterNode.ToonTypeInfo);
 
         // Reading a property whose type has no generated code goes through the generated tree-based method; writing,
         // the object's own tree is written in place (no fallback of the whole document)
@@ -161,6 +181,38 @@ public partial class TypeInfoTests
     }
 
     [Fact]
+    public async Task AsyncEnumerableAt_ReadsTheItemsOfANestedArray()
+    {
+        var rows = Enumerable.Range(0, 500).Select(i => new WriterRow { Id = i, Name = $"n{i}", Mood = Mood.Calm }).ToList();
+        var nested = ToonSerializer.Serialize(new Dictionary<string, object> { ["meta"] = 1, ["data"] = new Dictionary<string, object> { ["rows"] = rows } });
+        var read = new List<WriterRow?>();
+
+        await foreach (var row in ToonSerializer.DeserializeAsyncEnumerableAt(new MemoryStream(Encoding.UTF8.GetBytes(nested)), "$.data.rows",
+                                                                              WriterRow.ToonTypeInfo))
+        {
+            read.Add(row);
+        }
+
+        Assert.Equal(ToonSerializer.Serialize(rows), ToonSerializer.Serialize(read));
+        Assert.Equal(ToonSerializer.Serialize(rows), ToonSerializer.Serialize(ToonSerializer.DeserializeAt(nested, "$.data.rows",
+                                                                                                           ToonTypeInfo.CreateList(WriterRow.ToonTypeInfo))));
+    }
+
+    [Fact]
+    public void Prompt_WithATypeInfo()
+    {
+        var rows = Enumerable.Range(0, 5).Select(i => new WriterRow { Id = i, Name = $"n{i}", Mood = Mood.Calm }).ToList();
+        var list = ToonTypeInfo.CreateList(WriterRow.ToonTypeInfo);
+
+        var text = ToonNet.Core.Llm.ToonPrompt.Serialize(rows, list, new ToonNet.Core.Llm.ToonPromptOptions { MaxArrayItems = 2 });
+        Assert.EndsWith("# 3 more items", text);
+        Assert.Equal(ToonNet.Core.Llm.ToonPrompt.Serialize(rows, new ToonNet.Core.Llm.ToonPromptOptions { MaxArrayItems = 2 }), text);
+
+        var answer = "```toon\n" + ToonSerializer.Serialize(rows[1]) + "\nId: 7\n```";
+        Assert.Equal(7, ToonNet.Core.Llm.ToonPrompt.Deserialize(answer, WriterRow.ToonTypeInfo)!.Id);
+    }
+
+    [Fact]
     public void GetGenerated_ReturnsTheGeneratedTypeInfo()
     {
         Assert.Same(ParcelDepot.ToonTypeInfo, ToonTypeInfo.GetGenerated<ParcelDepot>());
@@ -190,8 +242,10 @@ public partial class TypeInfoTests
     [Fact]
     public void StrictMemberOptions_AreSupportedWithATypeInfo()
     {
-        // Off by default, so a missing required property and an unknown key are skipped
-        Assert.Null(ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2")!.Name);
+        // Required members are checked by default (since 4.0) and unknown keys skipped; both can be turned off and on
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2"));
+        Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize("Age: 1\nOther: 2", RequiredRow.ToonTypeInfo));
+        Assert.Null(ToonSerializer.Deserialize<RequiredRow>("Age: 1\nOther: 2", new ToonSerializerOptions { RespectRequiredMembers = false })!.Name);
 
         foreach (var options in new[]
                  {

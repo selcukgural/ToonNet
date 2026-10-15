@@ -138,7 +138,10 @@ YAML input is checked before it is loaded:
 
 - Nesting deeper than `ToonOptions.MaxDepth` (default 100) throws a `YamlException`.
 - Aliases (`*anchor`) are expanded into copies; input whose aliases expand to more than
-  `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes throws a `YamlException`.
+  `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes, or copy more than
+  `ToonYamlConverter.MaxAliasExpansionChars` characters (1,000,000, or ten times the length of the YAML when that is
+  more), throws a `YamlException`.
+- Duplicate keys throw a `YamlException`, also keys that differ only in their tag (`a` and `!!str a`).
 - The nesting limit counts the expanded aliases too, and an alias inside the node its anchor marks (a recursive
   structure such as `&a [*a]`) throws a `YamlException`.
 
@@ -289,12 +292,14 @@ Keys that are not plain identifiers are quoted in TOON (`"runs-on": ubuntu-lates
 
 ## ✨ YAML Features Supported
 
-Quoted and block scalars (`"42"`, `'true'`, `|`, `>`) and scalars tagged `!!str` are always strings. Plain scalars
+Quoted and block scalars (`"42"`, `'true'`, `|`, `>`) and scalars tagged `!!str` are strings, unless an explicit
+core-schema tag says otherwise (`!!int "42"` is 42; a value that does not fit its tag is a `YamlException`). Plain scalars
 are typed by the YAML 1.2 core schema: `true`/`false` (lowercase, capitalized or uppercase) become booleans, `null`,
 `~` and empty values become null, and integers and floats become numbers (exact when they fit in a `decimal`).
 Anything else stays a string, including the YAML 1.1 booleans `yes`/`no`/`on`/`off` and `.inf`/`.nan`, which a TOON
 number cannot hold. When converting back, strings that would otherwise read as another type are quoted (`"42"`,
-`"true"`, `"007"`, `""`, and `"yes"` for YAML 1.1 readers), so a TOON → YAML → TOON round trip keeps them strings.
+`"true"`, `"007"`, `""`, and `"yes"`, `"2001-12-14"`, `"<<"`, `"="` and text that starts with a byte order mark for
+YAML 1.1 readers), so a TOON → YAML → TOON round trip keeps them strings.
 
 ### Booleans
 ```yaml

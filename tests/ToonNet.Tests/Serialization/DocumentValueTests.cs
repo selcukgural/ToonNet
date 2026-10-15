@@ -75,4 +75,57 @@ public class DocumentValueTests
         Assert.Equal(text, ToonSerializer.Serialize(document));
         Assert.Equal(text, ToonSerializer.Serialize(document.RootElement));
     }
+
+    [Fact]
+    public void JsonNodes_HoldingClrValues_AreWrittenAsTheirJson()
+    {
+        var values = new Dictionary<string, JsonNode?>
+        {
+            ["date"] = JsonValue.Create(new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)),
+            ["id"] = JsonValue.Create(Guid.Empty),
+            ["c"] = JsonValue.Create('x'),
+            ["n"] = JsonValue.Create(1.5m),
+            ["no"] = JsonValue.Create(false),
+            ["none"] = null,
+            ["nan"] = JsonValue.Create(double.NaN),
+            ["inf"] = JsonValue.Create(float.PositiveInfinity)
+        };
+
+        Assert.Equal("""
+                     date: "2024-01-02T03:04:05Z"
+                     id: 00000000-0000-0000-0000-000000000000
+                     c: x
+                     n: 1.5
+                     no: false
+                     none: null
+                     nan: null
+                     inf: null
+                     """, ToonSerializer.Serialize(values));
+    }
+
+    [Fact]
+    public void JsonNumbers_BeyondDouble_StayStrings()
+    {
+        // As ToonConvert.FromJson keeps them, instead of writing null for an infinity
+        using var json = JsonDocument.Parse("1e400");
+
+        Assert.Equal("n: \"1e400\"", ToonSerializer.Serialize(new Dictionary<string, JsonElement> { ["n"] = json.RootElement }));
+        Assert.Equal("n: \"1e400\"", ToonSerializer.Serialize(new Dictionary<string, JsonNode?> { ["n"] = JsonNode.Parse("1e400") }));
+    }
+
+    [Fact]
+    public void JsonElements_WithRepeatedKeys_KeepTheLast()
+    {
+        using var json = JsonDocument.Parse("""{"a":1,"a":2}""");
+
+        Assert.Equal("v:\n  a: 2", ToonSerializer.Serialize(new Dictionary<string, JsonElement> { ["v"] = json.RootElement }));
+    }
+
+    [Fact]
+    public void JsonDocuments_AreRead()
+    {
+        using var document = ToonSerializer.Deserialize<JsonDocument>("a: 1\nb[2]: x,y")!;
+
+        Assert.Equal("""{"a":1,"b":["x","y"]}""", document.RootElement.GetRawText());
+    }
 }

@@ -11,17 +11,17 @@ public class ToonYamlConverterTests
     #region Numbers
 
     [Theory]
-    [InlineData("scientific: 1.5e-10")]
-    [InlineData("big: 1e22")]
-    [InlineData("long: 12345678901234567890123")]
-    [InlineData("tiny: 0.0000001")]
-    [InlineData("plain: 1.50")]
-    public void NumbersInExponentForm_RoundTrip(string yaml)
+    [InlineData("scientific: 1.5e-10", "scientific: 1.5e-10")]
+    [InlineData("big: 1e22", "big: 1e+22")]
+    [InlineData("long: 12345678901234567890123", "long: 1.2345678901234567890123e+22")]
+    [InlineData("tiny: 0.0000001", "tiny: 1e-7")]
+    [InlineData("plain: 1.50", "plain: 1.5")]
+    public void Numbers_TakeTheirCanonicalForm_AndRoundTrip(string yaml, string expected)
     {
         var toon = ToonYamlConvert.FromYaml(yaml);
-        var back = ToonYamlConvert.ToYaml(toon);
 
-        Assert.Equal(toon, ToonYamlConvert.FromYaml(back));
+        Assert.Equal(expected, toon);
+        Assert.Equal(toon, ToonYamlConvert.FromYaml(ToonYamlConvert.ToYaml(toon)));
     }
 
     #endregion
@@ -265,11 +265,9 @@ public class ToonYamlConverterTests
     [Fact]
     public void FromYaml_EmptyYaml_CreatesEmptyDocument()
     {
-        var yaml = "";
-
-        var doc = ToonYamlConverter.FromYaml(yaml);
-
-        Assert.NotNull(doc);
+        Assert.Empty(Assert.IsType<ToonObject>(ToonYamlConverter.FromYaml("").Root).Properties);
+        Assert.Empty(Assert.IsType<ToonObject>(ToonYamlConverter.FromYaml("# only a comment").Root).Properties);
+        Assert.IsType<ToonNull>(ToonYamlConverter.FromYaml("---").Root);
     }
 
     #endregion
@@ -364,8 +362,8 @@ public class ToonYamlConverterTests
 
         var yaml = ToonYamlConverter.ToYaml(doc);
 
-        // YAML serializes null as empty or explicit null
-        Assert.Contains("nullValue:", yaml);
+        Assert.Equal("nullValue: \n", yaml.ReplaceLineEndings("\n"));
+        Assert.IsType<ToonNull>(ToonYamlConverter.FromYaml(yaml).AsObject()["nullValue"]);
     }
 
     #endregion
@@ -439,6 +437,7 @@ public class ToonYamlConverterTests
     [Fact]
     public void Integration_YamlToToonToJsonToToonToYaml_WorksCorrectly()
     {
+        // YAML -> TOON -> JSON -> TOON -> YAML keeps the data
         var yaml = """
                    user:
                      name: Charlie
@@ -448,12 +447,12 @@ public class ToonYamlConverterTests
                        - editor
                    """;
 
-        // YAML -> TOON
         var doc1 = ToonYamlConverter.FromYaml(yaml);
-
-        // TOON -> YAML (round trip)
-        var yaml2 = ToonYamlConverter.ToYaml(doc1);
+        var viaJson = ToonNet.Extensions.Json.ToonJsonConverter.FromJson(ToonNet.Extensions.Json.ToonJsonConverter.ToJson(doc1));
+        var yaml2 = ToonYamlConverter.ToYaml(viaJson);
         var doc2 = ToonYamlConverter.FromYaml(yaml2);
+
+        Assert.True(ToonValue.DeepEquals(doc1.Root, doc2.Root));
 
         var root = (ToonObject)doc2.Root;
         var user = (ToonObject)root["user"]!;
@@ -574,6 +573,17 @@ public class ToonYamlConverterTests
     [InlineData(".5")]
     [InlineData("5.")]
     [InlineData("y")]
+    [InlineData(".inf")]
+    [InlineData("-.inf")]
+    [InlineData(".nan")]
+    // Typed by YAML 1.1 readers only
+    [InlineData("2001-12-14")]
+    [InlineData("2001-12-14T21:59:43.10-05:00")]
+    [InlineData("12:30:00")]
+    [InlineData("1:20")]
+    [InlineData("0b101")]
+    [InlineData("1_000")]
+    [InlineData("-1_000.5")]
     public void ToYaml_EveryStringTheReaderWouldType_IsQuoted(string text)
     {
         var value = new ToonObject { ["v"] = new ToonString(text) };
@@ -624,4 +634,225 @@ public class ToonYamlConverterTests
 
         Assert.Equal(expected, actual);
     }
+
+    #region YAML features
+
+    [Theory]
+    [InlineData("a: !!int \"42\"", "a: 42")]
+    [InlineData("a: !!float '1.5'", "a: 1.5")]
+    [InlineData("a: !!bool \"true\"", "a: true")]
+    [InlineData("a: !!null ''", "a: null")]
+    [InlineData("a: !!str 42", "a: \"42\"")]
+    [InlineData("a: ! true", "a: \"true\"")]
+    [InlineData("a: !!int 0x1F", "a: 31")]
+    [InlineData("a: !!int +7", "a: 7")]
+    [InlineData("a: !!float 7", "a: 7")]
+    [InlineData("a: !!null ~", "a: null")]
+    public void ExplicitTags_DecideTheType(string yaml, string toon)
+    {
+        Assert.Equal(toon, ToonYamlConvert.FromYaml(yaml));
+    }
+
+    [Theory]
+    [InlineData("a: !!int abc")]
+    [InlineData("a: !!bool yes")]
+    [InlineData("a: !!int 1.5")]
+    [InlineData("a: !!int -0x1F")]
+    [InlineData("a: !!int 1e3")]
+    [InlineData("a: !!int ''")]
+    [InlineData("a: !!null foo")]
+    [InlineData("a: !!null 0")]
+    public void ExplicitTags_ThatDoNotFit_AreErrors(string yaml)
+    {
+        Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConvert.FromYaml(yaml));
+    }
+
+    [Theory]
+    [InlineData("a\rb")]
+    [InlineData("a\r\nb")]
+    [InlineData("a\u0085b")]
+    [InlineData("a\u2028b")]
+    [InlineData("a\u2029b\nc")]
+    public void ToYaml_KeepsCarriageReturnsAndOtherLineBreaks(string text)
+    {
+        // Readers turn these into line feeds or spaces outside double quotes
+        var yaml = ToonYamlConverter.ToYaml(new ToonObject { ["s"] = new ToonString(text) });
+
+        Assert.StartsWith("s: \"", yaml);
+        Assert.Equal(text, ToonYamlConverter.FromYaml(yaml).Root["s"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ToYaml_WritesDeepTrees()
+    {
+        // YamlDotNet stops at 50 levels by default
+        ToonValue Nest(int depth) => depth == 0 ? new ToonNumber(1) : depth % 2 == 0 ? new ToonObject { ["k"] = Nest(depth - 1) } : new ToonArray { Items = { Nest(depth - 1) } };
+        var tree = Nest(201); // collections at depths 0 to 200
+
+        var yaml = ToonYamlConverter.ToYaml(tree);
+
+        Assert.True(ToonValue.DeepEquals(tree, ToonYamlConverter.FromYaml(yaml, new Core.ToonOptions { MaxDepth = 200 }).Root));
+        Assert.Equal("Maximum nesting depth of 200 exceeded",
+                     Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.ToYaml(Nest(202))).Message);
+        Assert.Equal(ToonYamlConverter.ToYaml(new ToonArray { Items = { ToonNull.Instance, new ToonNumber(1) } }),
+                     ToonYamlConverter.ToYaml(new ToonArray { Items = { null!, new ToonNumber(1) } }));
+    }
+
+    [Fact]
+    public void ByteOrderMark_IsIgnored()
+    {
+        Assert.Equal("a: 1", ToonYamlConvert.FromYaml("\uFEFFa: 1"));
+    }
+
+    [Fact]
+    public void SeveralDocuments_GiveTheFirst()
+    {
+        Assert.Equal("a: 1", ToonYamlConvert.FromYaml("---\na: 1\n---\nb: 2"));
+    }
+
+    [Fact]
+    public void MergeKeys_AreOrdinaryKeys()
+    {
+        // << is a YAML 1.1 feature; the 1.2 core schema reads it as a key
+        var toon = ToonYamlConvert.FromYaml("b: &b\n  x: 1\nc:\n  <<: *b\n  z: 3");
+
+        Assert.Equal("b:\n  x: 1\nc:\n  \"<<\":\n    x: 1\n  z: 3", toon);
+    }
+
+    [Fact]
+    public void Anchors_AndAliasesOfScalars_AreCopied()
+    {
+        Assert.Equal("a: 5\nb: 5", ToonYamlConvert.FromYaml("a: &x 5\nb: *x"));
+    }
+
+    [Fact]
+    public void DuplicateKeys_AreErrors_InEitherMode()
+    {
+        Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConvert.FromYaml("a: 1\na: 2"));
+        Assert.ThrowsAny<Exception>(() => ToonYamlConverter.FromYaml("a: 1\na: 2", new ToonNet.Core.ToonOptions { StrictMode = false }));
+    }
+
+    [Theory]
+    [InlineData("b: [1,")]
+    [InlineData("a:\n\tb: 1")]
+    [InlineData("a: \"unterminated")]
+    public void InvalidYaml_IsAYamlException(string yaml)
+    {
+        Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConvert.FromYaml(yaml));
+    }
+
+    [Fact]
+    public void InvalidOptions_Throw()
+    {
+        Assert.Throws<InvalidOperationException>(() => ToonYamlConverter.FromYaml("a: 1", new ToonNet.Core.ToonOptions { MaxDepth = 500 }));
+    }
+
+    [Fact]
+    public void BlockScalars_KeepTheirNewlines()
+    {
+        Assert.Equal("a: \"folded text\\npara\\n\"", ToonYamlConvert.FromYaml("a: >\n  folded\n  text\n\n  para\n"));
+        Assert.Equal("a: \"x\\n\\n\"", ToonYamlConvert.FromYaml("a: |+\n  x\n\n"));
+        Assert.Equal("a: x", ToonYamlConvert.FromYaml("a: |-\n  x\n"));
+    }
+
+    [Fact]
+    public void BigIntegers_BeyondDecimal_AreRoundedToDouble()
+    {
+        Assert.Equal("n: 1.2345678901234568e+29", ToonYamlConvert.FromYaml("n: 123456789012345678901234567890"));
+    }
+
+    #endregion
+
+    #region Untrusted input
+
+    private static void AssertFast(Action action, int milliseconds = 2_000)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        action();
+        Assert.True(watch.ElapsedMilliseconds < milliseconds, $"took {watch.ElapsedMilliseconds} ms");
+    }
+
+    [Theory]
+    [InlineData("0x", 'f', 1_000_000)]
+    [InlineData("0o", '7', 1_000_000)]
+    public void LongHexadecimalAndOctalScalars_AreStrings_InLinearTime(string prefix, char digit, int count)
+    {
+        var text = prefix + new string(digit, count);
+
+        AssertFast(() => Assert.Equal(text, ToonYamlConverter.FromYaml("a: " + text).Root["a"]!.GetValue<string>()));
+        AssertFast(() => Assert.Equal(text, ToonYamlConverter.FromYaml(ToonYamlConvert.ToYaml("a: " + text)).Root["a"]!.GetValue<string>()));
+
+        // Leading zeros do not count against the size, and the largest values still fit
+        Assert.Equal(255m, ToonYamlConverter.FromYaml("a: 0x" + new string('0', 100) + "ff").Root["a"]!.GetValue<decimal>());
+        Assert.Equal(decimal.MaxValue, ToonYamlConverter.FromYaml("a: 0xffffffffffffffffffffffff").Root["a"]!.GetValue<decimal>());
+    }
+
+    [Fact]
+    public void AliasesOfLongScalars_CannotExpandBeyondTheCharacterBudget()
+    {
+        var yaml = new System.Text.StringBuilder("s: &a ").Append('A', 10_000).Append("\nl:\n");
+
+        for (var i = 0; i < 99_000; i++)
+        {
+            yaml.Append("  - *a\n");
+        }
+
+        var ex = Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml.ToString()));
+        Assert.Contains("characters", ex.Message);
+
+        // Within ten times the length of the document, aliases expand
+        var small = "s: &a " + new string('A', 1_000) + "\nl:\n" + string.Concat(Enumerable.Repeat("  - *a\n", 50));
+        Assert.Equal(50, ToonYamlConverter.FromYaml(small).Root["l"]!.AsArray().Count);
+    }
+
+    [Theory]
+    [InlineData(100_000, "_")]
+    [InlineData(100_000, "0_")]
+    public void LongDigitStrings_AreQuoted_InLinearTime(int count, string unit)
+    {
+        var text = "1" + string.Concat(Enumerable.Repeat(unit, count)) + "x";
+        var document = new ToonDocument(new ToonObject { ["a"] = new ToonString(text) });
+
+        string yaml = "";
+        AssertFast(() => yaml = ToonYamlConverter.ToYaml(document));
+        Assert.StartsWith("a: \"1", yaml);
+        Assert.Equal(text, ToonYamlConverter.FromYaml(yaml).Root["a"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("<<")]
+    [InlineData("=")]
+    [InlineData("\uFEFFid")]
+    public void KeysAndValuesYaml11ReadersWouldChange_AreQuoted(string text)
+    {
+        var document = new ToonDocument(new ToonObject { [text] = new ToonObject { ["x"] = new ToonString(text) } });
+
+        var yaml = ToonYamlConverter.ToYaml(document);
+
+        Assert.StartsWith("\"", yaml);
+        var back = ToonYamlConverter.FromYaml(yaml).Root;
+        Assert.Equal(text, Assert.Single(back.AsObject().Properties).Key);
+        Assert.Equal(text, back[text]!["x"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("a: 1\n!!str a: 2")]
+    [InlineData("!!str a: 1\na: 2")]
+    [InlineData("? !!str a\n: 1\na: 2")]
+    public void KeysThatDifferOnlyInTheirTag_AreDuplicates(string yaml)
+    {
+        var ex = Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml));
+        Assert.Contains("Duplicate key", ex.Message);
+    }
+
+    [Fact]
+    public void TagErrors_DoNotRepeatTheValue()
+    {
+        var ex = Assert.ThrowsAny<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml("a: !!bool jane@example.com"));
+
+        Assert.Contains("!!bool", ex.Message);
+        Assert.DoesNotContain("jane", ex.ToString());
+    }
+
+    #endregion
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ToonNet.Core;
 using ToonNet.Core.Encoding;
 
@@ -53,6 +54,7 @@ public static class ToonYamlConvert
     /// string yamlString = ToonYamlConvert.ToYaml(toonString);
     /// </code>
     /// </remarks>
+    [RequiresDynamicCode(ToonYamlConverter.YamlWriteMessage)]
     public static string ToYaml(string toonString, ToonOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(toonString);

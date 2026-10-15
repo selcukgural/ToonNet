@@ -81,9 +81,36 @@ subsections):
 builder.Services.AddToonNet(builder.Configuration);
 ```
 
+The `ToonOptions` subsection reads `IndentSize`, `MaxDepth`, `Delimiter`, `StrictMode` and `AllowExtendedLimits`; the
+`ToonSerializerOptions` subsection reads `IgnoreNullValues`, `IncludeReadOnlyProperties`, `PropertyNamingPolicy`,
+`PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers` (default `true`),
+`SerializeRuntimeTypes` (default `false`), `MaxDepth` and `AllowExtendedLimits`:
+
+```json
+{
+  "ToonNet": {
+    "ToonSerializerOptions": {
+      "PropertyNamingPolicy": "CamelCase",
+      "SerializeRuntimeTypes": false
+    }
+  }
+}
+```
+
+`ToonNet:ToonSerializerOptions:SerializeRuntimeTypes = true` writes objects with their runtime type, so members of
+derived types reach responses through properties of narrower types; leave it off unless you need the behavior of
+ToonNet before 4.0 (see [Security](../advanced/security)).
+
 Invalid values (for example a `MaxDepth` above 200 without `AllowExtendedLimits`, or an `IndentSize` outside 1–100) make
 the application fail at startup. Calling `AddToonNet` more than once is safe: the delegates add up and the services
-are registered once.
+are registered once. Enum values are names in any case (`camelCase`); numbers and comma-separated lists are rejected.
+
+The options are read once, when they are first used: the formatters, `ToonEncoder` and `IOptions<T>` keep them for the
+lifetime of the application, and `IOptionsMonitor<T>` does not reload them when the configuration changes. Restart the
+application to apply new values.
+
+`IndentSize` is the indentation written and also the indentation expected when reading: in strict mode a request
+body indented by another number of spaces is rejected.
 
 ## Using Injected Services
 

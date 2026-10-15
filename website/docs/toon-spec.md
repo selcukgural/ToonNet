@@ -2,7 +2,7 @@
 
 ToonNet implements **[TOON spec v4.4](https://github.com/toon-format/spec/blob/v4.4.0/SPEC.md)**
 (toon-format/spec, tag `v4.4.0`). This page describes how conformance is verified and documents the
-implementation-defined behaviour that the spec requires implementations to document. For the format itself,
+implementation-defined behavior that the spec requires implementations to document. For the format itself,
 read the spec; this page does not restate it.
 
 ## ToonNet Implementation Status
@@ -29,7 +29,7 @@ expansion were removed), so dotted keys such as `user.name` are always literal k
 `tests/ToonNet.Compatibility.Tests` runs with every build against
 [Toon.Format](https://www.nuget.org/packages/Toon.Format), the official .NET implementation: both pass all 564
 fixtures, encode thousands of random JSON documents to identical text and read each other's output. The differences
-that remain are in how .NET values map to the data model (see [the README](https://github.com/selcukgural/ToonNet#toonnet-vs-the-official-toonformat-library)):
+that remain are in how .NET values map to the data model (see [ToonNet vs Toon.Format](comparison)):
 ToonNet writes enum names and keeps every digit of `decimal` and `ulong` values.
 
 ## Options
@@ -43,7 +43,7 @@ ToonNet writes enum names and keeps every digit of `decimal` and `ulong` values.
 `ToonOptions.MaxDepth` (default 100) additionally limits nesting when encoding and decoding; nested field groups
 count as levels.
 
-## Implementation-defined behaviour
+## Implementation-defined behavior
 
 ### Host type normalization (§3)
 
@@ -66,7 +66,8 @@ cannot be represented and throws `ToonEncodingException`. Custom mappings use `I
   `decimal` keeps its exact value; otherwise it is approximated as a `double`. A numeric token that overflows `double`
   (for example `1e400`) decodes as a **string**, not as infinity. When binding to .NET integer types, fractions and
   out-of-range values throw `ToonSerializationException` rather than being truncated.
-- `-0` decodes as `0`.
+- `-0` decodes as the number zero: `0` in integers, `decimal` and `object`, negative zero in `double` and `float`
+  (as `double.Parse` and System.Text.Json give it). It is written as `0`.
 
 ### Key order and keys (§2, §15)
 
@@ -115,4 +116,4 @@ Row widths are checked in both modes.
 1. Replace `tests/ToonNet.Tests/SpecCompliance/Fixtures/<version>` with the fixtures of the new tag and update
    `FixtureVersion` and `TargetSpecVersion` in `SpecFixtureConformanceTests`.
 2. Regenerate `KnownNonConformance.txt` with `TOONNET_WRITE_NONCONFORMANCE=<path>` and fix the listed cases.
-3. Update this page, the website copy (`website/docs/toon-spec.md`) and the README badge.
+3. Update `docs/TOON_SPEC_COMPLIANCE.md`, `website/docs/toon-spec.md` and the README badge.

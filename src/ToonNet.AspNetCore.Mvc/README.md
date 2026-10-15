@@ -237,7 +237,9 @@ TOON formatters register these media types:
 - `text/toon` (input and output)
 
 Both formatters support UTF-8 and UTF-16 (`charset=utf-16`); the request charset is used for reading and the negotiated
-charset for writing, also when the `Accept` value names one (`Accept: application/toon; charset=utf-16`).
+charset for writing, also when the `Accept` value names one (`Accept: application/toon; charset=utf-16`). A charset in
+`Accept` that is not supported is not echoed: the response is UTF-8 and its `Content-Type` names only a supported
+encoding.
 
 ---
 
@@ -305,8 +307,16 @@ public static class ToonHttpRequestExtensions
 ```
 
 It uses `IOptions<ToonSerializerOptions>` from DI unless options are passed. A request without a TOON content type
-throws `InvalidOperationException`, invalid TOON a `ToonException`; a blank body reads as the default value. The body
-size is limited by the server (`MaxRequestBodySize`, `[RequestSizeLimit]`), not by the formatter's 4 MB limit.
+throws `InvalidOperationException`, invalid TOON a `ToonException`; a blank body reads as the default value. Bodies
+larger than 4 MB (`ToonFormatterDefaults.MaxRequestBodySize`, as for the input formatter) are rejected with
+`413 Payload Too Large`, unless the endpoint has size limit metadata of its own (`[RequestSizeLimit]`,
+`[DisableRequestSizeLimit]`), which keeps the server's limit:
+
+```csharp
+app.MapPost("/imports", async (HttpRequest request) =>
+        Results.Extensions.Toon(await request.ReadFromToonAsync<Import>(), StatusCodes.Status201Created))
+    .WithMetadata(new RequestSizeLimitAttribute(16 * 1024 * 1024)); // Microsoft.AspNetCore.Mvc
+```
 
 ---
 

@@ -142,6 +142,17 @@ internal sealed class SourceEmitter
     /// </summary>
     private void EmitRegistration()
     {
+        if (_model.TypeInfoProperty == TypeInfoProperty.Hide)
+        {
+            // The base type's would write and read only the base type's properties
+            _code.AppendLine("[global::System.Obsolete(\"This type has no ToonTypeInfo of its own (a generic or non-public type, or one with a [ToonConverter]); " +
+                             "the base type's would convert only the base type's properties. Use the ToonSerializer overloads without a type info.\", true)]");
+            _code.AppendLine(HiddenAttribute);
+            _code.AppendLine("public new static object? ToonTypeInfo => null;");
+            _code.AppendLine();
+            return;
+        }
+
         if (!_model.RegisterWithSerializer)
         {
             return;
@@ -164,6 +175,7 @@ internal sealed class SourceEmitter
         {
             return;
         }
+
 
         if (_model.Documentation)
         {
@@ -245,8 +257,9 @@ internal sealed class SourceEmitter
 
         if (model.CheckRuntimeType)
         {
-            code.AppendLine("// Derived types are handled by ToonSerializer, which knows the runtime type.");
-            code.AppendLine($"if (value.GetType() != typeof({model.TypeOfName})) return {reflection};");
+            // A derived object is written as this type, unless the options ask for runtime types (ToonNet 4.0)
+            code.AppendLine("// Derived types written as their runtime type are handled by ToonSerializer, which knows it.");
+            code.AppendLine($"if (options.SerializeRuntimeTypes && value.GetType() != typeof({model.TypeOfName})) return {reflection};");
         }
         EmitPolicyLocal();
         code.AppendLine(ConvertLocal);
@@ -276,7 +289,7 @@ internal sealed class SourceEmitter
                 code.AppendLine($"__at = {name};");
             }
 
-            code.AppendLine($"var {local} = value.{Identifier(property)};");
+            code.AppendLine($"{property.TypeName} {local} = value.{Identifier(property)};"); // typed: a dynamic member is an object
 
             if (property.ConverterTypeName != null)
             {
@@ -438,7 +451,7 @@ internal sealed class SourceEmitter
             code.AppendLine();
             code.AppendLine($"// {property.Name}");
             code.BeginBlock(property.IsReadOnly ? "if (options.IncludeReadOnlyProperties)" : "");
-            code.AppendLine($"var __v{i} = value.{Identifier(property)};");
+            code.AppendLine($"{property.TypeName} __v{i} = value.{Identifier(property)};"); // typed: a dynamic member is an object
             EmitWriteField(property, $"__v{i}");
             code.EndBlock();
         }
@@ -517,7 +530,9 @@ internal sealed class SourceEmitter
                 // Objects of exactly the declared type are written by its field writer; derived types need their own,
                 // and an object that may be a keyed tabular object (§9.5) needs the serializer to decide
                 var keyedCheck = $"!{plan.ValueTypeName}.__ToonMayBeKeyed({value}, writer)";
-                code.BeginBlock(plan.CheckRuntimeType ? $"if ({value}.GetType() == typeof({plan.ValueTypeName}) && {keyedCheck})" : $"if ({keyedCheck})");
+                code.BeginBlock(plan.CheckRuntimeType
+                                    ? $"if ((!options.SerializeRuntimeTypes || {value}.GetType() == typeof({plan.ValueTypeName})) && {keyedCheck})"
+                                    : $"if ({keyedCheck})");
                 code.AppendLine(StartLine);
                 code.AppendLine("writer.EnterValue(depth + 1);");
                 code.AppendLine($"writer.Write({EncodedNameExpression(property, ":")});");
@@ -732,7 +747,7 @@ internal sealed class SourceEmitter
             {
                 if (plan.CanBeNull)
                 {
-                    code.AppendLine($"var __v{i} = value.{Identifier(property)};");
+                    code.AppendLine($"{property.TypeName} __v{i} = value.{Identifier(property)};"); // typed: a dynamic member is an object
                     code.AppendLine($"if (__v{i} is null) writer.WriteNull(); else {WritePrimitiveStatement(plan, NonNull(plan, $"__v{i}"))}");
                 }
                 else
@@ -879,6 +894,17 @@ internal sealed class SourceEmitter
                             ? "public override bool IsReadOnlyProperty(int index) => false;"
                             : $"public override bool IsReadOnlyProperty(int index) => index is {string.Join(" or ", readOnly)};");
 
+        // The declared types, which values are written as (ToonNet 4.0)
+        code.BeginBlock("public override global::System.Type? GetPropertyType(int index) => index switch");
+
+        for (var i = 0; i < properties.Length; i++)
+        {
+            code.AppendLine($"{i} => typeof({properties[i].TypeOfName}),");
+        }
+
+        code.AppendLine("_ => throw new global::System.ArgumentOutOfRangeException(nameof(index))");
+        code.EndBlock(";");
+
         code.BeginBlock($"public override object? GetValue({type} value, int index) => index switch");
 
         for (var i = 0; i < properties.Length; i++)
@@ -910,7 +936,7 @@ internal sealed class SourceEmitter
 
             if (plan.CanBeNull)
             {
-                code.AppendLine($"var __v{i} = value.{Identifier(property)};");
+                code.AppendLine($"{property.TypeName} __v{i} = value.{Identifier(property)};"); // typed: a dynamic member is an object
                 code.AppendLine($"if (__v{i} is null) writer.WriteNull(); else {WritePrimitiveStatement(plan, NonNull(plan, $"__v{i}"))}");
             }
             else
@@ -1025,9 +1051,9 @@ internal sealed class SourceEmitter
         code.AppendLine(HiddenAttribute);
         code.BeginBlock($"public static {type} __ToonReadObject({Reader} reader, in {ReaderValue} value, int depth)");
         code.AppendLine("var options = reader.Options;");
-        code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
         code.AppendLine("// Non-object values are handled (or reported) like the tree: by ToonSerializer");
         code.AppendLine("if (!reader.IsObject(in value)) return __ToonDeserializeValue(reader.BuildTree(in value), options, depth);");
+        code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth); // objects count, as for ToonSerializer (not null)");
         EmitPolicyLocal();
 
         // Keys shared by several members are read once per member by the tree
@@ -1053,7 +1079,7 @@ internal sealed class SourceEmitter
             var parameter = constructor.Parameters[j];
             code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue};");
             code.AppendLine($"var __ha{j} = false;");
-            arguments.Add($"__a{j}");
+            arguments.Add(parameter.PassIn ? $"in __a{j}" : $"__a{j}");
         }
 
         for (var i = 0; i < model.Properties.Length; i++)
@@ -1122,6 +1148,11 @@ internal sealed class SourceEmitter
         if (required.Count != 0)
         {
             code.AppendLine($"if (options.RespectRequiredMembers && !({string.Join(" && ", required)})) reader.Fallback(); // the tree reports the property");
+        }
+
+        if (KeptInitializers() is { } kept)
+        {
+            code.AppendLine($"if (!({kept}) && {DynamicCode}) reader.Fallback(); // a missing key keeps the property's initializer (the tree leaves it to reflection)");
         }
 
         code.AppendLine();
@@ -1457,7 +1488,6 @@ internal sealed class SourceEmitter
 
         code.AppendLine();
         code.BeginBlock($"private static {plan.TypeName} __ToonReadText{id}({Reader} reader, in {ReaderValue} value, int depth)");
-        code.AppendLine($"{Helpers}.CheckDeserializationDepth(reader.Options, depth);");
 
         if (plan.Kind == ValueKind.Dictionary)
         {
@@ -1467,6 +1497,7 @@ internal sealed class SourceEmitter
                 : $"{Helpers}.ReadPrimitive<{keyPlan.ValueTypeName}>(new {Models}ToonString(__key))";
 
             code.AppendLine($"if (!reader.IsObject(in value)) return reader.ReadValue<{plan.TypeName}>(in value, depth);");
+            code.AppendLine($"{Helpers}.CheckDeserializationDepth(reader.Options, depth);");
             code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>();");
             code.AppendLine("var __fields = reader.BeginObject(in value);");
             code.BeginBlock("while (reader.NextProperty(ref __fields, out var __key, out var __item))");
@@ -1477,6 +1508,7 @@ internal sealed class SourceEmitter
         else
         {
             code.AppendLine($"if (!reader.IsArray(in value)) return reader.ReadValue<{plan.TypeName}>(in value, depth);");
+            code.AppendLine($"{Helpers}.CheckDeserializationDepth(reader.Options, depth);");
             code.AppendLine("var __array = reader.BeginArray(in value);");
             code.AppendLine($"var __items = new global::System.Collections.Generic.List<{element.TypeName}>(reader.CapacityHint(in __array));");
             code.BeginBlock("while (reader.NextItem(ref __array, out var __item))");
@@ -1541,7 +1573,6 @@ internal sealed class SourceEmitter
         code.AppendLine("/// <summary>Used by generated code; call <c>Deserialize</c> instead.</summary>");
         code.AppendLine(HiddenAttribute);
         code.BeginBlock($"public static {model.FullyQualifiedName} __ToonDeserializeValue({Models}ToonValue value, {Options} options, int depth)");
-        code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
 
         var reflection = $"{Helpers}.DeserializeWithReflection<{model.FullyQualifiedName}>(value, options, depth)";
 
@@ -1554,6 +1585,7 @@ internal sealed class SourceEmitter
 
         code.AppendLine("// Null and non-object values are handled (or reported) by ToonSerializer.");
         code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
+        code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth); // objects count, as for ToonSerializer (not null)");
         EmitPolicyLocal();
         code.AppendLine(ConvertLocal);
         code.AppendLine("var __ci = options.PropertyNameCaseInsensitive;");
@@ -1607,7 +1639,7 @@ internal sealed class SourceEmitter
             code.AppendLine($"__at = {key};");
             code.AppendLine($"__a{j} = {read};");
             code.EndBlock();
-            arguments.Add($"__a{j}");
+            arguments.Add(parameter.PassIn ? $"in __a{j}" : $"__a{j}");
         }
 
         for (var i = 0; i < model.Properties.Length; i++)
@@ -1636,6 +1668,13 @@ internal sealed class SourceEmitter
         code.AppendLine();
         code.AppendLine("__at = null;");
 
+        if (KeptInitializers() is { } kept)
+        {
+            // The object initializer would replace the initializer of a property without a key
+            // (Under native AOT, where reflection cannot create the object, the object initializer is used as before)
+            code.AppendLine($"if (!({kept}) && {DynamicCode}) return {Helpers}.DeserializeWithReflection<{model.FullyQualifiedName}>(value, options, depth);");
+        }
+
         EmitConstruction(arguments);
 
         code.AppendLine();
@@ -1643,6 +1682,25 @@ internal sealed class SourceEmitter
         code.EndBlock();
         EmitPathFilter("__at != null", "__at");
         code.EndBlock();
+    }
+
+    /// <summary>
+    ///     The condition that every property set in the object initializer with an initializer of its own has a key, or
+    ///     null when there are none.
+    /// </summary>
+    private const string DynamicCode = "global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported";
+
+    private string? KeptInitializers()
+    {
+        var flags = _model.Properties.Select((p, i) => (p, i)).Where(t => t.p.KeepsInitializer).Select(t => $"__h{t.i}").ToList();
+
+        // A required member that is never read, with an initializer of its own, would always lose it
+        if (_model.UnsetRequiredHasInitializer)
+        {
+            flags.Add("false");
+        }
+
+        return flags.Count == 0 ? null : string.Join(" && ", flags);
     }
 
     /// <summary>
@@ -1658,17 +1716,23 @@ internal sealed class SourceEmitter
         var initializers = model.Properties.Select((p, i) => (Property: p, Index: i))
                                 .Where(p => p.Property.Write == WriteKind.Initializer)
                                 .Select(p => $"{Identifier(p.Property)} = __h{p.Index} ? __p{p.Index} : default!")
+                                .Concat(model.UnsetRequired.Select(name => $"{name} = default!")) // required, not read from documents
                                 .ToList();
 
         var creation = $"new {model.FullyQualifiedName}({string.Join(", ", arguments)})";
 
+        // An exception of the constructor (or an init accessor) is reported as ToonSerializer reports it: its type,
+        // with the exception as the inner one, not its message (which would reach clients through error responses)
+        code.AppendLine($"{model.FullyQualifiedName} __result;");
+        code.BeginBlock("try");
+
         if (initializers.Count == 0)
         {
-            code.AppendLine($"var __result = {creation};");
+            code.AppendLine($"__result = {creation};");
         }
         else
         {
-            code.AppendLine($"var __result = {creation}");
+            code.AppendLine($"__result = {creation}");
             code.AppendLine("{");
             code.IncrementIndent();
 
@@ -1680,6 +1744,11 @@ internal sealed class SourceEmitter
             code.DecrementIndent();
             code.AppendLine("};");
         }
+
+        code.EndBlock();
+        code.BeginBlock("catch (global::System.Exception __e) when (__e is not global::ToonNet.Core.ToonException)");
+        code.AppendLine($"throw {Helpers}.ConstructorError<{model.FullyQualifiedName}>(__e);");
+        code.EndBlock();
 
         for (var i = 0; i < model.Properties.Length; i++)
         {
@@ -1737,7 +1806,8 @@ internal sealed class SourceEmitter
                     PrimitiveKind.Integer or PrimitiveKind.UInt64 =>
                         ($"{exactNumber} && {d} == decimal.Truncate({d}) && {d} >= {type}.MinValue && {d} <= {type}.MaxValue", $"({type}){d}"),
                     PrimitiveKind.Decimal => (exactNumber, d),
-                    PrimitiveKind.Single => ($"{toon} is {Models}ToonNumber __n{n}", $"(float)__n{n}.Value"),
+                    // A double beyond float's range would become an infinity: the slow path rejects it, as reflection does
+                    PrimitiveKind.Single => ($"{toon} is {Models}ToonNumber __n{n} && float.IsFinite((float)__n{n}.Value)", $"(float)__n{n}.Value"),
                     _ => ($"{toon} is {Models}ToonNumber __n{n}", $"__n{n}.Value")
                 };
 
@@ -1855,7 +1925,7 @@ internal sealed class SourceEmitter
             }
 
             code.AppendLine("var __value = __entry.Value;");
-            EmitStore("__obj.Properties[__key]", element, "__value", "depth + 1", useDeclaredType: false);
+            EmitStore("__obj.Properties[__key]", element, "__value", "depth + 1", useDeclaredType: true); // declared as the value type (4.0)
             code.EndBlock();
 
             if (tracksPath)
@@ -1892,7 +1962,7 @@ internal sealed class SourceEmitter
 
             if (element.Kind != ValueKind.Reflection)
             {
-                branches.Add($"if (__convert && {Helpers}.TryWriteConverted<{element.TypeName}>(__item, options, false, out var __c)) " +
+                branches.Add($"if (__convert && {Helpers}.TryWriteConverted<{element.TypeName}>(__item, options, true, out var __c)) " +
                              $"__array.Items.Add(__c ?? {Models}ToonNull.Instance);");
             }
 
@@ -1957,7 +2027,6 @@ internal sealed class SourceEmitter
 
         code.AppendLine();
         code.BeginBlock($"private static {plan.TypeName} __ToonRead{id}({Models}ToonValue value, {Options} options, int depth)");
-        code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
         code.AppendLine(ConvertLocal);
 
         if (plan.Kind == ValueKind.Dictionary)
@@ -1970,6 +2039,7 @@ internal sealed class SourceEmitter
                   $"? __ck : {Helpers}.ReadPrimitive<{keyPlan.ValueTypeName}>(new {Models}ToonString(__entry.Key)))";
 
             code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
+            code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
             code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>(__obj.Properties.Count);");
             code.AppendLine("string? __at = null;");
             code.BeginBlock("try");
@@ -1984,6 +2054,7 @@ internal sealed class SourceEmitter
         else
         {
             code.AppendLine($"if (value is not {Models}ToonArray __array) return {reflection};");
+            code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
             code.AppendLine($"var __items = new global::System.Collections.Generic.List<{element.TypeName}>(__array.Count);");
             code.AppendLine("var __i = 0;");
             code.BeginBlock("try");
@@ -2043,7 +2114,31 @@ internal sealed class SourceEmitter
                $"{policyType}.LowerCase => {Literal(names[3])}, _ => {Literal(names[0])} }})";
     }
 
-    private static string Literal(string value) => SymbolDisplay.FormatLiteral(value, true);
+    /// <summary>
+    ///     A C# string literal; bidirectional controls are escaped too, so the generated file shows what the string holds
+    ///     (they can make source read differently from what it does).
+    /// </summary>
+    private static string Literal(string value)
+    {
+        var literal = SymbolDisplay.FormatLiteral(value, true);
+
+        if (literal.IndexOfAny(BidiControls) < 0)
+        {
+            return literal;
+        }
+
+        var text = new System.Text.StringBuilder(literal.Length + 16);
+
+        foreach (var c in literal)
+        {
+            text.Append(Array.IndexOf(BidiControls, c) >= 0 ? "\\u" + ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture) : c.ToString());
+        }
+
+        return text.ToString();
+    }
+
+    private static readonly char[] BidiControls =
+        [(char)0x061C, (char)0x200E, (char)0x200F, (char)0x202A, (char)0x202B, (char)0x202C, (char)0x202D, (char)0x202E, (char)0x2066, (char)0x2067, (char)0x2068, (char)0x2069];
 
     private string Accessibility() => _model.PublicMethods ? "public" : "internal";
 

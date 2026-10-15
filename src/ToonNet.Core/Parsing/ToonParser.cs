@@ -978,7 +978,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         if (duplicate)
         {
             ref readonly var line = ref _lines[cursor.PendingLineIndex];
-            throw new ToonParseException($"Duplicate key '{key}'", line.Number, line.Indent + 1);
+            throw new ToonParseException($"Duplicate key {ToonErrorText.Quote(key)}", line.Number, line.Indent + 1);
         }
     }
 
@@ -1442,6 +1442,66 @@ internal sealed class ToonParser(ToonOptions? options = null)
         }
 
         return Unescape(token[1..end], line.Number, value.Column + 1);
+    }
+
+    /// <summary>The state of the reader methods before a value is read, to read the value again (<see cref="Restore"/>).</summary>
+    internal readonly struct Checkpoint(int position, int depth, int headerSpans, int keyCount, int reservedListItems, int headersFrom,
+                                        int headerCount, Header header, Header[]? headers)
+    {
+        public readonly int Position = position;
+        public readonly int Depth = depth;
+        public readonly int HeaderSpans = headerSpans;
+        public readonly int KeyCount = keyCount;
+        public readonly int ReservedListItems = reservedListItems;
+
+        /// <summary>The headers from this index on, which reading the value may remove; those before it stay.</summary>
+        public readonly int HeadersFrom = headersFrom;
+
+        /// <summary>The number of headers from <see cref="HeadersFrom"/> on: one is kept in <see cref="Header"/>, more in <see cref="Headers"/>.</summary>
+        public readonly int HeaderCount = headerCount;
+
+        public readonly Header Header = header;
+        public readonly Header[]? Headers = headers;
+    }
+
+    /// <summary>
+    ///     Saves the state before <paramref name="value"/> is read, so the value can be read again after
+    ///     <see cref="Restore"/> (when reading it straight into an object gave up, it is built as a tree instead). The
+    ///     cursors that contain the value are not changed by reading it.
+    /// </summary>
+    internal Checkpoint Save(in ValueRef value)
+    {
+        // Reading an array or keyed object removes its own header when it ends (and the headers added after it, which
+        // Restore drops); a row or field group only refers to the header of the array it is in
+        var from = value.Kind is RefKind.HeaderArray or RefKind.KeyedObject ? Math.Min(value.HeaderIndex, _headers.Count) : _headers.Count;
+        var count = _headers.Count - from;
+
+        return new Checkpoint(_position, _depth, _headerSpans, _keyCount, _reservedListItems, from, count,
+                              count == 1 ? _headers[from] : default, count > 1 ? _headers.GetRange(from, count).ToArray() : null);
+    }
+
+    /// <summary>Returns to the state <see cref="Save"/> recorded.</summary>
+    internal void Restore(in Checkpoint checkpoint)
+    {
+        _position = checkpoint.Position;
+        _depth = checkpoint.Depth;
+        _headerSpans = checkpoint.HeaderSpans;
+        _keyCount = checkpoint.KeyCount;
+        _reservedListItems = checkpoint.ReservedListItems;
+
+        if (_headers.Count > checkpoint.HeadersFrom)
+        {
+            _headers.RemoveRange(checkpoint.HeadersFrom, _headers.Count - checkpoint.HeadersFrom);
+        }
+
+        if (checkpoint.HeaderCount == 1)
+        {
+            _headers.Add(checkpoint.Header);
+        }
+        else if (checkpoint.Headers != null)
+        {
+            _headers.AddRange(checkpoint.Headers);
+        }
     }
 
     /// <summary>
@@ -2078,7 +2138,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         }
 
         static ToonParseException DuplicateField(string name, in Line line) =>
-            new($"Duplicate field '{name}' in field list", line.Number, line.Indent + 1);
+            new($"Duplicate field {ToonErrorText.Quote(name)} in field list", line.Number, line.Indent + 1);
     }
 
     #endregion
@@ -2167,14 +2227,40 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return text.ToString();
         }
 
-        var slot = (int)((uint)string.GetHashCode(text) % KeyCacheSize);
+        // A hash that is the same in every process (string hashes are randomized per process, which made two keys of a
+        // document share a slot in some runs and not in others), and two slots per key, so two keys whose first slot
+        // is the same do not push each other out on every row
+        var hash = KeyHash(text);
+        var first = (int)(hash % KeyCacheSize);
 
-        if (_keys[slot] is { } cached && text.SequenceEqual(cached))
+        if (_keys[first] is { } cached && text.SequenceEqual(cached))
         {
             return cached;
         }
 
-        return _keys[slot] = text.ToString();
+        var second = (int)((hash >> 8) % KeyCacheSize);
+
+        if (_keys[second] is { } other && text.SequenceEqual(other))
+        {
+            return other;
+        }
+
+        var key = text.ToString();
+        _keys[_keys[first] == null || _keys[second] != null ? first : second] = key;
+        return key;
+    }
+
+    /// <summary>FNV-1a over the characters of a key.</summary>
+    private static uint KeyHash(ReadOnlySpan<char> text)
+    {
+        var hash = 2166136261u;
+
+        foreach (var c in text)
+        {
+            hash = (hash ^ c) * 16777619u;
+        }
+
+        return hash;
     }
 
     /// <summary>
@@ -2298,15 +2384,73 @@ internal sealed class ToonParser(ToonOptions? options = null)
             return false;
         }
 
-        // Keep the exact value when it fits in a decimal. Values below decimal precision (e.g. 1e-30) round to a
-        // different value there, so they only keep the double.
-        if (decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out exact) &&
-            Math.Abs((double)exact - value) <= Math.Abs(value) * 1e-12)
+        // Keep the exact value when a decimal holds it exactly; one that would round (more significant digits or decimal
+        // places than a decimal has, e.g. 1e-30 or 0.00000000000000012345678901234567) only keeps the double
+        if (FitsDecimal(token, out var places, out var significant) &&
+            decimal.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out exact) &&
+            (significant <= 28 || exact.Scale >= Math.Max(places, 0)))
         {
+            // 29 significant digits fit when they are at most decimal's largest mantissa; parsing rounds them otherwise,
+            // to fewer decimal places
             hasExact = true;
         }
 
         return true;
+    }
+
+    /// <summary>
+    ///     Whether a JSON number token may fit a <see cref="decimal"/> without rounding: at most 28 decimal places and 29
+    ///     significant digits (28 always fit; 29 when they do not exceed decimal's largest mantissa).
+    /// </summary>
+    private static bool FitsDecimal(ReadOnlySpan<char> token, out long places, out int significant)
+    {
+        places = 0;
+        significant = 0;
+
+        var exponentAt = token.IndexOfAny('e', 'E');
+        var mantissa = exponentAt < 0 ? token : token[..exponentAt];
+        var exponent = 0;
+
+        if (exponentAt >= 0 && !int.TryParse(token[(exponentAt + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent))
+        {
+            return false; // an exponent beyond int is far beyond decimal
+        }
+
+        int first = -1, last = -1, digits = 0, point = -1;
+
+        for (var i = 0; i < mantissa.Length; i++)
+        {
+            var c = mantissa[i];
+
+            if (c == '.')
+            {
+                point = digits;
+                continue;
+            }
+
+            if (c is < '0' or > '9')
+            {
+                continue; // the sign
+            }
+
+            if (c != '0')
+            {
+                first = first < 0 ? digits : first;
+                last = digits;
+            }
+
+            digits++;
+        }
+
+        if (first < 0)
+        {
+            return true; // zero
+        }
+
+        // Decimal places: the digits after the point up to the last significant one, less the exponent
+        places = (long)(last + 1 - (point < 0 ? digits : point)) - exponent;
+        significant = last - first + 1;
+        return places <= 28 && significant <= 29;
     }
 
     /// <summary>

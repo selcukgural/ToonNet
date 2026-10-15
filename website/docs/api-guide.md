@@ -1,12 +1,12 @@
 # ToonNet API Guide: System.Text.Json Style
 
-## 🎯 **Design Philosophy: Familiar by Design**
+## Design Philosophy
 
 ToonNet's API follows the patterns of System.Text.Json (`Serialize`/`Deserialize` with optional options) - if you know System.Text.Json, ToonNet will feel familiar.
 
 ---
 
-## 📊 **API Comparison**
+## API Comparison
 
 ### System.Text.Json API
 ```csharp
@@ -14,11 +14,11 @@ using System.Text.Json;
 
 // Serialize
 string json = JsonSerializer.Serialize(person);
-string json = JsonSerializer.Serialize(person, options);
+string withOptions = JsonSerializer.Serialize(person, options);
 
 // Deserialize
-Person p = JsonSerializer.Deserialize<Person>(json);
-Person p = JsonSerializer.Deserialize<Person>(json, options);
+Person? p = JsonSerializer.Deserialize<Person>(json);
+Person? p2 = JsonSerializer.Deserialize<Person>(json, options);
 ```
 
 ### ToonNet API (Same Pattern)
@@ -28,26 +28,26 @@ using ToonNet.Extensions.Json;  // For JSON conversion methods
 
 // Serialize to TOON
 string toon = ToonSerializer.Serialize(person);
-string toon = ToonSerializer.Serialize(person, options);
+string withOptions = ToonSerializer.Serialize(person, options);
 
 // Deserialize from TOON
-Person p = ToonSerializer.Deserialize<Person>(toon);
-Person p = ToonSerializer.Deserialize<Person>(toon, options);
+Person? p = ToonSerializer.Deserialize<Person>(toon);
+Person? p2 = ToonSerializer.Deserialize<Person>(toon, options);
 
 // UTF-8, as JsonSerializer.SerializeToUtf8Bytes and Deserialize(ReadOnlySpan<byte>)
 byte[] utf8 = ToonSerializer.SerializeToUtf8Bytes(person);
-Person p = ToonSerializer.Deserialize<Person>(utf8);
+Person? p3 = ToonSerializer.Deserialize<Person>(utf8);
 
 // JSON ↔ TOON conversion (ToonNet.Extensions.Json package)
-string toon = ToonConvert.FromJson(jsonString);  // JSON → TOON
-string json = ToonConvert.ToJson(toonString);    // TOON → JSON
+string fromJson = ToonConvert.FromJson(jsonString);  // JSON → TOON
+string json = ToonConvert.ToJson(toonString);        // TOON → JSON
 ```
 
 ---
 
-## ✅ **Complete API Reference**
+## Common Operations
 
-### 1. **C# Object → TOON** (Standard Serialization)
+### 1. C# Object → TOON (Standard Serialization)
 ```csharp
 var person = new Person { Name = "John", Age = 30 };
 string toon = ToonSerializer.Serialize(person);
@@ -57,10 +57,10 @@ string toon = ToonSerializer.Serialize(person);
 // Age: 30
 ```
 
-### 2. **TOON → C# Object** (Standard Deserialization)
+### 2. TOON → C# Object (Standard Deserialization)
 ```csharp
 string toon = "Name: John\nAge: 30";
-var person = ToonSerializer.Deserialize<Person>(toon);
+var person = ToonSerializer.Deserialize<Person>(toon)!;
 
 Console.WriteLine(person.Name); // "John"
 Console.WriteLine(person.Age);  // 30
@@ -75,7 +75,7 @@ var fromStream = ToonSerializer.Deserialize<Person>(stream);    // read to the e
 ToonSerializer.Serialize(pipeWriter, person);                   // IBufferWriter<byte>
 ```
 
-### 3. **JSON String → TOON String**
+### 3. JSON String → TOON String
 ```csharp
 string json = """{"name": "John", "age": 30}""";
 string toon = ToonConvert.FromJson(json);
@@ -85,7 +85,7 @@ string toon = ToonConvert.FromJson(json);
 // age: 30
 ```
 
-### 4. **TOON String → JSON String**
+### 4. TOON String → JSON String
 ```csharp
 string toon = "name: John\nage: 30";
 string json = ToonConvert.ToJson(toon);
@@ -93,7 +93,7 @@ string json = ToonConvert.ToJson(toon);
 // Output: {"name":"John","age":30}
 ```
 
-### 5. **JSON String → C# Object**
+### 5. JSON String → C# Object
 ```csharp
 string json = """{"Name": "John", "Age": 30}""";
 
@@ -104,7 +104,7 @@ var person = ToonConvert.DeserializeFromJson<Person>(json);
 var person2 = ToonConvert.ParseJson<Person>(json);
 ```
 
-### 6. **C# Object → JSON String**
+### 6. C# Object → JSON String
 ```csharp
 var person = new Person { Name = "John", Age = 30 };
 string json = ToonConvert.SerializeToJson(person);   // System.Text.Json, indented by default
@@ -118,7 +118,7 @@ string json = ToonConvert.SerializeToJson(person);   // System.Text.Json, indent
 
 ---
 
-## 🔥 **Real-World Examples**
+## Real-World Examples
 
 ### Example 1: API Response (JSON → TOON)
 ```csharp
@@ -128,8 +128,8 @@ var response = await httpClient.GetStringAsync("https://api.example.com/users/12
 // Convert to TOON format (more readable for logs/debugging)
 string toonLog = ToonConvert.FromJson(response);
 
-// Log it
-logger.LogInformation($"User data:\n{toonLog}");
+// Log it (a message template, not an interpolated string)
+logger.LogInformation("User data:\n{User}", toonLog);
 
 // Output in logs:
 // User data:
@@ -147,9 +147,11 @@ string toonConfig = await File.ReadAllTextAsync("appsettings.toon");
 // Convert to JSON for System.Text.Json consumers
 string jsonConfig = ToonConvert.ToJson(toonConfig);
 
-// Now you can use it with IConfiguration, etc.
 var config = JsonSerializer.Deserialize<AppSettings>(jsonConfig);
 ```
+
+For `IConfiguration`, read the TOON file directly with `builder.Configuration.AddToonFile("appsettings.toon")` (the
+configuration provider of `ToonNet.AspNetCore`).
 
 ### Example 3: Data Migration
 ```csharp
@@ -174,7 +176,7 @@ foreach (var jsonFile in jsonFiles)
 
 ### Example 4: Webhook Logging
 ```csharp
-app.MapPost("/webhook", async (HttpRequest request) =>
+app.MapPost("/webhook", async (HttpRequest request, ILogger<Program> logger) =>
 {
     // Read JSON payload
     using var reader = new StreamReader(request.Body);
@@ -183,8 +185,8 @@ app.MapPost("/webhook", async (HttpRequest request) =>
     // Convert to TOON for readable logs
     string toonPayload = ToonConvert.FromJson(jsonPayload);
     
-    // Log (TOON is more readable than JSON in logs!)
-    logger.LogInformation($"Webhook received:\n{toonPayload}");
+    // Log it; payloads can hold personal data (emails, names): log only what your privacy rules allow
+    logger.LogInformation("Webhook received:\n{Payload}", toonPayload);
     
     return Results.Ok();
 });
@@ -192,7 +194,7 @@ app.MapPost("/webhook", async (HttpRequest request) =>
 
 ---
 
-## 📦 **Package Installation**
+## Package Installation
 
 ```bash
 dotnet add package ToonNet.Core
@@ -203,36 +205,27 @@ dotnet add package ToonNet.Extensions.Json   # for ToonConvert (JSON ↔ TOON)
 
 ---
 
-## 🎯 **API Design Principles**
+## Which API to Use
 
-### ✅ **DO: Like System.Text.Json**
-```csharp
-// ✅ Familiar, clean, simple
-string toon = ToonConvert.FromJson(json);
-string json = ToonConvert.ToJson(toon);
-```
+`ToonConvert` converts between JSON and TOON text in one call, as `JsonSerializer` does between objects and JSON.
+When you need the tree in between (to change it, query it or write it with other options), use the lower-level types
+`ToonConvert` is built on:
 
-### ❌ **DON'T: Unfamiliar patterns**
 ```csharp
-// ❌ AVOID: Complex, unfamiliar
-var doc = ToonJsonConverter.FromJson(json);  // What is ToonDocument?
-var encoder = new ToonEncoder();              // Why do I need this?
-string toon = encoder.Encode(doc);           // Encode? Not Serialize?
+using ToonNet.Core.Encoding;
+using ToonNet.Extensions.Json;
+
+string toon = ToonConvert.FromJson(json);           // text to text
+string json2 = ToonConvert.ToJson(toon);
+
+var document = ToonJsonConverter.FromJson(json);    // a ToonDocument
+document.Root.RemoveAll("$..password");
+string trimmed = new ToonEncoder().Encode(document);
 ```
 
 ---
 
-## 💡 **Why This Matters**
-
-**Impact:**
-- ⏱️ **Short learning curve** - if you know System.Text.Json, the method names will be familiar
-- 🚀 **Faster adoption** - developers feel at home immediately
-- 📖 **Less documentation needed** - API is self-explanatory
-- 🐛 **Fewer errors** - familiar patterns = fewer mistakes
-
----
-
-## 🔄 **Complete Conversion Matrix**
+## Conversion Matrix
 
 | From | To | Method | Example |
 |------|-----|--------|---------|
@@ -246,7 +239,7 @@ string toon = encoder.Encode(doc);           // Encode? Not Serialize?
 
 ---
 
-## 🔄 **Async & Streaming Serialization**
+## Async and Streaming Serialization
 
 For large datasets (millions of records, database exports, ETL pipelines), ToonNet provides memory-efficient streaming serialization:
 
@@ -312,11 +305,77 @@ await foreach (var user in ToonSerializer.DeserializeAsyncEnumerable<User>(strea
 The root must be an array: an array under a key (`users[200000]{id,name}:`) is an object and throws a
 `ToonSerializationException`. Errors and line numbers are those of reading the whole document.
 
+### An Array Inside a Document
+
+`DeserializeAsyncEnumerableAt` streams the items of an array at a path of member names, such as the rows of a
+response envelope; the stream is read no further than the end of the array:
+
+```csharp
+await foreach (var order in ToonSerializer.DeserializeAsyncEnumerableAt<Order>(response, "$.data.orders"))
+{
+    Process(order);
+}
+```
+
+---
+
+## Querying, Editing and Language Models
+
+### JSONPath (RFC 9535)
+
+```csharp
+using ToonNet.Core.Models;
+using ToonNet.Core.Paths;
+using ToonNet.Core.Serialization;
+
+var root = ToonDocument.Parse(toon).Root;
+var ids = root.Select("$.orders[?@.total > 100 && @.paid == true].id");   // on a tree
+var fromText = ToonPath.Parse("$.orders[?@.total > 100]").SelectFrom(toon); // straight from text, building only the matches
+
+var orders = ToonSerializer.DeserializeAt<List<Order>>(toon, "$.data.orders");      // one value, the rest skipped
+var big = ToonSerializer.DeserializeAll<Order>(toon, "$.data.orders[?@.total > 100]"); // every match, into objects
+```
+
+Like `JsonNode`, values have indexers, `GetValue<T>()`, `DeepClone()` and `ToonValue.DeepEquals`; paths set and remove
+values (`root.SetValue("$.meta.by", "x")`, `root.RemoveAll("$.users[?@.active == false]")`), and `ToonMergePatch`
+applies and creates JSON Merge Patches (RFC 7386).
+
+`ToonSerializer.Deserialize<T>(ToonDocumentReader reader)` reads the value a reader is on, as `JsonSerializer` reads
+from a `Utf8JsonReader`.
+
+### Functions and Rules
+
+Filters can call ToonNet functions besides the standard five: `starts_with`, `ends_with`, `contains` (strings and
+arrays), `equals_ignore_case`, `lower`, `upper`, `trim`, `type`, `sum`, `min`, `max`, `avg`; register your own with
+`ToonPathFunctions` in `ToonPathOptions.Functions` (`StandardFunctionsOnly` keeps paths portable).
+
+```csharp
+using ToonNet.Core.Validation;
+
+var rules = new ToonRuleSet()
+    .Rule("$.orders[*]", "sum(@.lines[*].price) == @.total", "The lines do not add up")
+    .Unique("$.orders[*].id", "Order id {value} repeats");
+
+rules.Validate(toon).ThrowIfInvalid();   // ToonRuleException with the path of each violation
+```
+
+### Prompts and Answers
+
+```csharp
+using ToonNet.Core.Llm;
+
+var context = ToonPrompt.Serialize(orders, new ToonPromptOptions { MaxArrayItems = 50 }); // shortened, "# 380 more items"
+var shape = ToonPrompt.DescribeShape<Summary>();       // a TOON template of the answer
+var summary = ToonPrompt.Deserialize<Summary>(answer); // the ```toon block of the answer, in non-strict mode
+```
+
+See [Querying](core-features/querying), [Rules and Validation](core-features/validation), [Editing Trees](core-features/editing) and [Language Models](core-features/language-models) for details.
+
 ### Use Cases
 
 | Use Case | Description |
 |----------|-------------|
-| **Database Exports** | Stream large result sets (`IAsyncEnumerable<T>`) to a file without materialising them |
+| **Database Exports** | Stream large result sets (`IAsyncEnumerable<T>`) to a file without materializing them |
 | **ETL Pipelines** | Process large files one document at a time |
 | **Log Processing** | Read multi-document TOON files incrementally |
 | **Data Migration** | Convert large datasets with cancellable operations |
@@ -368,62 +427,46 @@ IAsyncEnumerable<T?> DeserializeAsyncEnumerable<T>(
 
 ---
 
-## ✨ **Summary**
-
-**ToonNet provides a System.Text.Json-style API:**
-
-✅ **Familiar** - Same patterns as System.Text.Json  
-✅ **Simple** - One class (`ToonSerializer`), clear methods  
-✅ **Powerful** - Full C# ↔ TOON ↔ JSON support  
-✅ **Developer-Friendly** - Familiar method names  
-
-**The API you expect:**
-```csharp
-using ToonNet.Core.Serialization;
-using ToonNet.Extensions.Json;
-
-// Just like JsonSerializer!
-string toon = ToonConvert.FromJson(json);
-string json = ToonConvert.ToJson(toon);
-var obj = ToonSerializer.Deserialize<Person>(toon);
-```
-
-**No surprises. No confusion. Just works.** 🚀
-
----
-
-## ⚠️ **IMPORTANT: Roundtrip Guarantees & Semantic Equivalence**
+## Round-Trip Guarantees
 
 ### Understanding Roundtrip Behavior
 
-ToonNet provides **two types of roundtrip guarantees** depending on your use case:
+ToonNet gives two kinds of round-trip guarantees, depending on the use case:
 
-#### 1️⃣ **Type-Safe Roundtrip** (Strongly-Typed) - ✅ VALUE PRESERVATION
+#### Strongly Typed Round Trips Preserve Values
 
 When using **strongly-typed serialization** with C# classes, **property values are preserved**:
 
 ```csharp
 // Original object
-var order = new Order 
-{ 
+var order = new Order
+{
     OrderId = "ORD-123",
     Discount = 35.00m,  // decimal
     Total = 100.50m
 };
 
-// Roundtrip through TOON
+// Round trip through TOON
 string toon = ToonSerializer.Serialize(order);
-var order2 = ToonSerializer.Deserialize<Order>(toon);
+var order2 = ToonSerializer.Deserialize<Order>(toon)!;
 
-// ✅ Values match: the TOON text contains "Discount: 35", which reads back as 35m
+// Values match: the TOON text contains "Discount: 35", which reads back as 35m
 Assert.Equal(35.00m, order2.Discount);  // decimal equality ignores the scale (35.00m == 35m)
+
+public record Order
+{
+    public string OrderId { get; init; } = "";
+    public decimal Discount { get; init; }
+    public decimal Total { get; init; }
+    public string Status { get; init; } = "";
+}
 ```
 
 **Guarantee**: If you serialize a C# object to TOON and deserialize back to the same type, the property values are equal to the originals. Numbers are written in canonical form, so a `decimal`'s scale (trailing zeros such as `35.00`) is not kept, and `long`/`decimal` values are read back exactly.
 
 ---
 
-#### 2️⃣ **Format Conversion** (Loosely-Typed) - ⚠️ SEMANTIC EQUIVALENCE
+#### Format Conversion Preserves Meaning
 
 When using **format conversion** between JSON/TOON strings, **semantic equivalence is guaranteed, but format details may change**:
 
@@ -454,9 +497,7 @@ string json2 = ToonConvert.ToJson(toon);    // {"discount":35}
 
 ---
 
-### Why This Matters
-
-**How this compares with JSON DOM round-trips:**
+### Compared With JSON Libraries
 
 | Library | Decimal Format | Whitespace | Property Order |
 |---------|----------------|------------|----------------|
@@ -469,24 +510,24 @@ string json2 = ToonConvert.ToJson(toon);    // {"discount":35}
 string json1 = @"{ ""value"": 35.00 }";
 var obj = JsonSerializer.Deserialize<JsonElement>(json1);
 string json2 = JsonSerializer.Serialize(obj);
-// Result: {"value":35.00}  ← JsonElement keeps the original number text; ToonNet normalises it
+// Result: {"value":35.00}  ← JsonElement keeps the original number text; ToonNet normalizes it
 ```
 
 ---
 
 ### Best Practices
 
-#### ✅ **Use Type-Safe Serialization for Production**
+#### Use Typed Serialization for Application Data
 
 ```csharp
-// ✅ RECOMMENDED: Exact roundtrip guaranteed
-var order = ToonSerializer.Deserialize<Order>(toonString);
+// Recommended: values round-trip exactly (Order is the record above)
+var order = ToonSerializer.Deserialize<Order>(toonString)!;
 var modified = order with { Status = "Shipped" };
 string toon = ToonSerializer.Serialize(modified);
 // Values preserved (Discount reads back as 35m, equal to 35.00m)
 ```
 
-#### ⚠️ **Use Format Conversion for Data Exchange**
+#### Use Format Conversion for Data Exchange
 
 ```csharp
 // ⚠️ USE CASE: Converting between formats (files, APIs)
@@ -496,7 +537,7 @@ await File.WriteAllTextAsync("order.toon", toon);
 // Data preserved, format details may change (this is OK for data exchange)
 ```
 
-#### 🚫 **Don't Use String Comparison for Validation**
+#### Compare Values, Not Text
 
 ```csharp
 // ❌ BAD: String comparison will fail due to format differences
@@ -529,7 +570,7 @@ JSON consumers that read numbers by value treat `35.00` and `35` as the same num
 
 ---
 
-## 🔧 **Manual Object Construction (Advanced)**
+## Building Trees in Code
 
 Just like `System.Text.Json` allows manual creation of `JsonDocument`, `JsonElement`, and `JsonObject`, ToonNet allows you to manually construct `ToonObject`, `ToonArray`, and other `ToonValue` types.
 
@@ -576,7 +617,7 @@ string toon = encoder.Encode(new ToonDocument(toonObject));
 
 ### Complete Manual Construction Examples
 
-#### 1️⃣ **Creating a Simple Object**
+#### A Simple Object
 
 ```csharp
 // Create a user object with implicit conversions
@@ -603,7 +644,7 @@ Console.WriteLine(toon);
 
 > **Note:** You can also use explicit construction if preferred: `["name"] = new ToonString("Alice")`, but implicit conversions make code cleaner.
 
-#### 2️⃣ **Creating Nested Objects**
+#### Nested Objects
 
 ```csharp
 // Create nested objects with implicit conversions
@@ -635,7 +676,7 @@ Console.WriteLine(toon);
 //   zipCode: "10001"   (quoted: an unquoted 10001 would read back as a number)
 ```
 
-#### 3️⃣ **Creating Arrays**
+#### Arrays
 
 ```csharp
 // Create an array with implicit conversions
@@ -653,7 +694,7 @@ Console.WriteLine(toon);
 // [3]: 10,20,30
 ```
 
-#### 4️⃣ **Creating Arrays of Objects**
+#### Arrays of Objects
 
 ```csharp
 // Create an array of objects with implicit conversions
@@ -691,7 +732,7 @@ Console.WriteLine(toon);
 //   Charlie,35
 ```
 
-#### 5️⃣ **Complex Nested Structure**
+#### A Nested Structure
 
 ```csharp
 // Create a complex order object with implicit conversions
@@ -725,8 +766,8 @@ var order = new ToonObject
     ["isPaid"] = true
 };
 
-// For null values, use ToonNull.Instance explicitly
-order["notes"] = ToonNull.Instance;
+// The indexer stores null as ToonNull.Instance
+order["notes"] = null;
 
 var document = new ToonDocument(order);
 var encoder = new ToonEncoder();
@@ -752,7 +793,7 @@ Console.WriteLine(toon);
 
 | Type | Constructor | Implicit Conversion | Example |
 |------|------------|---------------------|---------|
-| **ToonNull** | `ToonNull.Instance` | ❌ (use explicit) | `ToonNull.Instance` |
+| **ToonNull** | `ToonNull.Instance` | `null` through the indexers | `obj["key"] = null` |
 | **ToonBoolean** | `new ToonBoolean(bool)` | ✅ `bool` | `true` → `ToonBoolean` |
 | **ToonNumber** | `new ToonNumber(double)` (also `float`, `long`, `ulong`, `decimal`) | ✅ `int`, `long`, `float`, `double`, `decimal` | `42` → `ToonNumber` |
 | **ToonString** | `new ToonString(string)` | ✅ `string` (non-null) | `"Hello"` → `ToonString` |
@@ -763,7 +804,7 @@ Console.WriteLine(toon);
 
 ---
 
-### When to Use Manual Construction?
+### When to Build Trees in Code
 
 ✅ **Use manual construction when:**
 - Building TOON documents dynamically from non-C# sources
@@ -788,23 +829,31 @@ Console.WriteLine(toon);
 | **Add String** | `obj["key"] = "value"` | `obj["key"] = "value"` | `obj["key"] = new ToonString("value")` |
 | **Add Number** | `obj["key"] = 42` | `obj["key"] = 42` | `obj["key"] = new ToonNumber(42)` |
 | **Add Boolean** | `obj["key"] = true` | `obj["key"] = true` | `obj["key"] = new ToonBoolean(true)` |
-| **Add Null** | `obj["key"] = null` | `obj["key"] = ToonNull.Instance` | `obj["key"] = ToonNull.Instance` |
+| **Add Null** | `obj["key"] = null` | `obj["key"] = null` | `obj["key"] = ToonNull.Instance` |
 | **Create Array** | `new JsonArray()` | `new ToonArray()` | `new ToonArray()` |
 | **Add Item** | `array.Add(42)` | `array.Add(42)` | `array.Add(new ToonNumber(42))` |
 | **Encode** | `obj.ToJsonString()` | `encoder.Encode(new ToonDocument(obj))` | Same |
 
-**Result:** ToonNet supports both implicit conversions (like System.Text.Json) and explicit construction.
+ToonNet supports both implicit conversions (like System.Text.Json) and explicit construction.
+
+### Encoding a Tree
+
+`ToonEncoder` (namespace `ToonNet.Core.Encoding`, created with optional `ToonOptions`) writes a `ToonDocument`:
+
+| Method | Writes |
+|--------|--------|
+| `Encode(document)` | A string |
+| `EncodeToUtf8Bytes(document)` | UTF-8 bytes, without a byte order mark |
+| `Encode(document, IBufferWriter<byte>)` | UTF-8 to a buffer writer (a `PipeWriter`, an `ArrayBufferWriter<byte>`) |
+| `EncodeAsync(document, ct)` | A string, asynchronously |
+| `EncodeToStreamAsync(document, stream, ct)` | UTF-8 to a stream, in chunks through pooled buffers |
+| `EncodeToFileAsync(document, filePath, ct)` | UTF-8 to a file, written after the encoding succeeded |
+
+An instance keeps no per-call state; `AddToonNet` registers one as a singleton.
 
 ---
 
-## 🔒 Thread-Safety Notes
+## Thread-Safety
 
-- `ToonSerializer` methods are safe to call concurrently across threads.
-- A `ToonEncoder` instance keeps no per-call state and can be shared across threads (it is registered as a singleton by `AddToonNet`).
-- Shared metadata/name caches use `ConcurrentDictionary` for concurrent access.
-- Cache entries are created on demand and retained for the process lifetime (no eviction).
-- Do not mutate a single `ToonSerializerOptions` instance concurrently across threads.
+`ToonSerializer` and a shared `ToonEncoder` are safe to use from several threads; see [Configuration](core-features/configuration#thread-safety) for the caches and options.
 
----
-
-**No surprises. No confusion. Just works.** 🚀

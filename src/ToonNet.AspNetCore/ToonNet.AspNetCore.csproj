@@ -12,10 +12,12 @@
         
         <!-- Package Information -->
         <PackageId>ToonNet.AspNetCore</PackageId>
-        <Version>3.3.0</Version>
+        <Version>4.0.0</Version>
+        <Title>ToonNet ASP.NET Core</Title>
         <Description>ASP.NET Core integration for ToonNet. Provides dependency injection registration (AddToonNet) and a TOON configuration provider (AddToonFile).</Description>
         <PackageTags>toon;aspnetcore;configuration;di</PackageTags>
         <PackageReleaseNotes>See https://github.com/selcukgural/ToonNet/blob/master/CHANGELOG.md</PackageReleaseNotes>
+        <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
 
     <ItemGroup>
@@ -28,13 +30,11 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.2" />
         <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="8.0.1" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
         <PackageReference Include="Microsoft.Extensions.FileProviders.Abstractions" Version="8.0.0" />
         <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="8.0.0" />
     </ItemGroup>
 
 </Project>

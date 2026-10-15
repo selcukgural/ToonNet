@@ -74,6 +74,11 @@ public abstract class ToonObjectWriter
     /// </summary>
     public abstract bool IsReadOnlyProperty(int index);
 
+    /// <summary>
+    ///     The declared type of a property, which values are written as; null in code from generators before ToonNet 4.0.
+    /// </summary>
+    public virtual Type? GetPropertyType(int index) => null;
+
     internal abstract object? GetValueOf(object value, int index);
 
     /// <summary>

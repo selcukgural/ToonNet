@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ToonNet.Core.Serialization.Attributes;
 
 /// <summary>
@@ -9,6 +11,19 @@ namespace ToonNet.Core.Serialization.Attributes;
 /// </remarks>
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class ToonIgnoreAttribute : Attribute;
+
+/// <summary>
+/// Lets reading set a property through its non-public setter (<c>private set</c>, <c>protected set</c>,
+/// <c>internal set</c>), as System.Text.Json's <c>[JsonInclude]</c> does.
+/// </summary>
+/// <remarks>
+/// Without it, reading sets only public setters (<c>set</c> and <c>init</c>): a non-public setter usually means the
+/// property is not for callers to set, and a document from a client must not set what the code keeps for itself
+/// (<c>IsAdmin { get; private set; }</c>). A property with only a non-public setter is then read-only, as for
+/// <see cref="ToonSerializerOptions.IncludeReadOnlyProperties"/>.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class ToonIncludeAttribute : Attribute;
 
 /// <summary>
 /// Specifies a custom name for a property in TOON format.
@@ -66,11 +81,13 @@ public sealed class ToonPropertyOrderAttribute(int order) : Attribute
 /// enabling custom serialization and deserialization logic.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Class | AttributeTargets.Struct)]
-public sealed class ToonConverterAttribute(Type converterType) : Attribute
+public sealed class ToonConverterAttribute([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type converterType)
+    : Attribute
 {
     /// <summary>
     /// Gets the type of the custom converter specified for the property or type.
     /// </summary>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public Type ConverterType { get; } = converterType ?? throw new ArgumentNullException(nameof(converterType));
 }
 

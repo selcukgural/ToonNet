@@ -367,3 +367,11 @@ website/yarn-error.log
 
 # BenchmarkDotNet output
 **/BenchmarkDotNet.Artifacts/
+
+# Secrets and keys
+.env
+.env.*
+*.snk
+*.pem
+*.pfx
+*.key

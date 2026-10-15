@@ -118,7 +118,7 @@ using ToonNet.Extensions.Json;
 
 // JSON string → ToonDocument (options: MaxDepth, and StrictMode for duplicate keys)
 ToonDocument doc = ToonJsonConverter.FromJson(jsonString);
-ToonDocument doc = ToonJsonConverter.FromJson(jsonString, new ToonOptions { StrictMode = false });
+ToonDocument doc = ToonJsonConverter.FromJson(jsonString, new ToonOptions { StrictMode = false });  // last duplicate wins; trusted JSON only
 
 // JsonElement → ToonDocument
 ToonDocument doc = ToonJsonConverter.FromJson(jsonElement);

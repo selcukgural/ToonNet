@@ -152,9 +152,26 @@ public class ToonSerializerEdgeTypeTests
     [Fact]
     public void CollectionTarget_ThatCannotBeCreated_Throws()
     {
-        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<ReadOnlyCollection<int>>("[1]: 1"));
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<ArraySegment<int>>("[1]: 1"));
 
-        Assert.Contains("Cannot create a collection of type ReadOnlyCollection", ex.Message);
+        Assert.Contains("Cannot create a collection of type ArraySegment", ex.Message);
+    }
+
+    [Fact]
+    public void ReadOnlyFrozenAndImmutableInterfaceCollections_RoundTrip()
+    {
+        Assert.Equal([1, 2], ToonSerializer.Deserialize<ReadOnlyCollection<int>>(ToonSerializer.Serialize(new ReadOnlyCollection<int>([1, 2])))!);
+        Assert.Equal([1, 2], ToonSerializer.Deserialize<System.Collections.Frozen.FrozenSet<int>>("[2]: 1,2")!.Order());
+
+        var frozen = ToonSerializer.Deserialize<System.Collections.Frozen.FrozenDictionary<string, int>>("a: 1\nb: 2")!;
+        Assert.Equal(2, frozen["b"]);
+
+        var immutable = ToonSerializer.Deserialize<System.Collections.Immutable.IImmutableDictionary<string, int>>("a: 1")!;
+        Assert.Equal(1, immutable["a"]);
+        Assert.Equal("a: 1", ToonSerializer.Serialize(immutable));
+
+        var readOnly = ToonSerializer.Deserialize<IReadOnlyDictionary<string, int>>("a: 1")!;
+        Assert.Equal(1, readOnly["a"]);
     }
 
     [Theory]
@@ -197,7 +214,9 @@ public class ToonSerializerEdgeTypeTests
         var parameterized = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<ThrowingRecord>("Name: x"));
 
         Assert.IsType<InvalidOperationException>(parameterless.InnerException);
-        Assert.Contains("The constructor of ThrowingConstructor threw: boom", parameterless.Message);
+        Assert.Contains("The constructor of ThrowingConstructor threw", parameterless.Message);
+        Assert.DoesNotContain("boom", parameterless.Message); // the constructor's text can reach clients through error responses
+        Assert.Equal("boom", parameterless.InnerException!.Message);
         Assert.IsType<ArgumentException>(parameterized.InnerException);
         Assert.Contains("The constructor of ThrowingRecord threw", parameterized.Message);
     }

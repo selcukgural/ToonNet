@@ -80,7 +80,9 @@ string yaml = ToonYamlConverter.ToYaml(doc);
 - Nesting deeper than `ToonOptions.MaxDepth` (default 100) throws a `YamlException`.
   Pass options to change it: `ToonYamlConverter.FromYaml(yaml, new ToonOptions { MaxDepth = 50 })`.
 - Aliases (`*anchor`) are expanded into copies. Input whose aliases expand to more than
-  `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes throws a `YamlException`.
+  `ToonYamlConverter.MaxAliasExpansionNodes` (100,000) nodes, or copy more than
+  `ToonYamlConverter.MaxAliasExpansionChars` characters (1,000,000, or ten times the length of the YAML when that is
+  more), throws a `YamlException`, so a small document cannot expand into a huge string.
 - The nesting limit counts the expanded aliases too, and an alias inside the node its anchor marks (a recursive
   structure such as `&a [*a]`) throws a `YamlException`.
 
@@ -153,14 +155,21 @@ foreach (var service in services.Properties)
 - Only the first document of a multi-document YAML stream (`---`) is converted.
 - Mapping keys must be scalars: a sequence or mapping used as a key throws a `YamlException`. An empty key is kept as
   the TOON key `""`.
+- Duplicate keys in a mapping throw a `YamlException`, also keys that differ only in their tag (`a` and `!!str a`).
 - Merge keys (`<<: *base`) are not expanded; `<<` stays an ordinary key.
-- Quoted and block scalars (and scalars tagged `!!str`) are always strings (`"42"` stays a string). Plain scalars are
+- Quoted and block scalars (and scalars tagged `!!str`) are strings (`"42"` stays a string), unless an explicit
+  core-schema tag says otherwise (`!!int "42"` is 42; a value that does not fit its tag, such as `!!int 1.5` or
+  `!!null foo`, is a `YamlException`). Plain scalars are
   typed by the YAML 1.2 core schema: `true`/`false` (lowercase, capitalized or uppercase), `null`/`~`/empty, integers
   (`42`, `+5`, `007` is 7, `0xFF` is 255, `0o17` is 15) and floats (`1.5`, `.5`, `1e3`), exact when they fit in a
   `decimal`. Everything else is a string, including the YAML 1.1 booleans `yes`/`no`/`on`/`off` and `.inf`/`.nan`,
   which a TOON number cannot hold.
 - `ToonYamlConvert.ToYaml` quotes strings that YAML would otherwise read as another type (also `yes`/`no`/`on`/`off`,
-  for YAML 1.1 readers), so conversions round-trip, and accepts `ToonOptions` for parsing the TOON input.
+  `2001-12-14`, `12:30:00`, `0b101`, `1_000`, `<<`, `=` and text that starts with a byte order mark, for YAML 1.1
+  readers), so conversions round-trip, and accepts `ToonOptions` for parsing the TOON input. Strings with a carriage
+  return or a YAML 1.1 line break (NEL, U+2028, U+2029) are double-quoted, so they keep those characters. Values nested
+  deeper than 200 levels (the most `MaxDepth` allows without extended limits) throw a `YamlException`, and the YAML
+  ends with a line feed.
 - Anchors and aliases are expanded into copies; comments are not preserved.
 
 ## Use Cases
@@ -174,4 +183,4 @@ foreach (var service in services.Properties)
 ## See Also
 
 - **[JSON Integration](json-integration)**: Convert JSON ↔ TOON
-- **[Custom Formats](custom-formats)**: Create custom converters
+- **[Converter Examples](custom-formats)**: Converters for types with their own text form

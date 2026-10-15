@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using ToonNet.Core;
 using ToonNet.Core.Encoding;
@@ -15,6 +16,12 @@ namespace ToonNet.Extensions.Json;
 /// </remarks>
 public static class ToonConvert
 {
+    private const string JsonReflectionMessage =
+        "System.Text.Json converts .NET types with reflection here, which trimming and NativeAOT cannot analyze. Call JsonSerializer with a JsonTypeInfo (System.Text.Json source generation) instead.";
+
+    private const string ToonReflectionMessage =
+        "This method converts .NET types with reflection, which trimming and NativeAOT cannot analyze. Use ToonJsonConverter.FromJson and ToonSerializer.DeserializeFromValue with a ToonTypeInfo ([ToonSerializable]) instead.";
+
     private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
 
     /// <summary>
@@ -31,6 +38,8 @@ public static class ToonConvert
     /// <returns>The deserialized object of type <typeparamref name="T"/>.</returns>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="jsonString"/> is null.</exception>
     /// <exception cref="JsonException">Thrown if the JSON string cannot be parsed properly.</exception>
+    [RequiresUnreferencedCode(JsonReflectionMessage)]
+    [RequiresDynamicCode(JsonReflectionMessage)]
     public static T? DeserializeFromJson<T>(string jsonString, JsonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(jsonString);
@@ -52,6 +61,8 @@ public static class ToonConvert
     /// string json = ToonConvert.SerializeToJson(person);
     /// </code>
     /// </remarks>
+    [RequiresUnreferencedCode(JsonReflectionMessage)]
+    [RequiresDynamicCode(JsonReflectionMessage)]
     public static string SerializeToJson<T>(T value, JsonSerializerOptions? options = null)
     {
         // A shared instance, so System.Text.Json caches its metadata across calls
@@ -123,6 +134,8 @@ public static class ToonConvert
     /// </code>
     /// Equivalent to <c>Deserialize&lt;T&gt;(FromJson(jsonString))</c>, without encoding the intermediate TOON text.
     /// </remarks>
+    [RequiresUnreferencedCode(ToonReflectionMessage)]
+    [RequiresDynamicCode(ToonReflectionMessage)]
     public static T? ParseJson<T>(string jsonString, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(jsonString);

@@ -52,6 +52,7 @@ public partial class CatalogItem
 
     public int TagCount => Tags.Count;
 
+    [ToonInclude]
     public int Revision { get; private set; }
 
     [ToonIgnore]
@@ -81,6 +82,7 @@ public partial class Account
 
     public string Plan { get; init; } = "free";
 
+    [ToonInclude]
     public int Logins { get; private set; }
 
     public void Login() => Logins++;
@@ -92,6 +94,7 @@ public class EntityBase
 
     public virtual string Kind { get; set; } = "base";
 
+    [ToonInclude]
     public DateTime Created { get; private set; }
 
     public void Touch(DateTime value) => Created = value;

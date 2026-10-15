@@ -142,6 +142,9 @@ string prompt = $"Analyze this data:\n{toonString}";
 ### Scenario 2: Data Import
 
 ```csharp
+using ToonNet.Core.Serialization;
+using ToonNet.Extensions.Json;
+
 // Read JSON file
 string json = File.ReadAllText("data.json");
 
@@ -159,6 +162,10 @@ File.WriteAllText("data.toon", toon);
 ### Scenario 3: Format Transformation
 
 ```csharp
+using System.Text.Json;
+using ToonNet.Core.Models;
+using ToonNet.Extensions.Json;
+
 // JSON → TOON → JSON (with formatting)
 string compactJson = """{"name":"Alice","age":30}""";
 
@@ -184,8 +191,8 @@ Console.WriteLine(prettyJson);
 | `ToonConvert.ParseJson<T>(string, ToonSerializerOptions?)` | JSON → TOON → .NET object |
 | `ToonConvert.FromJson(string, ToonOptions?)` | JSON string → TOON string |
 | `ToonConvert.ToJson(string, JsonWriterOptions?, ToonOptions?)` | TOON string → JSON string |
-| `ToonJsonConverter.FromJson(string)` | JSON string → ToonDocument |
-| `ToonJsonConverter.FromJson(JsonElement)` | JsonElement → ToonDocument |
+| `ToonJsonConverter.FromJson(string)`, `FromJson(string, ToonOptions?)` | JSON string → ToonDocument |
+| `ToonJsonConverter.FromJson(JsonElement)`, `FromJson(JsonElement, ToonOptions?)` | JsonElement → ToonDocument |
 | `ToonJsonConverter.ToJson(ToonDocument, JsonWriterOptions?)` | ToonDocument → JSON string |
 | `ToonJsonConverter.ToJson(ToonValue, JsonWriterOptions?)` | ToonValue → JSON string |
 
@@ -194,9 +201,13 @@ Console.WriteLine(prettyJson);
 - JSON numbers keep their exact value when it fits in a `decimal` (`12345678901234567890` and `1299.99` round-trip
   unchanged); other magnitudes use the nearest `double`, and a number that is not finite as a `double` (`1e400`) is
   kept as a string. Numbers are written in canonical form as TOON spec §2 requires: `35.00` becomes `35`.
-- `FromJson` limits nesting with `ToonOptions.MaxDepth` (default 100; the root is at depth 0, as in TOON), accepts
-  comments and trailing commas (as in `appsettings.json`), and rejects duplicate keys with a `JsonException` in strict
-  mode (the default); with `StrictMode = false` the last value wins.
+- `FromJson` limits nesting with `ToonOptions.MaxDepth` (default 100; the root is at depth 0, as in TOON; a
+  `JsonElement` too), accepts comments and trailing commas (as in `appsettings.json`), and rejects duplicate keys with a
+  `JsonException` in strict mode (the default); with `StrictMode = false` the last value wins. Every error is a
+  `JsonException` (or a type derived from it): too deep, invalid JSON, a duplicate key, or a string or key with an
+  unpaired surrogate escape (`"\uD800"`).
+- `ToJson` writes trees as deep as TOON allows (1,000 levels below the root); a deeper tree built in code, or one
+  deeper than the `MaxDepth` of the `JsonWriterOptions` you pass, throws `InvalidOperationException`.
 - `ToJson` writes non-ASCII text as is (`"Çağrı"`, not `"\u00C7a\u011Fr\u0131"`); HTML-sensitive characters such as
   `<` stay escaped. Pass your own `JsonWriterOptions` to change the encoder or indentation.
 - `ToonConvert.ToJson` parses TOON with the default `ToonOptions` (strict mode); pass `toonOptions:` to change that.
@@ -212,4 +223,4 @@ Console.WriteLine(prettyJson);
 ## See Also
 
 - **[YAML Integration](yaml-integration)**: Convert YAML ↔ TOON
-- **[Custom Formats](custom-formats)**: Create custom converters
+- **[Converter Examples](custom-formats)**: Converters for types with their own text form

@@ -255,6 +255,48 @@ public static partial class ToonSerializer
 
     #endregion
 
+    /// <summary>
+    ///     Converts a <see cref="ToonValue"/> to an object with the type info of its type, without reflection, for example a
+    ///     value taken from a parsed <see cref="ToonDocument"/>.
+    /// </summary>
+    /// <typeparam name="T">The type to convert to.</typeparam>
+    /// <param name="value">The TOON value to convert.</param>
+    /// <param name="typeInfo">The type info, such as the <c>ToonTypeInfo</c> property of a <c>[ToonSerializable]</c> type.</param>
+    /// <param name="options">Optional deserialization options.</param>
+    /// <returns>The converted object, or null for <see cref="ToonNull"/> and nullable targets.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the value or type info is null.</exception>
+    /// <exception cref="NotSupportedException">
+    ///     Thrown when generated code cannot create <typeparamref name="T"/>, or the options need a newer generator.
+    /// </exception>
+    /// <exception cref="ToonSerializationException">Thrown when the value cannot be converted to the target type.</exception>
+    public static T? DeserializeFromValue<T>(ToonValue value, ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        options = CheckTypeInfo(typeInfo, options);
+        CheckGeneratedReading(typeInfo, options);
+
+        var deserialize = typeInfo.Deserialize ?? throw CannotCreate<T>();
+
+        return options.Converters.Count != 0 && TryReadConverted<T>(value, options, out var converted)
+            ? converted
+            : deserialize(value, options, 0);
+    }
+
+    private static void CheckGeneratedReading<T>(ToonTypeInfo<T> typeInfo, ToonSerializerOptions options)
+    {
+        if (!options.AllowsGeneratedReading && typeInfo.FeatureLevel < 1)
+        {
+            throw new NotSupportedException(
+                $"The generated code of {typeof(T).Name} (or of a type it reaches) does not apply PropertyNameCaseInsensitive, " +
+                "UnmappedMemberHandling.Disallow or RespectRequiredMembers (true by default since ToonNet 4.0): it is from a ToonNet.SourceGenerators " +
+                "before 3.3 (rebuild with the current one), or the type has a [ToonConverter] of its own; use the overloads without a type info, " +
+                "or options with RespectRequiredMembers = false.");
+        }
+    }
+
+    private static NotSupportedException CannotCreate<T>() => new(
+        $"Generated code cannot create {typeof(T).Name}: it needs a public parameterless constructor or a constructor whose parameters match its properties.");
+
     /// <summary>Checks the arguments common to the overloads that take a type info and returns the options to use.</summary>
     private static ToonSerializerOptions CheckTypeInfo<T>(ToonTypeInfo<T> typeInfo, ToonSerializerOptions? options)
     {
@@ -313,16 +355,9 @@ public static partial class ToonSerializer
     /// </summary>
     private static T? DeserializeText<T>(ToonText text, ToonTypeInfo<T> typeInfo, ToonSerializerOptions options)
     {
-        if (!options.AllowsGeneratedReading && typeInfo.FeatureLevel < 1)
-        {
-            throw new NotSupportedException(
-                $"The generated code of {typeof(T).Name} (or of a type it reaches) does not apply PropertyNameCaseInsensitive, " +
-                "UnmappedMemberHandling.Disallow or RespectRequiredMembers: it is from an older ToonNet.SourceGenerators (rebuild with the current " +
-                "one), or the type has a [ToonConverter] of its own; use the overloads without a type info.");
-        }
+        CheckGeneratedReading(typeInfo, options);
 
-        var deserialize = typeInfo.Deserialize ?? throw new NotSupportedException(
-            $"Generated code cannot create {typeof(T).Name}: it needs a public parameterless constructor or a constructor whose parameters match its properties.");
+        var deserialize = typeInfo.Deserialize ?? throw CannotCreate<T>();
 
         // With converters, only what no converter applies to is read straight from the text
         if (typeInfo.Read != null && (GetConverterCheck(options) is not { } check || typeInfo.ConvertsDirectly(check)))

@@ -489,7 +489,7 @@ public static partial class ToonSerializer
                 case DirectKind.Collection:
                     _writer.StartLine(0);
                     _writer.Nesting = -1; // the root array is at depth 0, like the root object
-                    WriteCollection(null, (IEnumerable)value!, 1, ToonArrayPosition.Root, 0);
+                    WriteCollection(null, (IEnumerable)value!, type, 1, ToonArrayPosition.Root, 0);
                     break;
                 default:
                     _tree.WriteRoot(ToTree(value, type, null, 0) ?? ToonNull.Instance);
@@ -518,17 +518,20 @@ public static partial class ToonSerializer
                 return DirectKind.Tree;
             }
 
+            // An object is written as the type it is declared as (unless the options say otherwise)
+            var writtenType = runtimeType == declaredType ? runtimeType : WrittenType(declaredType, runtimeType, _options);
+
             if (_generatedOnly)
             {
                 // A converter writes the value through its tree, and so does generated code that would not consult one
                 // it should (the generated tree-based method does)
                 if (_hasConverters && (IsDeclaredTypeConverted(declaredType) || IsConverted(runtimeType) ||
-                                       (FindGeneratedSerializer(runtimeType) != null && !_converterCheck!.AllowsGeneratedCode(runtimeType))))
+                                       (FindGeneratedSerializer(writtenType) != null && !_converterCheck!.AllowsGeneratedCode(writtenType))))
                 {
                     return DirectKind.Tree;
                 }
 
-                info = GetGeneratedOnlyTypeInfo(runtimeType);
+                info = GetGeneratedOnlyTypeInfo(writtenType);
                 return info.Kind;
             }
 
@@ -540,16 +543,27 @@ public static partial class ToonSerializer
                     return DirectKind.Tree;
                 }
 
-                info = converterFree;
+                if (writtenType == runtimeType)
+                {
+                    info = converterFree;
+                }
+                else if (GetInfoWithConverters(writtenType) is { } narrowed)
+                {
+                    info = narrowed;
+                }
+                else
+                {
+                    return DirectKind.Tree;
+                }
             }
             else
             {
-                info = GetDirectTypeInfo(runtimeType);
+                info = GetDirectTypeInfo(writtenType);
 
                 if (info.HasGeneratedCode && !_options.UseGeneratedCode)
                 {
                     // Without generated code the type is converted with reflection, which direct writing does as well
-                    info = GetReflectionTypeInfo(runtimeType);
+                    info = GetReflectionTypeInfo(writtenType);
                 }
             }
 
@@ -572,7 +586,7 @@ public static partial class ToonSerializer
         {
             if (_generatedOnly)
             {
-                return ToGeneratedTree(value, declaredType, depth);
+                return ToGeneratedTree(value, declaredType, propertyConverter, depth);
             }
 
             return SerializeValue(value, declaredType, _options, depth, new SerializerState(), propertyConverter);
@@ -583,11 +597,17 @@ public static partial class ToonSerializer
         ///     <see cref="ToonDocument"/> or JSON value holds one), or through the generated tree-based method of its
         ///     type; anything else needs the reflection-based serializer.
         /// </summary>
-        private ToonValue? ToGeneratedTree(object? value, Type declaredType, int depth)
+        private ToonValue? ToGeneratedTree(object? value, Type declaredType, IToonConverter? propertyConverter, int depth)
         {
             if (value == null)
             {
                 return _ignoreNulls ? null : ToonNull.Instance;
+            }
+
+            // A property's [ToonConverter] comes first, as in SerializeValue
+            if (propertyConverter != null)
+            {
+                return propertyConverter.Write(value, _options);
             }
 
             var runtimeType = value.GetType();
@@ -602,14 +622,17 @@ public static partial class ToonSerializer
                 return toonValue;
             }
 
-            if (ToonJsonInterop.TryToToon(value, out var documentValue))
+            if (ToonJsonInterop.TryToToon(value, _options.MaxDepth, out var documentValue))
             {
                 return documentValue;
             }
 
-            return GetGeneratedSerializer(runtimeType, _options) is { } generated
+            // A value without generated code is converted as the generated tree-based methods convert it (through
+            // the reflection-based serializer), for this value only: starting the document again would enumerate its
+            // sequences and call its getters a second time
+            return GetGeneratedSerializer(WrittenType(declaredType, runtimeType, _options), _options) is { } generated
                 ? generated.Serialize(value, _options, depth)
-                : throw new GeneratedOnlyFallbackException();
+                : SerializeForGeneratedCode(value, declaredType, _options, depth);
         }
 
         #region Objects and dictionaries
@@ -677,9 +700,17 @@ public static partial class ToonSerializer
 
             var count = 0;
 
+            // Keys of some types can be written as the same text: the tree-based path reports it
+            var keys = KeysMayCollide(info.Entries!.KeyType) ? new HashSet<string>(StringComparer.Ordinal) : null;
+
             foreach (var (rawKey, entryValue) in info.Entries!.Read(dictionary))
             {
-                if (WriteField(FormatDictionaryKey(rawKey), entryValue, entryValue?.GetType() ?? typeof(object), null, lineDepth, childDepth,
+                if (keys != null && !keys.Add(FormatDictionaryKey(rawKey)))
+                {
+                    throw new NotSupportedException();
+                }
+
+                if (WriteField(FormatDictionaryKey(rawKey), entryValue, info.Entries.ValueType, null, lineDepth, childDepth,
                                count > 0 || !firstOnCurrentLine, depth + 1))
                 {
                     count++;
@@ -757,7 +788,7 @@ public static partial class ToonSerializer
                     writer.ExitNesting();
                     break;
                 case DirectKind.Collection:
-                    WriteCollection(key, (IEnumerable)value!, childDepth, ToonArrayPosition.Field, depth);
+                    WriteCollection(key, (IEnumerable)value!, declaredType, childDepth, ToonArrayPosition.Field, depth);
                     break;
                 default:
                     _tree.WriteField(key, tree!, childDepth);
@@ -788,7 +819,7 @@ public static partial class ToonSerializer
 
                     foreach (var (_, entryValue) in info.Entries!.Read(value))
                     {
-                        switch (ClassifyKeyedField(entryValue, entryValue?.GetType() ?? typeof(object), null))
+                        switch (ClassifyKeyedField(entryValue, info.Entries.ValueType, null))
                         {
                             case KeyedField.NotObject:
                                 return false;
@@ -926,9 +957,14 @@ public static partial class ToonSerializer
         ///     Writes a collection like the encoder writes an array: empty, inline (all items primitive), tabular (uniform
         ///     objects with primitive values, not inside a list item) or as list items (spec §9).
         /// </summary>
-        private void WriteCollection(string? key, IEnumerable enumerable, int childDepth, ToonArrayPosition position, int depth)
+        private void WriteCollection(string? key, IEnumerable enumerable, Type declaredType, int childDepth, ToonArrayPosition position, int depth)
         {
             EnterValue(depth);
+
+            if (enumerable is Array { Rank: > 1 })
+            {
+                throw new NotSupportedException(); // any error makes the tree-based path run, which reports it
+            }
 
             // Arrays and lists of primitives are written from their typed items, without boxing each one
             if (!_hasConverters && !_generatedOnly && PrimitiveListWriter.For(enumerable.GetType()) is { } primitives)
@@ -938,6 +974,9 @@ public static partial class ToonSerializer
             }
 
             var items = new PooledItems(enumerable);
+
+            // The items are declared as the item type of the collection's declared type
+            var itemType = ItemTypeOf(declaredType, enumerable.GetType(), _options);
 
             try
             {
@@ -959,11 +998,11 @@ public static partial class ToonSerializer
                     for (var i = 0; i < count; i++)
                     {
                         var item = items[i];
-                        kinds[i] = Classify(item, item?.GetType() ?? typeof(object), null, out infos[i]);
+                        kinds[i] = Classify(item, itemType, null, out infos[i]);
 
                         if (kinds[i] == DirectKind.Tree)
                         {
-                            WriteCollectionAsTree(key, items, childDepth, position, depth);
+                            WriteCollectionAsTree(key, items, itemType, childDepth, position, depth);
                             return;
                         }
 
@@ -995,7 +1034,7 @@ public static partial class ToonSerializer
                                         return;
                                     case PlanResult.Unknown:
                                         DirectWriteTreeShapes++;
-                                        WriteCollectionAsTree(key, items, childDepth, position, depth);
+                                        WriteCollectionAsTree(key, items, itemType, childDepth, position, depth);
                                         return;
                                 }
 
@@ -1010,7 +1049,7 @@ public static partial class ToonSerializer
                     for (var i = 0; i < count; i++)
                     {
                         _writer.StartLine(childDepth);
-                        WriteListItem(items[i], kinds[i], infos[i], childDepth, depth + 1);
+                        WriteListItem(items[i], itemType, kinds[i], infos[i], childDepth, depth + 1);
                     }
 
                     _writer.ExitNesting();
@@ -1160,14 +1199,13 @@ public static partial class ToonSerializer
         }
 
         /// <summary>Converts the items with <see cref="SerializeValue"/> and lets the encoder decide the form.</summary>
-        private void WriteCollectionAsTree(string? key, PooledItems items, int childDepth, ToonArrayPosition position, int depth)
+        private void WriteCollectionAsTree(string? key, PooledItems items, Type itemType, int childDepth, ToonArrayPosition position, int depth)
         {
             var array = new ToonArray(new List<ToonValue>(items.Count));
 
             for (var i = 0; i < items.Count; i++)
             {
-                var item = items[i];
-                array.Items.Add(ToTree(item, item?.GetType() ?? typeof(object), null, depth + 1) ?? ToonNull.Instance);
+                array.Items.Add(ToTree(items[i], itemType, null, depth + 1) ?? ToonNull.Instance);
             }
 
             _tree.WriteArray(key, array, childDepth, position);
@@ -1448,7 +1486,7 @@ public static partial class ToonSerializer
         /// <summary>
         ///     Writes a list item whose line has been started at <paramref name="depth"/> (spec §9.4, §10).
         /// </summary>
-        private void WriteListItem(object? item, DirectKind kind, DirectTypeInfo? info, int depth, int valueDepth)
+        private void WriteListItem(object? item, Type itemType, DirectKind kind, DirectTypeInfo? info, int depth, int valueDepth)
         {
             var writer = _writer;
 
@@ -1491,7 +1529,7 @@ public static partial class ToonSerializer
                 }
                 default:
                     writer.Write("- ");
-                    WriteCollection(null, (IEnumerable)item!, depth + 1, ToonArrayPosition.ListItem, valueDepth);
+                    WriteCollection(null, (IEnumerable)item!, itemType, depth + 1, ToonArrayPosition.ListItem, valueDepth);
                     break;
             }
         }

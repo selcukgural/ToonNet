@@ -98,7 +98,7 @@ public abstract class ToonTypeInfo
 
     /// <summary>Converts a non-null item, with the converter of the options for it if there is one (null: no value).</summary>
     private static ToonValue? SerializeItem<T>(T item, ToonTypeInfo<T> info, ToonSerializerOptions options, int depth) =>
-        options.Converters.Count != 0 && ToonSerializer.TryWriteConverted(item, options, useDeclaredType: false, out var converted) ? converted : info.Serialize(item, options, depth);
+        options.Converters.Count != 0 && ToonSerializer.TryWriteConverted(item, options, useDeclaredType: true, out var converted) ? converted : info.Serialize(item, options, depth);
 
     private static T DeserializeItem<T>(ToonValue value, ToonTypeInfo<T> info, ToonSerializerOptions options, int depth) =>
         options.Converters.Count != 0 && ToonSerializer.TryReadConverted<T>(value, options, out var converted) ? converted : info.Deserialize!(value, options, depth);

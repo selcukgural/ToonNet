@@ -18,5 +18,5 @@ public static class ToonFormatterDefaults
     /// <summary>
     /// The default maximum size, in bytes, of a TOON request body accepted by <see cref="ToonInputFormatter"/> (4 MB).
     /// </summary>
-    public const long MaxRequestBodySize = 4 * 1024 * 1024;
+    public static readonly long MaxRequestBodySize = 4 * 1024 * 1024;
 }

@@ -15,11 +15,7 @@ public class SerializerCoverageTests
         var model = new SimpleModel { Name = "Test", Age = 25, Active = true };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
-        Assert.Contains("Name:", result);
-        Assert.Contains("Test", result);
-        Assert.Contains("Age:", result);
-        Assert.Contains("25", result);
+        Assert.Equal("Name: Test\nAge: 25\nActive: true", result);
     }
 
     [Fact]
@@ -45,8 +41,7 @@ public class SerializerCoverageTests
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
-        Assert.Contains("null", result);
+        Assert.Equal("OptionalString: null\nOptionalInt: null\nOptionalDouble: null", result);
     }
 
     [Fact]
@@ -72,8 +67,7 @@ public class SerializerCoverageTests
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.Contains("Hello", result);
-        Assert.Contains("42", result);
+        Assert.Equal("OptionalString: Hello\nOptionalInt: 42\nOptionalDouble: null", result);
     }
 
     [Fact]
@@ -85,8 +79,7 @@ public class SerializerCoverageTests
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
-        Assert.Contains("Tags", result);
+        Assert.Equal("Tags[3]: tag1,tag2,tag3\nNumbers: null\nSettings: null", result);
     }
 
     [Fact]
@@ -112,8 +105,7 @@ public class SerializerCoverageTests
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
-        Assert.Contains("Numbers", result);
+        Assert.Equal("Tags: null\nNumbers[5]: 1,2,3,4,5\nSettings: null", result);
     }
 
     [Fact]
@@ -129,8 +121,7 @@ public class SerializerCoverageTests
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
-        Assert.Contains("Settings", result);
+        Assert.Equal("Tags: null\nNumbers: null\nSettings:\n  key1: value1\n  key2: value2", result);
     }
 
     [Fact]
@@ -156,9 +147,7 @@ public class SerializerCoverageTests
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
-        Assert.Contains("Name: Outer", result);
-        Assert.Contains("Inner", result);
+        Assert.Equal("Name: Outer\nInner:\n  Name: Inner\n  Age: 30\n  Active: true\nItems: null", result);
     }
 
     [Fact]
@@ -188,10 +177,7 @@ public class SerializerCoverageTests
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
-        Assert.Contains("Items", result);
-        Assert.Contains("Item1", result);
-        Assert.Contains("Item2", result);
+        Assert.Equal("Name: Container\nInner: null\nItems[2]{Name,Age,Active}:\n  Item1,20,true\n  Item2,25,false", result);
     }
 
     [Fact]
@@ -280,7 +266,7 @@ Items[2]:
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
+        Assert.Equal("Tags: []\nNumbers: []\nSettings: null", result);
     }
 
     [Fact]
@@ -294,7 +280,7 @@ Items[2]:
         };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
+        Assert.Equal("Tags: null\nNumbers: null\nSettings: null", result);
     }
 
     [Fact]
@@ -312,16 +298,16 @@ Items[2]:
     {
         SimpleModel? model = null;
 
-        // Serializer null objects'i handle edebilir (throw etmeyebilir)
-        var result = ToonSerializer.Serialize(model!);
+        var result = ToonSerializer.Serialize(model);
 
-        Assert.NotNull(result);
+        Assert.Equal("null", result);
+        Assert.Null(ToonSerializer.Deserialize<SimpleModel>(result));
     }
 
     [Fact]
     public void Serialize_WithCustomOptions_UsesIndentSize()
     {
-        var model = new SimpleModel { Name = "Test", Age = 25, Active = true };
+        var model = new NestedModel { Name = "Outer", Inner = new SimpleModel { Name = "Inner", Age = 30, Active = false } };
 
         var options = new ToonSerializerOptions
         {
@@ -330,13 +316,17 @@ Items[2]:
 
         var result = ToonSerializer.Serialize(model, options);
 
-        Assert.NotNull(result);
-        Assert.Contains("Test", result);
+        Assert.Equal("Name: Outer\nInner:\n    Name: Inner\n    Age: 30\n    Active: false\nItems: null", result);
     }
 
     [Fact]
     public void Deserialize_WithStrictMode_ValidatesData()
     {
+        // Strict mode (the default) rejects a repeated key, which non-strict mode reads as the last value
+        Assert.Throws<ToonParseException>(() => ToonSerializer.Deserialize<SimpleModel>("Name: A\nName: B"));
+        Assert.Equal("B", ToonSerializer.Deserialize<SimpleModel>("Name: A\nName: B",
+                                                                   new ToonSerializerOptions { ToonOptions = new ToonOptions { StrictMode = false } })!.Name);
+
         var toon = "Name: Test\nAge: 25\nActive: true";
 
         var options = new ToonSerializerOptions
@@ -356,7 +346,7 @@ Items[2]:
         var model = new SimpleModel { Name = "Test", Age = 0, Active = false };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.Contains("false", result);
+        Assert.Equal("Name: Test\nAge: 0\nActive: false", result);
     }
 
     [Fact]
@@ -365,7 +355,7 @@ Items[2]:
         var model = new SimpleModel { Name = "Test", Age = 0, Active = true };
         var result = ToonSerializer.Serialize(model);
 
-        Assert.Contains("0", result);
+        Assert.Equal("Name: Test\nAge: 0\nActive: true", result);
     }
 
     [Fact]
@@ -373,7 +363,9 @@ Items[2]:
     {
         var model = ToonSerializer.Deserialize<SimpleModel>("");
 
+        // An empty document is an empty object
         Assert.NotNull(model);
+        Assert.Equal((null, 0, false), (model.Name, model.Age, model.Active));
     }
 
     public class SimpleModel

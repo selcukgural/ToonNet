@@ -74,8 +74,8 @@ public class MvcTests
         using var reader = new StreamReader(stream);
         var content = await reader.ReadToEndAsync();
 
-        Assert.Contains("Name: Output", content);
-        Assert.Contains("Age: 20", content);
+        Assert.Equal("application/toon; charset=utf-8", httpContext.Response.ContentType);
+        Assert.Equal("Name: Output\nAge: 20", content.TrimStart('\uFEFF'));
     }
 
     [Fact]
@@ -323,8 +323,11 @@ public class MvcTests
 
     [Theory]
     [InlineData("application/toon; charset=utf-16", "application/toon; charset=utf-16")]
-    [InlineData("text/toon;charset=UTF-8", "text/toon; charset=UTF-8")]
-    [InlineData("application/toon; charset=iso-8859-1", "application/toon; charset=iso-8859-1")]
+    [InlineData("text/toon;charset=UTF-8", "text/toon; charset=utf-8")]
+    [InlineData("application/toon; charset=iso-8859-1", "application/toon")]
+    [InlineData("application/toon; charset=\"utf-8,text/html\"", "application/toon")]
+    [InlineData("application/toon; charset=\"utf-8;x=<b>\"", "application/toon")]
+    [InlineData("application/toon; charset=\"utf-16\r\nX-Injected: 1\"", "application/toon")]
     [InlineData("application/toon", "application/toon")]
     [InlineData("application/json; charset=utf-8", null)]
     [InlineData("application/*; charset=utf-8", null)]
@@ -619,6 +622,224 @@ public class MvcTests
         Assert.Equal(200, httpContext.Response.StatusCode);
         Assert.Equal(expectedContentType, httpContext.Response.ContentType);
         Assert.Equal("Name: A\nAge: 1", System.Text.Encoding.UTF8.GetString(body.ToArray()));
+    }
+
+    private static InputFormatterContext CreateInputContext<T>(byte[] body, string contentType)
+    {
+        var context = CreateInputContext(body, contentType);
+        return new InputFormatterContext(context.HttpContext, "value", new ModelStateDictionary(),
+                                         new EmptyModelMetadataProvider().GetMetadataForType(typeof(T)), (s, e) => new StreamReader(s, e));
+    }
+
+    // Bodies whose bytes are all whitespace or byte order mark bytes in another encoding: ﻻ is EF BB BB in UTF-8, † is
+    // 20 20 and 묠 is 20 BB in UTF-16
+    public static TheoryData<string, string> BodiesOfNonBlankCharacters => new()
+    {
+        { "\uFEFB", "utf-8" },
+        { "\uFEFF\uFEFB", "utf-8" },
+        { "\u2020", "utf-16" },
+        { "\uBB20", "utf-16" },
+        { "\uFEFF\u2020", "utf-16" }
+    };
+
+    [Theory]
+    [MemberData(nameof(BodiesOfNonBlankCharacters))]
+    public async Task BodiesOfNonBlankCharacters_AreContent(string text, string charset)
+    {
+        var encoding = System.Text.Encoding.GetEncoding(charset);
+        var body = encoding.GetBytes(text);
+        var expected = text.TrimStart('\uFEFF');
+        var contentType = $"{ToonFormatterDefaults.MediaType}; charset={charset}";
+
+        var result = await new ToonInputFormatter(new ToonSerializerOptions()).ReadAsync(CreateInputContext<string>(body, contentType));
+        Assert.False(result.HasError);
+        Assert.True(result.IsModelSet);
+        Assert.Equal(expected, result.Model);
+
+        Assert.Equal(expected, await CreateRequest(body, contentType).ReadFromToonAsync<string>());
+    }
+
+    [Theory]
+    [InlineData("\uFEFF \n")]
+    [InlineData(" \t\r\n")]
+    public async Task Utf16BlankBodies_AreNoValue(string text)
+    {
+        var body = System.Text.Encoding.Unicode.GetBytes(text);
+        var contentType = ToonFormatterDefaults.MediaType + "; charset=utf-16";
+
+        var result = await new ToonInputFormatter(new ToonSerializerOptions()).ReadRequestBodyAsync(CreateInputContext(body, contentType), System.Text.Encoding.Unicode);
+        Assert.False(result.IsModelSet);
+        Assert.False(result.HasError);
+
+        Assert.Null(await CreateRequest(body, contentType).ReadFromToonAsync<TestModel>());
+    }
+
+    [Theory]
+    [InlineData("application/toon; charset=utf-7")]
+    [InlineData("application/toon; charset=\"\"")]
+    [InlineData("application/toon; charset=x-unknown")]
+    public async Task ReadFromToonAsync_UnusableCharsets_ThrowInvalidOperation(string contentType)
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateRequest("Name: x"u8.ToArray(), contentType).ReadFromToonAsync<TestModel>().AsTask());
+        Assert.Contains("charset", ex.Message);
+    }
+
+    [Fact]
+    public async Task Latin1_IsReadByReadFromToonAsync_ButNotByTheMvcFormatter()
+    {
+        var body = System.Text.Encoding.Latin1.GetBytes("Name: Müller\nAge: 3");
+        const string contentType = "application/toon; charset=iso-8859-1";
+
+        Assert.Equal("Müller", (await CreateRequest(body, contentType).ReadFromToonAsync<TestModel>())!.Name);
+
+        // MVC's formatter supports UTF-8 and UTF-16 only, and reports other charsets as a model error (a 415 is the
+        // framework's choice for a content type no formatter can read)
+        var context = CreateInputContext(body, contentType);
+        var result = await new ToonInputFormatter(new ToonSerializerOptions()).ReadAsync(context);
+        Assert.True(result.HasError);
+        Assert.False(context.ModelState.IsValid);
+    }
+
+    [Theory]
+    [InlineData("Name: [unclosed\n  - x\n -y")]
+    [InlineData("Name: a\nAge: not-a-number")]
+    public async Task ToonInputFormatter_InvalidBodies_AreModelErrors(string text)
+    {
+        var context = CreateInputContext(System.Text.Encoding.UTF8.GetBytes(text), ToonFormatterDefaults.MediaType);
+
+        var result = await new ToonInputFormatter(new ToonSerializerOptions()).ReadAsync(context);
+
+        Assert.True(result.HasError);
+        var error = Assert.Single(context.ModelState[nameof(TestModel)]!.Errors);
+        Assert.False(string.IsNullOrWhiteSpace(error.ErrorMessage));
+    }
+
+    [Theory]
+    [InlineData("application/json;q=0.5, application/toon;q=0.9", "application/toon; charset=utf-8")]
+    [InlineData("application/json;q=0.9, application/toon;q=0.5", "application/json; charset=utf-8")]
+    [InlineData("application/toon; charset=iso-8859-1", "application/toon; charset=utf-8")]
+    [InlineData("application/toon; charset=\"utf-8,text/html\"", "application/toon; charset=utf-8")]
+    [InlineData("application/toon; charset=\"utf-8;y=<b>\"", "application/toon; charset=utf-8")]
+    public async Task AcceptHeader_QualityAndCharset_SelectTheFormatter(string accept, string expectedContentType)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMvc(o => o.RespectBrowserAcceptHeader = true).AddToonFormatters();
+        await using var provider = services.BuildServiceProvider();
+
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
+        httpContext.Request.Headers.Accept = accept;
+        var body = new MemoryStream();
+        httpContext.Response.Body = body;
+
+        var actionContext = new Microsoft.AspNetCore.Mvc.ActionContext(httpContext, new Microsoft.AspNetCore.Routing.RouteData(),
+                                                                       new Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor());
+        await new Microsoft.AspNetCore.Mvc.ObjectResult(new TestModel { Name = "A", Age = 1 }).ExecuteResultAsync(actionContext);
+
+        Assert.Equal(expectedContentType, httpContext.Response.ContentType);
+        var text = System.Text.Encoding.UTF8.GetString(body.ToArray());
+        Assert.Equal(expectedContentType.StartsWith("application/json") ? "{\"name\":\"A\",\"age\":1}" : "Name: A\nAge: 1", text);
+    }
+
+    [Fact]
+    public async Task ToonResult_WithoutStatusCode_LeavesTheResponseStatus()
+    {
+        var httpContext = new DefaultHttpContext { RequestServices = new ServiceCollection().AddOptions().BuildServiceProvider() };
+        httpContext.Response.Body = new MemoryStream();
+        httpContext.Response.StatusCode = 202;
+
+        var result = (ToonResult)Results.Extensions.Toon(new TestModel { Name = "x" });
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Null(result.StatusCode);
+        Assert.Equal(202, httpContext.Response.StatusCode);
+        Assert.Equal("Name: x\nAge: 0", System.Text.Encoding.UTF8.GetString(((MemoryStream)httpContext.Response.Body).ToArray()));
+    }
+
+    private static byte[] BodyOfSize(long size) => System.Text.Encoding.UTF8.GetBytes("Name: " + new string('x', (int)size - 6));
+
+    [Fact]
+    public async Task ReadFromToonAsync_BodiesOverTheFormatterLimit_Are413()
+    {
+        var limit = ToonFormatterDefaults.MaxRequestBodySize;
+
+        Assert.Equal(new string('x', (int)limit - 6), (await CreateRequest(BodyOfSize(limit), "application/toon").ReadFromToonAsync<TestModel>())!.Name);
+
+        var ex = await Assert.ThrowsAsync<BadHttpRequestException>(() => CreateRequest(BodyOfSize(limit + 1), "application/toon").ReadFromToonAsync<TestModel>().AsTask());
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, ex.StatusCode);
+
+        // A declared length over the limit is rejected before the body is read
+        var declared = CreateRequest("Name: a"u8.ToArray(), "application/toon");
+        declared.ContentLength = limit + 1;
+        ex = await Assert.ThrowsAsync<BadHttpRequestException>(() => declared.ReadFromToonAsync<TestModel>().AsTask());
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, ex.StatusCode);
+
+        // Also for other charsets
+        var utf16 = CreateRequest(System.Text.Encoding.Unicode.GetBytes("Name: " + new string('x', (int)limit / 2)), "application/toon; charset=utf-16");
+        await Assert.ThrowsAsync<BadHttpRequestException>(() => utf16.ReadFromToonAsync(typeof(TestModel)).AsTask());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReadFromToonAsync_EndpointsWithTheirOwnSizeLimit_AreLimitedByTheServer(bool disable)
+    {
+        var request = CreateRequest(BodyOfSize(ToonFormatterDefaults.MaxRequestBodySize + 1), "application/toon");
+        object metadata = disable ? new Microsoft.AspNetCore.Mvc.DisableRequestSizeLimitAttribute() : new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(100_000_000);
+        request.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(metadata), "large"));
+
+        Assert.NotNull(await request.ReadFromToonAsync<TestModel>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToonInputFormatter_ActionsWithTheirOwnSizeLimit_AreLimitedByTheServer(bool disable)
+    {
+        // [RequestSizeLimit(16 MB)] on an action used to be cut at the formatter's 4 MB anyway
+        var formatter = new ToonInputFormatter(new ToonSerializerOptions(), maxRequestBodySize: 64);
+        var body = System.Text.Encoding.UTF8.GetBytes("Name: " + new string('x', 100));
+        var context = CreateInputContext(body, ToonFormatterDefaults.MediaType, contentLength: body.Length);
+        object metadata = disable ? new Microsoft.AspNetCore.Mvc.DisableRequestSizeLimitAttribute() : new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(1_000);
+        context.HttpContext.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(metadata), "large"));
+
+        var result = await formatter.ReadAsync(context);
+
+        Assert.False(result.HasError);
+        Assert.Equal(new string('x', 100), ((TestModel)result.Model!).Name);
+    }
+
+    [Fact]
+    public async Task ToonResult_WithoutRequestServices_UsesTheDefaultOptions()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Response.Body = new MemoryStream();
+
+        await new ToonResult(new TestModel { Name = "x" }).ExecuteAsync(httpContext);
+
+        Assert.Equal("Name: x\nAge: 0", System.Text.Encoding.UTF8.GetString(((MemoryStream)httpContext.Response.Body).ToArray()));
+    }
+
+    private sealed class ThrowingModel
+    {
+        public ThrowingModel(string name) => throw new ArgumentException("internal path /srv/app/secret.cfg");
+
+        public string Name { get; set; } = "";
+    }
+
+    [Fact]
+    public async Task ToonInputFormatter_ConstructorMessages_DoNotReachTheModelState()
+    {
+        var context = CreateInputContext("Name: bad"u8.ToArray(), ToonFormatterDefaults.MediaType);
+        context = new InputFormatterContext(context.HttpContext, "", new ModelStateDictionary(),
+                                            new EmptyModelMetadataProvider().GetMetadataForType(typeof(ThrowingModel)), (s, e) => new StreamReader(s, e));
+
+        var result = await new ToonInputFormatter(new ToonSerializerOptions()).ReadAsync(context);
+
+        Assert.True(result.HasError);
+        var message = Assert.Single(context.ModelState[""]!.Errors).ErrorMessage;
+        Assert.Contains("ArgumentException", message);
+        Assert.DoesNotContain("secret", message);
     }
 
     private class TestModel

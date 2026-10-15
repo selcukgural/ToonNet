@@ -170,7 +170,8 @@ public static partial class ToonSerializer
                 return new ReadTypeInfo { Kind = ReadKind.Dictionary, Target = target, AcceptsNull = acceptsNull, Dictionary = dictionary };
             }
 
-            if (typeof(IDictionary).IsAssignableFrom(target))
+            // Multidimensional arrays are not supported: the tree-based path reports it
+            if (typeof(IDictionary).IsAssignableFrom(target) || (target.IsArray && target.GetArrayRank() > 1))
             {
                 return Info(ReadKind.Tree);
             }
@@ -340,7 +341,7 @@ public static partial class ToonSerializer
 
         public void Fallback() => throw new DirectReadFallbackException();
 
-        private ToonReader Reader => _reader ??= new ToonReader(_parser, this);
+        public ToonReader Reader => _reader ??= new ToonReader(_parser, this);
 
         public static object? Read(ToonText text, Type type, ToonSerializerOptions options)
         {
@@ -467,7 +468,7 @@ public static partial class ToonSerializer
                     return _parser.BuildValue(value) is var tree && info.Target.IsInstanceOfType(tree) ? tree : throw new DirectReadFallbackException();
                 }
 
-                if (ToonJsonInterop.IsDocumentType(info.Target) && ToonJsonInterop.TryFromToon(_parser.BuildValue(value), info.Target, out var document))
+                if (ToonJsonInterop.IsDocumentType(info.Target) && ToonJsonInterop.TryFromToon(_parser.BuildValue(value), info.Target, _options.MaxDepth, out var document))
                 {
                     return document;
                 }
@@ -705,7 +706,7 @@ public static partial class ToonSerializer
                         seen[Array.IndexOf(properties, argument.Property)] = true;
                     }
 
-                    arguments[slot.Parameter] = ReadValue(fieldValue, argument.Parameter.ParameterType, argument.Property?.Converter, depth + 1);
+                    arguments[slot.Parameter] = ReadValue(fieldValue, ObjectActivator.ValueTypeOf(argument.Parameter), argument.Property?.Converter, depth + 1);
                     argumentRead[slot.Parameter] = true;
                 }
                 else

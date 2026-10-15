@@ -10,7 +10,7 @@ namespace ToonNet.Core.Models;
 ///     This is the base class for all TOON value types, such as null, boolean, number, string, object, and array.
 ///     It provides a common interface for accessing the type of the value.
 /// </remarks>
-public abstract class ToonValue
+public abstract partial class ToonValue
 {
     /// <summary>
     ///     Gets the type of this value.
@@ -436,7 +436,7 @@ public sealed class ToonObject : ToonValue
     /// <param name="key">The property key.</param>
     /// <returns>The property value, or null if not found.</returns>
     /// <remarks>Setting <c>null</c> stores <see cref="ToonNull.Instance"/>, a TOON <c>null</c> value.</remarks>
-    public ToonValue? this[string key]
+    public new ToonValue? this[string key]
     {
         get => Properties.GetValueOrDefault(key);
         set => Properties[key] = value ?? ToonNull.Instance;
@@ -456,7 +456,8 @@ public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null
     public ToonArray() : this([]) { }
 
     /// <summary>
-    ///     Gets the array items.
+    ///     Gets the array items. A null put into the list is a <see cref="ToonNull"/> item to every reader of the array
+    ///     (the indexer, paths, the serializer, cloning and comparing).
     /// </summary>
     public List<ToonValue> Items { get; } = items;
 
@@ -489,9 +490,9 @@ public sealed class ToonArray(List<ToonValue> items, string[]? fieldNames = null
     /// </summary>
     /// <param name="index">The item index.</param>
     /// <returns>The item at the specified index.</returns>
-    public ToonValue this[int index]
+    public new ToonValue this[int index]
     {
-        get => Items[index];
+        get => Items[index] ?? ToonNull.Instance;
         set => Items[index] = value ?? ToonNull.Instance;
     }
 

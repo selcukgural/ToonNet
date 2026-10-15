@@ -71,7 +71,7 @@ const FeatureList: FeatureItem[] = [
       <>
         Async APIs for strings, streams and files, and multi-document streaming that writes
         large collections in batches and reads them back one item at a time with{' '}
-        <code>SerializeStreamAsync</code> and <code>DeserializeStreamAsync</code>.
+        <code>SerializeDocumentsAsync</code> and <code>DeserializeDocumentsAsync</code>.
       </>
     ),
   },

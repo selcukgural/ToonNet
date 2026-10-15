@@ -56,6 +56,19 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(serialize);
 
+        // Only the generated code of a type registers it (its module initializer, with methods of the type's module),
+        // and the first registration stays: other code cannot replace how a type, or a type of the framework, is
+        // written and read for the whole process
+        if (serialize.Method.Module != typeof(T).Module || (deserialize != null && deserialize.Method.Module != typeof(T).Module))
+        {
+            throw new InvalidOperationException($"Generated code for {typeof(T).Name} can only be registered by code in the module of the type.");
+        }
+
+        if (RegisteredGeneratedSerializers.ContainsKey(typeof(T)))
+        {
+            return;
+        }
+
         RegisteredGeneratedSerializers[typeof(T)] = new GeneratedSerializer(
             typeof(T),
             (value, options, depth) => serialize((T)value, options, depth),
@@ -335,7 +348,7 @@ public static partial class ToonSerializer
             return (T)result!;
         }
 
-        throw Error($"Cannot convert {value.ValueType} to {(underlyingType ?? targetType).Name}", targetType, value, state);
+        throw Error($"Cannot convert {value.ValueType} to {(underlyingType ?? targetType).Name}", underlyingType ?? targetType, value, state);
     }
 
     internal static string FormatDictionaryKeyForGeneratedCode(object key) => FormatDictionaryKey(key);

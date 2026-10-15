@@ -115,8 +115,8 @@ public static partial class ToonSerializer
                                                 parameter,
                                                 metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name,
                                                                                                       StringComparison.OrdinalIgnoreCase)),
-                                                parameter.HasDefaultValue ? parameter.DefaultValue
-                                                : parameter.ParameterType.IsValueType ? System.Activator.CreateInstance(parameter.ParameterType)
+                                                parameter.HasDefaultValue ? DefaultOf(parameter)
+                                                : ValueTypeOf(parameter).IsValueType ? System.Activator.CreateInstance(ValueTypeOf(parameter))
                                                 : null))
                                     .ToArray();
 
@@ -126,6 +126,22 @@ public static partial class ToonSerializer
                 Arguments = arguments,
                 BoundToConstructor = [.. metadata.Properties.Select(p => arguments.Any(a => a.Property == p))]
             };
+        }
+
+        /// <summary>The type of a parameter's values: the element type of an <c>in</c> parameter (<c>Int32&amp;</c>).</summary>
+        internal static Type ValueTypeOf(ParameterInfo parameter) =>
+            parameter.ParameterType.IsByRef ? parameter.ParameterType.GetElementType()! : parameter.ParameterType;
+
+        /// <summary>
+        ///     The default value of an optional parameter as the parameter's type: reflection gives an enum default of a
+        ///     nullable enum parameter (<c>Perm? p = Perm.Write</c>) as its underlying number.
+        /// </summary>
+        private static object? DefaultOf(ParameterInfo parameter)
+        {
+            var value = parameter.DefaultValue;
+            var target = Nullable.GetUnderlyingType(ValueTypeOf(parameter)) ?? ValueTypeOf(parameter);
+
+            return value != null && target.IsEnum && value.GetType() != target ? Enum.ToObject(target, value) : value;
         }
 
         /// <summary>
@@ -182,6 +198,43 @@ public static partial class ToonSerializer
     private static readonly ConcurrentDictionary<Type, IToonConverter> AttributeConverterCache = new();
 
     /// <summary>
+    ///     The setter reading may use: a public one (<c>set</c>, <c>init</c>), or a non-public one when the property is
+    ///     marked <see cref="ToonIncludeAttribute"/>; null otherwise.
+    /// </summary>
+    internal static MethodInfo? SettableFromDocuments(PropertyInfo property) =>
+        FindSetter(property) is { } setter && (setter.IsPublic || Attribute.IsDefined(property, typeof(ToonIncludeAttribute), inherit: true)) ? setter : null;
+
+    /// <summary>
+    ///     The setter of a property, as the generator finds it: the property's own (a private one of a base class
+    ///     included, which a <see cref="PropertyInfo"/> of the derived type does not show), or that of the property it
+    ///     overrides when the override only redefines the getter.
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+    private static MethodInfo? FindSetter(PropertyInfo property)
+    {
+        const BindingFlags declared = BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+        for (var current = property; current != null;)
+        {
+            var own = current.DeclaringType!.GetProperties(declared).FirstOrDefault(p => p.Name == current.Name) ?? current;
+
+            if (own.GetSetMethod(nonPublic: true) is { } setter)
+            {
+                return setter;
+            }
+
+            // An override that only redefines the getter: the setter of the overridden property
+            var getter = own.GetGetMethod(nonPublic: true);
+            var baseGetter = getter?.GetBaseDefinition();
+            current = baseGetter != null && baseGetter != getter
+                ? baseGetter.DeclaringType!.GetProperties(declared).FirstOrDefault(p => p.Name == current.Name)
+                : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Retrieves cached type metadata for a specified type, or generates and stores it if not already cached.
     /// </summary>
     /// <remarks>
@@ -192,14 +245,47 @@ public static partial class ToonSerializer
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static TypeMetadata GetTypeMetadata(Type type)
     {
+        // A value tuple keeps its items in fields, which the serializer does not read: it would be written as an empty
+        // object and read back empty
+        if (type is { IsValueType: true, IsGenericType: true, Namespace: "System" } && type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal))
+        {
+            throw new NotSupportedException(
+                $"Value tuples ({type.Name}) are not supported: their items are fields, not properties. Use a record or a class.");
+        }
+
+        if (type is { IsValueType: true, IsGenericType: true } && (type.GetGenericTypeDefinition() == typeof(Memory<>) ||
+                                                                   type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>)))
+        {
+            throw new NotSupportedException($"{type.Name} is not supported: its items are not properties. Use an array ({type.GetGenericArguments()[0].Name}[]).");
+        }
+
         return TypeMetadataCache.GetOrAdd(type, static t =>
         {
             var properties = new List<(PropertyMetadata Metadata, int Order, int Index)>();
             var index = 0;
 
-            foreach (var prop in t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            // An interface (a type values are written as) has the properties of the interfaces it extends too
+            IEnumerable<PropertyInfo> declared = t.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+            if (t.IsInterface)
             {
-                if (prop.GetIndexParameters().Length > 0 || prop.GetGetMethod() == null ||
+                var names = new HashSet<string>(StringComparer.Ordinal);
+                // The properties of the extended interfaces come first, as those of base classes do
+                declared = t.GetInterfaces().SelectMany(i => i.GetProperties(BindingFlags.Public | BindingFlags.Instance)).Concat(declared)
+                            .Where(p => names.Add(p.Name)).ToList();
+            }
+            else
+            {
+                // A property hidden with `new` is listed with the one that hides it: keep the most derived, as the
+                // generator does (both would be written under one name)
+                declared = declared.GroupBy(p => p.Name, StringComparer.Ordinal)
+                                   .Select(g => g.MaxBy(p => InheritanceDepth(p.DeclaringType!))!).ToList();
+            }
+
+            foreach (var prop in declared)
+            {
+                // A ref struct (Span<T>) cannot be boxed into a value: such a property is left out, as by the generator
+                if (prop.GetIndexParameters().Length > 0 || prop.GetGetMethod() == null || prop.PropertyType.IsByRefLike ||
                     prop.GetCustomAttribute<ToonIgnoreAttribute>() != null)
                 {
                     continue;
@@ -209,7 +295,7 @@ public static partial class ToonSerializer
                 {
                     Property = prop,
                     Getter = CompileGetter(prop),
-                    Setter = prop.CanWrite ? CompileSetter(prop) : null,
+                    Setter = SettableFromDocuments(prop) is { } setter ? CompileSetter(prop, setter) : null,
                     AttributeName = prop.GetCustomAttribute<ToonPropertyAttribute>()?.Name,
                     Converter = CreateAttributeConverter(prop.GetCustomAttribute<ToonConverterAttribute>()),
                     Primitive = PrimitiveAccessor.Create(prop),
@@ -343,17 +429,18 @@ public static partial class ToonSerializer
     /// <remarks>
     ///     For structs the setter writes into the boxed instance (via unbox), so the assignment is not lost on a copy.
     /// </remarks>
-    private static Action<object, object?> CompileSetter(PropertyInfo property)
+    private static Action<object, object?> CompileSetter(PropertyInfo property, MethodInfo setter)
     {
         var instance = Expression.Parameter(typeof(object), "instance");
         var value = Expression.Parameter(typeof(object), "value");
-        var declaringType = property.DeclaringType!;
+        var declaringType = setter.DeclaringType!;
 
         Expression target = declaringType.IsValueType
             ? Expression.Unbox(instance, declaringType)
             : Expression.Convert(instance, declaringType);
 
-        var assign = Expression.Assign(Expression.Property(target, property), Expression.Convert(value, property.PropertyType));
+        // The setter found for the property, which can be a base class's (private, or of an overridden property)
+        var assign = Expression.Call(target, setter, Expression.Convert(value, property.PropertyType));
 
         return Expression.Lambda<Action<object, object?>>(assign, instance, value).Compile();
     }
@@ -448,12 +535,8 @@ public static partial class ToonSerializer
                     }
                     else
                     {
-                        if (!name.StartsWith('['))
-                        {
-                            sb.Append('.');
-                        }
-
-                        sb.Append(name);
+                        // Keys come from documents: escaped and shortened (ToonErrorText)
+                        ToonErrorText.AppendMember(sb, name);
                     }
                 }
 

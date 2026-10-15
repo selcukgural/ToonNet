@@ -78,8 +78,13 @@ await ToonSerializer.SerializeDocumentsAsync(
 
 **Read back efficiently:**
 ```csharp
-// ❌ Bad: Load entire file
-var users = ToonSerializer.Deserialize<List<User>>(File.ReadAllText("users.toon"));
+// ❌ Bad: read every document into a list first (a multi-document file is not one array: Deserialize<List<User>>
+// of the whole text would fail to parse)
+var users = new List<User?>();
+await foreach (var u in ToonSerializer.DeserializeDocumentsAsync<User>("users.toon"))
+{
+    users.Add(u);
+}
 
 // ✅ Good: Stream incrementally
 await foreach (var user in ToonSerializer.DeserializeDocumentsAsync<User>("users.toon"))
@@ -115,8 +120,7 @@ serializing with generated code takes 5–30% less time and deserializing 6–14
 `benchmark/ToonNet.Comparison` compares ToonNet with the official .NET TOON library (Toon.Format) and with
 System.Text.Json on four data shapes (flat records, nested records with arrays, nested field groups and keyed
 tables). ToonNet writes the same text as Toon.Format several times faster and with a fraction of the memory, and
-is close to System.Text.Json; the measured numbers are in the
-[README](https://github.com/selcukgural/ToonNet#toonnet-vs-the-official-toonformat-library). Run the comparison and
+is close to System.Text.Json; the measured numbers are in [ToonNet vs Toon.Format](../comparison). Run the comparison and
 the parity check on your own hardware:
 
 ```bash
@@ -136,6 +140,7 @@ Use BenchmarkDotNet to measure performance:
 ```csharp
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
+using ToonNet.Core.Serialization;
 
 [MemoryDiagnoser]
 public class SerializationBenchmarks

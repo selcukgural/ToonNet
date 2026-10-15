@@ -251,8 +251,12 @@ public class GeneratedReadingOptionsTests
         Assert.Null(ToonSerializer.Deserialize<LegacyGenerated>("name: x")!.Name);
 
         var ex = Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("name: x", ToonTypeInfo.GetGenerated<LegacyGenerated>(), options));
-        Assert.Contains("older ToonNet.SourceGenerators", ex.Message);
-        Assert.Equal("y", ToonSerializer.Deserialize("Name: y", ToonTypeInfo.GetGenerated<LegacyGenerated>())!.Name);
+        Assert.Contains("ToonNet.SourceGenerators before 3.3", ex.Message);
+
+        // It does not check required members either, which the default options do since 4.0
+        Assert.Throws<NotSupportedException>(() => ToonSerializer.Deserialize("Name: y", ToonTypeInfo.GetGenerated<LegacyGenerated>()));
+        var lenient = new ToonSerializerOptions { RespectRequiredMembers = false };
+        Assert.Equal("y", ToonSerializer.Deserialize("Name: y", ToonTypeInfo.GetGenerated<LegacyGenerated>(), lenient)!.Name);
     }
 
     /// <summary>What a 3.2 generator emits for a class with one string property, reduced to the parts the serializer calls.</summary>

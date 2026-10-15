@@ -20,6 +20,7 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -52,6 +53,7 @@ jobs:
   aot:
     name: NativeAOT smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -80,6 +82,7 @@ jobs:
   docs:
     name: Build documentation site
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout

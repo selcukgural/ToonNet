@@ -70,10 +70,11 @@ public sealed class ToonSerializerOptions : IValidatableObject
     /// <summary>
     ///     Gets or sets whether reading requires a key for every property declared with the C# <c>required</c> modifier,
     ///     throwing a <see cref="ToonSerializationException"/> when one is missing, as System.Text.Json does. Not
-    ///     checked when the constructor used for reading has <c>[SetsRequiredMembers]</c>. The default value is false.
-    ///     Generated code applies it too, as for <see cref="PropertyNameCaseInsensitive"/>.
+    ///     checked when the constructor used for reading has <c>[SetsRequiredMembers]</c>. The default value is true (it was
+    ///     false before ToonNet 4.0): a document that leaves out a required member would otherwise leave it at its default,
+    ///     null or <c>false</c> included. Generated code applies it too, as for <see cref="PropertyNameCaseInsensitive"/>.
     /// </summary>
-    public bool RespectRequiredMembers { get; set; }
+    public bool RespectRequiredMembers { get; set; } = true;
 
     /// <summary>
     ///     Whether code generated before ToonNet 3.3 may read with these options: it matches keys exactly and checks
@@ -145,7 +146,23 @@ public sealed class ToonSerializerOptions : IValidatableObject
     ///     For the converters last seen, per type with generated code, whether no converter applies to what its generated
     ///     code converts itself (see <see cref="ToonObjectWriter.InlineTypes"/>).
     /// </summary>
-    internal ToonSerializer.ConverterCheck? ConverterCheck { get; set; }
+    internal ToonSerializer.ConverterCheck? ConverterCheck
+    {
+        get => _rare?.ConverterCheck;
+        set => (_rare ??= new RareSettings()).ConverterCheck = value;
+    }
+
+    /// <summary>
+    ///     Settings few options use, in an object of their own, so the options of every call (<see cref="Default"/> creates
+    ///     one each time) stay small.
+    /// </summary>
+    private sealed class RareSettings
+    {
+        public ToonSerializer.ConverterCheck? ConverterCheck;
+        public Paths.ToonPathOptions? PathOptions;
+    }
+
+    private RareSettings? _rare;
 
     /// <summary>
     ///     Gets or sets whether to include read-only properties in serialization.
@@ -154,10 +171,55 @@ public sealed class ToonSerializerOptions : IValidatableObject
     public bool IncludeReadOnlyProperties { get; set; } = true;
 
     /// <summary>
+    ///     Gets or sets whether an object is written with the properties of its runtime type rather than those of the type
+    ///     it is declared as (a property's type, a collection's item type, the type argument of <c>Serialize&lt;T&gt;</c>).
+    ///     The default value is false (it was true before ToonNet 4.0): an entity in a property of a summary type writes
+    ///     only the summary's properties, as System.Text.Json does, so members of a derived type (a password hash, an
+    ///     internal flag) do not reach clients through a narrower type. A value declared as <c>object</c> is always written
+    ///     with its runtime type.
+    /// </summary>
+    public bool SerializeRuntimeTypes { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the limits on the paths the serializer's path methods take as text (<c>DeserializeAt</c>,
+    ///     <c>DeserializeAll</c>, <c>DeserializeAsyncEnumerableAt</c>): their length and nesting, and the work and time of
+    ///     an evaluation. Null (the default) uses <see cref="Paths.ToonPathOptions.Default"/>. Set stricter limits when
+    ///     paths come from clients.
+    /// </summary>
+    public Paths.ToonPathOptions? PathOptions
+    {
+        get => _rare?.PathOptions;
+        set => (_rare ??= new RareSettings()).PathOptions = value;
+    }
+
+    /// <summary>
     ///     Gets a new instance with the default settings. Each call returns a new instance, so changing one does not change
     ///     the defaults: create and keep your own instance (<c>new ToonSerializerOptions { ... }</c>) to use other settings.
     /// </summary>
     public static ToonSerializerOptions Default => new();
+
+    /// <summary>A copy of these options with other parsing and encoding options.</summary>
+    internal ToonSerializerOptions With(ToonOptions toonOptions)
+    {
+        var copy = new ToonSerializerOptions
+        {
+            ToonOptions = toonOptions,
+            UseGeneratedCode = UseGeneratedCode,
+            IgnoreNullValues = IgnoreNullValues,
+            PropertyNamingPolicy = PropertyNamingPolicy,
+            PropertyNameCaseInsensitive = PropertyNameCaseInsensitive,
+            UnmappedMemberHandling = UnmappedMemberHandling,
+            RespectRequiredMembers = RespectRequiredMembers,
+            AllowExtendedLimits = AllowExtendedLimits,
+            MaxDepth = MaxDepth,
+            IncludeReadOnlyProperties = IncludeReadOnlyProperties,
+            SerializeRuntimeTypes = SerializeRuntimeTypes,
+            PathOptions = PathOptions
+        };
+
+        copy.Converters.AddRange(Converters);
+        return copy;
+    }
 
     /// <summary>
     ///     Adds a custom converter to the collection.

@@ -256,11 +256,15 @@ public class ToonSerializerTypeSupportTests
     }
 
     [Fact]
-    public void ObjectTypedValues_UseRuntimeType()
+    public void ObjectTypedValues_UseRuntimeType_OthersTheirDeclaredType()
     {
         Assert.Equal("Payload:\n  Color: red\n  Radius: 2", ToonSerializer.Serialize(new Holder { Payload = new Circle { Color = "red", Radius = 2 } }));
-        Assert.Equal("Color: x\nRadius: 1", ToonSerializer.Serialize<Shape>(new Circle { Color = "x", Radius = 1 }));
         Assert.Equal("A: 1", ToonSerializer.Serialize<object>(new { A = 1 }));
+
+        // Since 4.0 a derived object is written as the type it is declared as, unless runtime types are asked for
+        Assert.Equal("Color: x", ToonSerializer.Serialize<Shape>(new Circle { Color = "x", Radius = 1 }));
+        Assert.Equal("Color: x\nRadius: 1", ToonSerializer.Serialize<Shape>(new Circle { Color = "x", Radius = 1 }, new ToonSerializerOptions { SerializeRuntimeTypes = true }));
+        Assert.Equal("[2]{Color}:\n  x\n  y", ToonSerializer.Serialize(new List<Shape> { new Circle { Color = "x", Radius = 1 }, new Circle { Color = "y", Radius = 2 } }));
     }
 
     [Fact]

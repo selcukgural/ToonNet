@@ -31,7 +31,9 @@ internal sealed record TypeModel(
     int? FixedNamingPolicy,
     EquatableArray<PropertyModel> Properties,
     ConstructorModel? Constructor,
-    EquatableArray<DiagnosticInfo> Diagnostics);
+    EquatableArray<DiagnosticInfo> Diagnostics,
+    EquatableArray<string> UnsetRequired = default,
+    bool UnsetRequiredHasInitializer = false);
 
 /// <summary>Whether and how the static <c>ToonTypeInfo</c> property is generated.</summary>
 internal enum TypeInfoProperty
@@ -43,7 +45,13 @@ internal enum TypeInfoProperty
     Emit,
 
     /// <summary>Generated with <c>new</c>, hiding the property generated for a base type.</summary>
-    EmitNew
+    EmitNew,
+
+    /// <summary>
+    ///     Not available (the type cannot be registered), but a base type has one: an obsolete member hides it, so
+    ///     <c>Derived.ToonTypeInfo</c> does not compile instead of being the base type's.
+    /// </summary>
+    Hide
 }
 
 /// <summary>A property in serialization order.</summary>
@@ -65,14 +73,16 @@ internal sealed record PropertyModel(
     WriteKind Write,
     string? SetterOwner,
     bool SetterOwnerIsValueType,
-    bool IsRequired);
+    bool IsRequired,
+    bool KeepsInitializer = false);
 
 /// <summary>The constructor used by the generated <c>Deserialize</c> method.</summary>
 internal sealed record ConstructorModel(EquatableArray<ParameterModel> Parameters, bool SetsRequiredMembers);
 
 /// <param name="PropertyIndex">The index of the property bound to this parameter (case-insensitive name match), or -1.</param>
 /// <param name="DefaultValue">C# expression used when the document has no value for the parameter.</param>
-internal sealed record ParameterModel(string Name, string TypeName, int PropertyIndex, string DefaultValue, ValuePlan Plan);
+/// <param name="PassIn">Whether the argument is passed with <c>in</c> (an <c>in</c> or <c>ref readonly</c> parameter).</param>
+internal sealed record ParameterModel(string Name, string TypeName, int PropertyIndex, string DefaultValue, ValuePlan Plan, bool PassIn = false);
 
 /// <summary>
 /// How generated code converts a value of one declared type. Collections and dictionaries carry the plans of their
@@ -84,7 +94,8 @@ internal sealed record ParameterModel(string Name, string TypeName, int Property
 /// <param name="IsNullableValueType">Whether the declared type is <c>Nullable&lt;T&gt;</c>.</param>
 /// <param name="Inline">For <see cref="ValueKind.Inline"/>: which inline conversion to use.</param>
 /// <param name="CheckRuntimeType">For <see cref="ValueKind.Generated"/>: the type is not sealed, so a derived instance
-/// is handed to the reflection-based serializer (which writes the runtime type).</param>
+/// is handed to the reflection-based serializer when the options ask for runtime types (it is written as this type
+/// otherwise).</param>
 /// <param name="Element">The element plan of a collection, or the value plan of a dictionary.</param>
 /// <param name="Key">The key plan of a dictionary.</param>
 internal sealed record ValuePlan(

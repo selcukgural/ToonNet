@@ -21,43 +21,24 @@ public class ToonConfigurationProviderTests
                      Count: 42
                    """;
 
-        var path = Path.GetTempFileName();
-        File.WriteAllText(path, toon);
+        // A relative path is found from the current directory
+        var fileName = "test_config_" + Guid.NewGuid() + ".toon";
+        File.WriteAllText(fileName, toon);
 
         try
         {
-            var builder = new ConfigurationBuilder();
-            // Use absolute path logic by implementing a custom FileProvider or setting BasePath to root
-            // FileConfigurationProvider combines BasePath + Path.
-            // If path is absolute, standard FileProvider handles it? No, PhysicalFileProvider is scoped to root.
-            
-            // Simpler fix for test: Set provider to null (default) but ensure we handle absolute paths correctly 
-            // OR simpler: write to current directory
-            
-            var fileName = "test_config_" + Guid.NewGuid() + ".toon";
-            File.WriteAllText(fileName, toon);
-            
-            try 
-            {
-                builder.AddToonFile(fileName);
-                var config = builder.Build();
+            var config = new ConfigurationBuilder().AddToonFile(fileName).Build();
 
-                Assert.Equal("Information", config["Logging:LogLevel:Default"]);
-                Assert.Equal("Warning", config["Logging:LogLevel:Microsoft"]);
-                Assert.Equal("*", config["AllowedHosts"]);
-                Assert.Equal("Server=.;Database=Db;", config["ConnectionStrings:Default"]);
-                Assert.Equal("True", config["FeatureToggles:IsEnabled"]);
-                Assert.Equal("42", config["FeatureToggles:Count"]);
-            }
-            finally
-            {
-                if (File.Exists(fileName)) File.Delete(fileName);
-            }
+            Assert.Equal("Information", config["Logging:LogLevel:Default"]);
+            Assert.Equal("Warning", config["Logging:LogLevel:Microsoft"]);
+            Assert.Equal("*", config["AllowedHosts"]);
+            Assert.Equal("Server=.;Database=Db;", config["ConnectionStrings:Default"]);
+            Assert.Equal("True", config["FeatureToggles:IsEnabled"]);
+            Assert.Equal("42", config["FeatureToggles:Count"]);
         }
         finally
         {
-            if (File.Exists(path))
-                File.Delete(path);
+            File.Delete(fileName);
         }
     }
 
@@ -174,19 +155,129 @@ public class ToonConfigurationProviderTests
         Assert.Throws<FormatException>(() => LoadProvider(toon));
     }
 
-    [Fact]
-    public void Load_EmptyObjectsAndArrays_ClearValuesFromEarlierSources()
+    private static string TempFile(string toon) => TempFile(System.Text.Encoding.UTF8.GetBytes(toon));
+
+    private static string TempFile(byte[] content)
     {
-        var configuration = new ConfigurationBuilder()
-                            .AddInMemoryCollection(new Dictionary<string, string?> { ["Hosts:0"] = "a", ["Feature"] = "on" })
-                            .Build();
+        var path = Path.Combine(Path.GetTempPath(), "toon_config_" + Guid.NewGuid() + ".toon");
+        File.WriteAllBytes(path, content);
+        return path;
+    }
 
-        var provider = LoadProvider("Hosts: []\nFeature:\nOther: 1");
+    [Fact]
+    public void Load_EmptyObjectsAndArrays_OverrideValuesFromEarlierSources_AsInJson()
+    {
+        var path = TempFile("Hosts: []\nFeature:\nOther: 1");
 
-        Assert.True(provider.TryGet("Hosts", out var hosts));
-        Assert.Null(hosts);
-        Assert.True(provider.TryGet("Feature", out var feature));
-        Assert.Null(feature);
-        Assert.Equal("a", configuration["Hosts:0"]);
+        try
+        {
+            var earlier = new Dictionary<string, string?> { ["Hosts:0"] = "a", ["Feature"] = "on" };
+            var toon = new ConfigurationBuilder().AddInMemoryCollection(earlier).AddToonFile(path).Build();
+            var json = new ConfigurationBuilder().AddInMemoryCollection(earlier)
+                                                 .AddJsonStream(new MemoryStream("""{"Hosts":[],"Feature":{},"Other":1}"""u8.ToArray()))
+                                                 .Build();
+
+            // The later empty object replaces the value; children of other sources stay, as with JSON files (whose empty
+            // arrays are null before .NET 10 and an empty string from it, so only the TOON value is checked for them)
+            Assert.Null(toon["Feature"]);
+            Assert.Equal(json["Feature"], toon["Feature"]);
+            Assert.Null(toon["Hosts"]);
+            Assert.Equal("a", toon["Hosts:0"]);
+            Assert.Equal(json["Hosts:0"], toon["Hosts:0"]);
+            Assert.Equal("1", toon["Other"]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Load_NullValues_AreNull()
+    {
+        var provider = LoadProvider("A: null\nB: \"null\"\nC[2]: null,x");
+
+        Assert.True(provider.TryGet("A", out var a));
+        Assert.Null(a);
+        Assert.True(provider.TryGet("B", out var b));
+        Assert.Equal("null", b);
+        Assert.True(provider.TryGet("C:0", out var c0));
+        Assert.Null(c0);
+    }
+
+    [Fact]
+    public void Build_MalformedFile_ThrowsWithTheFileError()
+    {
+        var path = TempFile("A: 1\n  B: [unclosed");
+
+        try
+        {
+            var ex = Assert.ThrowsAny<Exception>(() => new ConfigurationBuilder().AddToonFile(path).Build());
+            var format = ex as FormatException ?? Assert.IsType<FormatException>(ex.InnerException);
+            Assert.StartsWith("Failed to parse TOON configuration file", format.Message);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void MissingFiles_ThrowUnlessOptional()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "missing_" + Guid.NewGuid() + ".toon");
+
+        Assert.Throws<FileNotFoundException>(() => new ConfigurationBuilder().AddToonFile(path).Build());
+        Assert.Empty(new ConfigurationBuilder().AddToonFile(path, optional: true).Build().AsEnumerable());
+    }
+
+    [Fact]
+    public void Reload_ReadsTheChangedFile()
+    {
+        var path = TempFile("Level: 1");
+
+        try
+        {
+            var config = new ConfigurationBuilder().AddToonFile(path, optional: false, reloadOnChange: false).Build();
+            Assert.Equal("1", config["Level"]);
+
+            File.WriteAllText(path, "Level: 2\nAdded: yes");
+            config.Reload();
+
+            Assert.Equal("2", config["Level"]);
+            Assert.Equal("yes", config["Added"]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Load_Utf8ByteOrderMark_IsSkipped_AndUtf16ByteOrderMark_SelectsUtf16()
+    {
+        var provider = new ToonConfigurationProvider(new ToonConfigurationSource());
+
+        provider.Load(new MemoryStream([0xEF, 0xBB, 0xBF, .. "Name: ü"u8]));
+        Assert.True(provider.TryGet("Name", out var utf8));
+        Assert.Equal("ü", utf8);
+
+        // StreamReader detects the byte order mark of a file saved as UTF-16
+        provider.Load(new MemoryStream([.. System.Text.Encoding.Unicode.GetPreamble(), .. System.Text.Encoding.Unicode.GetBytes("Name: ü")]));
+        Assert.True(provider.TryGet("Name", out var utf16));
+        Assert.Equal("ü", utf16);
+    }
+
+    [Fact]
+    public void ToonOptions_AreUsedForParsing()
+    {
+        // Tab indentation is an error in strict mode only
+        var strict = new ToonConfigurationProvider(new ToonConfigurationSource());
+        Assert.Throws<FormatException>(() => strict.Load(new MemoryStream("A:\n\tB: 1"u8.ToArray())));
+
+        var lenient = new ToonConfigurationProvider(new ToonConfigurationSource(), new ToonNet.Core.ToonOptions { StrictMode = false });
+        lenient.Load(new MemoryStream("A:\n\tB: 1"u8.ToArray()));
+        Assert.True(lenient.TryGet("A:B", out var b));
+        Assert.Equal("1", b);
     }
 }

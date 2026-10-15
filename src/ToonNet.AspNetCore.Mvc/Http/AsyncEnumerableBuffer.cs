@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace ToonNet.AspNetCore.Mvc.Http;
@@ -15,6 +16,8 @@ internal static class AsyncEnumerableBuffer
     ///     Returns the value to write and its type: the items in a <see cref="List{T}"/> for an asynchronous sequence, the
     ///     value itself otherwise.
     /// </summary>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static async ValueTask<(object? Value, Type Type)> CollectIfAsyncAsync(object? value, Type type, CancellationToken cancellationToken)
     {
         var sequence = value?.GetType().GetInterfaces()

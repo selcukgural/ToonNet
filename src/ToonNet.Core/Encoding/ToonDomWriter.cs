@@ -12,7 +12,7 @@ namespace ToonNet.Core.Encoding;
 ///     The serializer also uses it for values it does not write directly (converter output, <see cref="ToonValue"/>
 ///     properties), so it exposes the field, array and list-item steps, not only the root.
 /// </remarks>
-internal sealed class ToonDomWriter(ToonWriter writer)
+internal class ToonDomWriter(ToonWriter writer)
 {
     private readonly ToonWriter _writer = writer;
 
@@ -132,7 +132,13 @@ internal sealed class ToonDomWriter(ToonWriter writer)
             }
         }
 
+        WriteAfterArray(array, childDepth);
         writer.ExitNesting();
+    }
+
+    /// <summary>Writes what follows an array's items (nothing; a subclass writes comments for prompts).</summary>
+    protected virtual void WriteAfterArray(ToonArray array, int childDepth)
+    {
     }
 
     /// <summary>

@@ -19,7 +19,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.NotNull(result);
+        Assert.Equal("", result);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("{name,age}", result);
+        Assert.Equal("people[1]{name,age}:\n  Alice,30", result);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("null", result);
+        Assert.Equal("value: null", result);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("true", result);
+        Assert.Equal("flag: true", result);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("false", result);
+        Assert.Equal("flag: false", result);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("42", result);
+        Assert.Equal("count: 42", result);
     }
 
     [Fact]
@@ -121,8 +121,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("price:", result);
-        Assert.Contains("19.9", result); // Tolerant check for decimal
+        Assert.Equal("price: 19.99", result);
     }
 
     [Fact]
@@ -135,7 +134,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("e", result.ToLower()); // Scientific notation (e or E)
+        Assert.Equal("big: 1e+22", result);
     }
 
     [Fact]
@@ -148,7 +147,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("e", result.ToLower()); // Scientific notation (e or E)
+        Assert.Equal("small: 1e-21", result);
     }
 
     [Fact]
@@ -161,7 +160,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("0", result);
+        Assert.Equal("zero: 0", result);
     }
 
     [Fact]
@@ -174,7 +173,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("hello world", result);
+        Assert.Equal("text: hello world", result);
     }
 
     [Fact]
@@ -187,8 +186,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        // Should be quoted because of backslash or special chars
-        Assert.NotNull(result);
+        Assert.Equal("path: \"C:\\\\Users\"", result);
     }
 
     [Fact]
@@ -205,8 +203,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("nested:", result);
-        Assert.Contains("name:", result);
+        Assert.Equal("nested:\n  name: Inner", result);
     }
 
     [Fact]
@@ -224,7 +221,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("tags", result);
+        Assert.Equal("tags[3]: a,b,c", result);
     }
 
     [Fact]
@@ -260,8 +257,7 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.NotNull(result);
-        Assert.Contains("nested:", result);
+        Assert.Equal("nested:\n    value: test", result);
     }
 
     [Fact]
@@ -281,8 +277,6 @@ public class EncoderCoverageTests
 
         var result = encoder.Encode(doc);
 
-        Assert.Contains("level2:", result);
-        Assert.Contains("level3:", result);
-        Assert.Contains("deep", result);
+        Assert.Equal("level2:\n  level3:\n    value: deep", result);
     }
 }

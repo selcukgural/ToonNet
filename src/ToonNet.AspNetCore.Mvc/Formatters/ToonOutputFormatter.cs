@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.Primitives;
@@ -24,6 +25,8 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
     /// A formatter that outputs TOON encoded content for ASP.NET Core MVC responses.
     /// </summary>
     /// <param name="options">Configuration options for TOON serialization.</param>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonOutputFormatter(ToonSerializerOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -70,13 +73,30 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
             if (mediaType.Type.Equals(requested.Type, StringComparison.OrdinalIgnoreCase) &&
                 mediaType.SubType.Equals(requested.SubType, StringComparison.OrdinalIgnoreCase))
             {
-                // The charset picks the encoding (UTF-8 when it is not one of the supported encodings)
-                context.ContentType = new StringSegment($"{supported}; charset={requested.Charset}");
+                // The charset picks one of the supported encodings, by its own name: the requested text is never copied
+                // into the response header (a value such as "utf-8,text/html" would change the content type). Any other
+                // charset gets the media type alone, which MVC writes in UTF-8.
+                var encoding = SupportedEncoding(requested.Charset.Value);
+                context.ContentType = new StringSegment(encoding == null ? supported : $"{supported}; charset={encoding.WebName}");
                 return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>The supported encoding a charset names, or null.</summary>
+    private Encoding? SupportedEncoding(string? charset)
+    {
+        foreach (var encoding in SupportedEncodings)
+        {
+            if (string.Equals(encoding.WebName, charset, StringComparison.OrdinalIgnoreCase))
+            {
+                return encoding;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -86,6 +106,8 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
     /// <param name="context">The context containing the object to serialize and HTTP response details.</param>
     /// <param name="selectedEncoding">The character encoding used for the serialized response body.</param>
     /// <returns>A task that represents the asynchronous operation of writing the response body.</returns>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = AotMessages.AnnotatedConstructor)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = AotMessages.AnnotatedConstructor)]
     public override async Task WriteResponseBodyAsync(OutputFormatterWriteContext context, Encoding selectedEncoding)
     {
         ArgumentNullException.ThrowIfNull(context);

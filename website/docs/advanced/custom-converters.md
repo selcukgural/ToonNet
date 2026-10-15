@@ -42,6 +42,9 @@ How the serializer calls a converter:
 - `Write` is not called for `null`; the serializer writes `null` itself (or skips the property when
   `IgnoreNullValues` is set).
 - `Read` **is** called for a `null` value, with a `ToonNull`, so handle it for reference types.
+- When writing, a converter of the options for the value's runtime type is used first, otherwise one for its declared
+  type: a property's type, a collection's item type or a dictionary's value type (since 4.0 for items and dictionary
+  values too).
 - The `options` argument lets a converter serialize nested values with `ToonSerializer.SerializeToValue`
   and `ToonSerializer.DeserializeFromValue`.
 
@@ -69,7 +72,7 @@ public class CustomDateTimeConverter : ToonConverter<DateTime>
 
         if (!DateTime.TryParseExact(str.Value, Format, CultureInfo.InvariantCulture,
             DateTimeStyles.None, out DateTime result))
-            throw new ToonSerializationException($"Invalid DateTime format: {str.Value}");
+            throw new ToonSerializationException($"Expected a date in the format {Format}");  // not the value: it may be personal data
 
         return result;
     }
@@ -81,7 +84,8 @@ Output for a `DateTime` property: `When: "2026-06-15 09:00:00"` (quoted because 
 ## Example: URI Converter
 
 `Uri` is supported out of the box; a converter is only needed for different rules, such as accepting
-absolute URIs only:
+absolute `http` and `https` URIs only (on Linux and macOS, `Uri.TryCreate("/path", UriKind.Absolute, ...)` succeeds
+with a `file://` URI, so the scheme is checked too):
 
 ```csharp
 public class AbsoluteUriConverter : ToonConverter<Uri>
@@ -99,8 +103,8 @@ public class AbsoluteUriConverter : ToonConverter<Uri>
         if (value is not ToonString str)
             throw new ToonSerializationException("Expected string for Uri");
 
-        if (!Uri.TryCreate(str.Value, UriKind.Absolute, out Uri? uri))
-            throw new ToonSerializationException($"Invalid URI: {str.Value}");
+        if (!Uri.TryCreate(str.Value, UriKind.Absolute, out Uri? uri) || uri.Scheme is not ("http" or "https"))
+            throw new ToonSerializationException("Expected an absolute http or https URI");
 
         return uri;
     }
@@ -227,4 +231,4 @@ public class SafeConverter<T> : ToonConverter<T> where T : new()
 ## See Also
 
 - **[Type System](../core-features/type-system)**: ToonValue types
-- **[Custom Formats](../format-extensions/custom-formats)**: Format converters
+- **[Converter Examples](../format-extensions/custom-formats)**: More converter examples

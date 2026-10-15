@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Net.Http.Headers;
 using ToonNet.Core;
@@ -24,14 +26,21 @@ public sealed class ToonInputFormatter : TextInputFormatter
     ///     up to <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> bytes.
     /// </summary>
     /// <param name="options">Options for deserialization.</param>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonInputFormatter(ToonSerializerOptions options) : this(options, ToonFormatterDefaults.MaxRequestBodySize) { }
 
     /// <summary>
     ///     Initializes a new instance of <see cref="ToonInputFormatter"/> with a custom request body size limit.
     /// </summary>
     /// <param name="options">Options for deserialization.</param>
-    /// <param name="maxRequestBodySize">The maximum size of the request body in bytes.</param>
+    /// <param name="maxRequestBodySize">
+    ///     The maximum size of the request body in bytes, for actions without a size limit of their own: the server
+    ///     limits an action with <c>[RequestSizeLimit]</c> or <c>[DisableRequestSizeLimit]</c>.
+    /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxRequestBodySize"/> is not positive.</exception>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public ToonInputFormatter(ToonSerializerOptions options, long maxRequestBodySize)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -59,6 +68,8 @@ public sealed class ToonInputFormatter : TextInputFormatter
     /// <exception cref="BadHttpRequestException">
     /// Thrown with status code 413 when the request body exceeds the configured size limit.
     /// </exception>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = AotMessages.AnnotatedConstructor)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = AotMessages.AnnotatedConstructor)]
     public override async Task<InputFormatterResult> ReadRequestBodyAsync(InputFormatterContext context, Encoding encoding)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -67,13 +78,21 @@ public sealed class ToonInputFormatter : TextInputFormatter
         var httpContext = context.HttpContext;
         var request = httpContext.Request;
 
-        if (request.ContentLength > _maxRequestBodySize)
+        // An endpoint with a size limit of its own ([RequestSizeLimit], [DisableRequestSizeLimit]) is limited by the
+        // server, as with ReadFromToonAsync; others by the formatter
+        var limit = httpContext.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>() != null ? long.MaxValue : _maxRequestBodySize;
+
+        if (request.ContentLength > limit)
         {
             throw CreatePayloadTooLargeException();
         }
 
         // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
-        var body = new LimitedReadStream(request.Body, _maxRequestBodySize, CreatePayloadTooLargeException);
+        var body = new LimitedReadStream(request.Body, limit, CreatePayloadTooLargeException);
+
+        // UTF-8 bodies are checked for content as they are read; others once decoded
+        string? content = null;
+        bool HasContent() => content == null ? body.HasContent : RequestBody.HasContent(content);
 
         try
         {
@@ -88,13 +107,13 @@ public sealed class ToonInputFormatter : TextInputFormatter
             }
             else
             {
-                var content = await RequestBody.ReadTextAsync(body, encoding, httpContext.RequestAborted).ConfigureAwait(false);
+                content = await RequestBody.ReadTextAsync(body, encoding, httpContext.RequestAborted).ConfigureAwait(false);
                 model = ToonSerializer.Deserialize(content, context.ModelType, _options);
             }
 
-            return body.HasContent ? await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false) : await NoContentAsync(context).ConfigureAwait(false);
+            return HasContent() ? await InputFormatterResult.SuccessAsync(model).ConfigureAwait(false) : await NoContentAsync(context).ConfigureAwait(false);
         }
-        catch (ToonException) when (!body.HasContent)
+        catch (ToonException) when (!HasContent())
         {
             // Whitespace that is not valid TOON (a tab in strict mode) is still no content
             return await NoContentAsync(context).ConfigureAwait(false);

@@ -14,6 +14,13 @@ public partial class DeclaredCollections
     public IDictionary<string, int>? Map { get; set; }
 }
 
+[ToonSerializable]
+public partial class NullableItems
+{
+    public List<string?>? Names { get; set; }
+    public int?[]? Counts { get; set; }
+}
+
 /// <summary>A list type with its own converter: written as one string, never as a list.</summary>
 [ToonConverter(typeof(TaggedListConverter))]
 public sealed class TaggedList : List<int>;
@@ -74,6 +81,24 @@ public class GeneratedCollectionTests
     {
         AssertAllPathsAgree(new DeclaredCollections { Chars = "abc", Sequence = Enumerable.Range(0, 3), Map = new CustomMap { ["a"] = 1 } });
         AssertAllPathsAgree(new DeclaredCollections { Items = new[] { 1, 2 }, Sequence = new HashSet<int> { 4 }, Map = new Dictionary<string, int> { ["b"] = 2 } });
+    }
+
+    [Fact]
+    public void NullItemsPutIntoATree_ReadAsNull()
+    {
+        // ToonArray.Items is a list, so code can add null to it; generated code reads it like reflection, as null
+        var tree = new ToonObject
+        {
+            ["Names"] = new ToonArray { Items = { new ToonString("a"), null! } },
+            ["Counts"] = new ToonArray { Items = { null!, new ToonNumber(2) } }
+        };
+
+        foreach (var options in new[] { new ToonSerializerOptions(), ReflectionOnly.Options() })
+        {
+            var read = tree.Deserialize<NullableItems>(options)!;
+            Assert.Equal(["a", null], read.Names!);
+            Assert.Equal([null, 2], read.Counts!);
+        }
     }
 
     private sealed class JoinedListConverter : ToonConverter<List<int>>

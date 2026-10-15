@@ -25,14 +25,14 @@ that TOON spec §3 requires implementations to document.
 | enum | string | Member name (flags: `A, B`); names are matched case-insensitively and numbers are accepted when reading |
 | `null` | `null` | Omitted from objects when `IgnoreNullValues` is set; always kept in arrays |
 | arrays, `IEnumerable<T>` | array | Readable into arrays, `List<T>`, `IReadOnlyList<T>`, `HashSet<T>`, `ISet<T>`, immutable collections and other collections with a parameterless constructor |
-| dictionaries | object | Keys formatted with the invariant culture; readable into string, numeric, enum, `Guid` (and other parsable) keys |
+| dictionaries | object | Keys formatted with the invariant culture, as values of their type are; readable into string, numeric, `bool`, enum, `Guid`, date and time keys. Keys of other types are written with `ToString()`, which reading cannot convert back |
 | objects whose values are uniform objects (at least two) | object, keyed tabular form | `servers[2:]{host,port}:` with one `name: cells` row per entry (spec §9.5); applies to dictionaries and classes alike |
 | lists of uniform objects | array, tabular form | Nested objects of the same shape become nested field groups: `orders[2]{id,customer{name,country}}:` (spec §9.3) |
-| other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the runtime type is used |
+| other classes, structs, records | object | Public properties in declaration order (base class first, `[ToonPropertyOrder]` first); the declared type is used (a value declared as `object` is written with its runtime type; `SerializeRuntimeTypes` writes every value with it). Reading sets public setters, and non-public ones marked `[ToonInclude]` |
 | `ToonValue` | as is | Useful for dynamic content |
 | `ToonDocument`, `JsonElement`, `JsonDocument`, `JsonNode` | the value they hold | A `ToonDocument` is written as its root and JSON values as the TOON value of their JSON (numbers in canonical form); reading creates them from the TOON value |
 | `Tuple<T1, …>` | object | `Item1`, `Item2`, … (properties) |
-| `ValueTuple` (`(int, string)`) | object without properties | Its elements are fields, which are not written or read, so it is written as an empty object, as System.Text.Json writes `{}`; use a record or class instead |
+| `ValueTuple` (`(int, string)`) | not supported | Its elements are fields, which are not written or read, so it throws `NotSupportedException`; use a record or class instead |
 
 Reading into `object` produces `Dictionary<string, object?>`, `List<object?>`, `string`, `bool`, `long` (integers),
 `decimal` (other exact numbers) or `double`.
@@ -43,9 +43,13 @@ When reading:
 - Quoted numbers are accepted for numeric targets, and unquoted numbers or booleans for `string` targets.
 - The constructor is chosen in this order: the one marked `[ToonConstructor]`, then a public parameterless constructor,
   then the public constructor with the most parameters (for example for positional records). Constructor parameters
-  are matched to properties by name (case-insensitively), then the remaining settable properties are assigned.
+  are matched to properties by name (case-insensitively), then the remaining properties are assigned through public
+  setters (`set`, `init`); a non-public setter is used only when the property is marked `[ToonInclude]`.
+- A missing key for a `required` property throws a `ToonSerializationException` (`RespectRequiredMembers`, on by
+  default since 4.0).
 - Errors include the path of the failing value, for example `$.Items[2].Price`.
-- Serializing an object graph with a cycle throws a `ToonEncodingException` instead of recursing until `MaxDepth`.
+- Serializing an object graph with a cycle throws a `ToonEncodingException`: the reflection-based serializer names the
+  back-reference, generated code (`[ToonSerializable]` types) reports exceeding `MaxDepth`.
 
 ## ToonValue Hierarchy
 
@@ -144,7 +148,9 @@ string text = big.ToString();        // "9007199254740993" (canonical TOON form)
 ```
 
 `ToString()` returns the canonical TOON form (spec §2): no exponent between 1e-6 and 1e21, no trailing zeros,
-`-0` as `0`, and `null` for NaN and infinities.
+`-0` as `0`, and `null` for NaN and infinities. `IsFinite` is false for NaN and infinities (written as `null`), and
+`ToonNumber.TryParse("12.50", out var n)` parses a TOON number token (the JSON grammar without leading zeros, so `05`
+is not a number), keeping the exact value when it fits in a `decimal`.
 
 ## ToonString
 
@@ -214,7 +220,7 @@ foreach (var kvp in obj.Properties)
 {
     string key = kvp.Key;
     ToonValue value = kvp.Value;
-    Console.WriteLine($"{key}: {value}");
+    Console.WriteLine($"{key}: {value}");   // primitives print their value; objects and arrays their type name
 }
 ```
 
@@ -243,8 +249,11 @@ string city = ((ToonString)address["City"]!).Value;
 // Update existing property
 obj["Age"] = 31;
 
-// Remove property
+// Remove property (also Remove(key, out var removed) to get its value)
 obj.Properties.Remove("Email");
+
+// Add a property unless the key exists (Add throws for an existing key)
+bool added = obj.Properties.TryAdd("Email", "ada@example.com");
 
 // Clear all properties
 obj.Properties.Clear();
@@ -519,9 +528,18 @@ if (root["Employees"] is ToonArray employees)
 
 ## Type Conversion Helpers
 
-ToonNet does not ship helpers like these; you can add your own extension methods:
+`GetValue<T>()` converts a primitive and throws `ToonSerializationException` when it cannot; `TryGetValue<T>(out value)`
+returns `false` instead. For defaults, add your own extension methods:
 
 ```csharp
+using ToonNet.Core.Models;
+
+// Usage
+ToonObject obj = ToonDocument.Parse("Name: Ada\nAge: 36\nIsActive: true").Root.AsObject();
+string name = obj["Name"].AsString("Unknown");
+int age = obj["Age"].AsInt(0);
+bool isActive = obj["IsActive"].AsBool(false);
+
 // Safe conversions
 public static class ToonValueExtensions
 {
@@ -540,12 +558,6 @@ public static class ToonValueExtensions
         return value is ToonBoolean b ? b.Value : defaultValue;
     }
 }
-
-// Usage
-ToonObject obj = ...;
-string name = obj["Name"].AsString("Unknown");
-int age = obj["Age"].AsInt(0);
-bool isActive = obj["IsActive"].AsBool(false);
 ```
 
 ## Pattern Matching
@@ -578,7 +590,7 @@ string result = value switch
 
 ```csharp
 // Good: Type-safe deserialization
-Person person = ToonSerializer.Deserialize<Person>(toonInput)!;
+Person? person = ToonSerializer.Deserialize<Person>(toonInput)!;
 
 // OK: Manual manipulation when needed
 ToonObject obj = ToonDocument.Parse(toonInput).AsObject();

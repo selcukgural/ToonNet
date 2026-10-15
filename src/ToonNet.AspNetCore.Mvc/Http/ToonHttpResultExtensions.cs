@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Http;
 using ToonNet.Core.Serialization;
 
@@ -15,6 +16,8 @@ public static class ToonHttpResultExtensions
     /// <param name="value">The value to serialize.</param>
     /// <param name="options">Optional serializer options.</param>
     /// <returns>The created <see cref="ToonResult"/>.</returns>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static IResult Toon(this IResultExtensions resultExtensions, object? value, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(resultExtensions);
@@ -30,6 +33,8 @@ public static class ToonHttpResultExtensions
     /// <param name="statusCode">The response status code.</param>
     /// <param name="options">Optional serializer options.</param>
     /// <returns>The created <see cref="ToonResult"/>.</returns>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static IResult Toon(this IResultExtensions resultExtensions, object? value, int statusCode, ToonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(resultExtensions);

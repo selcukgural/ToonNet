@@ -16,20 +16,26 @@ internal static class RequestBody
         using var reader = new StreamReader(body, strict, detectEncodingFromByteOrderMarks: false, ReadBufferSize, leaveOpen: true);
         return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>Whether decoded text has more than whitespace (spaces, tabs, line breaks) and a byte order mark.</summary>
+    public static bool HasContent(string text) => text.AsSpan().TrimStart('\uFEFF').IndexOfAnyExcept(" \t\r\n") >= 0;
 }
 
 /// <summary>
 ///     A read-only view of a stream that throws once more than a given number of bytes has been read, and notes whether
-///     anything other than whitespace was read.
+///     a UTF-8 body has anything other than whitespace (bodies in other charsets are checked once decoded, with
+///     <see cref="RequestBody.HasContent"/>).
 /// </summary>
 internal sealed class LimitedReadStream(Stream inner, long limit, Func<Exception> createLimitException) : Stream
 {
-    /// <summary>Spaces, tabs, line breaks and the bytes of a UTF-8 byte order mark (which in UTF-16 bodies are not alone).</summary>
-    private static readonly System.Buffers.SearchValues<byte> Blank = System.Buffers.SearchValues.Create([(byte)' ', (byte)'\t', (byte)'\r', (byte)'\n', 0x00, 0xEF, 0xBB, 0xBF, 0xFE, 0xFF]);
+    private static readonly System.Buffers.SearchValues<byte> Blank = System.Buffers.SearchValues.Create(" \t\r\n"u8);
 
     private long _read;
 
-    /// <summary>Whether a byte other than whitespace (or a byte order mark) was read.</summary>
+    /// <summary>
+    ///     Whether a UTF-8 body has a byte other than whitespace and a byte order mark at its start; only these bytes are
+    ///     whitespace in UTF-8 (the bytes of other characters are 0x80 and above).
+    /// </summary>
     public bool HasContent { get; private set; }
 
     public override bool CanRead => true;
@@ -63,6 +69,7 @@ internal sealed class LimitedReadStream(Stream inner, long limit, Func<Exception
 
     private int Count(ReadOnlySpan<byte> buffer, int read)
     {
+        var start = _read;
         _read += read;
 
         if (_read > limit)
@@ -70,7 +77,20 @@ internal sealed class LimitedReadStream(Stream inner, long limit, Func<Exception
             throw createLimitException();
         }
 
-        HasContent = HasContent || buffer[..read].IndexOfAnyExcept(Blank) >= 0;
+        if (!HasContent)
+        {
+            var bytes = buffer[..read];
+
+            // The byte order mark EF BB BF at the start of the body is not content
+            while (start < 3 && bytes.Length > 0 && bytes[0] == "\uFEFF"u8[(int)start])
+            {
+                bytes = bytes[1..];
+                start++;
+            }
+
+            HasContent = bytes.IndexOfAnyExcept(Blank) >= 0;
+        }
+
         return read;
     }
 }

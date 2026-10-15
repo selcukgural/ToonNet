@@ -21,6 +21,23 @@ public class ToonException : Exception
     /// <summary>
     ///     Appends the details that have a value to a message, on one line: <c>message (path: $.Age, target type: Int32)</c>.
     /// </summary>
+    /// <summary>
+    ///     A long path (a cycle followed to the depth limit) as its start and end, so the message stays short; the
+    ///     exception's path property keeps all of it.
+    /// </summary>
+    private static string ShortenPath(string path)
+    {
+        if (path.Length <= 256)
+        {
+            return path;
+        }
+
+        var head = char.IsHighSurrogate(path[63]) ? 63 : 64;
+        var tail = path.Length - 160;
+        tail = char.IsLowSurrogate(path[tail]) ? tail - 1 : tail;
+        return path[..head] + "..." + path[tail..];
+    }
+
     internal static string WithDetails(string message, params (string Name, string? Value)[] details)
     {
         var text = new System.Text.StringBuilder(message);
@@ -33,7 +50,7 @@ public class ToonException : Exception
                 continue;
             }
 
-            text.Append(first ? " (" : ", ").Append(name).Append(": ").Append(value);
+            text.Append(first ? " (" : ", ").Append(name).Append(": ").Append(name is "path" or "property" ? ShortenPath(value) : value);
             first = false;
         }
 
@@ -47,7 +64,7 @@ public class ToonException : Exception
     internal static string PrependPath(string prefix, string? path) => path is { Length: > 1 } ? prefix + path[1..] : prefix;
 
     /// <summary>The path of a property or dictionary key, as the serializer writes it: <c>$.Name</c>.</summary>
-    internal static string PathOf(string name) => name.StartsWith('[') ? "$" + name : "$." + name;
+    internal static string PathOf(string name) => ToonErrorText.AppendMember(new System.Text.StringBuilder("$"), name).ToString();
 
     /// <summary>The path of an item: <c>$[2]</c>.</summary>
     internal static string PathOf(int index) => "$[" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]";
@@ -294,6 +311,26 @@ public sealed class ToonSerializationException : ToonException
     }
 
     /// <summary>
+    ///     For an error in an item of a batch of a streamed array (<c>$[3].Id</c>): the path in the whole document, with
+    ///     the items of the earlier batches counted and the path of the array in front (<c>$.data.orders[1003].Id</c>).
+    /// </summary>
+    internal void RebaseItemPath(long itemsBefore, string arrayPath)
+    {
+        if (_reason == null || _path is not { } path || !path.StartsWith("$[", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var close = path.IndexOf(']');
+
+        if (close > 2 && long.TryParse(path.AsSpan(2, close - 2), System.Globalization.NumberStyles.None,
+                                       System.Globalization.CultureInfo.InvariantCulture, out var index))
+        {
+            _path = arrayPath + "[" + (index + itemsBefore).ToString(System.Globalization.CultureInfo.InvariantCulture) + "]" + path[(close + 1)..];
+        }
+    }
+
+    /// <summary>
     ///     Gets the value that caused the error.
     /// </summary>
     public object? Value { get; init; }
@@ -323,4 +360,83 @@ public sealed class ToonSerializationException : ToonException
 
         return ex;
     }
+}
+/// <summary>
+///     Exception thrown when a path (<see cref="Paths.ToonPath"/>) is not valid.
+/// </summary>
+public sealed class ToonPathException : ToonException
+{
+    /// <summary>Initializes a new instance of the ToonPathException class.</summary>
+    /// <param name="reason">What is wrong with the path.</param>
+    /// <param name="path">The path text.</param>
+    /// <param name="position">The 0-based position of the error in the path.</param>
+    public ToonPathException(string reason, string path, int position)
+        : base(WithDetails(reason, ("position", position.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                           ("path", ToonErrorText.EscapeControls(path.Length <= 200 ? path : path[..200] + "..."))))
+    {
+        Reason = reason;
+        Path = path;
+        Position = position;
+    }
+
+    /// <summary>What is wrong with the path, without the details.</summary>
+    public string Reason { get; }
+
+    /// <summary>The path text.</summary>
+    public string Path { get; }
+
+    /// <summary>The 0-based position of the error in the path.</summary>
+    public int Position { get; }
+}
+
+/// <summary>
+///     Exception thrown when a document breaks the rules of a <see cref="Validation.ToonRuleSet"/>
+///     (<see cref="Validation.ToonRuleResult.ThrowIfInvalid"/>).
+/// </summary>
+public sealed class ToonRuleException : ToonException
+{
+    /// <summary>Initializes a new instance of the ToonRuleException class.</summary>
+    /// <param name="violations">The violations of rules of severity <see cref="Validation.ToonRuleSeverity.Error"/>.</param>
+    public ToonRuleException(IReadOnlyList<Validation.ToonRuleViolation> violations)
+        : base(Describe(violations))
+    {
+        Violations = violations;
+    }
+
+    /// <summary>The violations.</summary>
+    public IReadOnlyList<Validation.ToonRuleViolation> Violations { get; }
+
+    /// <summary>One line: the number of violations, then the first ten of them.</summary>
+    private static string Describe(IReadOnlyList<Validation.ToonRuleViolation> violations)
+    {
+        ArgumentNullException.ThrowIfNull(violations);
+        var text = new System.Text.StringBuilder();
+        text.Append("The document has ").Append(violations.Count).Append(violations.Count == 1 ? " rule violation: " : " rule violations: ");
+        text.AppendJoin("; ", violations.Take(10));
+
+        if (violations.Count > 10)
+        {
+            text.Append("; ...");
+        }
+
+        return text.ToString();
+    }
+}
+
+/// <summary>
+///     Exception thrown when evaluating a path, or validating rules, goes beyond a limit of its
+///     <see cref="Paths.ToonPathOptions"/>: the step budget or the timeout.
+/// </summary>
+public sealed class ToonPathLimitException : ToonException
+{
+    /// <summary>Initializes a new instance of the ToonPathLimitException class.</summary>
+    /// <param name="message">The message.</param>
+    /// <param name="isTimeout">Whether the timeout was reached (otherwise the step budget).</param>
+    public ToonPathLimitException(string message, bool isTimeout) : base(message)
+    {
+        IsTimeout = isTimeout;
+    }
+
+    /// <summary>Whether the evaluation took longer than <see cref="Paths.ToonPathOptions.Timeout"/>; false for the step budget.</summary>
+    public bool IsTimeout { get; }
 }

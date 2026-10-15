@@ -192,6 +192,8 @@ public sealed class ToonNetServiceCollectionExtensionsTests
     [Theory]
     [InlineData("SnakeCas")]
     [InlineData("7")]
+    [InlineData("1")]                     // a number of a defined policy
+    [InlineData("CamelCase,SnakeCase")]   // Enum.TryParse combines the list into another policy
     public void AddToonNet_WithMisspelledNamingPolicy_Throws(string policy)
     {
         var configuration = new ConfigurationBuilder()
@@ -204,5 +206,117 @@ public sealed class ToonNetServiceCollectionExtensionsTests
 
         var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value);
         Assert.Contains("PropertyNamingPolicy", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(" camelCase ", "PropertyNamingPolicy", "CamelCase")]
+    [InlineData("disallow", "UnmappedMemberHandling", "Disallow")]
+    public void AddToonNet_WithConfiguration_ReadsEnumNamesInAnyCase(string configured, string key, string expected)
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { [$"ToonNet:ToonSerializerOptions:{key}"] = configured })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+
+        Assert.Equal(expected, key == "PropertyNamingPolicy" ? options.PropertyNamingPolicy.ToString() : options.UnmappedMemberHandling.ToString());
+    }
+
+    [Theory]
+    [InlineData("Skip,Disallow")]
+    [InlineData("1")]
+    public void AddToonNet_WithAListOrNumberForUnmappedMembers_Throws(string configured)
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["ToonNet:ToonSerializerOptions:UnmappedMemberHandling"] = configured })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value);
+        Assert.Equal($"Invalid ToonNet:ToonSerializerOptions:UnmappedMemberHandling value '{configured}'. Expected one of: Skip, Disallow.", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("pipes")]
+    [InlineData(";")]
+    [InlineData(",|")]
+    public void AddToonNet_WithUnknownDelimiter_Throws(string delimiter)
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["ToonNet:ToonOptions:Delimiter"] = delimiter })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOptions<ToonOptions>>().Value);
+        Assert.Contains("ToonNet:ToonOptions:Delimiter", ex.Message);
+        Assert.Contains($"'{delimiter}'", ex.Message);
+    }
+
+    [Fact]
+    public void AddToonNet_WithConfiguration_BindsSerializeRuntimeTypes_AndRequiredMembers()
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?>
+                            {
+                                ["ToonNet:ToonSerializerOptions:SerializeRuntimeTypes"] = "true",
+                                ["ToonNet:ToonSerializerOptions:RespectRequiredMembers"] = "false"
+                            })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+
+        Assert.True(options.SerializeRuntimeTypes);
+        Assert.False(options.RespectRequiredMembers);
+        Assert.True(new ToonSerializerOptions().RespectRequiredMembers);
+    }
+
+    [Fact]
+    public void AddToonNet_WithConfiguration_BindsIncludeReadOnlyProperties()
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["ToonNet:ToonSerializerOptions:IncludeReadOnlyProperties"] = "false" })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        Assert.True(new ToonSerializerOptions().IncludeReadOnlyProperties);
+        Assert.False(provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value.IncludeReadOnlyProperties);
+        Assert.False(provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value.SerializeRuntimeTypes);
+    }
+
+    [Fact]
+    public void AddToonNet_WithoutTheSection_KeepsTheDefaults()
+    {
+        var configuration = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?> { ["Other:MaxDepth"] = "3" })
+                            .Build();
+
+        var services = new ServiceCollection();
+        services.AddToonNet(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var toonOptions = provider.GetRequiredService<IOptions<ToonOptions>>().Value;
+        var serializerOptions = provider.GetRequiredService<IOptions<ToonSerializerOptions>>().Value;
+        var defaults = new ToonOptions();
+        var serializerDefaults = new ToonSerializerOptions();
+
+        Assert.Equal((defaults.Delimiter, defaults.IndentSize, defaults.MaxDepth, defaults.StrictMode),
+                     (toonOptions.Delimiter, toonOptions.IndentSize, toonOptions.MaxDepth, toonOptions.StrictMode));
+        Assert.Equal((serializerDefaults.MaxDepth, serializerDefaults.IgnoreNullValues, serializerDefaults.PropertyNamingPolicy),
+                     (serializerOptions.MaxDepth, serializerOptions.IgnoreNullValues, serializerOptions.PropertyNamingPolicy));
     }
 }

@@ -112,6 +112,11 @@ public static partial class ToonSerializer
                 case DirectKind.Dictionary:
                     foreach (var (rawKey, entryValue) in info.Entries!.Read(value))
                     {
+                        if (Narrows(entryValue, info.Entries.ValueType))
+                        {
+                            return PlanResult.Unknown; // written as its declared type, which the tree decides with
+                        }
+
                         if (!AddEntry(entries, FormatDictionaryKey(rawKey), entryValue))
                         {
                             return PlanResult.NotTabular;
@@ -135,7 +140,16 @@ public static partial class ToonSerializer
                             return PlanResult.Unknown; // a converter or runtime-typed value
                         }
 
-                        if (!AddEntry(entries, writer.GetName(p, _options), writer.GetValueOf(value, p)))
+                        var propertyValue = writer.GetValueOf(value, p);
+
+                        // Code from generators before 4.0 does not tell the declared type: any object that may be derived
+                        // is left to the tree
+                        if (writer.GetPropertyType(p) is { } declared ? Narrows(propertyValue, declared) : propertyValue is { } v && !v.GetType().IsSealed)
+                        {
+                            return PlanResult.Unknown;
+                        }
+
+                        if (!AddEntry(entries, writer.GetName(p, _options), propertyValue))
                         {
                             return PlanResult.NotTabular;
                         }
@@ -160,7 +174,14 @@ public static partial class ToonSerializer
                             return PlanResult.Unknown;
                         }
 
-                        if (!AddEntry(entries, names[p], properties[p].Getter(value)))
+                        var propertyValue = properties[p].Getter(value);
+
+                        if (Narrows(propertyValue, properties[p].Property.PropertyType))
+                        {
+                            return PlanResult.Unknown;
+                        }
+
+                        if (!AddEntry(entries, names[p], propertyValue))
                         {
                             return PlanResult.NotTabular;
                         }
@@ -217,6 +238,10 @@ public static partial class ToonSerializer
                 ArrayPool<object?>.Shared.Return(values, clearArray: true);
             }
         }
+
+        /// <summary>Whether a value is written as a type other than its runtime type (its declared type).</summary>
+        private bool Narrows(object? value, Type declaredType) =>
+            value != null && value.GetType() != declaredType && WrittenType(declaredType, value.GetType(), _options) != value.GetType();
 
         /// <summary>Adds an entry with a written value; returns false for a null value that is written (a primitive).</summary>
         private bool AddEntry(List<KeyValuePair<string, object>> entries, string key, object? value)

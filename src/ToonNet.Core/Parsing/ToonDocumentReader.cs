@@ -50,7 +50,8 @@ public enum ToonTokenType : byte
 ///     <para>
 ///         The reader checks the document as it goes, with the rules and errors of <see cref="ToonDocument.Parse(string,ToonOptions)"/>
 ///         (<see cref="ToonParseException"/> with line and column); the end of the document is checked when
-///         <see cref="Read"/> returns false. UTF-8 input is decoded into a pooled buffer, so a byte document is read
+///         <see cref="Read"/> returns false. In non-strict mode a repeated key is reported each time it appears; a
+///         tree keeps the last value. UTF-8 input is decoded into a pooled buffer, so a byte document is read
 ///         without creating a string. Dispose the reader to return its buffers. An instance is not thread-safe.
 ///     </para>
 /// </remarks>
@@ -183,6 +184,8 @@ public sealed class ToonDocumentReader : IDisposable
     {
         get
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (TokenType != ToonTokenType.StartArray || _entered)
             {
                 throw new InvalidOperationException("ArrayLength is available on the StartArray token.");
@@ -297,10 +300,52 @@ public sealed class ToonDocumentReader : IDisposable
         }
     }
 
+    /// <summary>The parser, for the serializer to read the current value with (<see cref="BeginValue"/>).</summary>
+    internal ToonParser Parser => _parser;
+
+    /// <summary>
+    ///     Positions the reader on the value to read, as <see cref="ReadValue"/> does (reading the first token if nothing
+    ///     was read yet, and moving from a property name to its value), and returns the value; the caller reads it with
+    ///     <see cref="Parser"/> and then calls <see cref="EndValue"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the reader is not on a property name or the start of a value.</exception>
+    internal ToonParser.ValueRef BeginValue(string caller)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (!_started)
+        {
+            Read();
+        }
+
+        if (TokenType == ToonTokenType.PropertyName)
+        {
+            Emit(_value);
+        }
+
+        return TokenType switch
+        {
+            ToonTokenType.StartObject or ToonTokenType.StartArray when !_entered => _value,
+            ToonTokenType.String or ToonTokenType.Number or ToonTokenType.True or ToonTokenType.False or ToonTokenType.Null => _value,
+            _ => throw new InvalidOperationException($"{caller} needs a property name or the start of a value, not {TokenType}.")
+        };
+    }
+
+    /// <summary>Moves the reader to the last token of the value <see cref="BeginValue"/> returned, which was read.</summary>
+    internal void EndValue()
+    {
+        if (TokenType is ToonTokenType.StartObject or ToonTokenType.StartArray)
+        {
+            TokenType = TokenType == ToonTokenType.StartObject ? ToonTokenType.EndObject : ToonTokenType.EndArray;
+            _entered = true;
+        }
+    }
+
     /// <summary>The name of the current property.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the reader is not on a property name.</exception>
     public string GetPropertyName()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         return TokenType == ToonTokenType.PropertyName
             ? _propertyName!
             : throw new InvalidOperationException($"GetPropertyName needs a PropertyName token, not {TokenType}.");
@@ -310,6 +355,8 @@ public sealed class ToonDocumentReader : IDisposable
     /// <exception cref="InvalidOperationException">Thrown when the reader is not on a string.</exception>
     public string GetString()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (TokenType != ToonTokenType.String)
         {
             throw new InvalidOperationException($"GetString needs a String token, not {TokenType}.");
@@ -322,6 +369,7 @@ public sealed class ToonDocumentReader : IDisposable
     /// <exception cref="InvalidOperationException">Thrown when the reader is not on <c>true</c> or <c>false</c>.</exception>
     public bool GetBoolean()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         return TokenType switch
         {
             ToonTokenType.True => true,
@@ -392,7 +440,7 @@ public sealed class ToonDocumentReader : IDisposable
         return false;
     }
 
-    /// <summary>Returns the reader's buffers to the pool.</summary>
+    /// <summary>Returns the reader's buffers to the pool; reading or getting a value afterwards throws <see cref="ObjectDisposedException"/>.</summary>
     public void Dispose()
     {
         if (_disposed)
@@ -400,7 +448,10 @@ public sealed class ToonDocumentReader : IDisposable
             return;
         }
 
+        // The token's text is in the buffers returned to the pool: accessors throw ObjectDisposedException
         _disposed = true;
+        _done = true;
+        TokenType = ToonTokenType.None;
         _parser.ReleaseDocument();
         _pooledText.Dispose();
         _frames.Clear();
@@ -502,6 +553,8 @@ public sealed class ToonDocumentReader : IDisposable
 
     private void CheckPrimitive()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (TokenType is not (ToonTokenType.String or ToonTokenType.Number or ToonTokenType.True or ToonTokenType.False or ToonTokenType.Null))
         {
             throw new InvalidOperationException($"ValueSpan needs a primitive token, not {TokenType}.");
@@ -510,6 +563,8 @@ public sealed class ToonDocumentReader : IDisposable
 
     private void CheckNumber()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (TokenType != ToonTokenType.Number)
         {
             throw new InvalidOperationException($"Reading a number needs a Number token, not {TokenType}.");

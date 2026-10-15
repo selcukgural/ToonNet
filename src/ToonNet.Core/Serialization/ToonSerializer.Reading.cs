@@ -22,6 +22,8 @@ public static partial class ToonSerializer
     private static object? DeserializeValue(ToonValue value, Type targetType, ToonSerializerOptions options, int depth, SerializerState state,
                                             IToonConverter? propertyConverter = null)
     {
+        // A null that code put into a tree (ToonArray.Items is a list) is a null value
+        value ??= ToonNull.Instance;
         var generatedAllowed = !state.FromGeneratedCode;
         state.FromGeneratedCode = false;
 
@@ -38,7 +40,7 @@ public static partial class ToonSerializer
         }
 
         // A ToonDocument, JsonElement or JsonNode is created from the value (null included)
-        if (ToonJsonInterop.TryFromToon(value, targetType, out var documentValue))
+        if (ToonJsonInterop.TryFromToon(value, targetType, options.MaxDepth, out var documentValue))
         {
             return documentValue;
         }
@@ -140,6 +142,20 @@ public static partial class ToonSerializer
     ///     The message names the path and the type but not the value, which may be personal data and ends up in logs and
     ///     (through model state) in HTTP responses; the value is available as <see cref="ToonSerializationException.Value"/>.
     /// </remarks>
+    /// <summary>
+    ///     The error for an exception of a constructor: not its message, because the constructor's text (paths, settings,
+    ///     the values it checked) would reach clients through error responses; the exception stays the inner exception,
+    ///     for the application's logs.
+    /// </summary>
+    internal static ToonSerializationException ConstructorError(Type targetType, Exception exception) =>
+        ConstructorError(targetType, exception, null, SerializerState.Root);
+
+    private static ToonSerializationException ConstructorError(Type targetType, Exception exception, ToonValue? value, SerializerState state)
+    {
+        var inner = exception is TargetInvocationException { InnerException: { } thrown } ? thrown : exception;
+        return Error($"The constructor of {targetType.Name} threw {inner.GetType().Name}", targetType, value, state, inner);
+    }
+
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
     {
         return ToonSerializationException.AtPath(message, state.Path, targetType, namesTargetType: true, value, inner);
@@ -150,6 +166,9 @@ public static partial class ToonSerializer
     ///     <see cref="Dictionary{TKey,TValue}"/>, arrays <see cref="List{T}"/>, integers <see cref="long"/>,
     ///     other exact numbers <see cref="decimal"/> and the rest <see cref="double"/>.
     /// </summary>
+    /// <summary>The value of a primitive as reading it into <see cref="object"/> gives it.</summary>
+    internal static object? ToUntypedPrimitive(ToonValue value) => ToUntyped(value, ToonSerializerOptions.Default, 0);
+
     private static object? ToUntyped(ToonValue value, ToonSerializerOptions options, int depth)
     {
         if (value is ToonArray or ToonObject)
@@ -232,7 +251,7 @@ public static partial class ToonSerializer
                 result = value switch
                 {
                     ToonString s => Enum.Parse(targetType, s.Value, ignoreCase: true),
-                    ToonNumber n => Enum.ToObject(targetType, ToInt64(n, targetType, state)),
+                    ToonNumber n => Enum.ToObject(targetType, EnumNumber(n, targetType, state)),
                     _            => throw Error($"Cannot convert {value.ValueType} to {targetType.Name}", targetType, value, state)
                 };
                 return true;
@@ -240,6 +259,8 @@ public static partial class ToonSerializer
 
             if (value is ToonString bigText && (targetType == typeof(BigInteger) || targetType == typeof(Int128) || targetType == typeof(UInt128)))
             {
+                EnsureIntegerLength(bigText.Value.Length, targetType, value, state);
+
                 // Integers beyond the decimal range are written as strings (lossless). Each branch is boxed on its own: a
                 // conditional expression would convert Int128 and UInt128 to BigInteger.
                 if (targetType == typeof(Int128))
@@ -295,8 +316,9 @@ public static partial class ToonSerializer
         }
         catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
         {
-            // The inner message may quote the value (Enum.Parse does), so it is not repeated here
-            throw Error($"Cannot convert the {value.ValueType} value to {targetType.Name} ({ex.GetType().Name})", targetType, value, state, ex);
+            // The parser's message quotes the value (Enum.Parse, bool.Parse, DateTime.Parse do), which may be personal data:
+            // it is neither repeated nor kept as the inner exception, whose text ToString() and loggers write
+            throw Error($"Cannot convert the {value.ValueType} value to {targetType.Name} ({ex.GetType().Name})", targetType, value, state);
         }
     }
 
@@ -395,11 +417,27 @@ public static partial class ToonSerializer
         }
     }
 
+    /// <summary>The most characters of an integer read into a BigInteger, Int128 or UInt128.</summary>
+    internal const int MaxIntegerLength = 10_000;
+
+    /// <summary>
+    ///     Rejects integers of more than <see cref="MaxIntegerLength"/> characters: parsing takes time that grows faster than
+    ///     their length (seconds for a few million digits).
+    /// </summary>
+    private static void EnsureIntegerLength(int length, Type targetType, ToonValue value, SerializerState state)
+    {
+        if (length > MaxIntegerLength)
+        {
+            throw Error($"The integer is longer than {MaxIntegerLength} characters", targetType, value, state);
+        }
+    }
+
     /// <summary>
     ///     Reads an integer token such as <c>123456789012345678901234567890123</c> or <c>1e40</c> exactly.
     /// </summary>
     private static object ParseWideInteger(string text, ToonNumber number, Type targetType, SerializerState state)
     {
+        EnsureIntegerLength(text.Length, targetType, number, state);
         if (!BigInteger.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var integer))
         {
             throw Error("The number is not an integer", targetType, number, state);
@@ -445,9 +483,22 @@ public static partial class ToonSerializer
         }
     }
 
-    private static long ToInt64(ToonNumber number, Type targetType, SerializerState state)
+    /// <summary>
+    ///     A number as a value of an enum's underlying type, checked as for that type (300 is not a byte, 1.5 not an
+    ///     integer), so it does not wrap; the error names the enum.
+    /// </summary>
+    private static object EnumNumber(ToonNumber number, Type enumType, SerializerState state)
     {
-        return (long)ConvertNumber(number, typeof(long), state);
+        var underlying = Enum.GetUnderlyingType(enumType);
+
+        try
+        {
+            return ConvertNumber(number, underlying, state);
+        }
+        catch (ToonSerializationException)
+        {
+            throw Error($"The number is not a value of {enumType.Name}, whose values are {underlying.Name}", enumType, number, state);
+        }
     }
 
     #endregion
@@ -462,6 +513,12 @@ public static partial class ToonSerializer
                                                  out object? result)
     {
         result = null;
+
+        if (targetType.IsArray && targetType.GetArrayRank() > 1)
+        {
+            throw Error($"Multidimensional arrays ({targetType.Name}) are not supported; use an array of arrays (int[][])", targetType, value, state);
+        }
+
         var elementType = GetElementType(targetType);
 
         if (elementType == null)
@@ -558,29 +615,93 @@ public static partial class ToonSerializer
                 return static items => items; // List<T> and the interfaces it implements
             }
 
+            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
+            {
+                // The interfaces are created as the type that implements them (IImmutableSet<T> as an ImmutableHashSet<T>)
+                var name = targetType.Name.Split('`')[0] switch
+                {
+                    "IImmutableList" => "ImmutableList",
+                    "IImmutableSet" => "ImmutableHashSet",
+                    "IImmutableQueue" => "ImmutableQueue",
+                    "IImmutableStack" => "ImmutableStack",
+                    var other => other
+                };
+                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{name}");
+                var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                                             .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1)
+                                             ?.MakeGenericMethod(elementType);
+                if (createRange == null)
+                {
+                    return static _ => null;
+                }
+
+                var fromRange = CompileCall<IList>(createRange);
+                return name == "ImmutableStack" ? items => fromRange(helpers.Reverse(items)) : fromRange;
+            }
+
+            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Frozen" } &&
+                FrozenFactory(targetType, "FrozenSet", "ToFrozenSet", typeof(IEnumerable<>).MakeGenericType(elementType), [elementType]) is { } frozen)
+            {
+                return items => frozen(items);
+            }
+
             if (targetType.IsInterface)
             {
                 return targetType.IsAssignableFrom(typeof(HashSet<>).MakeGenericType(elementType)) ? helpers.ToHashSet : static _ => null;
             }
 
-            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
+            if (targetType.GetConstructor(Type.EmptyTypes) != null && typeof(ICollection<>).MakeGenericType(elementType).IsAssignableFrom(targetType))
             {
-                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
-                var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                                             .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1)
-                                             ?.MakeGenericMethod(elementType);
-                return createRange == null ? static _ => null : CompileCall<IList>(createRange);
+                var create = Expression.Lambda<Func<object>>(Expression.Convert(Expression.New(targetType), typeof(object))).Compile();
+                return items => helpers.AddAll(create(), items);
             }
 
-            if (targetType.GetConstructor(Type.EmptyTypes) == null ||
-                !typeof(ICollection<>).MakeGenericType(elementType).IsAssignableFrom(targetType))
+            // Collections created from their items: Queue<T>, Stack<T>, ConcurrentQueue<T>, ConcurrentStack<T>, ...
+            var enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
+
+            // (or from a list of them: ReadOnlyCollection<T>)
+            var listType = typeof(IList<>).MakeGenericType(elementType);
+
+            if ((targetType.GetConstructor([enumerableType]) ?? targetType.GetConstructor([listType])) is not { } fromItems)
             {
                 return static _ => null;
             }
 
-            var create = Expression.Lambda<Func<object>>(Expression.Convert(Expression.New(targetType), typeof(object))).Compile();
-            return items => helpers.AddAll(create(), items);
+            var list = Expression.Parameter(typeof(IList), "items");
+            var construct = Expression.Lambda<Func<IList, object?>>(
+                Expression.Convert(Expression.New(fromItems, Expression.Convert(list, fromItems.GetParameters()[0].ParameterType)), typeof(object)), list).Compile();
+
+            // A stack is written top first and built by pushing: reverse, so the same top comes back
+            return targetType is { IsGenericType: true, Name: "Stack`1" or "ConcurrentStack`1" }
+                ? items => construct(helpers.Reverse(items))
+                : construct;
         }
+    }
+
+    /// <summary>
+    ///     A call of a System.Collections.Frozen factory (<c>FrozenSet.ToFrozenSet(items, comparer: null)</c>) on the read
+    ///     items or entries, or null when the type is not one of its results.
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = ToonSerializer.ReflectionJustification)]
+    private static Func<object, object?>? FrozenFactory(Type targetType, string factoryName, string methodName, Type sourceType, Type[] typeArguments)
+    {
+        var method = targetType.Assembly.GetType($"System.Collections.Frozen.{factoryName}")?
+                               .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                               .FirstOrDefault(m => m.Name == methodName && m.GetGenericArguments().Length == typeArguments.Length &&
+                                                    m.GetParameters().Length == 2)?
+                               .MakeGenericMethod(typeArguments);
+
+        if (method == null || !targetType.IsAssignableFrom(method.ReturnType))
+        {
+            return null;
+        }
+
+        var source = Expression.Parameter(typeof(object), "source");
+        var call = Expression.Call(method, Expression.Convert(source, sourceType), Expression.Constant(null, method.GetParameters()[1].ParameterType));
+        return Expression.Lambda<Func<object, object?>>(Expression.Convert(call, typeof(object)), source).Compile();
     }
 
     /// <summary>
@@ -602,6 +723,9 @@ public static partial class ToonSerializer
 
         /// <summary>Adds the items to <paramref name="collection"/>, an <see cref="ICollection{T}"/>, and returns it.</summary>
         public abstract object AddAll(object collection, IList items);
+
+        /// <summary>The items in reverse order.</summary>
+        public abstract IList Reverse(IList items);
     }
 
     private sealed class CollectionHelpers<T> : CollectionHelpers
@@ -633,6 +757,13 @@ public static partial class ToonSerializer
         public override object ToArray(IList items) => ((List<T>)items).ToArray();
 
         public override object ToHashSet(IList items) => new HashSet<T>((List<T>)items);
+
+        public override IList Reverse(IList items)
+        {
+            var reversed = new List<T>((List<T>)items);
+            reversed.Reverse();
+            return reversed;
+        }
 
         public override object AddAll(object collection, IList items)
         {
@@ -749,7 +880,8 @@ public static partial class ToonSerializer
             var dictionaryInterface = targetType.IsGenericType && targetType.GetGenericTypeDefinition() is var definition &&
                                       (definition == typeof(IDictionary<,>) || definition == typeof(IReadOnlyDictionary<,>))
                 ? targetType
-                : targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+                : targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)) ??
+                  targetType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>));
 
             if (dictionaryInterface == null)
             {
@@ -791,9 +923,18 @@ public static partial class ToonSerializer
                 return static entries => entries;
             }
 
+            if (targetType is { IsGenericType: true, Namespace: "System.Collections.Frozen" } &&
+                FrozenFactory(targetType, "FrozenDictionary", "ToFrozenDictionary",
+                              typeof(IEnumerable<>).MakeGenericType(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType)), [keyType, valueType]) is { } frozen)
+            {
+                return entries => frozen(entries);
+            }
+
             if (targetType is { IsGenericType: true, Namespace: "System.Collections.Immutable" })
             {
-                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{targetType.Name.Split('`')[0]}");
+                // IImmutableDictionary<TKey, TValue> is created as an ImmutableDictionary<TKey, TValue>
+                var name = targetType.Name.Split('`')[0] is "IImmutableDictionary" ? "ImmutableDictionary" : targetType.Name.Split('`')[0];
+                var factoryType = targetType.Assembly.GetType($"System.Collections.Immutable.{name}");
                 var createRange = factoryType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
                                              .FirstOrDefault(m => m.Name == "CreateRange" && m.GetParameters().Length == 1 &&
                                                                   m.GetGenericArguments().Length == 2)
@@ -1121,7 +1262,7 @@ public static partial class ToonSerializer
     private static ToonSerializationException UnmappedKeyError(string key, Type targetType, ToonValue value, SerializerState state)
     {
         state.Push(key);
-        return Error($"The key '{key}' matches no property or constructor parameter", targetType, value, state);
+        return Error("The key matches no property or constructor parameter", targetType, value, state); // the path names it
     }
 
     /// <summary>The error for a required property without a key, with required members respected.</summary>
@@ -1188,7 +1329,7 @@ public static partial class ToonSerializer
             if (TryGetKey(obj, name, caseInsensitive, out var argumentValue))
             {
                 state.Push(name);
-                arguments[i] = DeserializeValue(argumentValue, parameter.ParameterType, options, depth + 1, state, property?.Converter);
+                arguments[i] = DeserializeValue(argumentValue, ObjectActivator.ValueTypeOf(parameter), options, depth + 1, state, property?.Converter);
                 state.Pop();
             }
             else
@@ -1205,8 +1346,7 @@ public static partial class ToonSerializer
         }
         catch (Exception ex) when (ex is not ToonException)
         {
-            var inner = ex is TargetInvocationException { InnerException: { } thrown } ? thrown : ex;
-            throw Error($"The constructor of {targetType.Name} threw: {inner.Message}", targetType, value, state, inner);
+            throw ConstructorError(targetType, ex, value, state);
         }
 
         for (var p = 0; p < metadata.Properties.Length; p++)

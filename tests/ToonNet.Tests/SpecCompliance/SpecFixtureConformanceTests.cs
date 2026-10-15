@@ -156,6 +156,156 @@ public class SpecFixtureConformanceTests
     }
 
     /// <summary>
+    ///     The serializer reads the value a ToonDocumentReader is on through a parser checkpoint: after reading the value
+    ///     and returning to the checkpoint, the value read again and the rest of the document must be exactly what an
+    ///     uninterrupted reader gives, at every value of every decode fixture.
+    /// </summary>
+    [Fact]
+    public void ParserCheckpoint_RereadsEveryValue_ForEveryDecodeFixture()
+    {
+        var checkedValues = 0;
+
+        foreach (var fixture in Cases.Value.Values.Where(c => c.Category == "decode"))
+        {
+            var options = CreateOptions(fixture.Test);
+            var input = fixture.Test.GetProperty("input").GetString()!;
+
+            if (Record.Exception(() => ToonDocument.Parse(input, options)) != null)
+            {
+                continue;
+            }
+
+            for (var k = 0; ; k++)
+            {
+                var expected = ReadTokens(input, options, k, checkpoint: false);
+
+                if (expected == null)
+                {
+                    break; // fewer than k + 1 values
+                }
+
+                // Reading the value fully, or giving up after a few steps (as direct reading gives up)
+                foreach (var steps in (int[])[int.MaxValue, 0, 1, 2, 3, 5, 8])
+                {
+                    var actual = ReadTokens(input, options, k, checkpoint: true, steps)!;
+
+                    Assert.Equal(expected.Count, actual.Count);
+
+                    for (var i = 0; i < expected.Count; i++)
+                    {
+                        Assert.True(expected[i] is ToonValue tree
+                                        ? ToonValue.DeepEquals(tree, actual[i] as ToonValue)
+                                        : Equals(expected[i], actual[i]), $"{input}\nvalue {k}, steps {steps}, token {i}: {expected[i]} != {actual[i]}");
+                    }
+                }
+
+                checkedValues++;
+            }
+        }
+
+        Assert.True(checkedValues > 500, $"only {checkedValues} values checked");
+    }
+
+    /// <summary>
+    ///     The tokens of a document, with the value at <paramref name="target"/> (counting value starts) read as a tree:
+    ///     directly, or after skipping it and returning to a checkpoint. Null when the document has fewer values.
+    /// </summary>
+    private static List<object>? ReadTokens(string input, ToonOptions options, int target, bool checkpoint, int steps = int.MaxValue)
+    {
+        using var reader = new ToonDocumentReader(input, options);
+        var tokens = new List<object>();
+        var values = 0;
+        var found = false;
+
+        while (reader.Read())
+        {
+            var type = reader.TokenType;
+
+            if (type is not (ToonTokenType.PropertyName or ToonTokenType.EndObject or ToonTokenType.EndArray) && values++ == target)
+            {
+                found = true;
+
+                if (checkpoint)
+                {
+                    var parser = reader.Parser;
+                    var value = reader.BeginValue("test");
+                    var saved = parser.Save(value);
+
+                    try
+                    {
+                        ReadPartly(parser, value, ref steps);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+
+                    parser.Restore(saved);
+                    tokens.Add(parser.BuildValue(value));
+                    reader.EndValue();
+                }
+                else
+                {
+                    tokens.Add(reader.ReadValue());
+                }
+
+                continue;
+            }
+
+            tokens.Add(type switch
+            {
+                ToonTokenType.PropertyName => "name:" + reader.GetPropertyName(),
+                ToonTokenType.StartArray => "array:" + reader.ArrayLength,
+                ToonTokenType.String or ToonTokenType.Number => type + ":" + reader.ValueSpan.ToString(),
+                _ => type.ToString()
+            });
+        }
+
+        return found ? tokens : null;
+    }
+
+    /// <summary>Reads into a value with the parser's cursors, giving up (throwing) after <paramref name="steps"/> fields and items.</summary>
+    private static void ReadPartly(ToonParser parser, in ToonParser.ValueRef value, ref int steps)
+    {
+        switch (value.NodeKind)
+        {
+            case ToonNodeKind.Primitive:
+                return;
+            case ToonNodeKind.Array:
+            {
+                var cursor = parser.BeginArray(value);
+
+                while (parser.NextItem(ref cursor, out var item))
+                {
+                    if (steps-- == 0)
+                    {
+                        throw new OperationCanceledException();
+                    }
+
+                    ReadPartly(parser, item, ref steps);
+                }
+
+                return;
+            }
+            default:
+            {
+                var cursor = parser.BeginObject(value);
+
+                while (parser.NextProperty(ref cursor, out _, out var field))
+                {
+                    if (steps-- == 0)
+                    {
+                        throw new OperationCanceledException();
+                    }
+
+                    ReadPartly(parser, field, ref steps);
+                }
+
+                return;
+            }
+        }
+    }
+
+    /// <summary>
     ///     UTF-8 input is decoded into a pooled buffer and parsed without a string; it must give exactly what parsing the
     ///     string gives, also when a stream delivers the bytes a few at a time, splitting multi-byte sequences.
     /// </summary>

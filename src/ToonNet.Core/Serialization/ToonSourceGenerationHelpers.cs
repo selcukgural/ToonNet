@@ -96,12 +96,12 @@ public static class ToonSourceGenerationHelpers
 
     /// <summary>
     ///     Serializes a value with the reflection-based serializer, continuing at the given depth, after generated code
-    ///     has asked <see cref="TryWriteConverted{T}"/> for a converter: the serializer then looks one up only for the
-    ///     value's runtime type (as for collection items, which have no declared type of their own).
+    ///     has asked <see cref="TryWriteConverted{T}"/> for a converter. The value is declared as <typeparamref name="T"/>,
+    ///     which an object is written as (unless <see cref="ToonSerializerOptions.SerializeRuntimeTypes"/>).
     /// </summary>
     public static ToonValue SerializeConvertedWithReflection<T>(T value, ToonSerializerOptions options, int depth)
     {
-        return ToonSerializer.SerializeForGeneratedCode(value, value?.GetType() ?? typeof(T), options, depth);
+        return ToonSerializer.SerializeForGeneratedCode(value, typeof(T), options, depth);
     }
 
     /// <summary>
@@ -112,8 +112,9 @@ public static class ToonSourceGenerationHelpers
 
     /// <summary>
     ///     Writes a non-null value with the converter of the options for it, as <see cref="ToonSerializer"/> finds it:
-    ///     for its runtime type, else (with <paramref name="useDeclaredType"/>, for property values) for
-    ///     <typeparamref name="T"/>. Returns false when no converter applies; a null result means no value (a property
+    ///     for its runtime type, else (with <paramref name="useDeclaredType"/>) for <typeparamref name="T"/>, the type it is
+    ///     declared as (a property's, an item's or a dictionary value's; code from generators before 4.0 passes false for
+    ///     items and values). Returns false when no converter applies; a null result means no value (a property
     ///     is left out).
     /// </summary>
     public static bool TryWriteConverted<T>(T value, ToonSerializerOptions options, bool useDeclaredType, out ToonValue? result) =>
@@ -180,6 +181,13 @@ public static class ToonSourceGenerationHelpers
             throw ToonEncodingException.AtPath("Object graph is nested too deeply to serialize with the available stack space", "$");
         }
     }
+
+    /// <summary>
+    ///     The error for an exception thrown by the constructor of <typeparamref name="T"/> while reading, as
+    ///     <see cref="ToonSerializer"/> reports it: the exception's type, and the exception as the inner one.
+    /// </summary>
+    public static ToonSerializationException ConstructorError<T>(Exception exception) =>
+        ToonSerializer.ConstructorError(typeof(T), exception);
 
     /// <summary>
     ///     Throws when <paramref name="depth"/> exceeds <see cref="ToonSerializerOptions.MaxDepth"/> or the stack is

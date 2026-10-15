@@ -54,7 +54,7 @@ public class ToonConverterTests
                 return ToonNull.Instance;
             }
 
-            return new ToonString($"{value.X},{value.Y}");
+            return new ToonString(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value.X},{value.Y}"));
         }
 
         public override Point? Read(ToonValue value, ToonSerializerOptions options)
@@ -77,7 +77,10 @@ public class ToonConverterTests
                 throw ToonSerializationException.Create("Invalid Point format", value: str.Value, suggestion: "Use format: 'x,y' (e.g., '10,20')");
             }
 
-            if (!int.TryParse(parts[0], out var x) || !int.TryParse(parts[1], out var y))
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+            if (!int.TryParse(parts[0], System.Globalization.NumberStyles.Integer, invariant, out var x) ||
+                !int.TryParse(parts[1], System.Globalization.NumberStyles.Integer, invariant, out var y))
             {
                 throw ToonSerializationException.Create("Invalid Point coordinates", value: str.Value,
                                                         suggestion: "Both x and y must be valid integers");

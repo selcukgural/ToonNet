@@ -37,6 +37,19 @@ internal static class TypeModelBuilder
             }
         }
 
+        // Shapes generated code cannot have: instances (static classes), boxing and generic arguments (ref structs), or
+        // a name the generated file can refer to (file-local types)
+        var unsupported = type.IsStatic ? "a static class has no instances to serialize"
+            : type.IsRefLikeType ? "a ref struct cannot be boxed or used as a type argument"
+            : type.IsFileLocal ? "a file-local type cannot be named from the generated file"
+            : null;
+
+        if (unsupported != null)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.UnsupportedTypeKind, location, type.Name, unsupported));
+            return Empty(type, diagnostics);
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var attribute = context.Attributes[0];
@@ -91,20 +104,30 @@ internal static class TypeModelBuilder
             var reasons = new List<string>();
             var reportedWithProperty = index >= 0 && (HasConverter(properties[index]) ||
                                                       SymbolEqualityComparer.Default.Equals(parameter.Type, properties[index].Type));
-            var plan = planBuilder.Build(parameter.Type, reportedWithProperty ? [] : reasons);
+            var plan = planBuilder.Build(Typed(parameter.Type, compilation), reportedWithProperty ? [] : reasons);
             ReportFallback(diagnostics, fallbackDescriptor, reasons, $"constructor parameter '{parameter.Name}'", type, parameter.Locations, location);
 
-            parameterModels.Add(new ParameterModel(parameter.Name, parameter.Type.ToDisplayString(TypeNameFormat), index, FormatDefaultValue(parameter), plan));
+            parameterModels.Add(new ParameterModel(parameter.Name, Typed(parameter.Type, compilation).ToDisplayString(TypeNameFormat), index,
+                                                   FormatDefaultValue(parameter), plan,
+                                                   PassIn: parameter.RefKind is RefKind.In or RefKind.RefReadOnlyParameter));
         }
 
         var propertyModels = properties.Select((property, index) =>
         {
             var reasons = new List<string>();
-            var plan = planBuilder.Build(property.Type, HasConverter(property) ? [] : reasons);
+            var plan = planBuilder.Build(Typed(property.Type, compilation), HasConverter(property) ? [] : reasons);
             ReportFallback(diagnostics, fallbackDescriptor, reasons, $"property '{property.Name}'", type, property.Locations, location);
 
-            return CreatePropertyModel(property, plan, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers);
+            var model = CreatePropertyModel(property, plan, type, compilation, canUseUnsafeAccessor, boundProperties.Contains(index), setsRequiredMembers);
+
+            // A property set in the object initializer gets a value even without a key, which would replace what the
+            // object had (an initializer, a value set by the constructor): such an object is left to the
+            // reflection-based reader, which leaves the property as it was
+            return model.Write == WriteKind.Initializer && allowFallback ? model with { KeepsInitializer = true } : model;
         }).ToImmutableArray();
+
+        var unsetRequiredHasInitializer = false;
+        var unsetRequired = setsRequiredMembers ? [] : UnsetRequiredMembers(type, properties, out unsetRequiredHasInitializer);
 
         var hasTypeConverter = type.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute");
         var namingPolicy = attribute.NamedArguments.FirstOrDefault(a => a.Key == "NamingPolicy").Value.Value as int?;
@@ -130,13 +153,54 @@ internal static class TypeModelBuilder
             CheckRuntimeType: !type.IsValueType && !type.IsSealed,
             HasTypeConverter: hasTypeConverter,
             RegisterWithSerializer: !hasTypeConverter && CanRegister(type, compilation),
-            TypeInfoProperty: !hasTypeConverter && CanRegister(type, compilation) ? GetTypeInfoProperty(type, compilation) : TypeInfoProperty.None,
-            EmitSerializeMethod: !MethodNameTaken(type, "Serialize", diagnostics, location),
-            EmitDeserializeMethod: !MethodNameTaken(type, "Deserialize", diagnostics, location),
+            TypeInfoProperty: !hasTypeConverter && CanRegister(type, compilation) ? GetTypeInfoProperty(type, compilation)
+                : type.GetMembers("ToonTypeInfo").IsEmpty && GetTypeInfoProperty(type, compilation) == TypeInfoProperty.EmitNew ? TypeInfoProperty.Hide
+                : TypeInfoProperty.None,
+            EmitSerializeMethod: !MethodNameTaken(type, "Serialize", type, compilation, diagnostics, location),
+            EmitDeserializeMethod: !MethodNameTaken(type, "Deserialize", compilation.GetTypeByMetadataName("ToonNet.Core.Models.ToonDocument"), compilation,
+                                                    diagnostics, location),
             FixedNamingPolicy: namingPolicy,
             Properties: new EquatableArray<PropertyModel>(propertyModels),
             Constructor: type.IsAbstract ? null : constructorModel,
-            Diagnostics: new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()));
+            Diagnostics: new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()),
+            UnsetRequired: new EquatableArray<string>(unsetRequired.ToImmutableArray()),
+            UnsetRequiredHasInitializer: unsetRequiredHasInitializer && allowFallback);
+    }
+
+    /// <summary>
+    ///     The <c>required</c> members generated code does not read (fields, ignored properties, properties without a
+    ///     public getter), which the object initializer must still set: to their default, as reflection leaves them.
+    /// </summary>
+    private static List<string> UnsetRequiredMembers(INamedTypeSymbol type, List<IPropertySymbol> properties, out bool hasInitializer)
+    {
+        var read = new HashSet<string>(properties.Select(p => p.Name), StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var unset = new List<string>();
+        hasInitializer = false;
+
+        for (var current = type; current != null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers())
+            {
+                var required = member switch
+                {
+                    IPropertySymbol { IsRequired: true } property => !read.Contains(property.Name),
+                    IFieldSymbol { IsRequired: true } => true,
+                    _ => false
+                };
+
+                if (!required || !seen.Add(member.Name))
+                {
+                    continue;
+                }
+
+                unset.Add(EscapeKeyword(member.Name));
+                hasInitializer |= member.DeclaringSyntaxReferences.Any(r => r.GetSyntax() is PropertyDeclarationSyntax { Initializer: not null } or
+                                                                                VariableDeclaratorSyntax { Initializer: not null });
+            }
+        }
+
+        return unset;
     }
 
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
@@ -210,12 +274,19 @@ internal static class TypeModelBuilder
     }
 
     /// <summary>
-    /// Whether a member that is not a method (a property, field, event or nested type) takes the name of a generated
-    /// static method, which would not compile; reports TOON009 then.
+    /// Whether a member takes the name of a generated static method, which would not compile: one that is not a method
+    /// (a property, field, event or nested type), or a method with the generated method's parameters
+    /// (<paramref name="firstParameter"/>, <c>ToonSerializerOptions</c>); reports TOON009 then.
     /// </summary>
-    private static bool MethodNameTaken(INamedTypeSymbol type, string name, List<DiagnosticInfo> diagnostics, Location? location)
+    private static bool MethodNameTaken(INamedTypeSymbol type, string name, ITypeSymbol? firstParameter, Compilation compilation,
+                                        List<DiagnosticInfo> diagnostics, Location? location)
     {
-        if (type.GetMembers(name).All(member => member is IMethodSymbol) && type.GetTypeMembers(name).IsEmpty)
+        var options = compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSerializerOptions");
+        var sameSignature = type.GetMembers(name).OfType<IMethodSymbol>().Any(method =>
+            method.Parameters.Length == 2 && SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, firstParameter) &&
+            SymbolEqualityComparer.Default.Equals(method.Parameters[1].Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated), options));
+
+        if (!sameSignature && type.GetMembers(name).All(member => member is IMethodSymbol) && type.GetTypeMembers(name).IsEmpty)
         {
             return false;
         }
@@ -254,7 +325,9 @@ internal static class TypeModelBuilder
 
             foreach (var property in current.GetMembers().OfType<IPropertySymbol>())
             {
-                if (property.IsStatic || property.IsIndexer || property.GetMethod?.DeclaredAccessibility != Accessibility.Public ||
+                // A name C# cannot spell (from another language's assembly) is left out: it would go into generated code
+                if (!property.CanBeReferencedByName || !SyntaxFacts.IsValidIdentifier(property.Name) ||
+                    property.IsStatic || property.IsIndexer || property.GetMethod?.DeclaredAccessibility != Accessibility.Public ||
                     property.Type.IsRefLikeType || property.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer ||
                     property.ReturnsByRef || property.ReturnsByRefReadonly || !seen.Add(property.Name))
                 {
@@ -317,8 +390,11 @@ internal static class TypeModelBuilder
             return null;
         }
 
-        // Reflection does not see the implicit parameterless constructor of a struct.
-        var all = type.InstanceConstructors.Where(c => !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0)).ToList();
+        // Reflection does not see the implicit parameterless constructor of a struct; a constructor with a ref struct
+        // parameter (Span<T>) cannot be called with values read from a document
+        var all = type.InstanceConstructors.Where(c => !(type.IsValueType && c.IsImplicitlyDeclared && c.Parameters.Length == 0) &&
+                                                       !c.Parameters.Any(p => p.Type.IsRefLikeType || p.RefKind is RefKind.Ref or RefKind.Out ||
+                                                                             p.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer)).ToList();
         var constructors = all.Where(c => c.DeclaredAccessibility == Accessibility.Public).ToList();
 
         // [ToonConstructor] may mark a constructor of any accessibility (generated code is a member of the type)
@@ -345,7 +421,7 @@ internal static class TypeModelBuilder
     private static PropertyModel CreatePropertyModel(IPropertySymbol property, ValuePlan plan, INamedTypeSymbol type, Compilation compilation,
                                                      bool canUseUnsafeAccessor, bool boundToConstructor, bool setsRequiredMembers)
     {
-        var propertyType = property.Type;
+        var propertyType = Typed(property.Type, compilation);
 
         var attributeName = FindAttribute(property, "ToonPropertyAttribute") is { ConstructorArguments.Length: > 0 } nameAttribute
             ? nameAttribute.ConstructorArguments[0].Value as string
@@ -360,7 +436,14 @@ internal static class TypeModelBuilder
             ? converterType.ToDisplayString(TypeOfFormat)
             : null;
 
+        // As reflection reads: public setters (set, init), and non-public ones of properties marked [ToonInclude]
         var setter = FindSetter(property);
+
+        if (setter != null && setter.DeclaredAccessibility != Accessibility.Public && !IsIncluded(property))
+        {
+            setter = null;
+        }
+
         var write = GetWriteKind(property, setter, type, compilation, canUseUnsafeAccessor, boundToConstructor, setsRequiredMembers);
 
         return new PropertyModel(
@@ -375,6 +458,24 @@ internal static class TypeModelBuilder
             SetterOwner: write == WriteKind.Accessor ? setter!.ContainingType.ToDisplayString(TypeOfFormat) : null,
             SetterOwnerIsValueType: setter?.ContainingType.IsValueType ?? false,
             IsRequired: property.IsRequired);
+    }
+
+    /// <summary><c>dynamic</c> as <c>object</c>, which it is at run time (<c>typeof(dynamic)</c> does not compile).</summary>
+    private static ITypeSymbol Typed(ITypeSymbol type, Compilation compilation) =>
+        type.TypeKind == TypeKind.Dynamic ? compilation.ObjectType.WithNullableAnnotation(type.NullableAnnotation) : type;
+
+    /// <summary>Whether the property, or one it overrides, is marked <c>[ToonInclude]</c>.</summary>
+    private static bool IsIncluded(IPropertySymbol property)
+    {
+        for (var current = property; current != null; current = current.OverriddenProperty)
+        {
+            if (current.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "ToonNet.Core.Serialization.Attributes.ToonIncludeAttribute"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The setter of the property, or of the property it overrides when the override only redefines the getter.</summary>
@@ -453,7 +554,8 @@ internal static class TypeModelBuilder
             double d when double.IsNegativeInfinity(d) => "double.NegativeInfinity",
             double d => d.ToString("R", CultureInfo.InvariantCulture) + "D",
             decimal m => m.ToString(CultureInfo.InvariantCulture) + "M",
-            IFormattable number => $"({typeName})({number.ToString(null, CultureInfo.InvariantCulture)})",
+            DateTime dateTime => $"new global::System.DateTime({dateTime.Ticks.ToString(CultureInfo.InvariantCulture)}L)", // [DateTimeConstant]
+            IFormattable number when number.GetType().IsPrimitive => $"({typeName})({number.ToString(null, CultureInfo.InvariantCulture)})",
             _ => "default!"
         };
     }
@@ -474,10 +576,16 @@ internal static class TypeModelBuilder
             _ => "class"
         };
 
-        var typeParameters = type.TypeParameters.Length > 0 ? "<" + string.Join(", ", type.TypeParameters.Select(t => t.Name)) + ">" : "";
+        var typeParameters = type.TypeParameters.Length > 0 ? "<" + string.Join(", ", type.TypeParameters.Select(t => EscapeKeyword(t.Name))) + ">" : "";
 
-        return $"partial {keyword} {type.Name}{typeParameters}";
+        return $"partial {keyword} {EscapeKeyword(type.Name)}{typeParameters}";
     }
+
+    /// <summary>A name as C# writes it: a keyword with '@' (<c>@class</c>, <c>@in</c>).</summary>
+    private static string EscapeKeyword(string name) =>
+        SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None || SyntaxFacts.GetContextualKeywordKind(name) is SyntaxKind.RecordKeyword
+            ? "@" + name
+            : name;
 
     private static EquatableArray<string> ContainingDeclarations(INamedTypeSymbol type)
     {
@@ -491,16 +599,32 @@ internal static class TypeModelBuilder
         return new EquatableArray<string>(declarations.ToImmutableArray());
     }
 
+    /// <summary>
+    ///     The file name of a type's generated code: its readable name, and a hash of its exact name, because hint names
+    ///     must be unique ignoring case and the readable part maps several characters to '_' (<c>Url</c> and <c>URL</c>,
+    ///     <c>G&lt;T&gt;</c> and <c>G_T_</c> would collide, and the compiler would drop the code of every type).
+    /// </summary>
     private static string HintName(INamedTypeSymbol type)
     {
         var name = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted));
-        var builder = new StringBuilder(name.Length);
+        var builder = new StringBuilder(name.Length + 16);
 
         foreach (var c in name)
         {
             builder.Append(char.IsLetterOrDigit(c) || c is '.' or '_' ? c : '_');
         }
 
-        return builder.Append(".g.cs").ToString();
+        // FNV-1a over the metadata name (with arity and containing types): stable across runs and machines
+        var exact = type.ContainingNamespace is { IsGlobalNamespace: false } ns ? ns.ToDisplayString() + "." + MetadataName(type) : MetadataName(type);
+        var hash = 2166136261u;
+
+        foreach (var c in exact)
+        {
+            hash = (hash ^ c) * 16777619u;
+        }
+
+        return builder.Append('.').Append(hash.ToString("x8", CultureInfo.InvariantCulture)).Append(".g.cs").ToString();
+
+        static string MetadataName(INamedTypeSymbol t) => t.ContainingType is { } outer ? MetadataName(outer) + "+" + t.MetadataName : t.MetadataName;
     }
 }

@@ -19,14 +19,6 @@ using ToonNet.Core.Encoding;
 using ToonNet.Core.Models;
 using ToonNet.Core.Serialization.Attributes;
 
-[ToonSerializable]
-public partial class Person
-{
-    public string Name { get; set; } = "";
-    public int Age { get; set; }
-    public List<string> Hobbies { get; set; } = [];
-}
-
 var person = new Person { Name = "Alice", Age = 28, Hobbies = ["chess", "running"] };
 
 ToonDocument doc = Person.Serialize(person);
@@ -36,6 +28,14 @@ string toon = new ToonEncoder().Encode(doc);
 // Hobbies[2]: chess,running
 
 Person copy = Person.Deserialize(ToonDocument.Parse(toon));
+
+[ToonSerializable]
+public partial class Person
+{
+    public string Name { get; set; } = "";
+    public int Age { get; set; }
+    public List<string> Hobbies { get; set; } = [];
+}
 ```
 
 The generated signatures are:
@@ -54,8 +54,11 @@ produce the same TOON for the same object:
   base-class properties first, then declaration order);
 - the same constructor (a `[ToonConstructor]` one, otherwise the public parameterless one, otherwise the public one with
   the most parameters), with parameters bound to keys by property name;
-- `[ToonProperty]`, `[ToonConverter]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`, `PropertyNamingPolicy`,
-  `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers` and `Converters` options.
+- the same setters for reading (public ones, and non-public ones only with `[ToonInclude]`);
+- writing with the declared type of each property, item and dictionary value;
+- `[ToonProperty]`, `[ToonConverter]`, `[ToonInclude]`, and the `IgnoreNullValues`, `IncludeReadOnlyProperties`,
+  `PropertyNamingPolicy`, `PropertyNameCaseInsensitive`, `UnmappedMemberHandling`, `RespectRequiredMembers`,
+  `SerializeRuntimeTypes` and `Converters` options.
 
 ### What is generated
 
@@ -73,9 +76,11 @@ Any other property type (`object`, interfaces, abstract types, type parameters, 
 other collection types) is handed to the reflection-based serializer and reported as warning `TOON006`, with the
 reason. Use `[ToonSerializable(AllowReflectionFallback = false)]` to turn these into errors (`TOON007`).
 
-At runtime the generated methods apply the converters of the options to the values they convert, and defer to
-`ToonSerializer` when a property holds an instance of a class derived from its declared `[ToonSerializable]` type. The
-output is the same either way.
+At runtime the generated methods apply the converters of the options to the values they convert. An instance of a
+class derived from a property's declared `[ToonSerializable]` type is written as the declared type, as `ToonSerializer`
+writes it; with `SerializeRuntimeTypes = true` the generated methods defer to `ToonSerializer`, which writes the runtime
+type. The output is the same either way. Code generated before 4.0 does not report its properties' types; regenerate
+it with the 4.0 generator.
 
 `ToonSerializer` uses the generated methods as well: each generated type registers them from a module initializer, so
 `ToonSerializer.Serialize`/`Deserialize<T>` and everything built on them (the ASP.NET Core formatters, `ToonResult`,
@@ -101,13 +106,7 @@ warning where it calls them. Every `[ToonSerializable]` type has a static `ToonT
 `ToonSerializer` overloads that take a type info, which need no reflection:
 
 ```csharp
-[ToonSerializable(AllowReflectionFallback = false)] // every property must be converted by generated code
-public partial class Catalog
-{
-    public string Name { get; set; } = "";
-    public List<Product> Products { get; set; } = [];
-    public Dictionary<string, Warehouse> Warehouses { get; set; } = [];
-}
+var catalog = new Catalog { Name = "Spring", Products = [new("A-1", 9.5m)], Warehouses = { ["ist"] = new("Istanbul", 40) } };
 
 string toon = ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo);
 Catalog? copy = ToonSerializer.Deserialize(toon, Catalog.ToonTypeInfo);
@@ -119,14 +118,25 @@ Catalog? fromBytes = ToonSerializer.Deserialize(utf8, Catalog.ToonTypeInfo);
 // Collection roots: compose the type info of the elements
 var catalogs = ToonTypeInfo.CreateList(Catalog.ToonTypeInfo);           // also CreateArray, CreateDictionary
 string many = ToonSerializer.Serialize(new List<Catalog> { catalog }, catalogs);
+
+[ToonSerializable(AllowReflectionFallback = false)] // every property must be converted by generated code
+public partial class Catalog
+{
+    public string Name { get; set; } = "";
+    public List<Product> Products { get; set; } = [];
+    public Dictionary<string, Warehouse> Warehouses { get; set; } = [];
+}
+
+[ToonSerializable] public partial record Product(string Sku, decimal Price);  // property types need generated code too
+[ToonSerializable] public partial record Warehouse(string City, int Stock);
 ```
 
 These overloads write and read straight from text, like the others and with the same output, at the same speed: on
 10,000 records they serialize 2.4–4x and deserialize 1.6–2x faster than going through a `ToonDocument`. A value that
 only reflection would handle directly (an object without generated code in a property typed `object`, a derived
-instance) makes the whole document go through the generated tree-based methods, with the same text. Converters of the
-options are applied too: values no converter applies to are still converted straight from text, the others through the
-generated tree-based methods. `ToonTypeInfo.GetGenerated<T>()` returns the same type info for generic code or a type
+instance with `SerializeRuntimeTypes`) is converted alone by the reflection-based serializer, with the same text; the
+rest of the document is still written straight. Converters of the options are applied too: values no converter
+applies to are still converted straight from text, the others through the generated tree-based methods. `ToonTypeInfo.GetGenerated<T>()` returns the same type info for generic code or a type
 whose own member is named `ToonTypeInfo`.
 
 The generated `Serialize`/`Deserialize` methods with `ToonEncoder` and `ToonDocument.Parse` need no reflection either:
@@ -137,8 +147,20 @@ Catalog copy = Catalog.Deserialize(ToonDocument.Parse(toon));
 byte[] utf8 = new ToonEncoder().EncodeToUtf8Bytes(Catalog.Serialize(catalog));  // or Encode(document, bufferWriter)
 ```
 
-This holds as long as objects are of their declared types (a derived instance is handed to the reflection-based
-serializer). The repository's CI publishes an app that uses both with NativeAOT and fails on any trim or AOT warning.
+This holds as long as objects are of their declared types or `SerializeRuntimeTypes` is off (with it on, a derived
+instance is handed to the reflection-based serializer). A document that leaves out a `required` or `init` property with
+an initializer (`= true`, `= new()`) is read by the reflection-based reader too, which keeps the initializer. The
+repository's CI publishes an app that uses both with NativeAOT and fails on any trim or AOT warning.
+
+The other packages are annotated as well (`IsAotCompatible`). These members use reflection and warn in trimmed and
+AOT apps:
+
+| Package | Members with `[RequiresUnreferencedCode]` / `[RequiresDynamicCode]` | Without reflection |
+|---------|-------------------------------------------------------------------|--------------------|
+| ToonNet.Extensions.Json | `ToonConvert.DeserializeFromJson`, `SerializeToJson` (System.Text.Json), `ParseJson` | `FromJson`, `ToJson`, `ToonJsonConverter` |
+| ToonNet.Extensions.Yaml | `ToYaml` (`[RequiresDynamicCode]`: YamlDotNet's serializer) | `FromYaml` |
+| ToonNet.AspNetCore | – | `AddToonNet`, `AddToonFile` |
+| ToonNet.AspNetCore.Mvc | `AddToonFormatters`, the formatters, `ReadFromToonAsync<T>()` and `(Type)`, `ToonResult`, `Results.Extensions.Toon` | `ReadFromToonAsync(typeInfo)`; write responses with `ToonSerializer` and a type info |
 
 ## Supported shapes
 
@@ -147,18 +169,16 @@ serializer). The repository's CI publishes an app that uses both with NativeAOT 
 | Classes, structs, records, record structs | ✅ |
 | Positional records and constructor parameters | ✅ parameter defaults are used for missing keys |
 | `init`-only and `required` properties | ✅ |
-| Private setters (also in base classes) | ✅ |
+| Non-public setters marked `[ToonInclude]` (also in base classes) | ✅ (without it, only public setters are used) |
 | Nested types, generic types, the global namespace | ✅ containing types must be `partial` too |
 | Abstract types | `Serialize` only |
 
-Known differences from `ToonSerializer`:
+Known differences from the reflection-based serializer:
 
-- A non-`required` `init` property of a **generic** type is set through the object initializer, so a missing key resets
-  it to `default` instead of keeping its initializer value.
-- A `required` property whose key is missing from the document is set to `default` instead of keeping its initializer
-  value (with `RespectRequiredMembers`, both report the missing key).
-- A circular reference is reported as "maximum depth exceeded" instead of "circular reference" (both throw
-  `ToonEncodingException`).
+- Generated code does not track the objects it writes: a circular reference is reported as "Maximum depth of 100
+  exceeded during serialization (property: $.Next.Next...)" instead of "A circular reference was detected (property:
+  $.Next)". Both throw `ToonEncodingException`. This holds for the generated methods and for `ToonSerializer`, which
+  uses the generated code of `[ToonSerializable]` types.
 
 ## Attribute options
 
@@ -190,7 +210,9 @@ public partial class User
 | `TOON006` | Warning | A property or constructor parameter is converted with reflection; the message says why |
 | `TOON007` | Error | Same as `TOON006`, on a type with `AllowReflectionFallback = false` |
 | `TOON008` | Error | A `[ToonProperty]` name contains an unpaired surrogate, which TOON cannot represent |
-| `TOON009` | Warning | A member of the type is named `Serialize` or `Deserialize`, so that generated static method is left out; use `ToonSerializer` with `ToonTypeInfo` instead |
+| `TOON009` | Warning | A member of the type is named `Serialize` or `Deserialize` (a property, field or nested type, or a method with the generated method's parameters), so that generated static method is left out; use `ToonSerializer` with `ToonTypeInfo` instead |
+| `TOON010` | Error | The type is a static class, a ref struct or a file-local type, which generated code cannot serialize |
+| `TOON011` | Error | The project references a `ToonNet.Core` of an older or another major version than the generator; no code is generated until both packages have the same version |
 
 ## Viewing generated code
 
@@ -200,12 +222,15 @@ public partial class User
 </PropertyGroup>
 ```
 
-The files are written to `obj/<configuration>/<tfm>/generated/ToonNet.SourceGenerators/`. In Visual Studio and Rider
+The files are written to
+`obj/<configuration>/<tfm>/generated/ToonNet.SourceGenerators/ToonNet.SourceGenerators.ToonSerializableGenerator/`
+(`<Type>.<hash>.g.cs`). In Visual Studio and Rider
 they are also listed under **Dependencies → Analyzers → ToonNet.SourceGenerators**.
 
 ## Requirements
 
 - .NET 8.0 or later (`ToonNet.Core` builds for .NET 8 and .NET 10)
+- C# 10 or later (the default of .NET 6 and later; generated files use file-scoped namespaces)
 - ToonNet.Core of the same release
 
 ## See Also

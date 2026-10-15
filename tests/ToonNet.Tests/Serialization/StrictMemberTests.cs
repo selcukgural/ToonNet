@@ -61,19 +61,24 @@ public class StrictMemberTests
     }
 
     [Fact]
-    public void Defaults_SkipUnknownKeysAndMissingRequiredProperties()
+    public void Defaults_SkipUnknownKeys_AndRequireRequiredProperties()
     {
-        var account = ToonSerializer.Deserialize<Account>("Age: 3\nUnknown: 1")!;
+        // Since 4.0 a missing required property is an error by default, as in System.Text.Json
+        Assert.True(new ToonSerializerOptions().RespectRequiredMembers);
+        var ex = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<Account>("Age: 3\nUnknown: 1"));
+        Assert.Contains("required property 'Name' is missing", ex.Message);
 
+        var account = ToonSerializer.Deserialize<Account>("Age: 3\nUnknown: 1", new ToonSerializerOptions { RespectRequiredMembers = false })!;
         Assert.Null(account.Name);
         Assert.Equal(3, account.Age);
+        Assert.Equal("a", ToonSerializer.Deserialize<Account>("Name: a\nUnknown: 1")!.Name);
     }
 
     [Fact]
     public void UnknownKeys_AreErrors_WithTheirPath()
     {
         var ex = Fails<Account>("Name: a\nNmae: b", Disallow);
-        Assert.Equal("The key 'Nmae' matches no property or constructor parameter (path: $.Nmae, target type: Account)", ex.Message);
+        Assert.Equal("The key matches no property or constructor parameter (path: $.Nmae, target type: Account)", ex.Message);
 
         ex = Fails<Account>("Name: a\nAddresses[1]{City,Zip}:\n  x,1", Disallow);
         Assert.Equal("$.Addresses[0].Zip", ex.Path);

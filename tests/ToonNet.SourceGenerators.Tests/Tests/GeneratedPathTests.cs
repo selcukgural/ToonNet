@@ -195,14 +195,20 @@ public class GeneratedPathTests
     }
 
     [Fact]
-    public void DerivedInstance_InGeneratedProperty_IsWrittenWithItsRuntimeType()
+    public void DerivedInstance_InGeneratedProperty_IsWrittenAsTheDeclaredType()
     {
         var person = new Person { Name = "Ada", Address = new SpecialAddress { City = "Paris", Floor = "3" } };
 
         var generated = new ToonNet.Core.Encoding.ToonEncoder().Encode(Person.Serialize(person));
 
         Assert.Equal(ToonSerializer.Serialize(person, ReflectionOnly.Options()), generated);
-        Assert.Contains("Floor: \"3\"", generated);
+        Assert.Contains("City: Paris", generated);
+        Assert.DoesNotContain("Floor", generated);
+
+        var runtime = new ToonSerializerOptions { SerializeRuntimeTypes = true };
+        var withRuntimeTypes = new ToonNet.Core.Encoding.ToonEncoder().Encode(Person.Serialize(person, runtime));
+        Assert.Equal(ToonSerializer.Serialize(person, ReflectionOnly.Options(runtime)), withRuntimeTypes);
+        Assert.Contains("Floor: \"3\"", withRuntimeTypes);
     }
 
     [Fact]

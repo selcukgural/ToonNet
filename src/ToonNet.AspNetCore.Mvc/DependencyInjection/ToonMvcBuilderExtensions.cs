@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -26,6 +27,8 @@ public static class ToonMvcBuilderExtensions
     /// Request bodies are limited to <see cref="ToonFormatterDefaults.MaxRequestBodySize"/> bytes. The options are
     /// validated when the application starts. Calling this method more than once does not add the formatters twice.
     /// </remarks>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static IMvcBuilder AddToonFormatters(this IMvcBuilder builder, Action<ToonSerializerOptions>? configureOptions = null)
     {
         return AddToonFormatters(builder, configureOptions, ToonFormatterDefaults.MaxRequestBodySize);
@@ -40,6 +43,8 @@ public static class ToonMvcBuilderExtensions
     /// </param>
     /// <param name="maxRequestBodySize">The maximum size, in bytes, of a TOON request body.</param>
     /// <returns>The MVC builder instance for chaining further configuration.</returns>
+    [RequiresUnreferencedCode(AotMessages.Reflection)]
+    [RequiresDynamicCode(AotMessages.Reflection)]
     public static IMvcBuilder AddToonFormatters(this IMvcBuilder builder, Action<ToonSerializerOptions>? configureOptions, long maxRequestBodySize)
     {
         ArgumentNullException.ThrowIfNull(builder);
