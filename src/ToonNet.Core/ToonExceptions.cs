@@ -25,18 +25,7 @@ public class ToonException : Exception
     ///     A long path (a cycle followed to the depth limit) as its start and end, so the message stays short; the
     ///     exception's path property keeps all of it.
     /// </summary>
-    private static string ShortenPath(string path)
-    {
-        if (path.Length <= 256)
-        {
-            return path;
-        }
-
-        var head = char.IsHighSurrogate(path[63]) ? 63 : 64;
-        var tail = path.Length - 160;
-        tail = char.IsLowSurrogate(path[tail]) ? tail - 1 : tail;
-        return path[..head] + "..." + path[tail..];
-    }
+    private static string ShortenPath(string path) => ToonErrorText.Shorten(path);
 
     internal static string WithDetails(string message, params (string Name, string? Value)[] details)
     {

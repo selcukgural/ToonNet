@@ -274,7 +274,9 @@ public sealed class ToonRuleSet
         {
             if (string.CompareOrdinal(message, i, "{path}", 0, 6) == 0)
             {
-                text.Append(path);
+                // A normalized path escapes only C0 controls (RFC 9535): line separators and bidirectional controls in
+                // keys would reach the message as they are
+                text.Append(ToonErrorText.ShowPath(path));
                 i += 5;
             }
             else if (string.CompareOrdinal(message, i, "{value}", 0, 7) == 0)
@@ -435,7 +437,7 @@ public sealed record ToonRuleViolation(ToonRule Rule, string Path, string Messag
     public ToonRuleSeverity Severity => Rule.Severity;
 
     /// <summary>The violation as text: <c>$['orders'][3]: An order total cannot be negative</c>.</summary>
-    public override string ToString() => $"{Path}: {Message}";
+    public override string ToString() => $"{ToonErrorText.ShowPath(Path)}: {Message}";
 }
 
 /// <summary>The result of checking a document against a <see cref="ToonRuleSet"/>.</summary>

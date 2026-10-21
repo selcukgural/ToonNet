@@ -24,6 +24,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ToonPropertyCollection` and `ToonDocumentWriter` errors, escaped and shortened, as for other text from documents.
   `ToonDocumentWriter` checks long field lists for repeated names in linear time, and non-strict mode rejects tab
   indentation too wide to count instead of reporting a negative column.
+- **ToonNet.Core:** Paths: compiling a regular expression for `match()` and `search()` spends steps (as many as a few
+  thousand), also for light patterns and for patterns taken from the document, and an evaluation keeps the patterns it
+  compiled: patterns that pushed each other out of the small shared cache were compiled again for each value, which the
+  step budget did not count. A path has at most 32 pattern literals, which are compiled when it is parsed.
+- **ToonNet.Core:** Paths: a list of selected values may hold a million values and two more per value of the document;
+  selectors that repeat (`$.a[*,*,*,...]`, whose duplicates RFC 9535 keeps) kept many times the document in memory
+  until the steps ran out. Evaluating over text spends a step per member a filter reads and per operand it tests, and
+  for the text it compares, as on a tree, and looks up the members of filters of many names in a hash index;
+  `contains()` spends for the length of the part it looks for.
+- **ToonNet.Core:** Paths in messages (`{path}` in rule messages, `ToonRuleViolation.ToString`, `ToonRuleException`,
+  the errors of `ToonPath` and `DeserializeAt`) and the character of an `Unexpected` path error are escaped and long
+  paths shortened; normalized paths escape only C0 controls (RFC 9535), so line separators and bidirectional controls
+  in keys reached messages. `ToonRuleViolation.Path` and `ToonPathMatch` paths are unchanged.
 
 ## [4.0.0] - 2026-10-15
 

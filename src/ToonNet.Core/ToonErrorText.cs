@@ -37,6 +37,26 @@ internal static class ToonErrorText
         return (cut ? text.Append("...") : text).ToString();
     }
 
+    /// <summary>
+    ///     A path in a message: its control characters escaped, and a long one cut to its start and end (paths of values
+    ///     can be as long as the keys of a document). The full path stays in the properties of the exception or result.
+    /// </summary>
+    public static string ShowPath(string path) => EscapeControls(Shorten(path));
+
+    /// <summary>A path of up to 256 characters as it is, a longer one as its first 64 and last 160 characters.</summary>
+    internal static string Shorten(string path)
+    {
+        if (path.Length <= 256)
+        {
+            return path;
+        }
+
+        var head = char.IsHighSurrogate(path[63]) ? 63 : 64;
+        var tail = path.Length - 160;
+        tail = char.IsLowSurrogate(path[tail]) ? tail - 1 : tail;
+        return path[..head] + "..." + path[tail..];
+    }
+
     /// <summary>The text of a path from a caller (in an exception about it), with its control characters escaped.</summary>
     public static string EscapeControls(string text)
     {

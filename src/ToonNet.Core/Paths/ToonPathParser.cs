@@ -14,6 +14,12 @@ internal sealed class ToonPathParser
 
     private readonly string _text;
     private readonly ToonPathOptions _limits;
+
+    /// <summary>The pattern literals of <c>match()</c> and <c>search()</c> in the path so far.</summary>
+    private int _patterns;
+
+    /// <summary>The most pattern literals a path may have.</summary>
+    internal const int MaxPatterns = 32;
     private int _position;
     private int _nesting;
 
@@ -55,7 +61,7 @@ internal sealed class ToonPathParser
 
         if (parser._position < text.Length)
         {
-            throw parser.Error($"Unexpected '{text[parser._position]}'");
+            throw parser.Error($"Unexpected '{ToonErrorText.EscapeControls(text[parser._position].ToString())}'");
         }
 
         return expression;
@@ -72,7 +78,7 @@ internal sealed class ToonPathParser
 
         if (_position < _text.Length)
         {
-            throw Error(char.IsWhiteSpace(_text[_position]) ? "Unexpected whitespace" : $"Unexpected '{_text[_position]}'");
+            throw Error(char.IsWhiteSpace(_text[_position]) ? "Unexpected whitespace" : $"Unexpected '{ToonErrorText.EscapeControls(_text[_position].ToString())}'");
         }
 
         return new Query(absolute: true, segments);
@@ -715,9 +721,15 @@ internal sealed class ToonPathParser
 
         _nesting--;
 
-        // A literal pattern is compiled once, with the path
+        // A literal pattern is compiled once, with the path. Compiling takes about as long as evaluating thousands of
+        // steps, and parsing has no budget: a path from a client may have a few
         if (function is FunctionKind.Match or FunctionKind.Search && arguments[1] is LiteralExpression { Value: var pattern })
         {
+            if (++_patterns > MaxPatterns)
+            {
+                throw Error($"A path has at most {MaxPatterns} pattern literals", start);
+            }
+
             return new FunctionExpression(function, arguments.ToArray())
             {
                 HasLiteralPattern = true,

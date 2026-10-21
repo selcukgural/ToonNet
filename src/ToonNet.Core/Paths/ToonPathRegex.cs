@@ -28,6 +28,12 @@ internal static class ToonPathRegex
 
     private static readonly ConcurrentDictionary<PathPattern, Regex> Shared = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>
+    ///     The steps an evaluation spends to compile a regular expression, on top of its weight: building one takes about
+    ///     as long as a few thousand steps, whatever its size.
+    /// </summary>
+    internal const int CompileSteps = 4096;
+
     /// <summary>Heavier patterns are invalid (.NET rejects automata much smaller than this).</summary>
     private const long MaxWeight = 1_000_000;
 
@@ -40,27 +46,34 @@ internal static class ToonPathRegex
     /// <param name="pattern">The I-Regexp pattern.</param>
     /// <param name="full">Whether the whole string must match (<c>match()</c>) rather than a substring (<c>search()</c>).</param>
     /// <param name="maxLength">Longer patterns are not valid, which bounds the cost of compiling one.</param>
-    public static PathPattern? Get(string pattern, bool full, int maxLength)
+    public static PathPattern? Get(string pattern, bool full, int maxLength) => Get(pattern, full, maxLength, out _);
+
+    /// <inheritdoc cref="Get(string, bool, int)"/>
+    /// <param name="compiled">Whether the pattern was not in the cache, and compiling it was paid now.</param>
+    public static PathPattern? Get(string pattern, bool full, int maxLength, out bool compiled)
     {
+        compiled = false;
+
         if (pattern.Length > maxLength)
         {
             return null;
         }
 
-        if (Cache.TryGetValue((pattern, full), out var compiled))
+        if (Cache.TryGetValue((pattern, full), out var result))
         {
-            return compiled;
+            return result;
         }
 
-        compiled = Compile(pattern, full);
+        compiled = true;
+        result = Compile(pattern, full);
 
         if (Cache.Count >= MaxCacheSize)
         {
             Cache.Clear();
         }
 
-        Cache.TryAdd((pattern, full), compiled);
-        return compiled;
+        Cache.TryAdd((pattern, full), result);
+        return result;
     }
 
     private static PathPattern? Compile(string pattern, bool full)
@@ -85,17 +98,20 @@ internal static class ToonPathRegex
         return new PathPattern(text, (int)weight);
     }
 
-    /// <summary>The shared regular expression of a light pattern, or null for a heavy one.</summary>
-    public static Regex? GetShared(PathPattern pattern)
+    /// <summary>The shared regular expression of a pattern, if it has been compiled and is still in the cache.</summary>
+    public static bool TryGetShared(PathPattern pattern, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Regex? regex) =>
+        Shared.TryGetValue(pattern, out regex);
+
+    /// <summary>
+    ///     Compiles a pattern; a light one is also shared with other evaluations. The caller pays for compiling
+    ///     (<see cref="CompileSteps"/>): patterns that keep replacing each other in the small cache are compiled again on
+    ///     each use.
+    /// </summary>
+    public static Regex Compile(PathPattern pattern)
     {
         if (pattern.Weight > MaxSharedWeight)
         {
-            return null;
-        }
-
-        if (Shared.TryGetValue(pattern, out var regex))
-        {
-            return regex;
+            return pattern.Compile();
         }
 
         if (Shared.Count >= MaxSharedCount)

@@ -438,7 +438,7 @@ public static partial class ToonSerializer
         return compiled.IsSingular
             ? compiled
             : throw new ArgumentException(
-                $"The path '{path}' can select several values; DeserializeAt needs member names and indexes only. Use ToonPath.Select for queries.",
+                $"The path '{ToonErrorText.ShowPath(path)}' can select several values; DeserializeAt needs member names and indexes only. Use ToonPath.Select for queries.",
                 nameof(path));
     }
 

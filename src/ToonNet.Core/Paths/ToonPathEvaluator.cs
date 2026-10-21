@@ -26,6 +26,7 @@ internal sealed class EvaluationBudget
     {
         _remaining = options.MaxSteps;
         _root = options.MaxStepsPerValue > 0 ? root : null;
+        _document = root;
     }
 
     /// <summary>
@@ -37,9 +38,54 @@ internal sealed class EvaluationBudget
     {
         _remaining = options.MaxSteps;
         _text = options.MaxStepsPerValue > 0 ? text : (Parsing.ToonText?)null;
+        _documentText = text;
     }
 
     private Parsing.ToonText? _text;
+
+    /// <summary>The document, whose values are counted for <see cref="CheckNodes"/> once a list gets long.</summary>
+    private ToonValue? _document;
+
+    private Parsing.ToonText? _documentText;
+
+    /// <summary>The values a list of selected nodes may hold before the document's values are counted.</summary>
+    private const long MinNodes = 1_000_000;
+
+    /// <summary>The values a list may hold per value of the document, on top of <see cref="MinNodes"/>.</summary>
+    private const int NodesPerValue = 2;
+
+    private long _maxNodes = MinNodes;
+
+    /// <summary>
+    ///     Checks the length of a list of selected nodes. Steps bound the work, not the memory of the lists a segment
+    ///     builds: selectors that repeat (<c>[*,*,*,...]</c>, which keep their duplicates, RFC 9535 §2.5) would keep
+    ///     sixteen nodes per value of the document. A list may hold a million nodes, and two more per value.
+    /// </summary>
+    /// <exception cref="ToonPathLimitException">Thrown when the list is longer.</exception>
+    public void CheckNodes(int count)
+    {
+        if (count <= _maxNodes)
+        {
+            return;
+        }
+
+        if (_document != null || _documentText != null)
+        {
+            var values = _document != null ? CountValues(_document).Values : CountTextValues(_documentText!.Value.Span);
+            _maxNodes += NodesPerValue * values;
+            _document = null;
+            _documentText = null;
+
+            if (count <= _maxNodes)
+            {
+                return;
+            }
+        }
+
+        throw new ToonPathLimitException(
+            $"The path selects more than {_maxNodes} values at once (a million, and two per value of the document): selectors that repeat keep their duplicates.",
+            isTimeout: false);
+    }
 
     private EvaluationBudget(ToonPathOptions options)
     {
@@ -121,36 +167,44 @@ internal sealed class EvaluationBudget
     /// <summary>A pattern from the document (<c>match(@.v, @.pattern)</c>), compiled once per evaluation.</summary>
     public PathPattern? Pattern(string pattern, bool full)
     {
-        // Compiling a pattern costs about its length in steps (it is cached, but other documents can fill the cache)
+        // Checking a pattern reads it, and compiles it when it is not cached (other documents can fill the cache)
         SpendText(pattern.Length);
-        return ToonPathRegex.Get(pattern, full, Options.MaxPatternLength);
+        var result = ToonPathRegex.Get(pattern, full, Options.MaxPatternLength, out var compiled);
+
+        if (compiled)
+        {
+            Spend(ToonPathRegex.CompileSteps);
+        }
+
+        return result;
     }
 
     /// <summary>
     ///     The regular expression of a pattern, after spending for a match on a text of <paramref name="length"/>
     ///     characters: a step per 64 characters and states of the automaton. A heavy pattern is compiled for this
-    ///     evaluation (and spends for that), so the states it builds are released with the evaluation; a light one may
-    ///     come from the small shared cache.
+    ///     evaluation, so the states it builds are released with the evaluation; a light one may come from the small
+    ///     shared cache. Compiling spends steps, whichever cache it goes to.
     /// </summary>
     public System.Text.RegularExpressions.Regex RegexFor(PathPattern pattern, int length)
     {
         SpendMany((long)length * pattern.Weight / 64 + 1);
 
-        if (ToonPathRegex.GetShared(pattern) is { } shared)
-        {
-            return shared;
-        }
-
+        // The evaluation's own first: patterns of other evaluations can push its patterns out of the shared cache
         if (_regexes != null && _regexes.TryGetValue(pattern, out var regex))
         {
             return regex;
         }
 
-        SpendMany(pattern.Weight + 64L);
-        regex = pattern.Compile();
+        if (!ToonPathRegex.TryGetShared(pattern, out regex))
+        {
+            SpendMany(pattern.Weight + (long)ToonPathRegex.CompileSteps);
+            regex = ToonPathRegex.Compile(pattern);
+        }
 
-        // A few patterns are kept for the evaluation; more (each value with its own pattern) are compiled for each use
-        if ((_regexes ??= new Dictionary<PathPattern, System.Text.RegularExpressions.Regex>(ReferenceEqualityComparer.Instance)).Count < 16)
+        // The pattern literals of the path and a few patterns from the document are kept for the evaluation; more (each
+        // value with its own pattern) are compiled for each use
+        if ((_regexes ??= new Dictionary<PathPattern, System.Text.RegularExpressions.Regex>(ReferenceEqualityComparer.Instance)).Count <
+            ToonPathParser.MaxPatterns + 16)
         {
             _regexes[pattern] = regex;
         }
@@ -559,6 +613,7 @@ internal static class ToonPathEvaluator
         var before = output.Count;
         AddChildren(selector, node, root, track, output, work);
         work.Spend(output.Count - before);
+        work.CheckNodes(output.Count);
     }
 
     private static void AddChildren(Selector selector, Node node, ToonValue root, bool track, List<Node> output, EvaluationBudget work)
@@ -848,8 +903,17 @@ internal static class ToonPathEvaluator
             }
         }
 
+        // contains() compares the part at each position of the text: a long part costs more than reading the text
+        if (custom.Test == PathFunction.StringTest.Contains && arguments is [ToonString text, ToonString part])
+        {
+            work.SpendMany(ContainsSteps(text.Value.Length, part.Value.Length));
+        }
+
         return custom.Invoke(arguments);
     }
+
+    /// <summary>The steps of looking for a part in a text, beyond reading the text: a step per 16 characters for each 64 of the part.</summary>
+    internal static long ContainsSteps(int textLength, int partLength) => (long)(textLength / 16) * (partLength / 64);
 
     private static bool TestFunction(FunctionExpression function, ToonValue root, ToonValue current, EvaluationBudget work)
     {
