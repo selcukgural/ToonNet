@@ -53,17 +53,18 @@ public class GeneratedCollectionTests
     public void DictionariesAndSetsOfLargeKeys_GetComparersDocumentsCannotMakeCollide()
     {
         // Keys whose default hash codes are all 0 (the XOR of the halves of a 64-bit value)
-        var longs = Enumerable.Range(1, 50_000).Select(i => ((long)i << 32) | (uint)i).ToList();
+        var longs = Enumerable.Range(1, 100_000).Select(i => ((long)i << 32) | (uint)i).ToList();
         var toon = "ByLong:\n" + string.Concat(longs.Select(k => $"  \"{k}\": 1\n")) + "Ids[1]: " + Guid.Empty + "\nByName:\n  a: 1";
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var text = ToonSerializer.Deserialize<KeyedCollections>(toon)!;
         var tree = ToonSerializer.DeserializeFromValue<KeyedCollections>(ToonNet.Core.Models.ToonDocument.Parse(toon).Root)!;
-        Assert.True(watch.ElapsedMilliseconds < 1_000, $"took {watch.ElapsedMilliseconds} ms");
+        // Linear: well under a second on a laptop; the default comparer takes about ten seconds (quadratic)
+        Assert.True(watch.ElapsedMilliseconds < 5_000, $"took {watch.ElapsedMilliseconds} ms");
 
         foreach (var read in new[] { text, tree })
         {
-            Assert.Equal(50_000, read.ByLong.Count);
+            Assert.Equal(100_000, read.ByLong.Count);
             Assert.NotSame(EqualityComparer<long>.Default, read.ByLong.Comparer);
             Assert.NotSame(EqualityComparer<Guid>.Default, read.Ids.Comparer);
             Assert.Contains(Guid.Empty, read.Ids);

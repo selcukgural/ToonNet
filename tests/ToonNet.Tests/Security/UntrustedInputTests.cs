@@ -418,8 +418,9 @@ public class UntrustedInputTests
         var text = toon.ToString();
         Keyed? keyed = null;
 
-        Fast(() => keyed = ToonSerializer.Deserialize<Keyed>(text), 2_000);
-        Fast(() => ToonSerializer.DeserializeFromValue<Keyed>(ToonDocument.Parse(text).Root), 2_000);
+        // Linear: a fraction of a second; the default comparers take about twenty seconds (quadratic)
+        Fast(() => keyed = ToonSerializer.Deserialize<Keyed>(text), 5_000);
+        Fast(() => ToonSerializer.DeserializeFromValue<Keyed>(ToonDocument.Parse(text).Root), 5_000);
 
         Assert.Equal(100_000, keyed!.ByLong.Count);
         Assert.Equal(1, keyed.ByLong[longs[^1]]);
