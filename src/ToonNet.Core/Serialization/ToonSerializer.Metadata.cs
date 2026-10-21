@@ -302,7 +302,7 @@ public static partial class ToonSerializer
     {
         var metadata = GetTypeMetadata(writtenType);
 
-        if (!writtenType.IsInterface || runtimeType == writtenType || runtimeType.IsInterface || metadata.Properties.Length == 0)
+        if (runtimeType == writtenType || !writtenType.IsInterface || metadata.Properties.Length == 0)
         {
             return metadata;
         }
@@ -352,6 +352,12 @@ public static partial class ToonSerializer
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static TypeMetadata GetTypeMetadata(Type type)
     {
+        // Types that are not supported are never cached: the checks below run once per supported type
+        if (TypeMetadataCache.TryGetValue(type, out var cached))
+        {
+            return cached;
+        }
+
         // A value tuple keeps its items in fields, which the serializer does not read: it would be written as an empty
         // object and read back empty
         if (type is { IsValueType: true, IsGenericType: true, Namespace: "System" } && type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal))

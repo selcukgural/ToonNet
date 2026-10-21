@@ -13,21 +13,20 @@ internal static class ToonKeyComparer
     /// <summary>The comparer for <typeparamref name="T"/>, or null when its default comparer is fine.</summary>
     public static IEqualityComparer<T>? For<T>()
     {
-        object? comparer = default(T) switch
-        {
-            long => Int64,
-            ulong => UInt64,
-            double => Double,
-            Guid => GuidKeys,
-            DateTime => DateTimeKeys,
-            DateTimeOffset => DateTimeOffsetKeys,
-            TimeSpan => TimeSpanKeys,
-            Int128 => Int128Keys,
-            UInt128 => UInt128Keys,
-            nint when IntPtr.Size == 8 => NativeInt,
-            nuint when IntPtr.Size == 8 => NativeUInt,
-            _ => null
-        };
+        // typeof comparisons the JIT folds for each T: no boxing of a default value, no branches left
+        object? comparer =
+            typeof(T) == typeof(long) ? Int64
+            : typeof(T) == typeof(ulong) ? UInt64
+            : typeof(T) == typeof(double) ? Double
+            : typeof(T) == typeof(Guid) ? GuidKeys
+            : typeof(T) == typeof(DateTime) ? DateTimeKeys
+            : typeof(T) == typeof(DateTimeOffset) ? DateTimeOffsetKeys
+            : typeof(T) == typeof(TimeSpan) ? TimeSpanKeys
+            : typeof(T) == typeof(Int128) ? Int128Keys
+            : typeof(T) == typeof(UInt128) ? UInt128Keys
+            : typeof(T) == typeof(nint) && IntPtr.Size == 8 ? NativeInt
+            : typeof(T) == typeof(nuint) && IntPtr.Size == 8 ? NativeUInt
+            : null;
 
         return (IEqualityComparer<T>?)comparer;
     }
