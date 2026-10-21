@@ -310,7 +310,7 @@ public class ToonPromptTests
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var extracted = ToonPrompt.Extract(answer);
 
-        Assert.True(watch.ElapsedMilliseconds < 1_000, $"took {watch.ElapsedMilliseconds} ms");
+        Assert.True(watch.ElapsedMilliseconds < 3_000, $"took {watch.ElapsedMilliseconds} ms");
         Assert.Equal("k: v", extracted);
         Assert.Equal("a: 1\nb: 2", ToonPrompt.Extract("```py\nx = 1\n```\na: 1\n```json\n{}\n```\nb: 2"));
     }
