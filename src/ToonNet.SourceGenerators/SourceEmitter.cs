@@ -1054,6 +1054,16 @@ internal sealed class SourceEmitter
         code.AppendLine("// Non-object values are handled (or reported) like the tree: by ToonSerializer");
         code.AppendLine("if (!reader.IsObject(in value)) return __ToonDeserializeValue(reader.BuildTree(in value), options, depth);");
         code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth); // objects count, as for ToonSerializer (not null)");
+
+        if (model.ConstructorError is { } error)
+        {
+            // A constructor parameter matches no property (TOON012): as ToonSerializer, reading the type throws
+            code.AppendLine($"throw new global::System.InvalidOperationException({Literal(error)});");
+            code.EndBlock();
+            EmitObjectReaderClass();
+            return;
+        }
+
         EmitPolicyLocal();
 
         // Keys shared by several members are read once per member by the tree
@@ -1197,6 +1207,13 @@ internal sealed class SourceEmitter
         for (var j = 0; j < constructor.Parameters.Length; j++)
         {
             var parameter = constructor.Parameters[j];
+
+            // A parameter of a member the type keeps out of documents is never read
+            if (!parameter.FromDocument)
+            {
+                continue;
+            }
+
             var bound = parameter.PropertyIndex >= 0 ? model.Properties[parameter.PropertyIndex] : null;
             var names = bound != null ? PolicyNames(bound) : [parameter.Name, parameter.Name, parameter.Name, parameter.Name];
             var read = bound?.ConverterTypeName != null
@@ -1248,7 +1265,7 @@ internal sealed class SourceEmitter
         for (var policy = 0; policy < 4; policy++)
         {
             names[policy] = [.. _model.Properties.Select(p => PolicyNames(p)[policy])];
-            names[policy].AddRange(constructor.Parameters.Where(p => p.PropertyIndex < 0).Select(p => p.Name));
+            names[policy].AddRange(constructor.Parameters.Where(p => p.PropertyIndex < 0 && p.FromDocument).Select(p => p.Name));
         }
 
         return names;
@@ -1586,6 +1603,15 @@ internal sealed class SourceEmitter
         code.AppendLine("// Null and non-object values are handled (or reported) by ToonSerializer.");
         code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
         code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth); // objects count, as for ToonSerializer (not null)");
+
+        if (model.ConstructorError is { } error)
+        {
+            // A constructor parameter matches no property (TOON012): as ToonSerializer, reading the type throws
+            code.AppendLine($"throw new global::System.InvalidOperationException({Literal(error)});");
+            code.EndBlock();
+            return;
+        }
+
         EmitPolicyLocal();
         code.AppendLine(ConvertLocal);
         code.AppendLine("var __ci = options.PropertyNameCaseInsensitive;");
@@ -1626,6 +1652,15 @@ internal sealed class SourceEmitter
         for (var j = 0; j < constructor.Parameters.Length; j++)
         {
             var parameter = constructor.Parameters[j];
+
+            if (!parameter.FromDocument)
+            {
+                code.AppendLine();
+                code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue}; // its member is kept out of documents");
+                arguments.Add(parameter.PassIn ? $"in __a{j}" : $"__a{j}");
+                continue;
+            }
+
             var bound = parameter.PropertyIndex >= 0 ? model.Properties[parameter.PropertyIndex] : null;
             var key = bound != null ? NameExpression(bound) : Literal(parameter.Name);
             var ignoreCase = IgnoreCase(bound != null ? PolicyNames(bound) : [parameter.Name, parameter.Name, parameter.Name, parameter.Name], unambiguous);

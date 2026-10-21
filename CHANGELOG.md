@@ -48,6 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** A value written as an interface leaves out the interface's properties that its class marks
   `[ToonIgnore]` where it implements them (implicitly or explicitly): an `Account` that ignores `PasswordHash`, held as
   an `IAccount` that declares it, wrote the hash.
+- **ToonNet.Core, ToonNet.SourceGenerators:** Constructor parameters are read from documents only as System.Text.Json
+  reads them. A parameter whose member the type keeps out of documents (a `[ToonIgnore]` property, as in
+  `record User(string Name, [property: ToonIgnore] bool IsAdmin = false)`, a property without a public getter, or a
+  field) is not read: it gets its default value, and its key is not mapped. A parameter that matches no member makes
+  reading the type throw `InvalidOperationException` (the generator reports it as warning `TOON012`), unless the
+  constructor is marked `[ToonConstructor]`, which reads it from a key of its name as before. Such parameters let
+  documents pass values the type never shows to the constructor of any type a property declares (a `FileInfo` whose
+  setters then changed the file it named). **This changes reading for types whose constructor takes values without a
+  property:** mark the constructor `[ToonConstructor]` to keep reading them.
+- **ToonNet.Core:** Reflection types (`Type`, `MemberInfo`, `Assembly`, `Module`), delegates, `SerializationInfo`,
+  streams, file system entries (`FileInfo`, `DirectoryInfo`), processes (`Process`, `ProcessStartInfo`) and handles
+  (`SafeHandle`, `WaitHandle`) are not serialized or deserialized, as in System.Text.Json: `NotSupportedException`
+  instead of a `MemoryStream` of a capacity from the document, a `FileStream` that truncates a file, or writing a
+  reflection graph until a depth error. A converter of the options still handles them.
 
 ## [4.0.0] - 2026-10-15
 

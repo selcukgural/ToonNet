@@ -132,6 +132,31 @@ public class GeneratorDriverTests
         Assert.DoesNotContain("static global::ToonNet.Core.Models.ToonDocument Serialize(", LastGeneratedSources.Single());
     }
 
+    [Fact]
+    public void ConstructorParametersWithoutAProperty_ReportToon012_UnlessTheConstructorIsMarked()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Login(string user, string pass) { public string User { get; } = user; }
+            [ToonSerializable] public partial class Hidden(string user, bool isAdmin) { public string User { get; } = user; internal bool IsAdmin { get; } = isAdmin; }
+            [ToonSerializable] public partial class Marked { [ToonConstructor] public Marked(string user, string pass) { User = user + pass; } public string User { get; } }
+            """);
+
+        Assert.Empty(errors);
+        var diagnostic = Assert.Single(diagnostics, d => d.Id == "TOON012");
+        Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.Equal("The constructor parameter 'pass' of 'Login' matches no public property, so reading 'Login' throws; add a property with its name, or mark the constructor [ToonConstructor] to read the parameter from the key 'pass'",
+                     diagnostic.GetMessage());
+
+        // The readers of Login throw; Hidden never reads isAdmin
+        var login = LastGeneratedSources.Single(s => s.Contains("partial class Login"));
+        Assert.Equal(2, login.Split("throw new global::System.InvalidOperationException(\"The parameter 'pass' of the constructor of Login").Length - 1);
+        var hidden = LastGeneratedSources.Single(s => s.Contains("partial class Hidden"));
+        Assert.Contains("bool __a1 = default!; // its member is kept out of documents", hidden);
+        Assert.DoesNotContain("\"isAdmin\"", hidden);
+    }
+
     [Theory]
     [InlineData("public static partial class Holder { public static int X { get; set; } }", "static class")]
     [InlineData("public ref partial struct Span { public int X { get; set; } }", "ref struct")]
@@ -458,6 +483,7 @@ public class GeneratorDriverTests
             [ToonSerializable]
             public partial class WithDefaults
             {
+                [ToonConstructor] // its parameters have no properties: read from keys of their own
                 public WithDefaults(Level level = Level.High, decimal rate = 0.1m, double ratio = -1.5, string? name = null, char c = '\'') { }
                 public Level Level { get; set; }
             }

@@ -7,7 +7,7 @@
     <IsPackable>false</IsPackable>
     <!-- Box<T> in Models/ModernModels.cs uses the reflection fallback on purpose; generator diagnostics are tested
          through the Roslyn driver (GeneratorDriverTests), which this setting does not affect -->
-    <NoWarn>$(NoWarn);TOON006</NoWarn>
+    <NoWarn>$(NoWarn);TOON006;TOON012</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

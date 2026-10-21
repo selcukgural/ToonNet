@@ -86,6 +86,14 @@ internal static class DiagnosticHelper
                                                                           Category, DiagnosticSeverity.Error, true);
 
     /// <summary>
+    /// Warning: a constructor parameter matches no public property, and the constructor is not marked
+    /// <c>[ToonConstructor]</c>: reading the type throws, as with System.Text.Json.
+    /// </summary>
+    public static readonly DiagnosticDescriptor UnboundConstructorParameter = new("TOON012", "Constructor parameter matches no property",
+                                                                                  "The constructor parameter '{0}' of '{1}' matches no public property, so reading '{1}' throws; add a property with its name, or mark the constructor [ToonConstructor] to read the parameter from the key '{0}'",
+                                                                                  Category, DiagnosticSeverity.Warning, true);
+
+    /// <summary>
     /// Looks up a descriptor by id (used when replaying diagnostics stored in the generator model).
     /// </summary>
 
@@ -99,6 +107,7 @@ internal static class DiagnosticHelper
         "TOON008" => InvalidPropertyName,
         "TOON009" => GeneratedMethodNameTaken,
         "TOON010" => UnsupportedTypeKind,
+        "TOON012" => UnboundConstructorParameter,
         _         => GenerationError
     };
 }

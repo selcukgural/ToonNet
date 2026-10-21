@@ -1207,7 +1207,8 @@ public static partial class ToonSerializer
         }
 
         var names = metadata.Properties.Select(property => GetPropertyName(property, metadata, options))
-                            .Concat(metadata.Activator.Arguments.Where(argument => argument.Property == null).Select(argument => argument.Parameter.Name!));
+                            .Concat(metadata.Activator.Arguments.Where(argument => argument.Property == null && argument.FromDocument)
+                                            .Select(argument => argument.Parameter.Name!));
 
         var unambiguous = names.GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
                                .Where(group => group.Distinct(StringComparer.Ordinal).Count() == 1)
@@ -1238,7 +1239,7 @@ public static partial class ToonSerializer
 
         foreach (var argument in metadata.Activator.Arguments)
         {
-            if (argument.Property == null && string.Equals(argument.Parameter.Name, key, StringComparison.Ordinal))
+            if (argument.Property == null && argument.FromDocument && string.Equals(argument.Parameter.Name, key, StringComparison.Ordinal))
             {
                 return true;
             }
@@ -1323,10 +1324,10 @@ public static partial class ToonSerializer
 
         for (var i = 0; i < arguments.Length; i++)
         {
-            var (parameter, property, missingValue) = activator.Arguments[i];
+            var (parameter, property, missingValue, fromDocument) = activator.Arguments[i];
             var name = property != null ? GetPropertyName(property, metadata, options) : parameter.Name!;
 
-            if (TryGetKey(obj, name, caseInsensitive, out var argumentValue))
+            if (fromDocument && TryGetKey(obj, name, caseInsensitive, out var argumentValue))
             {
                 state.Push(name);
                 arguments[i] = DeserializeValue(argumentValue, ObjectActivator.ValueTypeOf(parameter), options, depth + 1, state, property?.Converter);

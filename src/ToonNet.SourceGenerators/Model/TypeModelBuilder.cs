@@ -90,13 +90,30 @@ internal static class TypeModelBuilder
         var allowFallback = GetBool(attribute, "AllowReflectionFallback", true);
         var fallbackDescriptor = allowFallback ? DiagnosticHelper.ReflectionFallback : DiagnosticHelper.ReflectionFallbackNotAllowed;
 
+        var isToonConstructor = constructor != null && constructor.GetAttributes().Any(a =>
+            a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConstructorAttribute");
+        string? constructorError = null;
+
         foreach (var parameter in parameters)
         {
             var index = properties.FindIndex(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
+            var fromDocument = true;
 
             if (index >= 0)
             {
                 boundProperties.Add(index);
+            }
+            else if (HasHiddenMember(type, parameter.Name))
+            {
+                // A member the type keeps out of documents ([ToonIgnore], not public, a field): never read, as by reflection
+                fromDocument = false;
+            }
+            else if (!isToonConstructor)
+            {
+                constructorError ??= $"The parameter '{parameter.Name}' of the constructor of {type.Name} matches no public property. " +
+                                     $"Add a property with its name, or mark the constructor [ToonConstructor] to read the parameter from the key '{parameter.Name}'.";
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.UnboundConstructorParameter, parameter.Locations.FirstOrDefault() ?? location,
+                                                      parameter.Name, type.Name));
             }
 
             // A parameter bound to a property with [ToonConverter] is read by the converter, like in ToonSerializer.
@@ -109,7 +126,7 @@ internal static class TypeModelBuilder
 
             parameterModels.Add(new ParameterModel(parameter.Name, Typed(parameter.Type, compilation).ToDisplayString(TypeNameFormat), index,
                                                    FormatDefaultValue(parameter), plan,
-                                                   PassIn: parameter.RefKind is RefKind.In or RefKind.RefReadOnlyParameter));
+                                                   PassIn: parameter.RefKind is RefKind.In or RefKind.RefReadOnlyParameter, FromDocument: fromDocument));
         }
 
         var propertyModels = properties.Select((property, index) =>
@@ -164,7 +181,26 @@ internal static class TypeModelBuilder
             Constructor: type.IsAbstract ? null : constructorModel,
             Diagnostics: new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()),
             UnsetRequired: new EquatableArray<string>(unsetRequired.ToImmutableArray()),
-            UnsetRequiredHasInitializer: unsetRequiredHasInitializer && allowFallback);
+            UnsetRequiredHasInitializer: unsetRequiredHasInitializer && allowFallback,
+            ConstructorError: type.IsAbstract ? null : constructorError);
+    }
+
+    /// <summary>
+    ///     Whether the type or a base type has an instance property or field of the name (ignoring case) that generated code
+    ///     does not read or write: the collected properties are matched before this is asked.
+    /// </summary>
+    private static bool HasHiddenMember(INamedTypeSymbol type, string name)
+    {
+        for (var current = type; current != null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            if (current.GetMembers().Any(m => !m.IsStatic && (m is IPropertySymbol or IFieldSymbol { IsImplicitlyDeclared: false }) &&
+                                              string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
