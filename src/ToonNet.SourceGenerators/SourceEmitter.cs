@@ -1088,7 +1088,13 @@ internal sealed class SourceEmitter
         {
             var parameter = constructor.Parameters[j];
             code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue};");
-            code.AppendLine($"var __ha{j} = false;");
+
+            // A parameter that is never read has no key, and no flag for it
+            if (parameter.FromDocument)
+            {
+                code.AppendLine($"var __ha{j} = false;");
+            }
+
             arguments.Add(parameter.PassIn ? $"in __a{j}" : $"__a{j}");
         }
 

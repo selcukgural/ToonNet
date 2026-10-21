@@ -54,6 +54,22 @@ public sealed partial class CheckedContact
     }
 }
 
+/// <summary>An indexer is not a member named Item: the parameter is read from its own key.</summary>
+[ToonSerializable]
+public sealed partial class BindingIndexed
+{
+    private readonly int _value;
+
+    [ToonConstructor]
+    public BindingIndexed(int item) => _value = item;
+
+    public int this[int i] => i + _value;
+
+    public int X { get; set; }
+
+    public int Read() => _value;
+}
+
 /// <summary>Generated readers bind constructor parameters as ToonSerializer does.</summary>
 public class GeneratedConstructorBindingTests
 {
@@ -100,6 +116,11 @@ public class GeneratedConstructorBindingTests
 
         Assert.Equal("User: u\nSecret: p", ToonSerializer.Serialize(new BindingLogin("u", "p")));
         Assert.Equal("5 EUR", Read<BindingMarked>("Amount: 5\ncurrency: EUR")!.Text);
+
+        // An indexer (Item, to reflection) does not keep the parameter from documents
+        Assert.Equal(5, Read<BindingIndexed>("item: 5\nX: 1")!.Read());
+        Assert.Equal(5, ToonSerializer.Deserialize<BindingIndexed>("item: 5\nX: 1", ReflectionOnly.Options())!.Read());
+        Assert.Equal(5, ToonSerializer.DeserializeFromValue<BindingIndexed>(ToonDocument.Parse("item: 5").Root, ReflectionOnly.Options())!.Read());
     }
 
     [Fact]

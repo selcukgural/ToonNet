@@ -160,8 +160,8 @@ internal sealed class ValuePlanBuilder(Compilation compilation)
 
         if (named.DeclaringSyntaxReferences.Length > 0)
         {
-            // Declared in this compilation: its methods are generated in this run.
-            canSerialize = AllPartial(named);
+            // Declared in this compilation: its methods are generated in this run, unless a name it uses cannot be (TOON013)
+            canSerialize = AllPartial(named) && !TypeModelBuilder.HasUnemittableNames(named);
             canDeserialize = canSerialize && (named.IsValueType || TypeModelBuilder.SelectConstructor(named) != null);
             hasFieldWriter = canSerialize;
             hasTextReader = canDeserialize;

@@ -255,6 +255,9 @@ internal static class TypeModelBuilder
     ///     constructor parameters (with their type arguments, element types, containing types and namespaces), of the
     ///     base types, of converters and of the properties themselves; null when all can be written.
     /// </summary>
+    /// <summary>Whether no code is generated for the type because of a name it uses (TOON013), which callers convert with reflection.</summary>
+    internal static bool HasUnemittableNames(INamedTypeSymbol type) => FirstUnemittableName(type, CollectProperties(type), SelectConstructor(type)) != null;
+
     private static string? FirstUnemittableName(INamedTypeSymbol type, List<IPropertySymbol> properties, IMethodSymbol? constructor)
     {
         var types = new List<ITypeSymbol>();

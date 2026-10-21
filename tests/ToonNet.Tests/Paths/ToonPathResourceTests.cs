@@ -416,4 +416,24 @@ public class ToonPathResourceTests
         Assert.DoesNotContain('\u2028', several.Message);
         Assert.Contains(@"$['a\u2028b'].*", several.Message);
     }
+
+    [Fact]
+    public void CompilingPatterns_CostsTheSame_WhateverRanBefore()
+    {
+        // The compile was charged only when the shared cache missed: a small budget failed or not depending on whether
+        // another evaluation had compiled the pattern
+        var tree = new ToonArray([new ToonObject { ["a"] = "xyz" }]);
+        var small = new ToonPathOptions { MaxSteps = 3_000, MaxStepsPerValue = 0 };
+
+        Assert.Single(ToonPath.Parse("$[?match(@.a, 'x.*')]").Select(tree));
+        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$[?match(@.a, 'x.*')]", small).Select(tree));
+
+        var fromDocument = new ToonArray([new ToonObject { ["a"] = "xyz", ["p"] = "x.*" }]);
+        Assert.Single(ToonPath.Parse("$[?match(@.a, @.p)]").Select(fromDocument));
+        Assert.Throws<ToonPathLimitException>(() => ToonPath.Parse("$[?match(@.a, @.p)]", small).Select(fromDocument));
+
+        // Once per evaluation: the same pattern on many values is compiled once
+        var many = new ToonArray(Enumerable.Range(0, 1_000).Select(_ => (ToonValue)new ToonObject { ["a"] = "xyz", ["p"] = "x.*" }).ToList());
+        Assert.Equal(1_000, ToonPath.Parse("$[?match(@.a, @.p)]", new ToonPathOptions { MaxSteps = 50_000, MaxStepsPerValue = 0 }).Select(many).Count);
+    }
 }

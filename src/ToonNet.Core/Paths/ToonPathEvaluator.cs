@@ -167,17 +167,23 @@ internal sealed class EvaluationBudget
     /// <summary>A pattern from the document (<c>match(@.v, @.pattern)</c>), compiled once per evaluation.</summary>
     public PathPattern? Pattern(string pattern, bool full)
     {
-        // Checking a pattern reads it, and compiles it when it is not cached (other documents can fill the cache)
         SpendText(pattern.Length);
-        var result = ToonPathRegex.Get(pattern, full, Options.MaxPatternLength, out var compiled);
 
-        if (compiled)
+        if (_patterns != null && _patterns.TryGetValue((pattern, full), out var known))
         {
-            Spend(ToonPathRegex.CompileSteps);
+            return known;
         }
 
+        // Each pattern costs a compile once per evaluation, whether another evaluation has cached it or not: the steps
+        // a path may take do not depend on what ran before it
+        Spend(ToonPathRegex.CompileSteps);
+        var result = ToonPathRegex.Get(pattern, full, Options.MaxPatternLength);
+        (_patterns ??= [])[(pattern, full)] = result;
         return result;
     }
+
+    /// <summary>The patterns from the document checked in this evaluation.</summary>
+    private Dictionary<(string Pattern, bool Full), PathPattern?>? _patterns;
 
     /// <summary>
     ///     The regular expression of a pattern, after spending for a match on a text of <paramref name="length"/>
@@ -195,9 +201,11 @@ internal sealed class EvaluationBudget
             return regex;
         }
 
+        // Paid once per evaluation, whether the shared cache has it or not, as for Pattern
+        SpendMany(pattern.Weight + (long)ToonPathRegex.CompileSteps);
+
         if (!ToonPathRegex.TryGetShared(pattern, out regex))
         {
-            SpendMany(pattern.Weight + (long)ToonPathRegex.CompileSteps);
             regex = ToonPathRegex.Compile(pattern);
         }
 

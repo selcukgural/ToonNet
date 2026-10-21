@@ -167,7 +167,15 @@ public class GeneratorDriverTests
                          .Append(MetadataReference.CreateFromFile(typeof(ToonSerializer).Assembly.Location))
                          .Append(MetadataReference.CreateFromImage(image.ToArray()));
         var compilation = CSharpCompilation.Create("Snippet",
-                                                   [CSharpSyntaxTree.ParseText("[ToonNet.Core.Serialization.Attributes.ToonSerializable] public partial class Mine : Ns.NiceBase { public int Own { get; set; } }")],
+                                                   [CSharpSyntaxTree.ParseText("""
+                                                       [ToonNet.Core.Serialization.Attributes.ToonSerializable] public partial class Mine : Ns.NiceBase { public int Own { get; set; } }
+                                                       // A generated type that uses it converts it with reflection, as it gets no generated methods
+                                                       [ToonNet.Core.Serialization.Attributes.ToonSerializable] public partial class User
+                                                       {
+                                                           public Mine? Inner { get; set; }
+                                                           public System.Collections.Generic.List<Mine> Items { get; set; } = new();
+                                                       }
+                                                       """)],
                                                    references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         var driver = CSharpGeneratorDriver.Create(new Generator::ToonNet.SourceGenerators.ToonSerializableGenerator())
@@ -177,8 +185,10 @@ public class GeneratorDriverTests
         Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
         Assert.StartsWith("No code is generated for 'Mine': the name '", diagnostic.GetMessage());
         Assert.DoesNotContain('\u202E', diagnostic.GetMessage());
-        Assert.Empty(driver.GetRunResult().GeneratedTrees);
+        Assert.Single(driver.GetRunResult().GeneratedTrees, t => t.FilePath.Contains("User."));
+        Assert.DoesNotContain(driver.GetRunResult().GeneratedTrees, t => t.FilePath.Contains("Mine."));
         Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains(diagnostics, d => d.Id == "TOON006" && d.GetMessage().Contains("'Inner'"));
     }
 #endif
 
@@ -205,6 +215,10 @@ public class GeneratorDriverTests
         var hidden = LastGeneratedSources.Single(s => s.Contains("partial class Hidden"));
         Assert.Contains("bool __a1 = default!; // its member is kept out of documents", hidden);
         Assert.DoesNotContain("\"isAdmin\"", hidden);
+
+        // No flag for the parameter that is never read (CS0219 breaks builds that treat warnings as errors)
+        Assert.DoesNotContain("__ha1", hidden);
+        Assert.DoesNotContain(LastCompilationWarnings, d => d.Id == "CS0219");
     }
 
     [Theory]

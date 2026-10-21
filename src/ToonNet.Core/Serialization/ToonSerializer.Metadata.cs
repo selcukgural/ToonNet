@@ -157,7 +157,9 @@ public static partial class ToonSerializer
 
         /// <summary>
         ///     Whether the type or a base type has a property or field of the name (ignoring case) that is not written or
-        ///     read: marked <see cref="ToonIgnoreAttribute"/>, without a public getter, or a field.
+        ///     read: marked <see cref="ToonIgnoreAttribute"/>, without a public getter, or a field. Indexers are not
+        ///     members of a name, and of base types in other assemblies only the members those assemblies expose (public
+        ///     and protected) count, as for the source generator, which sees no others.
         /// </summary>
         [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
         [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
@@ -167,14 +169,20 @@ public static partial class ToonSerializer
 
             for (var current = type; current != null && current != typeof(object); current = current.BaseType)
             {
-                if (current.GetProperties(all).Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) ||
-                    current.GetFields(all).Any(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase)))
+                var own = current.Assembly == type.Assembly;
+
+                if (current.GetProperties(all).Any(p => p.GetIndexParameters().Length == 0 && string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                                                        (own || p.GetAccessors(nonPublic: true).Any(IsExposed))) ||
+                    current.GetFields(all).Any(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                                                    (own || f.IsPublic || f.IsFamily || f.IsFamilyOrAssembly)))
                 {
                     return true;
                 }
             }
 
             return false;
+
+            static bool IsExposed(MethodInfo accessor) => accessor.IsPublic || accessor.IsFamily || accessor.IsFamilyOrAssembly;
         }
 
         /// <summary>The type of a parameter's values: the element type of an <c>in</c> parameter (<c>Int32&amp;</c>).</summary>
