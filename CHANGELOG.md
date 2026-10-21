@@ -71,6 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is reported as one of a constructor: a `ToonSerializationException` that names the property's path and the
   exception's type, with the exception as the inner one, instead of the exception and its message (which can contain
   the value), which the MVC formatter did not turn into a model-state error.
+- **ToonNet.SourceGenerators:** Names from referenced assemblies that are not C# identifiers (another compiler or a
+  hand-written assembly can give a type any name) are no longer written into generated source: such a name of a base
+  type, a property's type or a converter added code to the project. The type then gets no generated code and is
+  serialized with reflection, and warning `TOON013` names it. Default values of constructor parameters and other
+  literals escape format characters (bidirectional controls, zero-width characters), as property names already did.
+- **ToonNet.Core:** Generated code is registered only with methods of its type (or of classes nested in it, such as
+  the generated writer and reader), not with other code of the type's module, dynamic methods, or a writer or reader
+  of another class.
 
 ## [4.0.0] - 2026-10-15
 

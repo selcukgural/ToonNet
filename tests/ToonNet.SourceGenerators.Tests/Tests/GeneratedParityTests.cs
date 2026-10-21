@@ -449,9 +449,30 @@ public class GeneratedParityTests
             (_, _, _) => new ToonNet.Core.Models.ToonObject(), null));
         Assert.Equal("a: b", ToonSerializer.Serialize(new Dictionary<string, string> { ["a"] = "b" }));
 
-        // A second registration of a type does not replace the first
-        ToonNet.Core.Serialization.ToonSourceGenerationHelpers.Register<Measured>((_, _, _) => new ToonNet.Core.Models.ToonString("hijacked"), null);
+        // Nor by other code of the type's module: only methods of the type, or of classes nested in it
+        Assert.Throws<InvalidOperationException>(() => ToonNet.Core.Serialization.ToonSourceGenerationHelpers.Register<Measured>(
+            (_, _, _) => new ToonNet.Core.Models.ToonString("hijacked"), null));
         Assert.Equal("X: 1\nL: []", ToonSerializer.Serialize(new Measured { X = 1 }));
+
+        // A dynamic method created in the type's module has no declaring type
+        var dynamic = new System.Reflection.Emit.DynamicMethod("Hijack", typeof(ToonNet.Core.Models.ToonValue),
+                                                               [typeof(Measured), typeof(ToonSerializerOptions), typeof(int)], typeof(Measured).Module);
+        var il = dynamic.GetILGenerator();
+        il.Emit(System.Reflection.Emit.OpCodes.Ldnull);
+        il.Emit(System.Reflection.Emit.OpCodes.Ret);
+        Assert.Throws<InvalidOperationException>(() => ToonNet.Core.Serialization.ToonSourceGenerationHelpers.Register(
+            dynamic.CreateDelegate<Func<Measured, ToonSerializerOptions, int, ToonNet.Core.Models.ToonValue>>(), null));
+
+        // The type's own methods with a writer or reader of other code
+        Assert.Throws<InvalidOperationException>(() => ToonNet.Core.Serialization.ToonSourceGenerationHelpers.Register<Measured>(
+            Measured.__ToonSerializeValue, Measured.__ToonDeserializeValue, null, new ForeignReader()));
+        Assert.Equal(1, ToonSerializer.Deserialize<Measured>("X: 1")!.X);
+    }
+
+    private sealed class ForeignReader : ToonNet.Core.Serialization.ToonObjectReader<Measured>
+    {
+        public override Measured Read(ToonNet.Core.Serialization.ToonReader reader, in ToonNet.Core.Serialization.ToonReaderValue value, int depth) =>
+            new() { X = 42 };
     }
 
     [Fact]

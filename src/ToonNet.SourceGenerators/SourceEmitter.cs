@@ -2169,36 +2169,16 @@ internal sealed class SourceEmitter
     }
 
     /// <summary>
-    ///     A C# string literal; bidirectional controls are escaped too, so the generated file shows what the string holds
-    ///     (they can make source read differently from what it does).
-    /// </summary>
-    /// <summary>
     ///     The comparer argument of a dictionary or set of <paramref name="typeName"/> read from a document
     ///     (<c>, Helpers.KeyComparer&lt;T&gt;()</c>), or nothing for a ToonNet.Core without it.
     /// </summary>
     private string KeyComparer(string typeName) => _model.KeyComparers ? $", {Helpers}.KeyComparer<{typeName}>()" : "";
 
-    private static string Literal(string value)
-    {
-        var literal = SymbolDisplay.FormatLiteral(value, true);
-
-        if (literal.IndexOfAny(BidiControls) < 0)
-        {
-            return literal;
-        }
-
-        var text = new System.Text.StringBuilder(literal.Length + 16);
-
-        foreach (var c in literal)
-        {
-            text.Append(Array.IndexOf(BidiControls, c) >= 0 ? "\\u" + ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture) : c.ToString());
-        }
-
-        return text.ToString();
-    }
-
-    private static readonly char[] BidiControls =
-        [(char)0x061C, (char)0x200E, (char)0x200F, (char)0x202A, (char)0x202B, (char)0x202C, (char)0x202D, (char)0x202E, (char)0x2066, (char)0x2067, (char)0x2068, (char)0x2069];
+    /// <summary>
+    ///     A C# string literal; format characters (bidirectional controls) are escaped too, so the generated file shows
+    ///     what the string holds (they can make source read differently from what it does).
+    /// </summary>
+    private static string Literal(string value) => CSharpLiteral.Of(value);
 
     private string Accessibility() => _model.PublicMethods ? "public" : "internal";
 

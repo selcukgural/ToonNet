@@ -80,6 +80,14 @@ internal static class TypeModelBuilder
             diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.NoPublicConstructor, location, type.Name));
         }
 
+        // Names from referenced assemblies go into the generated source as they are: one that is not an identifier
+        // (`G instance, int value); [ModuleInitializer] static void M() => ...; void N(G`) would add code to the project
+        if (FirstUnemittableName(type, properties, constructor) is { } unemittable)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.NameNotEmittable, location, type.Name, ShowName(unemittable)));
+            return Empty(type, diagnostics);
+        }
+
         var setsRequiredMembers = constructor != null && constructor.GetAttributes().Any(a =>
             a.AttributeClass?.ToDisplayString() == "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute");
 
@@ -241,6 +249,129 @@ internal static class TypeModelBuilder
 
         return unset;
     }
+
+    /// <summary>
+    ///     The first name generated code would write that is not a plain C# identifier: of the types of the properties and
+    ///     constructor parameters (with their type arguments, element types, containing types and namespaces), of the
+    ///     base types, of converters and of the properties themselves; null when all can be written.
+    /// </summary>
+    private static string? FirstUnemittableName(INamedTypeSymbol type, List<IPropertySymbol> properties, IMethodSymbol? constructor)
+    {
+        var types = new List<ITypeSymbol>();
+
+        for (var current = type.BaseType; current != null; current = current.BaseType)
+        {
+            types.Add(current);
+        }
+
+        foreach (var property in properties)
+        {
+            if (!IsEmittableName(property.Name))
+            {
+                return property.Name;
+            }
+
+            types.Add(property.Type);
+            types.Add(property.ContainingType);
+            types.AddRange(ConverterTypes(property));
+        }
+
+        types.AddRange(ConverterTypes(type));
+        types.AddRange(constructor?.Parameters.Select(p => p.Type) ?? []);
+
+        foreach (var used in types)
+        {
+            if (FirstUnemittableName(used) is { } name)
+            {
+                return name;
+            }
+        }
+
+        return null;
+
+        static IEnumerable<ITypeSymbol> ConverterTypes(ISymbol symbol) =>
+            symbol.GetAttributes().Where(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute")
+                  .SelectMany(a => a.ConstructorArguments).Select(argument => argument.Value).OfType<ITypeSymbol>();
+    }
+
+    private static string? FirstUnemittableName(ITypeSymbol type)
+    {
+        switch (type)
+        {
+            case IArrayTypeSymbol array:
+                return FirstUnemittableName(array.ElementType);
+            case IPointerTypeSymbol pointer:
+                return FirstUnemittableName(pointer.PointedAtType);
+            case ITypeParameterSymbol parameter:
+                return IsEmittableName(parameter.Name) ? null : parameter.Name;
+            case INamedTypeSymbol named:
+            {
+                if (!IsEmittableName(named.Name))
+                {
+                    return named.Name;
+                }
+
+                // Tuple element names are written too: (int Count, string Name)
+                if (named.IsTupleType && named.TupleElements.FirstOrDefault(e => !IsEmittableName(e.Name)) is { } element)
+                {
+                    return element.Name;
+                }
+
+                foreach (var argument in named.TypeArguments)
+                {
+                    if (FirstUnemittableName(argument) is { } name)
+                    {
+                        return name;
+                    }
+                }
+
+                if (named.ContainingType != null)
+                {
+                    return FirstUnemittableName(named.ContainingType);
+                }
+
+                for (var ns = named.ContainingNamespace; ns is { IsGlobalNamespace: false }; ns = ns.ContainingNamespace)
+                {
+                    if (!IsEmittableName(ns.Name))
+                    {
+                        return ns.Name;
+                    }
+                }
+
+                return null;
+            }
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    ///     A name C# can write as it is: an identifier (keywords are escaped with '@' when written), without format
+    ///     characters, which C# ignores in identifiers (<c>Is&#x200B;Admin</c> is <c>IsAdmin</c>) and which can hide or
+    ///     reorder text.
+    /// </summary>
+    /// <summary>A name for a message: characters other than letters, digits and ASCII punctuation as <c>\uXXXX</c>, cut to 64.</summary>
+    private static string ShowName(string name)
+    {
+        var text = new StringBuilder();
+
+        foreach (var c in name.Length > 64 ? name.Substring(0, 64) : name)
+        {
+            if (char.IsLetterOrDigit(c) || (c < 0x7F && !char.IsControl(c)))
+            {
+                text.Append(c);
+            }
+            else
+            {
+                text.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+            }
+        }
+
+        return name.Length > 64 ? text.Append("...").ToString() : text.ToString();
+    }
+
+    private static bool IsEmittableName(string name) =>
+        SyntaxFacts.IsValidIdentifier(name) && !name.Any(c => CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.Format);
 
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
     {
@@ -581,8 +712,8 @@ internal static class TypeModelBuilder
 
         return value switch
         {
-            string s => SymbolDisplay.FormatLiteral(s, true),
-            char c => SymbolDisplay.FormatLiteral(c, true),
+            string s => CSharpLiteral.Of(s),
+            char c => CSharpLiteral.Of(c),
             bool b => b ? "true" : "false",
             float f when float.IsNaN(f) => "float.NaN",
             float f when float.IsPositiveInfinity(f) => "float.PositiveInfinity",
