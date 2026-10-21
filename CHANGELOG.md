@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-10-21
+
+> A security release for all packages; update both `ToonNet.Core` and `ToonNet.SourceGenerators`. Limits that hold on
+> every read path for documents built to take time or memory (YAML aliases, nested field groups, regular expressions in
+> paths, repeated selectors, colliding dictionary keys), constructor parameters read as System.Text.Json reads them,
+> declared types on the remaining write paths, and generated code that names only what C# can write. Two changes can
+> affect code that worked: constructor parameters without a public property need `[ToonConstructor]`, and reflection,
+> stream, file system and process types are no longer serialized; see the
+> [migration guide](https://selcukgural.github.io/ToonNet/docs/getting-started/migration-4#changes-in-401).
+
 ### Security
 - **ToonNet.Extensions.Yaml:** An alias that comes before its anchor, or refers to an anchor of another document, is an
   error (YAML 1.2 lets an alias refer only to a preceding anchor). YamlDotNet resolved such aliases while loading, so
@@ -1771,7 +1781,8 @@ Each release includes:
 
 ---
 
-[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/selcukgural/ToonNet/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/selcukgural/ToonNet/compare/v3.3.0...v4.0.0
 [3.3.0]: https://github.com/selcukgural/ToonNet/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/selcukgural/ToonNet/compare/v3.1.0...v3.2.0
