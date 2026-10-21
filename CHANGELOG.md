@@ -79,6 +79,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ToonNet.Core:** Generated code is registered only with methods of its type (or of classes nested in it, such as
   the generated writer and reader), not with other code of the type's module, dynamic methods, or a writer or reader
   of another class.
+- **ToonNet.AspNetCore.Mvc:** The output formatter writes a response value as the type the action declares
+  (`ActionResult<Summary>` holding an entity writes the summary), unless that is `object` or
+  `SerializeRuntimeTypes` is set, as properties are written; the root used its runtime type. An `IAsyncEnumerable<T>`
+  response is collected up to `MvcOptions.MaxIAsyncEnumerableBufferLimit` items (8,192 by default, also for
+  `ToonResult`), and a longer one throws, as MVC does for the sequences it buffers, instead of filling the memory.
+- **ToonNet.AspNetCore.Mvc:** `ReadFromToonAsync` reads UTF-8 and UTF-16 bodies only, as the MVC formatter does:
+  other charsets .NET knows (`utf-32`, `iso-8859-1`, EBCDIC code pages) let a body mean something else to a proxy or
+  firewall that reads it as UTF-8. An endpoint's own `[RequestSizeLimit]` is enforced while reading too (it replaced
+  the 4 MB limit, and was left to the server, which a test host or a body read by earlier middleware does not apply).
 
 ## [4.0.0] - 2026-10-15
 

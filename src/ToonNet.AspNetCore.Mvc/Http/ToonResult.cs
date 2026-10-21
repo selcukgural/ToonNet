@@ -97,7 +97,9 @@ public sealed class ToonResult : IResult, IStatusCodeHttpResult, IValueHttpResul
 
         // A null value is written as the TOON document `null`; an empty body would read back as an empty object. An
         // asynchronous sequence is collected first (its array header needs the number of items)
-        var (value, objectType) = await AsyncEnumerableBuffer.CollectIfAsyncAsync(_value, _value?.GetType() ?? typeof(object), httpContext.RequestAborted)
+        var limit = httpContext.RequestServices?.GetService<IOptions<Microsoft.AspNetCore.Mvc.MvcOptions>>()?.Value.MaxIAsyncEnumerableBufferLimit ??
+                    AsyncEnumerableBuffer.DefaultLimit;
+        var (value, objectType) = await AsyncEnumerableBuffer.CollectIfAsyncAsync(_value, _value?.GetType() ?? typeof(object), limit, httpContext.RequestAborted)
                                                               .ConfigureAwait(false);
         await ToonSerializer.SerializeToStreamAsync(objectType, value, httpContext.Response.Body, options, httpContext.RequestAborted)
             .ConfigureAwait(false);
