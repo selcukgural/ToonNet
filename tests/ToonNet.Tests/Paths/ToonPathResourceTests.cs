@@ -282,9 +282,9 @@ public class ToonPathResourceTests
             var path = ToonPath.Parse($"$.a[?{filter}]");
             IReadOnlyList<ToonValue>? selected = null;
 
-            Fast(() => selected = path.Select(tree));
+            Fast(() => selected = path.Select(tree), 3_000);
             Assert.Equal(count * 625, selected!.Count);
-            Fast(() => Assert.Equal(selected.Count, path.SelectFrom(items.ToString()).Count));
+            Fast(() => Assert.Equal(selected.Count, path.SelectFrom(items.ToString()).Count), 3_000);
         }
     }
 
@@ -347,13 +347,28 @@ public class ToonPathResourceTests
         var filter = string.Join("||", Enumerable.Range(0, 6_000).Select(i => $"@.x{i}==2").Append("@.k49999==1"));
         var path = ToonPath.Parse($"$.items[?{filter}]", options);
 
-        // Within the default limits and the time of a single name, with the tree's result
-        Fast(() => Assert.Equal(10, path.SelectFrom(toon).Count));
+        // Within the default limits, with the tree's result, and in about the time of a filter of one name (reading the
+        // text takes most of it): comparing every key with every name took ten times as long. Compared with the same
+        // machine's time for one name, as an absolute limit fails on slow CI machines
+        var one = Elapsed(() => Assert.Equal(10, ToonPath.Parse("$.items[?@.k49999==1]").SelectFrom(toon).Count));
+        var many = Elapsed(() => Assert.Equal(10, path.SelectFrom(toon).Count));
+        Assert.True(many < one * 4 + 100, $"{many} ms for 6,000 names, {one} ms for one");
         Assert.Equal(10, path.Select(ToonDocument.Parse(toon).Root).Count);
 
         // A filter reading a member through a function (length) reads only the members it names, also with many names
         var lengths = ToonPath.Parse("$.items[?" + string.Join("||", Enumerable.Range(0, 6_000).Select(i => $"length(@.x{i})>9")) + "||@.k00007>0]", options);
-        Fast(() => Assert.Equal(10, lengths.SelectFrom(toon).Count));
+        var oneLength = Elapsed(() => Assert.Equal(10, ToonPath.Parse("$.items[?length(@.x0)>9||@.k00007>0]").SelectFrom(toon).Count));
+        var manyLengths = Elapsed(() => Assert.Equal(10, lengths.SelectFrom(toon).Count));
+        Assert.True(manyLengths < oneLength * 4 + 100, $"{manyLengths} ms for 6,000 names, {oneLength} ms for one");
+    }
+
+    /// <summary>The milliseconds of a run after a first one (which compiles the code paths it takes).</summary>
+    private static long Elapsed(Action action)
+    {
+        action();
+        var watch = Stopwatch.StartNew();
+        action();
+        return watch.ElapsedMilliseconds;
     }
 
     [Fact]

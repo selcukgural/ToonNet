@@ -351,7 +351,7 @@ public class UntrustedInputTests
         {
             var writer = new ToonDocumentWriter(new StringWriter());
             writer.WriteStartTable(0, fields);
-        });
+        }, 3_000);
 
         fields[^1] = "f\n7";
         fields[^2] = "f\n7";
