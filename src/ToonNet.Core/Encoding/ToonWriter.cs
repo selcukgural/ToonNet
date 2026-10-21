@@ -489,6 +489,9 @@ public sealed class ToonWriter
             'f' => value.SequenceEqual("false"),
             'n' => value.SequenceEqual("null"),
             '+' or (>= '0' and <= '9') => IsNumericLike(value),
+            // A line of three or more backticks or tildes alone (a root string, the cell of a one-field table) would
+            // close the Markdown code block a prompt puts the document in; quoted, it is text
+            '`' or '~' => value.Length >= 3 && value.IndexOfAnyExcept(first) < 0,
             _ => false
         };
     }

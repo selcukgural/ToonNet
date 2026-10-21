@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the errors of `ToonPath` and `DeserializeAt`) and the character of an `Unexpected` path error are escaped and long
   paths shortened; normalized paths escape only C0 controls (RFC 9535), so line separators and bidirectional controls
   in keys reached messages. `ToonRuleViolation.Path` and `ToonPathMatch` paths are unchanged.
+- **ToonNet.Core:** Strings of three or more backticks or tildes alone (```` ``` ````, `~~~~`) are quoted when written:
+  as a root string or the cell of a one-field table they made a line that closes the Markdown code block a prompt puts
+  the document in, so the rest of the data read as text of the prompt, and the model's echo of it was cut short.
+  `ToonPrompt.Extract` takes time linear in the answer when it has many blocks of other languages.
 
 ## [4.0.0] - 2026-10-15
 
