@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **ToonNet.Extensions.Yaml:** An alias that comes before its anchor, or refers to an anchor of another document, is an
+  error (YAML 1.2 lets an alias refer only to a preceding anchor). YamlDotNet resolved such aliases while loading, so
+  their expansion was not limited by the alias budgets or `MaxDepth`. Converting also checks the number of nodes and
+  the nesting depth again as it expands aliases.
+
 ## [4.0.0] - 2026-10-15
 
 > All packages move to 4.0.0; rebuild with the 4.0 generator (`TOON011` reports a `ToonNet.Core` of another version).

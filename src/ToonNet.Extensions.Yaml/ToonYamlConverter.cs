@@ -125,7 +125,7 @@ public static partial class ToonYamlConverter
         // with the iterative event parser first to avoid stack overflows and alias bombs.
         options ??= ToonOptions.Default;
         EnsureValid(options);
-        EnsureWithinLimits(yaml, options.MaxDepth);
+        var nodes = EnsureWithinLimits(yaml, options.MaxDepth);
 
         using var reader = new StringReader(yaml);
         var yamlStream = new YamlStream();
@@ -137,7 +137,7 @@ public static partial class ToonYamlConverter
         }
 
         var rootNode = yamlStream.Documents[0].RootNode;
-        var toonValue = ConvertYamlNodeToToonValue(rootNode);
+        var toonValue = ConvertYamlNodeToToonValue(rootNode, new ConversionBudget(nodes, options.MaxDepth), 0);
         return new ToonDocument(toonValue);
     }
 
@@ -271,8 +271,9 @@ public static partial class ToonYamlConverter
     /// </remarks>
     /// <param name="yaml">The YAML string to scan.</param>
     /// <param name="maxDepth">The maximum allowed nesting depth of mappings and sequences.</param>
+    /// <returns>The number of nodes the documents expand to, which conversion may not exceed.</returns>
     /// <exception cref="YamlException">Thrown when a limit is exceeded or the YAML is malformed.</exception>
-    private static void EnsureWithinLimits(string yaml, int maxDepth)
+    private static long EnsureWithinLimits(string yaml, int maxDepth)
     {
         var parser = new Parser(new StringReader(yaml));
 
@@ -294,6 +295,11 @@ public static partial class ToonYamlConverter
 
             switch (current)
             {
+                // Anchors belong to their document
+                case DocumentStart:
+                    anchors.Clear();
+                    openAnchors.Clear();
+                    break;
                 case Scalar scalar:
                     nodeCount++;
                     charCount += scalar.Value.Length;
@@ -376,6 +382,35 @@ public static partial class ToonYamlConverter
                     }
 
                     break;
+                case AnchorAlias alias:
+                    // YAML 1.2 §3.2.2.2: an alias refers to the most recent preceding anchor. A loader that resolves it
+                    // to a later one would expand nodes this scan never counted
+                    throw new YamlException(current.Start, current.End,
+                                            $"The alias *{alias.Value.Value} refers to an anchor that is not defined before it");
+            }
+        }
+
+        return nodeCount;
+    }
+
+    /// <summary>
+    ///     What conversion may still build: the nodes the scan counted and the nesting depth of the options, checked again
+    ///     while expanding aliases.
+    /// </summary>
+    private sealed class ConversionBudget(long nodes, int maxDepth)
+    {
+        private long _nodes = nodes;
+
+        public void Spend(YamlNode node, int depth)
+        {
+            if (--_nodes < 0)
+            {
+                throw new YamlException(node.Start, node.End, "YAML aliases expand to more nodes than the document has");
+            }
+
+            if (depth > maxDepth && node is not YamlScalarNode)
+            {
+                throw new YamlException(node.Start, node.End, $"Maximum nesting depth of {maxDepth} exceeded");
             }
         }
     }
@@ -435,18 +470,20 @@ public static partial class ToonYamlConverter
     ///     include scalar, mapping, and sequence nodes. If the node type is unsupported, a
     ///     <see cref="YamlException"/> is thrown.
     /// </remarks>
-    private static ToonValue ConvertYamlNodeToToonValue(YamlNode node)
+    private static ToonValue ConvertYamlNodeToToonValue(YamlNode node, ConversionBudget budget, int depth)
     {
         if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
         {
             throw new YamlException("YAML document is nested too deeply to convert with the available stack space");
         }
 
+        budget.Spend(node, depth);
+
         return node switch
         {
             YamlScalarNode scalar   => ConvertYamlScalar(scalar),
-            YamlMappingNode mapping => ConvertYamlMapping(mapping),
-            YamlSequenceNode seq    => ConvertYamlSequence(seq),
+            YamlMappingNode mapping => ConvertYamlMapping(mapping, budget, depth),
+            YamlSequenceNode seq    => ConvertYamlSequence(seq, budget, depth),
             _                       => throw new YamlException($"Unsupported YAML node type: {node.GetType().Name}")
         };
     }
@@ -678,7 +715,7 @@ public static partial class ToonYamlConverter
     ///     Console.WriteLine(toonObject["key1"]); // Outputs: value1
     ///     </code>
     /// </example>
-    private static ToonObject ConvertYamlMapping(YamlMappingNode mapping)
+    private static ToonObject ConvertYamlMapping(YamlMappingNode mapping, ConversionBudget budget, int depth)
     {
         var toonObject = new ToonObject();
 
@@ -692,7 +729,7 @@ public static partial class ToonYamlConverter
 
             // An empty key is a valid TOON key (""). YAML compares keys with their tags (a: 1 and !!str a: 2 are two
             // keys to it), but they are one key in TOON: a second value would replace the first
-            if (!toonObject.Properties.TryAdd(keyNode.Value ?? string.Empty, ConvertYamlNodeToToonValue(entry.Value)))
+            if (!toonObject.Properties.TryAdd(keyNode.Value ?? string.Empty, ConvertYamlNodeToToonValue(entry.Value, budget, depth + 1)))
             {
                 throw new YamlException(keyNode.Start, keyNode.End, "Duplicate key in a mapping");
             }
@@ -728,13 +765,13 @@ public static partial class ToonYamlConverter
     ///     Console.WriteLine(toonArray[0]); // Outputs: item1
     ///     </code>
     /// </example>
-    private static ToonArray ConvertYamlSequence(YamlSequenceNode sequence)
+    private static ToonArray ConvertYamlSequence(YamlSequenceNode sequence, ConversionBudget budget, int depth)
     {
         var items = new List<ToonValue>();
 
         foreach (var child in sequence.Children)
         {
-            items.Add(ConvertYamlNodeToToonValue(child));
+            items.Add(ConvertYamlNodeToToonValue(child, budget, depth + 1));
         }
 
         return new ToonArray(items);

@@ -118,6 +118,38 @@ public class ToonYamlConverterTests
         Assert.Contains("recursive", ex.Message);
     }
 
+    [Theory]
+    [InlineData("a: *x\nb: &x [1, 2]", "*x")]
+    [InlineData("a: &a [*b]\nb: &b [*a]", "*b")]
+    [InlineData("--- &x [1]\n--- [*x]", "*x")]
+    public void FromYaml_AliasBeforeItsAnchor_ThrowsYamlException(string yaml, string alias)
+    {
+        var ex = Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(yaml));
+
+        Assert.Contains($"The alias {alias} refers to an anchor that is not defined before it", ex.Message);
+    }
+
+    [Fact]
+    public void FromYaml_AliasBombWithAnchorsAfterTheirAliases_ThrowsYamlException()
+    {
+        // Each line refers to the anchor of the next one: a scan that counts only aliases of earlier anchors sees no
+        // expansion, while the loader resolves them all (ten levels of ten copies)
+        var sb = new System.Text.StringBuilder();
+
+        for (var i = 9; i > 0; i--)
+        {
+            sb.Append('l').Append(i).Append(": &l").Append(i).Append(" [")
+              .AppendJoin(',', Enumerable.Repeat("*l" + (i - 1), 10))
+              .Append("]\n");
+        }
+
+        sb.Append("l0: &l0 [x,x,x,x,x,x,x,x,x,x]\n");
+
+        var ex = Assert.Throws<YamlDotNet.Core.YamlException>(() => ToonYamlConverter.FromYaml(sb.ToString()));
+
+        Assert.Contains("The alias *l8 refers to an anchor that is not defined before it", ex.Message);
+    }
+
     [Fact]
     public void FromYaml_RedefinedAnchor_IsNotRecursive()
     {
