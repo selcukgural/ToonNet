@@ -43,8 +43,11 @@ When reading:
 - Quoted numbers are accepted for numeric targets, and unquoted numbers or booleans for `string` targets.
 - The constructor is chosen in this order: the one marked `[ToonConstructor]`, then a public parameterless constructor,
   then the public constructor with the most parameters (for example for positional records). Constructor parameters
-  are matched to properties by name (case-insensitively), then the remaining properties are assigned through public
-  setters (`set`, `init`); a non-public setter is used only when the property is marked `[ToonInclude]`.
+  are matched to public properties by name (case-insensitively), then the remaining properties are assigned through
+  public setters (`set`, `init`); a non-public setter is used only when the property is marked `[ToonInclude]`. A
+  parameter of a member that is kept out of documents (`[ToonIgnore]`, not public, a field) gets its default value; a
+  parameter without a member makes reading throw, unless the constructor is marked `[ToonConstructor]`, which reads it
+  from a key of its name.
 - A missing key for a `required` property throws a `ToonSerializationException` (`RespectRequiredMembers`, on by
   default since 4.0).
 - Errors include the path of the failing value, for example `$.Items[2].Price`.

@@ -33,7 +33,10 @@ internal sealed record TypeModel(
     ConstructorModel? Constructor,
     EquatableArray<DiagnosticInfo> Diagnostics,
     EquatableArray<string> UnsetRequired = default,
-    bool UnsetRequiredHasInitializer = false);
+    bool UnsetRequiredHasInitializer = false,
+    string? ConstructorError = null,
+    bool KeyComparers = false,
+    bool SetterErrors = false);
 
 /// <summary>Whether and how the static <c>ToonTypeInfo</c> property is generated.</summary>
 internal enum TypeInfoProperty
@@ -82,7 +85,8 @@ internal sealed record ConstructorModel(EquatableArray<ParameterModel> Parameter
 /// <param name="PropertyIndex">The index of the property bound to this parameter (case-insensitive name match), or -1.</param>
 /// <param name="DefaultValue">C# expression used when the document has no value for the parameter.</param>
 /// <param name="PassIn">Whether the argument is passed with <c>in</c> (an <c>in</c> or <c>ref readonly</c> parameter).</param>
-internal sealed record ParameterModel(string Name, string TypeName, int PropertyIndex, string DefaultValue, ValuePlan Plan, bool PassIn = false);
+internal sealed record ParameterModel(string Name, string TypeName, int PropertyIndex, string DefaultValue, ValuePlan Plan, bool PassIn = false,
+                                      bool FromDocument = true);
 
 /// <summary>
 /// How generated code converts a value of one declared type. Collections and dictionaries carry the plans of their

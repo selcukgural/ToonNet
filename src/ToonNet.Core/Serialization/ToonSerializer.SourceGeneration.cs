@@ -56,10 +56,11 @@ public static partial class ToonSerializer
     {
         ArgumentNullException.ThrowIfNull(serialize);
 
-        // Only the generated code of a type registers it (its module initializer, with methods of the type's module),
-        // and the first registration stays: other code cannot replace how a type, or a type of the framework, is
-        // written and read for the whole process
-        if (serialize.Method.Module != typeof(T).Module || (deserialize != null && deserialize.Method.Module != typeof(T).Module))
+        // Only the generated code of a type registers it (its module initializer, with its own methods and the writer and
+        // reader classes nested in it), and the first registration stays: other code cannot replace how a type, or a type
+        // of the framework, is written and read for the whole process. A dynamic method has no declaring type, whatever
+        // module it is created in
+        if (!IsMethodOf<T>(serialize) || (deserialize != null && !IsMethodOf<T>(deserialize)) || !IsNestedIn<T>(writer) || !IsNestedIn<T>(reader))
         {
             throw new InvalidOperationException($"Generated code for {typeof(T).Name} can only be registered by code in the module of the type.");
         }
@@ -83,6 +84,28 @@ public static partial class ToonSerializer
             deserialize == null ? null : reader != null ? reader.Read : (ToonReader r, in ToonReaderValue v, int depth) => deserialize(r.BuildTree(in v), r.Options, depth),
             static () => GetFeatureLevel(typeof(T)),
             static check => check.AllowsGeneratedCode(typeof(T)));
+    }
+
+    /// <summary>Whether a method is declared in <typeparamref name="T"/>, or in a class nested in it (a lambda's closure).</summary>
+    private static bool IsMethodOf<T>(Delegate method) => method.Method.Module == typeof(T).Module && IsWithin<T>(method.Method.DeclaringType);
+
+    /// <summary>Whether an object is null or of a class nested in <typeparamref name="T"/>.</summary>
+    private static bool IsNestedIn<T>(object? instance) => instance == null || IsWithin<T>(instance.GetType().DeclaringType);
+
+    /// <summary>Whether a type is <typeparamref name="T"/> or nested in it (in its definition, for a generic type).</summary>
+    private static bool IsWithin<T>(Type? type)
+    {
+        var definition = typeof(T).IsGenericType ? typeof(T).GetGenericTypeDefinition() : typeof(T);
+
+        for (var current = type; current != null; current = current.DeclaringType)
+        {
+            if (current == typeof(T) || current == definition)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Per type with generated code, the lowest feature level of its generated code and what it calls directly.</summary>

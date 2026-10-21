@@ -1054,6 +1054,16 @@ internal sealed class SourceEmitter
         code.AppendLine("// Non-object values are handled (or reported) like the tree: by ToonSerializer");
         code.AppendLine("if (!reader.IsObject(in value)) return __ToonDeserializeValue(reader.BuildTree(in value), options, depth);");
         code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth); // objects count, as for ToonSerializer (not null)");
+
+        if (model.ConstructorError is { } error)
+        {
+            // A constructor parameter matches no property (TOON012): as ToonSerializer, reading the type throws
+            code.AppendLine($"throw new global::System.InvalidOperationException({Literal(error)});");
+            code.EndBlock();
+            EmitObjectReaderClass();
+            return;
+        }
+
         EmitPolicyLocal();
 
         // Keys shared by several members are read once per member by the tree
@@ -1078,7 +1088,13 @@ internal sealed class SourceEmitter
         {
             var parameter = constructor.Parameters[j];
             code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue};");
-            code.AppendLine($"var __ha{j} = false;");
+
+            // A parameter that is never read has no key, and no flag for it
+            if (parameter.FromDocument)
+            {
+                code.AppendLine($"var __ha{j} = false;");
+            }
+
             arguments.Add(parameter.PassIn ? $"in __a{j}" : $"__a{j}");
         }
 
@@ -1197,6 +1213,13 @@ internal sealed class SourceEmitter
         for (var j = 0; j < constructor.Parameters.Length; j++)
         {
             var parameter = constructor.Parameters[j];
+
+            // A parameter of a member the type keeps out of documents is never read
+            if (!parameter.FromDocument)
+            {
+                continue;
+            }
+
             var bound = parameter.PropertyIndex >= 0 ? model.Properties[parameter.PropertyIndex] : null;
             var names = bound != null ? PolicyNames(bound) : [parameter.Name, parameter.Name, parameter.Name, parameter.Name];
             var read = bound?.ConverterTypeName != null
@@ -1248,7 +1271,7 @@ internal sealed class SourceEmitter
         for (var policy = 0; policy < 4; policy++)
         {
             names[policy] = [.. _model.Properties.Select(p => PolicyNames(p)[policy])];
-            names[policy].AddRange(constructor.Parameters.Where(p => p.PropertyIndex < 0).Select(p => p.Name));
+            names[policy].AddRange(constructor.Parameters.Where(p => p.PropertyIndex < 0 && p.FromDocument).Select(p => p.Name));
         }
 
         return names;
@@ -1498,7 +1521,7 @@ internal sealed class SourceEmitter
 
             code.AppendLine($"if (!reader.IsObject(in value)) return reader.ReadValue<{plan.TypeName}>(in value, depth);");
             code.AppendLine($"{Helpers}.CheckDeserializationDepth(reader.Options, depth);");
-            code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>();");
+            code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>({KeyComparer(keyPlan.ValueTypeName).TrimStart(',', ' ')});");
             code.AppendLine("var __fields = reader.BeginObject(in value);");
             code.BeginBlock("while (reader.NextProperty(ref __fields, out var __key, out var __item))");
             code.AppendLine($"__dictionary[{key}] = {ReadTextExpression(element, "__item", "depth + 1")};");
@@ -1517,7 +1540,7 @@ internal sealed class SourceEmitter
             code.AppendLine(plan.Kind switch
             {
                 ValueKind.Array => "return __items.ToArray();",
-                ValueKind.Set => $"return new global::System.Collections.Generic.HashSet<{element.TypeName}>(__items);",
+                ValueKind.Set => $"return new global::System.Collections.Generic.HashSet<{element.TypeName}>(__items{KeyComparer(element.TypeName)});",
                 _ => "return __items;"
             });
         }
@@ -1586,6 +1609,15 @@ internal sealed class SourceEmitter
         code.AppendLine("// Null and non-object values are handled (or reported) by ToonSerializer.");
         code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
         code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth); // objects count, as for ToonSerializer (not null)");
+
+        if (model.ConstructorError is { } error)
+        {
+            // A constructor parameter matches no property (TOON012): as ToonSerializer, reading the type throws
+            code.AppendLine($"throw new global::System.InvalidOperationException({Literal(error)});");
+            code.EndBlock();
+            return;
+        }
+
         EmitPolicyLocal();
         code.AppendLine(ConvertLocal);
         code.AppendLine("var __ci = options.PropertyNameCaseInsensitive;");
@@ -1626,6 +1658,15 @@ internal sealed class SourceEmitter
         for (var j = 0; j < constructor.Parameters.Length; j++)
         {
             var parameter = constructor.Parameters[j];
+
+            if (!parameter.FromDocument)
+            {
+                code.AppendLine();
+                code.AppendLine($"{parameter.TypeName} __a{j} = {parameter.DefaultValue}; // its member is kept out of documents");
+                arguments.Add(parameter.PassIn ? $"in __a{j}" : $"__a{j}");
+                continue;
+            }
+
             var bound = parameter.PropertyIndex >= 0 ? model.Properties[parameter.PropertyIndex] : null;
             var key = bound != null ? NameExpression(bound) : Literal(parameter.Name);
             var ignoreCase = IgnoreCase(bound != null ? PolicyNames(bound) : [parameter.Name, parameter.Name, parameter.Name, parameter.Name], unambiguous);
@@ -1675,7 +1716,7 @@ internal sealed class SourceEmitter
             code.AppendLine($"if (!({kept}) && {DynamicCode}) return {Helpers}.DeserializeWithReflection<{model.FullyQualifiedName}>(value, options, depth);");
         }
 
-        EmitConstruction(arguments);
+        EmitConstruction(arguments, trackKeys: true);
 
         code.AppendLine();
         code.AppendLine("return __result;");
@@ -1708,7 +1749,12 @@ internal sealed class SourceEmitter
     /// <c>__p{i}</c> (set when <c>__h{i}</c>): object initializers for init-only properties, then assignments and
     /// accessor calls in property order.
     /// </summary>
-    private void EmitConstruction(List<string> arguments)
+    /// <param name="arguments">The constructor arguments.</param>
+    /// <param name="trackKeys">
+    ///     Whether the method keeps the key it reads in <c>__at</c> for error paths (the tree-based reader): an exception
+    ///     of a setter is then reported as ToonSerializer reports it. The text reader leaves errors to the tree.
+    /// </param>
+    private void EmitConstruction(List<string> arguments, bool trackKeys = false)
     {
         var code = _code;
         var model = _model;
@@ -1754,16 +1800,30 @@ internal sealed class SourceEmitter
         {
             var property = model.Properties[i];
 
-            switch (property.Write)
+            var assignment = property.Write switch
             {
-                case WriteKind.Assign:
-                    code.AppendLine($"if (__h{i}) __result.{Identifier(property)} = __p{i};");
-                    break;
-                case WriteKind.Accessor:
-                    var reference = property.SetterOwnerIsValueType ? "ref " : "";
-                    code.AppendLine($"if (__h{i}) {AccessorName(property)}({reference}__result, __p{i});");
-                    break;
+                WriteKind.Assign => $"__result.{Identifier(property)} = __p{i};",
+                WriteKind.Accessor => $"{AccessorName(property)}({(property.SetterOwnerIsValueType ? "ref " : "")}__result, __p{i});",
+                _ => null
+            };
+
+            if (assignment == null)
+            {
+                continue;
             }
+
+            if (!trackKeys || !model.SetterErrors)
+            {
+                code.AppendLine($"if (__h{i}) {assignment}");
+                continue;
+            }
+
+            // The setter's exception, reported as ToonSerializer reports it: its type, at the property's path
+            code.BeginBlock($"if (__h{i})");
+            code.AppendLine($"__at = {NameExpression(property)};");
+            code.AppendLine($"try {{ {assignment} }}");
+            code.AppendLine($"catch (global::System.Exception __e) when (__e is not global::ToonNet.Core.ToonException) {{ throw {Helpers}.SetterError<{model.FullyQualifiedName}>({Literal(property.Name)}, __e); }}");
+            code.EndBlock();
         }
 
     }
@@ -2040,7 +2100,7 @@ internal sealed class SourceEmitter
 
             code.AppendLine($"if (value is not {Models}ToonObject __obj) return {reflection};");
             code.AppendLine($"{Helpers}.CheckDeserializationDepth(options, depth);");
-            code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>(__obj.Properties.Count);");
+            code.AppendLine($"var __dictionary = new global::System.Collections.Generic.Dictionary<{keyPlan.ValueTypeName}, {element.TypeName}>(__obj.Properties.Count{KeyComparer(keyPlan.ValueTypeName)});");
             code.AppendLine("string? __at = null;");
             code.BeginBlock("try");
             code.BeginBlock("foreach (var __entry in __obj.Properties)");
@@ -2066,7 +2126,7 @@ internal sealed class SourceEmitter
             code.AppendLine(plan.Kind switch
             {
                 ValueKind.Array => "return __items.ToArray();",
-                ValueKind.Set => $"return new global::System.Collections.Generic.HashSet<{element.TypeName}>(__items);",
+                ValueKind.Set => $"return new global::System.Collections.Generic.HashSet<{element.TypeName}>(__items{KeyComparer(element.TypeName)});",
                 _ => "return __items;"
             });
         }
@@ -2115,30 +2175,16 @@ internal sealed class SourceEmitter
     }
 
     /// <summary>
-    ///     A C# string literal; bidirectional controls are escaped too, so the generated file shows what the string holds
-    ///     (they can make source read differently from what it does).
+    ///     The comparer argument of a dictionary or set of <paramref name="typeName"/> read from a document
+    ///     (<c>, Helpers.KeyComparer&lt;T&gt;()</c>), or nothing for a ToonNet.Core without it.
     /// </summary>
-    private static string Literal(string value)
-    {
-        var literal = SymbolDisplay.FormatLiteral(value, true);
+    private string KeyComparer(string typeName) => _model.KeyComparers ? $", {Helpers}.KeyComparer<{typeName}>()" : "";
 
-        if (literal.IndexOfAny(BidiControls) < 0)
-        {
-            return literal;
-        }
-
-        var text = new System.Text.StringBuilder(literal.Length + 16);
-
-        foreach (var c in literal)
-        {
-            text.Append(Array.IndexOf(BidiControls, c) >= 0 ? "\\u" + ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture) : c.ToString());
-        }
-
-        return text.ToString();
-    }
-
-    private static readonly char[] BidiControls =
-        [(char)0x061C, (char)0x200E, (char)0x200F, (char)0x202A, (char)0x202B, (char)0x202C, (char)0x202D, (char)0x202E, (char)0x2066, (char)0x2067, (char)0x2068, (char)0x2069];
+    /// <summary>
+    ///     A C# string literal; format characters (bidirectional controls) are escaped too, so the generated file shows
+    ///     what the string holds (they can make source read differently from what it does).
+    /// </summary>
+    private static string Literal(string value) => CSharpLiteral.Of(value);
 
     private string Accessibility() => _model.PublicMethods ? "public" : "internal";
 

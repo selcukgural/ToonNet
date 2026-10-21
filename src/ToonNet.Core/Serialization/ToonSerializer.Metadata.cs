@@ -88,9 +88,11 @@ public static partial class ToonSerializer
 
     /// <summary>
     ///     A constructor parameter and what is bound to it: the property with the same name (case-insensitive), if any,
-    ///     and the value used when the document has no entry for it.
+    ///     and the value used when the document has no entry for it. A parameter whose member the type keeps out of
+    ///     documents (<see cref="ToonIgnoreAttribute"/>, a non-public property or a field) is not
+    ///     <see cref="FromDocument"/>: it always gets <see cref="MissingValue"/>, and its key is not mapped.
     /// </summary>
-    private sealed record ConstructorArgument(ParameterInfo Parameter, PropertyMetadata? Property, object? MissingValue);
+    private sealed record ConstructorArgument(ParameterInfo Parameter, PropertyMetadata? Property, object? MissingValue, bool FromDocument = true);
 
     /// <summary>
     ///     Creates instances of a type for deserialization through a compiled delegate instead of
@@ -107,17 +109,42 @@ public static partial class ToonSerializer
         /// <summary>Per entry of <see cref="TypeMetadata.Properties"/>, whether it is set through the constructor.</summary>
         public required bool[] BoundToConstructor { get; init; }
 
+        /// <exception cref="InvalidOperationException">
+        ///     Thrown when a parameter has no member of its name and the constructor is not marked
+        ///     <see cref="ToonConstructorAttribute"/>, as System.Text.Json does: a parameter of its own would let documents
+        ///     pass values the type never shows (a path, a mode) to the constructor of any type a property declares.
+        /// </exception>
         [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = ToonSerializer.ReflectionJustification)]
         public static ObjectActivator For(TypeMetadata metadata)
         {
             var arguments = metadata.ConstructorParameters
-                                    .Select(parameter => new ConstructorArgument(
-                                                parameter,
-                                                metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name,
-                                                                                                      StringComparison.OrdinalIgnoreCase)),
-                                                parameter.HasDefaultValue ? DefaultOf(parameter)
-                                                : ValueTypeOf(parameter).IsValueType ? System.Activator.CreateInstance(ValueTypeOf(parameter))
-                                                : null))
+                                    .Select(parameter =>
+                                    {
+                                        var property = metadata.Properties.FirstOrDefault(p => string.Equals(p.Property.Name, parameter.Name,
+                                                                                                             StringComparison.OrdinalIgnoreCase));
+                                        var missing = parameter.HasDefaultValue ? DefaultOf(parameter)
+                                            : ValueTypeOf(parameter).IsValueType ? System.Activator.CreateInstance(ValueTypeOf(parameter))
+                                            : null;
+
+                                        if (property != null)
+                                        {
+                                            return new ConstructorArgument(parameter, property, missing);
+                                        }
+
+                                        if (HasHiddenMember(metadata.Type, parameter.Name!))
+                                        {
+                                            return new ConstructorArgument(parameter, null, missing, FromDocument: false);
+                                        }
+
+                                        if (metadata.Constructor?.IsDefined(typeof(ToonConstructorAttribute), inherit: false) != true)
+                                        {
+                                            throw new InvalidOperationException(
+                                                $"The parameter '{parameter.Name}' of the constructor of {metadata.Type.Name} matches no public property. " +
+                                                $"Add a property with its name, or mark the constructor [ToonConstructor] to read the parameter from the key '{parameter.Name}'.");
+                                        }
+
+                                        return new ConstructorArgument(parameter, null, missing);
+                                    })
                                     .ToArray();
 
             return new ObjectActivator
@@ -126,6 +153,36 @@ public static partial class ToonSerializer
                 Arguments = arguments,
                 BoundToConstructor = [.. metadata.Properties.Select(p => arguments.Any(a => a.Property == p))]
             };
+        }
+
+        /// <summary>
+        ///     Whether the type or a base type has a property or field of the name (ignoring case) that is not written or
+        ///     read: marked <see cref="ToonIgnoreAttribute"/>, without a public getter, or a field. Indexers are not
+        ///     members of a name, and of base types in other assemblies only the members those assemblies expose (public
+        ///     and protected) count, as for the source generator, which sees no others.
+        /// </summary>
+        [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
+        [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+        private static bool HasHiddenMember(Type type, string name)
+        {
+            const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+            for (var current = type; current != null && current != typeof(object); current = current.BaseType)
+            {
+                var own = current.Assembly == type.Assembly;
+
+                if (current.GetProperties(all).Any(p => p.GetIndexParameters().Length == 0 && string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                                                        (own || p.GetAccessors(nonPublic: true).Any(IsExposed))) ||
+                    current.GetFields(all).Any(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                                                    (own || f.IsPublic || f.IsFamily || f.IsFamilyOrAssembly)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+
+            static bool IsExposed(MethodInfo accessor) => accessor.IsPublic || accessor.IsFamily || accessor.IsFamilyOrAssembly;
         }
 
         /// <summary>The type of a parameter's values: the element type of an <c>in</c> parameter (<c>Int32&amp;</c>).</summary>
@@ -242,15 +299,87 @@ public static partial class ToonSerializer
     /// with <see cref="ToonIgnoreAttribute"/>, ordered by <see cref="ToonPropertyOrderAttribute"/> (default 0), then base-class
     /// properties before derived ones, then declaration order.
     /// </remarks>
+    private static readonly ConcurrentDictionary<(Type Interface, Type Runtime), TypeMetadata> InterfaceViews = new();
+
+    /// <summary>
+    ///     The metadata an object is written with: that of <paramref name="writtenType"/>, without the properties of an
+    ///     interface that the object's type marks <see cref="ToonIgnoreAttribute"/> where it implements them (a value held
+    ///     as <c>IAccount</c> whose class ignores <c>PasswordHash</c>).
+    /// </summary>
+    private static TypeMetadata GetWrittenMetadata(Type writtenType, Type runtimeType)
+    {
+        var metadata = GetTypeMetadata(writtenType);
+
+        if (runtimeType == writtenType || !writtenType.IsInterface || metadata.Properties.Length == 0)
+        {
+            return metadata;
+        }
+
+        return InterfaceViews.GetOrAdd((writtenType, runtimeType), static (key, metadata) =>
+        {
+            var kept = metadata.Properties.Where(p => !IsIgnoredByImplementation(p.Property, key.Runtime)).ToArray();
+
+            return kept.Length == metadata.Properties.Length
+                ? metadata
+                : new TypeMetadata
+                {
+                    Properties = kept,
+                    Type = metadata.Type,
+                    TypeConverter = metadata.TypeConverter,
+                    FixedNamingPolicy = metadata.FixedNamingPolicy
+                };
+        }, metadata);
+    }
+
+    /// <summary>Whether the member of <paramref name="type"/> that implements an interface property is marked <see cref="ToonIgnoreAttribute"/>.</summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+    private static bool IsIgnoredByImplementation(PropertyInfo interfaceProperty, Type type)
+    {
+        if (interfaceProperty.GetGetMethod() is not { } getter || !interfaceProperty.DeclaringType!.IsAssignableFrom(type))
+        {
+            return false;
+        }
+
+        var map = type.GetInterfaceMap(interfaceProperty.DeclaringType);
+        var index = Array.IndexOf(map.InterfaceMethods, getter);
+
+        if (index < 0 || map.TargetMethods[index] is not { } target)
+        {
+            return false;
+        }
+
+        // The property whose getter implements it, implicitly (public) or explicitly (private), in the class that declares it
+        const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+        var implementation = target.DeclaringType?.GetProperties(all).FirstOrDefault(p => p.GetGetMethod(nonPublic: true) == target);
+
+        return implementation != null && Attribute.IsDefined(implementation, typeof(ToonIgnoreAttribute), inherit: true);
+    }
+
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static TypeMetadata GetTypeMetadata(Type type)
     {
+        // Types that are not supported are never cached: the checks below run once per supported type
+        if (TypeMetadataCache.TryGetValue(type, out var cached))
+        {
+            return cached;
+        }
+
         // A value tuple keeps its items in fields, which the serializer does not read: it would be written as an empty
         // object and read back empty
         if (type is { IsValueType: true, IsGenericType: true, Namespace: "System" } && type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal))
         {
             throw new NotSupportedException(
                 $"Value tuples ({type.Name}) are not supported: their items are fields, not properties. Use a record or a class.");
+        }
+
+        if (IsUnsupportedType(type))
+        {
+            // As in System.Text.Json: reading would let documents create them (a FileInfo whose setters change a file, a
+            // FileStream that truncates one), and writing walks reflection graphs or exposes handles
+            throw new NotSupportedException(
+                $"Serializing and deserializing {type.FullName} is not supported: it is a reflection, delegate, stream, file system, process or handle type. Register a converter to write it as a value.");
         }
 
         if (type is { IsValueType: true, IsGenericType: true } && (type.GetGenericTypeDefinition() == typeof(Memory<>) ||
@@ -322,6 +451,17 @@ public static partial class ToonSerializer
             };
         });
     }
+
+    /// <summary>
+    ///     Types that are not data: reflection (<see cref="Type"/>, <see cref="MemberInfo"/>, <see cref="Assembly"/>,
+    ///     <see cref="Module"/>), delegates, serialization state, streams, file system entries, processes and handles.
+    /// </summary>
+    private static bool IsUnsupportedType(Type type) =>
+        typeof(MemberInfo).IsAssignableFrom(type) || typeof(Assembly).IsAssignableFrom(type) || typeof(Module).IsAssignableFrom(type) ||
+        typeof(Delegate).IsAssignableFrom(type) || type == typeof(System.Runtime.Serialization.SerializationInfo) ||
+        typeof(Stream).IsAssignableFrom(type) || typeof(FileSystemInfo).IsAssignableFrom(type) ||
+        typeof(System.Diagnostics.Process).IsAssignableFrom(type) || type == typeof(System.Diagnostics.ProcessStartInfo) ||
+        typeof(System.Runtime.InteropServices.SafeHandle).IsAssignableFrom(type) || typeof(WaitHandle).IsAssignableFrom(type);
 
     /// <summary>
     /// The naming policy set explicitly with <c>[ToonSerializable(NamingPolicy = ...)]</c> on the type or, for a type

@@ -360,6 +360,9 @@ public sealed class ToonString(string value) : ToonValue
     /// </summary>
     public string Value { get; } = value;
 
+    /// <summary>The empty string, which parsing shares between all the empty cells and values of a document.</summary>
+    internal static readonly ToonString Empty = new(string.Empty);
+
     /// <summary>
     ///     Gets the type of this value.
     /// </summary>

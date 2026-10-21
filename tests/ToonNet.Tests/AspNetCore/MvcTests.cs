@@ -684,13 +684,19 @@ public class MvcTests
         Assert.Contains("charset", ex.Message);
     }
 
-    [Fact]
-    public async Task Latin1_IsReadByReadFromToonAsync_ButNotByTheMvcFormatter()
+    [Theory]
+    [InlineData("iso-8859-1")]
+    [InlineData("utf-32")]
+    [InlineData("utf-16BE")]
+    [InlineData("us-ascii")]
+    public async Task OtherCharsets_AreNotRead_AsByTheMvcFormatter(string charset)
     {
-        var body = System.Text.Encoding.Latin1.GetBytes("Name: Müller\nAge: 3");
-        const string contentType = "application/toon; charset=iso-8859-1";
+        // A body that a proxy or firewall reads as UTF-8 could mean something else in another charset (utf-32, EBCDIC)
+        var body = System.Text.Encoding.GetEncoding(charset).GetBytes("Name: M\nAge: 3");
+        var contentType = $"application/toon; charset={charset}";
 
-        Assert.Equal("Müller", (await CreateRequest(body, contentType).ReadFromToonAsync<TestModel>())!.Name);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateRequest(body, contentType).ReadFromToonAsync<TestModel>().AsTask());
+        Assert.Equal($"Unable to read the request as TOON because the charset '{charset}' is not supported.", ex.Message);
 
         // MVC's formatter supports UTF-8 and UTF-16 only, and reports other charsets as a model error (a 415 is the
         // framework's choice for a content type no formatter can read)
@@ -807,6 +813,100 @@ public class MvcTests
 
         Assert.False(result.HasError);
         Assert.Equal(new string('x', 100), ((TestModel)result.Model!).Name);
+    }
+
+    /// <summary>A body without a declared length (chunked), which only the reading wrapper can limit.</summary>
+    private sealed class ChunkedBody(byte[] bytes) : MemoryStream(bytes)
+    {
+        public override bool CanSeek => false;
+    }
+
+    [Fact]
+    public async Task EndpointSizeLimits_AreEnforcedWhenReading_AlsoWithoutTheServer()
+    {
+        // A host that does not apply [RequestSizeLimit] (a test server, a body read by middleware first) left the body
+        // unlimited, because the endpoint's own limit replaced the formatter's
+        var body = System.Text.Encoding.UTF8.GetBytes("Name: " + new string('x', 100));
+        var limited = new Endpoint(null, new EndpointMetadataCollection(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(64)), "small");
+
+        var request = CreateRequest(body, "application/toon");
+        request.Body = new ChunkedBody(body);
+        request.HttpContext.SetEndpoint(limited);
+        var ex = await Assert.ThrowsAsync<BadHttpRequestException>(() => request.ReadFromToonAsync<TestModel>().AsTask());
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, ex.StatusCode);
+        Assert.Equal("The TOON request body exceeds the maximum allowed size of 64 bytes.", ex.Message);
+
+        var context = CreateInputContext(body, ToonFormatterDefaults.MediaType);
+        context.HttpContext.Request.Body = new ChunkedBody(body);
+        context.HttpContext.SetEndpoint(limited);
+        ex = await Assert.ThrowsAsync<BadHttpRequestException>(() => new ToonInputFormatter(new ToonSerializerOptions()).ReadAsync(context));
+        Assert.Equal("The TOON request body exceeds the maximum allowed size of 64 bytes.", ex.Message);
+    }
+
+    private class Summary
+    {
+        public string Name { get; set; } = "n";
+    }
+
+    private sealed class Entity : Summary
+    {
+        public string PasswordHash { get; set; } = "SECRET";
+    }
+
+    private static async IAsyncEnumerable<Entity> EntitiesAsync(int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            await Task.Yield();
+            yield return new Entity();
+        }
+    }
+
+    private static async Task<string> WriteWithFormatterAsync(Type declared, object value, ToonSerializerOptions? options = null, IServiceProvider? services = null)
+    {
+        var httpContext = new DefaultHttpContext();
+        if (services != null)
+        {
+            httpContext.RequestServices = services;
+        }
+
+        var stream = new MemoryStream();
+        httpContext.Response.Body = stream;
+        var context = new OutputFormatterWriteContext(httpContext, (s, e) => new StreamWriter(s, e, leaveOpen: true), declared, value);
+        await new ToonOutputFormatter(options ?? new ToonSerializerOptions()).WriteResponseBodyAsync(context, System.Text.Encoding.UTF8);
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    [Fact]
+    public async Task ResponseValues_AreWrittenAsTheTypeTheActionDeclares()
+    {
+        // ActionResult<Summary> holding an entity wrote the entity's members (the root used the runtime type)
+        Assert.Equal("Name: n", await WriteWithFormatterAsync(typeof(Summary), new Entity()));
+        Assert.Equal("[2]{Name}:\n  n\n  n", await WriteWithFormatterAsync(typeof(IAsyncEnumerable<Summary>), EntitiesAsync(2)));
+
+        // object, or runtime types asked for, write what it is
+        Assert.Equal("Name: n\nPasswordHash: SECRET", await WriteWithFormatterAsync(typeof(object), new Entity()));
+        Assert.Equal("Name: n\nPasswordHash: SECRET",
+                     await WriteWithFormatterAsync(typeof(Summary), new Entity(), new ToonSerializerOptions { SerializeRuntimeTypes = true }));
+    }
+
+    [Fact]
+    public async Task AsyncSequences_AreCollectedUpToTheMvcBufferLimit()
+    {
+        // A long or endless sequence was collected into memory without a limit
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => WriteWithFormatterAsync(typeof(IAsyncEnumerable<Entity>), EntitiesAsync(8_193)));
+        Assert.Equal("The response has more than 8192 items of IAsyncEnumerable<Entity>, the most that are collected to write its array " +
+                     "(MvcOptions.MaxIAsyncEnumerableBufferLimit). Return fewer items, or a list of them.", ex.Message);
+        Assert.StartsWith("[8192]{Name,PasswordHash}:", await WriteWithFormatterAsync(typeof(IAsyncEnumerable<Entity>), EntitiesAsync(8_192)));
+
+        // The limit of the application's MvcOptions
+        var services = new ServiceCollection().Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(o => o.MaxIAsyncEnumerableBufferLimit = 3).BuildServiceProvider();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => WriteWithFormatterAsync(typeof(IAsyncEnumerable<Entity>), EntitiesAsync(4), services: services));
+        Assert.StartsWith("[3]", await WriteWithFormatterAsync(typeof(IAsyncEnumerable<Entity>), EntitiesAsync(3), services: services));
+
+        var httpContext = new DefaultHttpContext { RequestServices = services };
+        httpContext.Response.Body = new MemoryStream();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ToonResult(EntitiesAsync(4)).ExecuteAsync(httpContext));
     }
 
     [Fact]

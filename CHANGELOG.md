@@ -7,6 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-10-21
+
+> A security release for all packages; update both `ToonNet.Core` and `ToonNet.SourceGenerators`. Limits that hold on
+> every read path for documents built to take time or memory (YAML aliases, nested field groups, regular expressions in
+> paths, repeated selectors, colliding dictionary keys), constructor parameters read as System.Text.Json reads them,
+> declared types on the remaining write paths, and generated code that names only what C# can write. Two changes can
+> affect code that worked: constructor parameters without a public property need `[ToonConstructor]`, and reflection,
+> stream, file system and process types are no longer serialized; see the
+> [migration guide](https://selcukgural.github.io/ToonNet/docs/getting-started/migration-4#changes-in-401).
+
+### Security
+- **ToonNet.Extensions.Yaml:** An alias that comes before its anchor, or refers to an anchor of another document, is an
+  error (YAML 1.2 lets an alias refer only to a preceding anchor). YamlDotNet resolved such aliases while loading, so
+  their expansion was not limited by the alias budgets or `MaxDepth`. Converting also checks the number of nodes and
+  the nesting depth again as it expands aliases.
+- **ToonNet.Core:** The nested field groups of tabular rows (§9.3) take no text of their own, so a short row under a
+  deeply nested header made many objects: a document may have one such object per two characters (at least 65,536),
+  and more is a parse error on every read path (trees, the serializer, `ToonDocumentReader` and `Skip`, the validator).
+  Each group object reserves room for its own fields only, not for those of the groups below it, which made the memory
+  of a row grow with the square of its depth.
+- **ToonNet.Core:** Empty cells and values share one string value, and the objects of rows look up their keys through
+  a hash index only once a key is looked up, so wide tables of empty cells take memory in proportion to the document
+  (a seventh of what they took).
+- **ToonNet.Core:** Error messages show the character of an invalid escape sequence, and the keys and field names of
+  `ToonPropertyCollection` and `ToonDocumentWriter` errors, escaped and shortened, as for other text from documents.
+  `ToonDocumentWriter` checks long field lists for repeated names in linear time, and non-strict mode rejects tab
+  indentation too wide to count instead of reporting a negative column.
+- **ToonNet.Core:** Paths: compiling a regular expression for `match()` and `search()` spends steps (as many as a few
+  thousand), also for light patterns and for patterns taken from the document, and an evaluation keeps the patterns it
+  compiled: patterns that pushed each other out of the small shared cache were compiled again for each value, which the
+  step budget did not count. A path has at most 32 pattern literals, which are compiled when it is parsed.
+- **ToonNet.Core:** Paths: a list of selected values may hold a million values and two more per value of the document;
+  selectors that repeat (`$.a[*,*,*,...]`, whose duplicates RFC 9535 keeps) kept many times the document in memory
+  until the steps ran out. Evaluating over text spends a step per member a filter reads and per operand it tests, and
+  for the text it compares, as on a tree, and looks up the members of filters of many names in a hash index;
+  `contains()` spends for the length of the part it looks for.
+- **ToonNet.Core:** Paths in messages (`{path}` in rule messages, `ToonRuleViolation.ToString`, `ToonRuleException`,
+  the errors of `ToonPath` and `DeserializeAt`) and the character of an `Unexpected` path error are escaped and long
+  paths shortened; normalized paths escape only C0 controls (RFC 9535), so line separators and bidirectional controls
+  in keys reached messages. `ToonRuleViolation.Path` and `ToonPathMatch` paths are unchanged.
+- **ToonNet.Core:** Strings of three or more backticks or tildes alone (```` ``` ````, `~~~~`) are quoted when written:
+  as a root string or the cell of a one-field table they made a line that closes the Markdown code block a prompt puts
+  the document in, so the rest of the data read as text of the prompt, and the model's echo of it was cut short.
+  `ToonPrompt.Extract` takes time linear in the answer when it has many blocks of other languages.
+- **ToonNet.Core, ToonNet.SourceGenerators:** The tables of the text writer write object properties of generated types
+  and dictionary values as their declared type, as every other path does since 4.0: a list of `[ToonSerializable]`
+  orders whose `Summary` owner held an entity, or a list of `Dictionary<string, Summary>`, wrote the entity's members
+  (`Serialize`, `SerializeToUtf8Bytes` and the `ToonTypeInfo` overloads; `SerializeToValue` was right).
+- **ToonNet.Core:** A value written as an interface leaves out the interface's properties that its class marks
+  `[ToonIgnore]` where it implements them (implicitly or explicitly): an `Account` that ignores `PasswordHash`, held as
+  an `IAccount` that declares it, wrote the hash.
+- **ToonNet.Core, ToonNet.SourceGenerators:** Constructor parameters are read from documents only as System.Text.Json
+  reads them. A parameter whose member the type keeps out of documents (a `[ToonIgnore]` property, as in
+  `record User(string Name, [property: ToonIgnore] bool IsAdmin = false)`, a property without a public getter, or a
+  field) is not read: it gets its default value, and its key is not mapped. A parameter that matches no member makes
+  reading the type throw `InvalidOperationException` (the generator reports it as warning `TOON012`), unless the
+  constructor is marked `[ToonConstructor]`, which reads it from a key of its name as before. Such parameters let
+  documents pass values the type never shows to the constructor of any type a property declares (a `FileInfo` whose
+  setters then changed the file it named). **This changes reading for types whose constructor takes values without a
+  property:** mark the constructor `[ToonConstructor]` to keep reading them.
+- **ToonNet.Core:** Reflection types (`Type`, `MemberInfo`, `Assembly`, `Module`), delegates, `SerializationInfo`,
+  streams, file system entries (`FileInfo`, `DirectoryInfo`), processes (`Process`, `ProcessStartInfo`) and handles
+  (`SafeHandle`, `WaitHandle`) are not serialized or deserialized, as in System.Text.Json: `NotSupportedException`
+  instead of a `MemoryStream` of a capacity from the document, a `FileStream` that truncates a file, or writing a
+  reflection graph until a depth error. A converter of the options still handles them.
+- **ToonNet.Core, ToonNet.SourceGenerators:** Dictionaries and sets read from documents with keys of 64 bits or more
+  (`long`, `ulong`, `double`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `Int128`, `UInt128`) get an equality
+  comparer that hashes the whole key with a per-process random seed: the default hash of such a key is the XOR of its
+  halves, so keys such as `(i << 32) | i` all collided, and a few megabytes of them took seconds of CPU to add. The
+  comparer compares keys as the default one does. Code generated for ToonNet.Core 4.0.0 keeps the default comparer.
+- **ToonNet.Core, ToonNet.SourceGenerators:** An exception of a property's setter while reading (a check of the value)
+  is reported as one of a constructor: a `ToonSerializationException` that names the property's path and the
+  exception's type, with the exception as the inner one, instead of the exception and its message (which can contain
+  the value), which the MVC formatter did not turn into a model-state error.
+- **ToonNet.SourceGenerators:** Names from referenced assemblies that are not C# identifiers (another compiler or a
+  hand-written assembly can give a type any name) are no longer written into generated source: such a name of a base
+  type, a property's type or a converter added code to the project. The type then gets no generated code and is
+  serialized with reflection, and warning `TOON013` names it. Default values of constructor parameters and other
+  literals escape format characters (bidirectional controls, zero-width characters), as property names already did.
+- **ToonNet.Core:** Generated code is registered only with methods of its type (or of classes nested in it, such as
+  the generated writer and reader), not with other code of the type's module, dynamic methods, or a writer or reader
+  of another class.
+- **ToonNet.AspNetCore.Mvc:** The output formatter writes a response value as the type the action declares
+  (`ActionResult<Summary>` holding an entity writes the summary), unless that is `object` or
+  `SerializeRuntimeTypes` is set, as properties are written; the root used its runtime type. An `IAsyncEnumerable<T>`
+  response is collected up to `MvcOptions.MaxIAsyncEnumerableBufferLimit` items (8,192 by default, also for
+  `ToonResult`), and a longer one throws, as MVC does for the sequences it buffers, instead of filling the memory.
+- **ToonNet.AspNetCore.Mvc:** `ReadFromToonAsync` reads UTF-8 and UTF-16 bodies only, as the MVC formatter does:
+  other charsets .NET knows (`utf-32`, `iso-8859-1`, EBCDIC code pages) let a body mean something else to a proxy or
+  firewall that reads it as UTF-8. An endpoint's own `[RequestSizeLimit]` is enforced while reading too (it replaced
+  the 4 MB limit, and was left to the server, which a test host or a body read by earlier middleware does not apply).
+
+### Changed
+- **All packages:** The assemblies in the packages get a build provenance attestation too: nuget.org signs each
+  package it stores, which changes the `.nupkg` file, so `gh attestation verify` checks the `.nupkg` attached to the
+  GitHub release, or the assemblies of a package downloaded from nuget.org (`gh attestation verify
+  lib/net10.0/ToonNet.Core.dll --repo selcukgural/ToonNet`). Publishing pushes only packages of this repository, as many
+  as were packed.
+- **Repository:** Restore reports known vulnerabilities of transitive packages too, and fails CI builds for moderate
+  or worse ones; the documentation site installs its packages without running their install scripts.
+
+### Documentation
+- The [security guide](https://selcukgural.github.io/ToonNet/docs/advanced/security) and the
+  [migration guide](https://selcukgural.github.io/ToonNet/docs/getting-started/migration-4#changes-in-401) describe the
+  changes of 4.0.1; the generator's diagnostics list `TOON012` and `TOON013`.
+
 ## [4.0.0] - 2026-10-15
 
 > All packages move to 4.0.0; rebuild with the 4.0 generator (`TOON011` reports a `ToonNet.Core` of another version).
@@ -1675,7 +1781,8 @@ Each release includes:
 
 ---
 
-[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/selcukgural/ToonNet/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/selcukgural/ToonNet/compare/v3.3.0...v4.0.0
 [3.3.0]: https://github.com/selcukgural/ToonNet/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/selcukgural/ToonNet/compare/v3.1.0...v3.2.0

@@ -316,4 +316,131 @@ public class UntrustedInputTests
         Assert.Equal(whole.Message, streamed.Message);
         Assert.True(stream.BytesRead < 1_000_000, $"{stream.BytesRead} of {toon.Length} bytes read");
     }
+    [Theory]
+    [InlineData('\r', "\\\\r")]
+    [InlineData('\u001B', "\\\\u001B")]
+    [InlineData('\u202E', "\\\\u202E")]
+    [InlineData('\u2028', "\\\\u2028")]
+    [InlineData('\u0085', "\\\\u0085")]
+    public void InvalidEscapes_ShowTheCharacterEscaped(char character, string shown)
+    {
+        // A raw line break, escape or bidirectional control in the message would forge a log line or reorder its text
+        var ex = Assert.Throws<ToonParseException>(() => ToonDocument.Parse("a: \"x\\" + character + "\""));
+
+        Assert.StartsWith($"Invalid escape sequence '{shown}'", ex.Message);
+        Assert.DoesNotContain(character, ex.Message);
+    }
+
+    [Fact]
+    public void PropertyCollectionErrors_ShowKeysEscaped()
+    {
+        var properties = new ToonObject { ["a\nb"] = 1 }.Properties;
+
+        Assert.Equal("The key \"x\\r\\u202Ey\" was not found.", Assert.Throws<KeyNotFoundException>(() => properties["x\r\u202Ey"]).Message);
+        Assert.Equal("An item with the same key has already been added. Key: \"a\\nb\" (Parameter 'key')",
+                     Assert.Throws<ArgumentException>(() => properties.Add("a\nb", 2)).Message);
+    }
+
+    [Fact]
+    public void DocumentWriter_LongFieldLists_AreCheckedInLinearTime()
+    {
+        // Columns from data (a CSV header): comparing each pair took 1.7 s for 50,000 fields
+        var fields = Enumerable.Range(0, 200_000).Select(i => "f" + i).ToArray();
+
+        Fast(() =>
+        {
+            var writer = new ToonDocumentWriter(new StringWriter());
+            writer.WriteStartTable(0, fields);
+        });
+
+        fields[^1] = "f\n7";
+        fields[^2] = "f\n7";
+        var ex = Assert.Throws<ArgumentException>(() => new ToonDocumentWriter(new StringWriter()).WriteStartTable(0, fields));
+        Assert.Equal("The field \"f\\n7\" is repeated. (Parameter 'fields')", ex.Message);
+
+        // Short lists are checked pair by pair, with the same message
+        ex = Assert.Throws<ArgumentException>(() => new ToonDocumentWriter(new StringWriter()).WriteStartTable(0, ["a", "b\r", "b\r"]));
+        Assert.Equal("The field \"b\\r\" is repeated. (Parameter 'fields')", ex.Message);
+    }
+
+    [Fact]
+    public void TabIndentation_WiderThanAnInt_IsAnError()
+    {
+        // Non-strict mode counts a tab as IndentSize columns: 21.5 million tabs of 100 columns overflowed the count
+        var text = "a:\n" + new string('\t', 21_474_837) + "b: 1";
+
+        var ex = Assert.Throws<ToonParseException>(() => ToonDocument.Parse(text, new ToonOptions { StrictMode = false, IndentSize = 100 }));
+
+        Assert.Equal("Indentation is too wide (line 2, column 1)", ex.Message);
+    }
+    /// <summary>Keys whose default hash codes are all 0: a 64-bit key hashes to the XOR of its halves.</summary>
+    private static IEnumerable<long> CollidingLongs(int count) => Enumerable.Range(1, count).Select(i => ((long)i << 32) | (uint)i);
+
+    /// <summary>GUIDs whose four 32-bit parts XOR to 0.</summary>
+    private static IEnumerable<Guid> CollidingGuids(int count) => Enumerable.Range(1, count).Select(i =>
+    {
+        var bytes = new byte[16];
+        BitConverter.GetBytes(i).CopyTo(bytes, 0);
+        BitConverter.GetBytes(i).CopyTo(bytes, 12);
+        return new Guid(bytes);
+    });
+
+    public sealed class Keyed
+    {
+        public Dictionary<long, int> ByLong { get; set; } = [];
+        public HashSet<long> Longs { get; set; } = [];
+        public IReadOnlyDictionary<Guid, int> ByGuid { get; set; } = new Dictionary<Guid, int>();
+    }
+
+    [Fact]
+    public void KeysWithCollidingHashCodes_AreAddedInLinearTime()
+    {
+        // 100,000 such keys took seconds to add (a 4 MB body was half a minute of CPU)
+        var longs = CollidingLongs(100_000).ToList();
+        var guids = CollidingGuids(100_000).ToList();
+        Assert.Single(longs.Select(k => k.GetHashCode()).Distinct());
+        Assert.Single(guids.Select(k => k.GetHashCode()).Distinct());
+
+        var toon = new StringBuilder("ByLong:\n");
+
+        foreach (var key in longs)
+        {
+            toon.Append("  \"").Append(key).Append("\": 1\n");
+        }
+
+        toon.Append("Longs[").Append(longs.Count).Append("]: ").AppendJoin(',', longs).Append("\nByGuid:\n");
+
+        foreach (var key in guids)
+        {
+            toon.Append("  ").Append(key).Append(": 1\n");
+        }
+
+        var text = toon.ToString();
+        Keyed? keyed = null;
+
+        // Linear: a fraction of a second; the default comparers take about twenty seconds (quadratic)
+        Fast(() => keyed = ToonSerializer.Deserialize<Keyed>(text), 5_000);
+        Fast(() => ToonSerializer.DeserializeFromValue<Keyed>(ToonDocument.Parse(text).Root), 5_000);
+
+        Assert.Equal(100_000, keyed!.ByLong.Count);
+        Assert.Equal(1, keyed.ByLong[longs[^1]]);
+        Assert.Contains(longs[500], keyed.Longs);
+        Assert.Equal(1, keyed.ByGuid[guids[7]]);
+        Assert.False(keyed.ByLong.ContainsKey(1));
+    }
+
+    [Fact]
+    public void KeyComparers_CompareAsTheDefaultComparers()
+    {
+        var doubles = ToonSerializer.Deserialize<HashSet<double>>("[3]: 0,-0,1.5")!;
+        Assert.Equal(2, doubles.Count);
+        Assert.Contains(-0.0, doubles);
+
+        var times = ToonSerializer.Deserialize<Dictionary<DateTimeOffset, int>>("\"2026-01-01T00:00:00+00:00\": 1")!;
+        Assert.Equal(1, times[new DateTimeOffset(2026, 1, 1, 3, 0, 0, TimeSpan.FromHours(3))]);
+
+        // Other key types keep the default comparer
+        Assert.Same(EqualityComparer<int>.Default, ToonSerializer.Deserialize<Dictionary<int, int>>("1: 2")!.Comparer);
+        Assert.NotSame(EqualityComparer<long>.Default, ToonSerializer.Deserialize<Dictionary<long, int>>("1: 2")!.Comparer);
+    }
 }

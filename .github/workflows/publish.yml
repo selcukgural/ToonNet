@@ -104,11 +104,46 @@ jobs:
           name: nupkgs
           path: nupkgs
 
-      # Signed provenance of this workflow run for each package, which `gh attestation verify` checks
+      # Only packages of this repository, as many as the pack job listed: the pack job runs third-party build code,
+      # which must not be able to add packages of other IDs the account owns
+      - name: Check packages
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          count=0
+          for package in nupkgs/*.nupkg; do
+            name=$(basename "$package")
+            if ! [[ "$name" =~ ^ToonNet\.(Core|SourceGenerators|AspNetCore|AspNetCore\.Mvc|Extensions\.Json|Extensions\.Yaml)\.[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.nupkg$ ]]; then
+              echo "::error::Unexpected package $name"
+              exit 1
+            fi
+            count=$((count + 1))
+          done
+          listed=$(grep -c . nupkgs/published.txt || true)
+          if [ "$count" -ne "$listed" ]; then
+            echo "::error::$count packages, but the pack job listed $listed"
+            exit 1
+          fi
+
+      # The assemblies in the packages, which nuget.org's repository signature leaves unchanged (it changes the .nupkg)
+      - name: Extract assemblies
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for package in nupkgs/*.nupkg; do
+            target="assemblies/$(basename "$package" .nupkg)"
+            mkdir -p "$target"
+            # Exit code 11: a package without one of the folders
+            unzip -q -o "$package" 'lib/*' 'analyzers/*' -d "$target" || [ $? -eq 11 ]
+          done
+
+      # Signed provenance of this workflow run for each package and its assemblies, which `gh attestation verify` checks
       - name: Attest packages
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: nupkgs/*.nupkg
+          subject-path: |
+            nupkgs/*.nupkg
+            assemblies/**/*.dll
 
       - name: NuGet login (Trusted Publishing)
         id: login

@@ -986,6 +986,9 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
             throw new ArgumentException("A table needs at least one field.", nameof(fields));
         }
 
+        // Long field lists (columns from data) are checked with a set: comparing each pair takes quadratic time
+        var seen = fields.Length > LinearFieldCheckLimit ? new HashSet<string>(fields.Length, StringComparer.Ordinal) : null;
+
         for (var i = 0; i < fields.Length; i++)
         {
             if (fields[i] is null)
@@ -996,15 +999,15 @@ public sealed class ToonDocumentWriter : IDisposable, IAsyncDisposable
             // Before anything is written: the header with a field TOON cannot represent would be cut off
             CheckText(fields[i]);
 
-            for (var j = 0; j < i; j++)
+            if (seen != null ? !seen.Add(fields[i]) : fields[..i].Contains(fields[i]))
             {
-                if (fields[j] == fields[i])
-                {
-                    throw new ArgumentException($"The field '{fields[i]}' is repeated.", nameof(fields));
-                }
+                throw new ArgumentException($"The field {ToonErrorText.Quote(fields[i])} is repeated.", nameof(fields));
             }
         }
     }
+
+    /// <summary>Field lists up to this length are checked for repeated names pair by pair.</summary>
+    private const int LinearFieldCheckLimit = 16;
 
     /// <summary>Writes an array header (or an empty array) like <see cref="ToonDomWriter"/> and opens its frame.</summary>
     private void StartArray(Kind kind, string? key, int length, ReadOnlySpan<string> fields, Position position, int childDepth)

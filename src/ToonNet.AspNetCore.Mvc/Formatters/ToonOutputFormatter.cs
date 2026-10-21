@@ -1,6 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Formatters;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
 using ToonNet.AspNetCore.Mvc.Http;
@@ -118,9 +121,16 @@ public sealed class ToonOutputFormatter : TextOutputFormatter
 
         // A null value (reached when MVC does not turn it into 204 No Content) is written as `null`, because an empty
         // TOON document means an empty object.
+        // The value is written as the type the action declares (ActionResult<Summary> holding an entity writes the summary),
+        // unless that is object or the options ask for runtime types, as properties are.
         // An asynchronous sequence is collected first: its array header needs the number of items
-        var (value, type) = await AsyncEnumerableBuffer.CollectIfAsyncAsync(context.Object, context.Object?.GetType() ?? context.ObjectType ?? typeof(object),
-                                                                            httpContext.RequestAborted).ConfigureAwait(false);
+        var declared = context.ObjectType;
+        var written = context.Object is { } instance && declared != null && declared != typeof(object) && !_options.SerializeRuntimeTypes &&
+                      declared.IsInstanceOfType(instance)
+            ? declared
+            : context.Object?.GetType() ?? declared ?? typeof(object);
+        var limit = httpContext.RequestServices?.GetService<IOptions<MvcOptions>>()?.Value.MaxIAsyncEnumerableBufferLimit ?? AsyncEnumerableBuffer.DefaultLimit;
+        var (value, type) = await AsyncEnumerableBuffer.CollectIfAsyncAsync(context.Object, written, limit, httpContext.RequestAborted).ConfigureAwait(false);
 
         if (selectedEncoding.CodePage == Encoding.UTF8.CodePage)
         {

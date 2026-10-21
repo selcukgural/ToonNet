@@ -39,8 +39,39 @@ public sealed class CustomMap : Dictionary<string, int>;
 ///     Generated code writes collections it knows (List, array, HashSet, Dictionary) itself; other runtime types behind
 ///     a declared interface or class go to the serializer, so the text is the reflection-based text in every path.
 /// </summary>
+[ToonSerializable]
+public partial class KeyedCollections
+{
+    public Dictionary<long, int> ByLong { get; set; } = [];
+    public HashSet<Guid> Ids { get; set; } = [];
+    public Dictionary<string, int> ByName { get; set; } = [];
+}
+
 public class GeneratedCollectionTests
 {
+    [Fact]
+    public void DictionariesAndSetsOfLargeKeys_GetComparersDocumentsCannotMakeCollide()
+    {
+        // Keys whose default hash codes are all 0 (the XOR of the halves of a 64-bit value)
+        var longs = Enumerable.Range(1, 100_000).Select(i => ((long)i << 32) | (uint)i).ToList();
+        var toon = "ByLong:\n" + string.Concat(longs.Select(k => $"  \"{k}\": 1\n")) + "Ids[1]: " + Guid.Empty + "\nByName:\n  a: 1";
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var text = ToonSerializer.Deserialize<KeyedCollections>(toon)!;
+        var tree = ToonSerializer.DeserializeFromValue<KeyedCollections>(ToonNet.Core.Models.ToonDocument.Parse(toon).Root)!;
+        // Linear: well under a second on a laptop; the default comparer takes about ten seconds (quadratic)
+        Assert.True(watch.ElapsedMilliseconds < 5_000, $"took {watch.ElapsedMilliseconds} ms");
+
+        foreach (var read in new[] { text, tree })
+        {
+            Assert.Equal(100_000, read.ByLong.Count);
+            Assert.NotSame(EqualityComparer<long>.Default, read.ByLong.Comparer);
+            Assert.NotSame(EqualityComparer<Guid>.Default, read.Ids.Comparer);
+            Assert.Contains(Guid.Empty, read.Ids);
+            Assert.Equal(1, read.ByName["a"]);
+        }
+    }
+
     private static void AssertAllPathsAgree(DeclaredCollections value, ToonSerializerOptions? options = null)
     {
         options ??= new ToonSerializerOptions();

@@ -120,7 +120,9 @@ Order copy = Order.Deserialize(ToonDocument.Parse(toon));
 | Abstract types | `Serialize` only |
 
 **Constructor selection** (same as `ToonSerializer`): a constructor marked `[ToonConstructor]`, otherwise the public
-parameterless constructor, otherwise the public constructor with the most parameters.
+parameterless constructor, otherwise the public constructor with the most parameters. Parameters are read through the public
+properties they match; one without a property is reported as warning **`TOON012`** and makes reading throw, unless the
+constructor is marked `[ToonConstructor]`.
 
 **Known differences from `ToonSerializer`:**
 

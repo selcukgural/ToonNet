@@ -86,6 +86,23 @@ internal static class DiagnosticHelper
                                                                           Category, DiagnosticSeverity.Error, true);
 
     /// <summary>
+    /// Warning: a constructor parameter matches no public property, and the constructor is not marked
+    /// <c>[ToonConstructor]</c>: reading the type throws, as with System.Text.Json.
+    /// </summary>
+    public static readonly DiagnosticDescriptor UnboundConstructorParameter = new("TOON012", "Constructor parameter matches no property",
+                                                                                  "The constructor parameter '{0}' of '{1}' matches no public property, so reading '{1}' throws; add a property with its name, or mark the constructor [ToonConstructor] to read the parameter from the key '{0}'",
+                                                                                  Category, DiagnosticSeverity.Warning, true);
+
+    /// <summary>
+    /// Warning: a type the generated code would name (a property's type, a base type, a converter) has a name that is not
+    /// a C# identifier, which only another compiler or a hand-written assembly gives a type; nothing is generated, and the
+    /// type is serialized with reflection.
+    /// </summary>
+    public static readonly DiagnosticDescriptor NameNotEmittable = new("TOON013", "Type name cannot be used in generated code",
+                                                                       "No code is generated for '{0}': the name '{1}' that it uses is not a C# identifier; '{0}' is serialized with reflection",
+                                                                       Category, DiagnosticSeverity.Warning, true);
+
+    /// <summary>
     /// Looks up a descriptor by id (used when replaying diagnostics stored in the generator model).
     /// </summary>
 
@@ -99,6 +116,8 @@ internal static class DiagnosticHelper
         "TOON008" => InvalidPropertyName,
         "TOON009" => GeneratedMethodNameTaken,
         "TOON010" => UnsupportedTypeKind,
+        "TOON012" => UnboundConstructorParameter,
+        "TOON013" => NameNotEmittable,
         _         => GenerationError
     };
 }

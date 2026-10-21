@@ -132,6 +132,95 @@ public class GeneratorDriverTests
         Assert.DoesNotContain("static global::ToonNet.Core.Models.ToonDocument Serialize(", LastGeneratedSources.Single());
     }
 
+#if NET9_0_OR_GREATER
+    [Theory]
+    [InlineData("Ns.G instance, int value); [global::System.Runtime.CompilerServices.ModuleInitializer] internal static void Pwn() => global::System.Console.WriteLine(1); private static extern void Pad(global::Ns.G")]
+    [InlineData("Ns.Is\u200BAdmin")]
+    [InlineData("Ns.Bad\u202ENamespace.G")]
+    public void TypeNamesThatAreNotIdentifiers_ReportToon013_AndGenerateNothing(string typeName)
+    {
+        // A referenced assembly (another compiler's, or written by hand) can name a type anything: such a base type with
+        // an init-only property was written into an [UnsafeAccessor] declaration as is, adding code to the project
+        var builder = new System.Reflection.Emit.PersistedAssemblyBuilder(new System.Reflection.AssemblyName("Names"), typeof(object).Assembly);
+        var module = builder.DefineDynamicModule("Names");
+        var odd = module.DefineType(typeName, System.Reflection.TypeAttributes.Public | System.Reflection.TypeAttributes.Class);
+        odd.DefineDefaultConstructor(System.Reflection.MethodAttributes.Public);
+        var field = odd.DefineField("_p", typeof(int), System.Reflection.FieldAttributes.Private);
+        var property = odd.DefineProperty("Prop", System.Reflection.PropertyAttributes.None, typeof(int), null);
+        var getter = odd.DefineMethod("get_Prop", System.Reflection.MethodAttributes.Public | System.Reflection.MethodAttributes.SpecialName, typeof(int), Type.EmptyTypes);
+        var il = getter.GetILGenerator();
+        il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
+        il.Emit(System.Reflection.Emit.OpCodes.Ldfld, field);
+        il.Emit(System.Reflection.Emit.OpCodes.Ret);
+        property.SetGetMethod(getter);
+        var oddType = odd.CreateType();
+        var nice = module.DefineType("Ns.NiceBase", System.Reflection.TypeAttributes.Public | System.Reflection.TypeAttributes.Class, oddType);
+        nice.DefineDefaultConstructor(System.Reflection.MethodAttributes.Public);
+        nice.CreateType();
+
+        using var image = new MemoryStream();
+        builder.Save(image);
+
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+                         .Split(Path.PathSeparator)
+                         .Select(path => MetadataReference.CreateFromFile(path))
+                         .Append(MetadataReference.CreateFromFile(typeof(ToonSerializer).Assembly.Location))
+                         .Append(MetadataReference.CreateFromImage(image.ToArray()));
+        var compilation = CSharpCompilation.Create("Snippet",
+                                                   [CSharpSyntaxTree.ParseText("""
+                                                       [ToonNet.Core.Serialization.Attributes.ToonSerializable] public partial class Mine : Ns.NiceBase { public int Own { get; set; } }
+                                                       // A generated type that uses it converts it with reflection, as it gets no generated methods
+                                                       [ToonNet.Core.Serialization.Attributes.ToonSerializable] public partial class User
+                                                       {
+                                                           public Mine? Inner { get; set; }
+                                                           public System.Collections.Generic.List<Mine> Items { get; set; } = new();
+                                                       }
+                                                       """)],
+                                                   references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var driver = CSharpGeneratorDriver.Create(new Generator::ToonNet.SourceGenerators.ToonSerializableGenerator())
+                                          .RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
+
+        var diagnostic = Assert.Single(diagnostics, d => d.Id == "TOON013");
+        Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.StartsWith("No code is generated for 'Mine': the name '", diagnostic.GetMessage());
+        Assert.DoesNotContain('\u202E', diagnostic.GetMessage());
+        Assert.Single(driver.GetRunResult().GeneratedTrees, t => t.FilePath.Contains("User."));
+        Assert.DoesNotContain(driver.GetRunResult().GeneratedTrees, t => t.FilePath.Contains("Mine."));
+        Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Contains(diagnostics, d => d.Id == "TOON006" && d.GetMessage().Contains("'Inner'"));
+    }
+#endif
+
+    [Fact]
+    public void ConstructorParametersWithoutAProperty_ReportToon012_UnlessTheConstructorIsMarked()
+    {
+        var (diagnostics, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Login(string user, string pass) { public string User { get; } = user; }
+            [ToonSerializable] public partial class Hidden(string user, bool isAdmin) { public string User { get; } = user; internal bool IsAdmin { get; } = isAdmin; }
+            [ToonSerializable] public partial class Marked { [ToonConstructor] public Marked(string user, string pass) { User = user + pass; } public string User { get; } }
+            """);
+
+        Assert.Empty(errors);
+        var diagnostic = Assert.Single(diagnostics, d => d.Id == "TOON012");
+        Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.Equal("The constructor parameter 'pass' of 'Login' matches no public property, so reading 'Login' throws; add a property with its name, or mark the constructor [ToonConstructor] to read the parameter from the key 'pass'",
+                     diagnostic.GetMessage());
+
+        // The readers of Login throw; Hidden never reads isAdmin
+        var login = LastGeneratedSources.Single(s => s.Contains("partial class Login"));
+        Assert.Equal(2, login.Split("throw new global::System.InvalidOperationException(\"The parameter 'pass' of the constructor of Login").Length - 1);
+        var hidden = LastGeneratedSources.Single(s => s.Contains("partial class Hidden"));
+        Assert.Contains("bool __a1 = default!; // its member is kept out of documents", hidden);
+        Assert.DoesNotContain("\"isAdmin\"", hidden);
+
+        // No flag for the parameter that is never read (CS0219 breaks builds that treat warnings as errors)
+        Assert.DoesNotContain("__ha1", hidden);
+        Assert.DoesNotContain(LastCompilationWarnings, d => d.Id == "CS0219");
+    }
+
     [Theory]
     [InlineData("public static partial class Holder { public static int X { get; set; } }", "static class")]
     [InlineData("public ref partial struct Span { public int X { get; set; } }", "ref struct")]
@@ -280,6 +369,37 @@ public class GeneratorDriverTests
         var source = Assert.Single(LastGeneratedSources);
         Assert.DoesNotContain('\u202E', source);
         Assert.Contains("\\u202E", source);
+    }
+
+    [Fact]
+    public void FormatCharactersInDefaultValuesAndNames_AreEscapedInGeneratedLiterals()
+    {
+        // Constructor defaults were written with Roslyn's literal formatting only, which keeps bidirectional controls
+        var (_, errors, _) = Run("""
+            using ToonNet.Core.Serialization.Attributes;
+            namespace App;
+            [ToonSerializable] public partial class Defaults
+            {
+                public Defaults(string s = "x\u202E\u2066z", char c = '\u202E', string zero = "a\u200Bb\uFEFF") { S = s; C = c; Zero = zero; }
+                public string S { get; }
+                public char C { get; }
+                public string Zero { get; }
+                [ToonProperty("w\u200Bx")] public int W { get; set; }
+            }
+            """);
+
+        Assert.Empty(errors);
+        var source = Assert.Single(LastGeneratedSources);
+
+        foreach (var c in new[] { '\u202E', '\u2066', '\u200B', '\uFEFF' })
+        {
+            Assert.DoesNotContain(c, source);
+        }
+
+        Assert.Contains("\"x\\u202E\\u2066z\"", source);
+        Assert.Contains("'\\u202E'", source);
+        Assert.Contains("\"a\\u200Bb\\uFEFF\"", source);
+        Assert.Contains("\"w\\u200Bx\"", source);
     }
 
     [Fact]
@@ -458,6 +578,7 @@ public class GeneratorDriverTests
             [ToonSerializable]
             public partial class WithDefaults
             {
+                [ToonConstructor] // its parameters have no properties: read from keys of their own
                 public WithDefaults(Level level = Level.High, decimal rate = 0.1m, double ratio = -1.5, string? name = null, char c = '\'') { }
                 public Level Level { get; set; }
             }

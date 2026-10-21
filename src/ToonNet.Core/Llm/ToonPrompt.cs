@@ -41,7 +41,7 @@ public static class ToonPrompt
 
         var lines = modelOutput.Replace("\r\n", "\n").Split('\n');
         string? unmarked = null;
-        var otherBlocks = new List<Range>(); // blocks marked with another language (python, json, ...)
+        var otherBlocks = new List<Range>(); // blocks marked with another language (python, json, ...), in order
 
         for (var i = 0; i < lines.Length; i++)
         {
@@ -150,9 +150,27 @@ public static class ToonPrompt
     /// </summary>
     private static string WholeAnswer(string[] all, List<Range> otherBlocks)
     {
-        var lines = all.Where((line, index) => !IsFenceLine(line) && !otherBlocks.Any(block => index >= block.Start.Value && index < block.End.Value))
-                       .ToArray();
-        var text = TrimBlankLines(lines).Split('\n');
+        // The blocks are in order and do not overlap: walk them with the lines (looking through all of them for each
+        // line took quadratic time on an answer of many small blocks)
+        var lines = new List<string>(all.Length);
+        var block = 0;
+
+        for (var index = 0; index < all.Length; index++)
+        {
+            while (block < otherBlocks.Count && otherBlocks[block].End.Value <= index)
+            {
+                block++;
+            }
+
+            var inBlock = block < otherBlocks.Count && index >= otherBlocks[block].Start.Value;
+
+            if (!inBlock && !IsFenceLine(all[index]))
+            {
+                lines.Add(all[index]);
+            }
+        }
+
+        var text = TrimBlankLines([.. lines]).Split('\n');
         var indent = text.Where(line => !string.IsNullOrWhiteSpace(line)).Select(line => line.Length - line.TrimStart(' ').Length).DefaultIfEmpty(0).Min();
         return string.Join('\n', text.Select(line => RemoveIndent(line, indent)));
 

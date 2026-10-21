@@ -279,7 +279,7 @@ public sealed class ToonPath
         {
             0 => null,
             1 => nodes[0].Value,
-            _ => throw new InvalidOperationException($"The path '{Text}' selects {nodes.Count} values, not one.")
+            _ => throw new InvalidOperationException($"The path '{ToonErrorText.ShowPath(Text)}' selects {nodes.Count} values, not one.")
         };
     }
 
@@ -301,7 +301,7 @@ public sealed class ToonPath
 
         if (!IsSingular)
         {
-            throw new InvalidOperationException($"The path '{Text}' can select several values; setting needs member names and indexes only.");
+            throw new InvalidOperationException($"The path '{ToonErrorText.ShowPath(Text)}' can select several values; setting needs member names and indexes only.");
         }
 
         var segments = Query.Segments;
@@ -360,7 +360,7 @@ public sealed class ToonPath
                     if (index < 0 || index > count)
                     {
                         throw new InvalidOperationException(
-                            $"The index {selector.Index} of the path '{Text}' is outside the array of {count} item{(count == 1 ? "" : "s")}.");
+                            $"The index {selector.Index} of the path '{ToonErrorText.ShowPath(Text)}' is outside the array of {count} item{(count == 1 ? "" : "s")}.");
                     }
 
                     if (index < count)
@@ -393,7 +393,7 @@ public sealed class ToonPath
     }
 
     private InvalidOperationException NotA(ToonValue value, string kind, int segment) =>
-        new($"The value at segment {segment + 1} of the path '{Text}' is {ToonValue.DescribeKind(value.ValueType)}, not {kind}.");
+        new($"The value at segment {segment + 1} of the path '{ToonErrorText.ShowPath(Text)}' is {ToonValue.DescribeKind(value.ValueType)}, not {kind}.");
 
     /// <summary>Removes every value the path selects from the object or array it is in.</summary>
     /// <param name="root">The value <c>$</c> stands for.</param>

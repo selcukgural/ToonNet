@@ -78,17 +78,19 @@ public sealed class ToonInputFormatter : TextInputFormatter
         var httpContext = context.HttpContext;
         var request = httpContext.Request;
 
-        // An endpoint with a size limit of its own ([RequestSizeLimit], [DisableRequestSizeLimit]) is limited by the
-        // server, as with ReadFromToonAsync; others by the formatter
-        var limit = httpContext.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>() != null ? long.MaxValue : _maxRequestBodySize;
+        // An endpoint with a size limit of its own ([RequestSizeLimit], [DisableRequestSizeLimit]) has that limit, as with
+        // ReadFromToonAsync, enforced here too (a server or test host may not apply it); others the formatter's
+        var limit = httpContext.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>() is { } own
+            ? own.MaxRequestBodySize ?? long.MaxValue
+            : _maxRequestBodySize;
 
         if (request.ContentLength > limit)
         {
-            throw CreatePayloadTooLargeException();
+            throw CreatePayloadTooLargeException(limit);
         }
 
         // Decode while reading instead of copying the body into a MemoryStream first; the wrapper enforces the limit
-        var body = new LimitedReadStream(request.Body, limit, CreatePayloadTooLargeException);
+        var body = new LimitedReadStream(request.Body, limit, () => CreatePayloadTooLargeException(limit));
 
         // UTF-8 bodies are checked for content as they are read; others once decoded
         string? content = null;
@@ -140,9 +142,9 @@ public sealed class ToonInputFormatter : TextInputFormatter
             ? InputFormatterResult.SuccessAsync(GetDefaultValueForType(context.ModelType))
             : InputFormatterResult.NoValueAsync();
 
-    private BadHttpRequestException CreatePayloadTooLargeException()
+    private static BadHttpRequestException CreatePayloadTooLargeException(long limit)
     {
-        return new BadHttpRequestException($"The TOON request body exceeds the maximum allowed size of {_maxRequestBodySize} bytes.",
+        return new BadHttpRequestException($"The TOON request body exceeds the maximum allowed size of {limit} bytes.",
                                            StatusCodes.Status413PayloadTooLarge);
     }
 }

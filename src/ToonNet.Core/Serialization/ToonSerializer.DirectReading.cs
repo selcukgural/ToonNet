@@ -230,6 +230,13 @@ public static partial class ToonSerializer
         for (var i = 0; i < activator.Arguments.Length; i++)
         {
             var argument = activator.Arguments[i];
+
+            // Never read: its key is not mapped, and the argument gets its missing value
+            if (!argument.FromDocument)
+            {
+                continue;
+            }
+
             var name = argument.Property != null ? names[Array.IndexOf(metadata.Properties, argument.Property)] : argument.Parameter.Name!;
             slots[name] = (i, -1);
         }

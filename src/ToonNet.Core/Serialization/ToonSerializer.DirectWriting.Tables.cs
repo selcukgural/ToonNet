@@ -423,13 +423,22 @@ public static partial class ToonSerializer
                             }
 
                             var values = (rented ??= ArrayPool<object?>.Shared.Rent(objects.Length)).AsSpan(0, objects.Length);
+                            var declared = writer.GetPropertyType(p);
 
                             for (var i = 0; i < objects.Length; i++)
                             {
                                 values[i] = writer.GetValueOf(objects[i]!, p);
+
+                                // Code from generators before 4.0 does not tell the declared type: any object that may be
+                                // derived is left to the tree, which writes it as the declared type
+                                if (declared == null && values[i] is { } v && !v.GetType().IsSealed)
+                                {
+                                    return PlanResult.Unknown;
+                                }
                             }
 
-                            result = AddColumn(plan, name, values, typeof(object), new PlanColumn(p, null, writer, true), level);
+                            // Objects are written as the property's type, not as what they are (a derived type's members)
+                            result = AddColumn(plan, name, values, declared ?? typeof(object), new PlanColumn(p, null, writer, true), level);
                         }
 
                         if (result is PlanResult.NotTabular or PlanResult.Unknown)
@@ -526,9 +535,9 @@ public static partial class ToonSerializer
                     }
                 }
 
-                // Entry values are written by their runtime type
+                // Entry values are written as the dictionary's value type (their runtime type for object)
                 (plan.Entries ??= []).Add((entries, rawKey));
-                var result = AddColumn(plan, name, values, typeof(object), new PlanColumn(plan.Entries.Count - 1, null, null, true), level);
+                var result = AddColumn(plan, name, values, entries.ValueType, new PlanColumn(plan.Entries.Count - 1, null, null, true), level);
 
                 if (result is PlanResult.NotTabular or PlanResult.Unknown)
                 {

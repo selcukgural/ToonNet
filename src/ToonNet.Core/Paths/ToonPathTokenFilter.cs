@@ -54,10 +54,45 @@ internal sealed class ToonPathTokenFilter
     {
         Members = members;
         _root = root;
+
+        if (members.Length > LinearSearchLimit)
+        {
+            MemberIndexes = new Dictionary<string, int>(members.Length, StringComparer.Ordinal);
+
+            for (var i = 0; i < members.Length; i++)
+            {
+                MemberIndexes.TryAdd(members[i], i);
+            }
+        }
     }
+
+    /// <summary>Up to this many names are searched in order; more are looked up in <see cref="MemberIndexes"/>.</summary>
+    internal const int LinearSearchLimit = 8;
 
     /// <summary>The names of the members the filter reads.</summary>
     public string[] Members { get; }
+
+    /// <summary>The index of each name in <see cref="Members"/>, for filters of many names; null for a few.</summary>
+    public Dictionary<string, int>? MemberIndexes { get; }
+
+    /// <summary>The index of a key in <see cref="Members"/>, or -1.</summary>
+    public int IndexOf(string key)
+    {
+        if (MemberIndexes != null)
+        {
+            return MemberIndexes.TryGetValue(key, out var index) ? index : -1;
+        }
+
+        for (var i = 0; i < Members.Length; i++)
+        {
+            if (string.Equals(Members[i], key))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     /// <summary>The filter for an expression, or null when it reads more than members compared with literals.</summary>
     public static ToonPathTokenFilter? TryCreate(PathExpression expression)
@@ -144,21 +179,25 @@ internal sealed class ToonPathTokenFilter
     ///     where their values are (primitives as tokens; objects and arrays were skipped).
     /// </summary>
     /// <returns>The result, or null when the tokens do not decide it (a member is an object or array a test needs).</returns>
-    public bool? Test(ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found)
+    public bool? Test(ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found, EvaluationBudget work)
     {
         var undecided = false;
-        var result = Test(_root, parser, values, found, ref undecided);
+        var result = Test(_root, parser, values, found, work, ref undecided);
         return undecided ? null : result;
     }
 
-    private static bool Test(Node node, ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found, ref bool undecided)
+    /// <remarks>Each operand spends a step, and a string test a step per 16 characters it reads, as on a tree.</remarks>
+    private static bool Test(Node node, ToonParser parser, ReadOnlySpan<ToonParser.ValueRef> values, ReadOnlySpan<bool> found,
+                             EvaluationBudget work, ref bool undecided)
     {
+        work.Spend();
+
         switch (node)
         {
             case And and:
                 foreach (var operand in and.Operands)
                 {
-                    if (!Test(operand, parser, values, found, ref undecided))
+                    if (!Test(operand, parser, values, found, work, ref undecided))
                     {
                         return false;
                     }
@@ -168,7 +207,7 @@ internal sealed class ToonPathTokenFilter
             case Or or:
                 foreach (var operand in or.Operands)
                 {
-                    if (Test(operand, parser, values, found, ref undecided))
+                    if (Test(operand, parser, values, found, work, ref undecided))
                     {
                         return true;
                     }
@@ -176,7 +215,7 @@ internal sealed class ToonPathTokenFilter
 
                 return false;
             case Not not:
-                return !Test(not.Operand, parser, values, found, ref undecided);
+                return !Test(not.Operand, parser, values, found, work, ref undecided);
             case Exists exists:
                 return found[exists.Member];
             case StringTest test:
@@ -195,7 +234,7 @@ internal sealed class ToonPathTokenFilter
                     return false;
                 }
 
-                return TestString(parser, tested, test.Test, test.Literal);
+                return TestString(parser, tested, test.Test, test.Literal, work);
             }
             default:
             {
@@ -215,15 +254,24 @@ internal sealed class ToonPathTokenFilter
                     return compare.Operator == ComparisonOperator.NotEqual;
                 }
 
+                work.SpendText(parser.TokenOf(value).Length);
                 return CompareToken(parser, value, compare.Operator, compare.Literal);
             }
         }
     }
 
     /// <summary>A string test of a primitive token: false when the token is not a string.</summary>
-    private static bool TestString(ToonParser parser, in ToonParser.ValueRef value, PathFunction.StringTest test, string literal)
+    private static bool TestString(ToonParser parser, in ToonParser.ValueRef value, PathFunction.StringTest test, string literal,
+                                   EvaluationBudget work)
     {
         var token = parser.TokenOf(value);
+        work.SpendText(token.Length);
+
+        if (test == PathFunction.StringTest.Contains)
+        {
+            work.SpendMany(ToonPathEvaluator.ContainsSteps(token.Length, literal.Length));
+        }
+
         var text = token;
 
         if (token.Length > 0 && token[0] == '"')

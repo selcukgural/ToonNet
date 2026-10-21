@@ -89,13 +89,36 @@ internal sealed class ToonPathTextEvaluator
     {
         public bool Whole;
 
-        /// <summary>The names of the members read (a few, so they are searched in order), and what is read below each.</summary>
+        /// <summary>The names of the members read, and what is read below each.</summary>
         public string[] Names = [];
 
         public MemberTree[] Below = [];
 
+        /// <summary>The position of each name, for more than a few names; built by the first lookup.</summary>
+        private Dictionary<string, int>? _indexes;
+
         public MemberTree? Find(string name)
         {
+            if (Names.Length > ToonPathTokenFilter.LinearSearchLimit)
+            {
+                var indexes = _indexes;
+
+                if (indexes == null)
+                {
+                    // A compiled path is evaluated on several threads at once: the index is published only when complete
+                    indexes = new Dictionary<string, int>(Names.Length, StringComparer.Ordinal);
+
+                    for (var i = 0; i < Names.Length; i++)
+                    {
+                        indexes.TryAdd(Names[i], i);
+                    }
+
+                    _indexes = indexes;
+                }
+
+                return indexes.TryGetValue(name, out var index) ? Below[index] : null;
+            }
+
             for (var i = 0; i < Names.Length; i++)
             {
                 if (string.Equals(Names[i], name))
@@ -117,6 +140,7 @@ internal sealed class ToonPathTextEvaluator
             var added = new MemberTree();
             Names = [.. Names, name];
             Below = [.. Below, added];
+            _indexes = null;
             return added;
         }
     }
@@ -368,12 +392,12 @@ internal sealed class ToonPathTextEvaluator
         {
             var obj = walker.Partials[index] ??= new ToonObject();
             obj.Properties.Clear();
-            AddMembers(parser, child, members, obj);
+            AddMembers(parser, child, members, obj, walker.Work);
             partial = obj;
         }
         else
         {
-            partial = BuildMembers(parser, child, members);
+            partial = BuildMembers(parser, child, members, walker.Work);
         }
 
         if (ToonPathEvaluator.Test(selector.Filter!, partial, partial, walker.Work))
@@ -405,14 +429,12 @@ internal sealed class ToonPathTextEvaluator
 
             while (parser.NextProperty(ref cursor, out var key, out var member))
             {
-                for (var i = 0; i < names.Length; i++)
+                walker.Work.Spend();
+
+                if (filter.IndexOf(key) is var i and >= 0)
                 {
-                    if (string.Equals(names[i], key))
-                    {
-                        values[i] = member;
-                        found[i] = true;
-                        break;
-                    }
+                    values[i] = member;
+                    found[i] = true;
                 }
 
                 // Checks the member like reading it would; a primitive's token stays in the text
@@ -425,18 +447,18 @@ internal sealed class ToonPathTextEvaluator
             parser.Skip(child);
         }
 
-        return filter.Test(parser, values, found);
+        return filter.Test(parser, values, found, walker.Work);
     }
 
     /// <summary>A tree of the members a filter reads (the rest is skipped); a primitive or an array stands for itself.</summary>
-    private static ToonValue BuildMembers(ToonParser parser, in ToonParser.ValueRef value, MemberTree members)
+    private static ToonValue BuildMembers(ToonParser parser, in ToonParser.ValueRef value, MemberTree members, EvaluationBudget work)
     {
         switch (value.NodeKind)
         {
             case ToonNodeKind.Object:
             {
                 var obj = new ToonObject();
-                AddMembers(parser, value, members, obj);
+                AddMembers(parser, value, members, obj, work);
                 return obj;
             }
             case ToonNodeKind.Array:
@@ -449,12 +471,14 @@ internal sealed class ToonPathTextEvaluator
     }
 
     /// <summary>Reads the members of an object a filter reads into <paramref name="obj"/>, skipping the others.</summary>
-    private static void AddMembers(ToonParser parser, in ToonParser.ValueRef value, MemberTree members, ToonObject obj)
+    private static void AddMembers(ToonParser parser, in ToonParser.ValueRef value, MemberTree members, ToonObject obj, EvaluationBudget work)
     {
         var cursor = parser.BeginObject(value);
 
         while (parser.NextProperty(ref cursor, out var key, out var member))
         {
+            work.Spend();
+
             if (members.Find(key) is not { } below)
             {
                 parser.Skip(member);
@@ -466,7 +490,7 @@ internal sealed class ToonPathTextEvaluator
             }
             else
             {
-                obj.Properties[key] = BuildMembers(parser, member, below);
+                obj.Properties[key] = BuildMembers(parser, member, below, work);
             }
         }
     }

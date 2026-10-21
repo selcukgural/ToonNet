@@ -132,10 +132,11 @@ public static class ToonHttpRequestExtensions
 
         options ??= request.HttpContext.RequestServices?.GetService<IOptions<ToonSerializerOptions>>()?.Value ?? ToonSerializerOptions.Default;
 
-        // An endpoint with a size limit of its own is limited by the server; others by the limit of the MVC formatter,
-        // because the text and the tree of a TOON body take many times its size in memory
-        var limit = request.HttpContext.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>() != null
-            ? long.MaxValue
+        // An endpoint with a size limit of its own has that limit (enforced here too: a server or test host may not
+        // apply it); others the limit of the MVC formatter, because the text and the tree of a TOON body take many times
+        // its size in memory
+        var limit = request.HttpContext.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>() is { } own
+            ? own.MaxRequestBodySize ?? long.MaxValue
             : ToonFormatterDefaults.MaxRequestBodySize;
 
         if (request.ContentLength > limit)
@@ -203,13 +204,21 @@ public static class ToonHttpRequestExtensions
         try
         {
             encoding = Encoding.GetEncoding(contentType.Charset.Value!.Trim('"'));
-            return true;
+
+            // The encodings of the MVC formatter only: a body that a proxy or firewall in front reads as UTF-8 must not
+            // mean something else here (utf-32, an EBCDIC code page)
+            if (encoding.CodePage is 65001 or 1200)
+            {
+                return true;
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
         {
             // An unknown name, or one .NET knows but does not support (utf-7): the client chose it, so it is not a 500
-            unknownCharset = contentType.Charset.Value;
-            return false;
         }
+
+        encoding = Encoding.UTF8;
+        unknownCharset = contentType.Charset.Value;
+        return false;
     }
 }

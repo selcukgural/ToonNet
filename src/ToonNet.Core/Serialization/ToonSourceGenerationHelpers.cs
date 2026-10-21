@@ -18,6 +18,13 @@ namespace ToonNet.Core.Serialization;
 public static class ToonSourceGenerationHelpers
 {
     /// <summary>
+    ///     The comparer for the keys of a dictionary or the items of a set read from a document: one whose hash codes
+    ///     documents cannot make collide, for 64-bit and larger key types (<c>long</c>, <c>Guid</c>, dates), or null for the
+    ///     default comparer.
+    /// </summary>
+    public static IEqualityComparer<T>? KeyComparer<T>() => ToonKeyComparer.For<T>();
+
+    /// <summary>
     ///     Registers the generated methods of <typeparamref name="T"/>, so <see cref="ToonSerializer"/> (and everything
     ///     built on it) uses them for values of exactly that type. Generated module initializers call this.
     /// </summary>
@@ -188,6 +195,15 @@ public static class ToonSourceGenerationHelpers
     /// </summary>
     public static ToonSerializationException ConstructorError<T>(Exception exception) =>
         ToonSerializer.ConstructorError(typeof(T), exception);
+
+    /// <summary>
+    ///     The error for an exception thrown by the setter of a property of <typeparamref name="T"/> while reading, as
+    ///     <see cref="ToonSerializer"/> reports it: the exception's type, and the exception as the inner one.
+    /// </summary>
+    /// <param name="property">The name of the property in code.</param>
+    /// <param name="exception">The exception of the setter.</param>
+    public static ToonSerializationException SetterError<T>(string property, Exception exception) =>
+        ToonSerializer.SetterError(typeof(T), property, exception);
 
     /// <summary>
     ///     Throws when <paramref name="depth"/> exceeds <see cref="ToonSerializerOptions.MaxDepth"/> or the stack is

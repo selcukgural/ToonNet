@@ -156,6 +156,19 @@ public static partial class ToonSerializer
         return Error($"The constructor of {targetType.Name} threw {inner.GetType().Name}", targetType, value, state, inner);
     }
 
+    /// <summary>
+    ///     The error for an exception of a property's setter (a check of the value), reported as for a constructor: its
+    ///     type, not its message, at the path of the property.
+    /// </summary>
+    internal static ToonSerializationException SetterError(Type targetType, string property, Exception exception) =>
+        SetterError(targetType, property, exception, null, SerializerState.Root);
+
+    private static ToonSerializationException SetterError(Type targetType, string property, Exception exception, ToonValue? value, SerializerState state)
+    {
+        var inner = exception is TargetInvocationException { InnerException: { } thrown } ? thrown : exception;
+        return Error($"The setter of {property} threw {inner.GetType().Name}", targetType, value, state, inner);
+    }
+
     private static ToonSerializationException Error(string message, Type targetType, ToonValue? value, SerializerState state, Exception? inner = null)
     {
         return ToonSerializationException.AtPath(message, state.Path, targetType, namesTargetType: true, value, inner);
@@ -650,6 +663,12 @@ public static partial class ToonSerializer
                 return targetType.IsAssignableFrom(typeof(HashSet<>).MakeGenericType(elementType)) ? helpers.ToHashSet : static _ => null;
             }
 
+            // With the comparer of its items (ToonKeyComparer), not the one `new HashSet<T>()` has
+            if (targetType == typeof(HashSet<>).MakeGenericType(elementType))
+            {
+                return helpers.ToHashSet;
+            }
+
             if (targetType.GetConstructor(Type.EmptyTypes) != null && typeof(ICollection<>).MakeGenericType(elementType).IsAssignableFrom(targetType))
             {
                 var create = Expression.Lambda<Func<object>>(Expression.Convert(Expression.New(targetType), typeof(object))).Compile();
@@ -756,7 +775,7 @@ public static partial class ToonSerializer
 
         public override object ToArray(IList items) => ((List<T>)items).ToArray();
 
-        public override object ToHashSet(IList items) => new HashSet<T>((List<T>)items);
+        public override object ToHashSet(IList items) => new HashSet<T>((List<T>)items, ToonKeyComparer.For<T>());
 
         public override IList Reverse(IList items)
         {
@@ -1004,7 +1023,7 @@ public static partial class ToonSerializer
 
     private sealed class DictionaryHelpers<TKey, TValue> : DictionaryHelpers where TKey : notnull
     {
-        public override IDictionary CreateEntries() => new Dictionary<TKey, TValue>();
+        public override IDictionary CreateEntries() => new Dictionary<TKey, TValue>(ToonKeyComparer.For<TKey>());
 
         public override bool TryAddEntry(DirectReader reader, IDictionary entries, string key, in ToonParser.ValueRef value, bool primitiveValue,
                                          int depth)
@@ -1207,7 +1226,8 @@ public static partial class ToonSerializer
         }
 
         var names = metadata.Properties.Select(property => GetPropertyName(property, metadata, options))
-                            .Concat(metadata.Activator.Arguments.Where(argument => argument.Property == null).Select(argument => argument.Parameter.Name!));
+                            .Concat(metadata.Activator.Arguments.Where(argument => argument.Property == null && argument.FromDocument)
+                                            .Select(argument => argument.Parameter.Name!));
 
         var unambiguous = names.GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
                                .Where(group => group.Distinct(StringComparer.Ordinal).Count() == 1)
@@ -1238,7 +1258,7 @@ public static partial class ToonSerializer
 
         foreach (var argument in metadata.Activator.Arguments)
         {
-            if (argument.Property == null && string.Equals(argument.Parameter.Name, key, StringComparison.Ordinal))
+            if (argument.Property == null && argument.FromDocument && string.Equals(argument.Parameter.Name, key, StringComparison.Ordinal))
             {
                 return true;
             }
@@ -1323,10 +1343,10 @@ public static partial class ToonSerializer
 
         for (var i = 0; i < arguments.Length; i++)
         {
-            var (parameter, property, missingValue) = activator.Arguments[i];
+            var (parameter, property, missingValue, fromDocument) = activator.Arguments[i];
             var name = property != null ? GetPropertyName(property, metadata, options) : parameter.Name!;
 
-            if (TryGetKey(obj, name, caseInsensitive, out var argumentValue))
+            if (fromDocument && TryGetKey(obj, name, caseInsensitive, out var argumentValue))
             {
                 state.Push(name);
                 arguments[i] = DeserializeValue(argumentValue, ObjectActivator.ValueTypeOf(parameter), options, depth + 1, state, property?.Converter);
@@ -1366,14 +1386,38 @@ public static partial class ToonSerializer
             }
 
             // Exact primitive matches are set without boxing; anything else (and every error) takes the general path
-            if (property.Primitive is { } primitive && property.Converter == null && options.Converters.Count == 0 &&
-                primitive.TryRead(instance, toonValue))
+            if (property.Primitive is { } primitive && property.Converter == null && options.Converters.Count == 0)
             {
-                continue;
+                bool read;
+
+                try
+                {
+                    read = primitive.TryRead(instance, toonValue);
+                }
+                catch (Exception ex) when (ex is not ToonException)
+                {
+                    state.Push(name);
+                    throw SetterError(targetType, property.Property.Name, ex, toonValue, state);
+                }
+
+                if (read)
+                {
+                    continue;
+                }
             }
 
             state.Push(name);
-            property.Setter(instance, DeserializeValue(toonValue, property.Property.PropertyType, options, depth + 1, state, property.Converter));
+            var propertyValue = DeserializeValue(toonValue, property.Property.PropertyType, options, depth + 1, state, property.Converter);
+
+            try
+            {
+                property.Setter(instance, propertyValue);
+            }
+            catch (Exception ex) when (ex is not ToonException)
+            {
+                throw SetterError(targetType, property.Property.Name, ex, toonValue, state);
+            }
+
             state.Pop();
         }
 

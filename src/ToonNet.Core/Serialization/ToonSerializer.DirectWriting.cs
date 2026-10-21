@@ -521,6 +521,13 @@ public static partial class ToonSerializer
             // An object is written as the type it is declared as (unless the options say otherwise)
             var writtenType = runtimeType == declaredType ? runtimeType : WrittenType(declaredType, runtimeType, _options);
 
+            // An interface whose implementation ignores some of its properties is written by the tree, without them
+            if (writtenType != runtimeType && writtenType.IsInterface &&
+                !ReferenceEquals(GetWrittenMetadata(writtenType, runtimeType), GetTypeMetadata(writtenType)))
+            {
+                return DirectKind.Tree;
+            }
+
             if (_generatedOnly)
             {
                 // A converter writes the value through its tree, and so does generated code that would not consult one

@@ -213,6 +213,8 @@ public partial class User
 | `TOON009` | Warning | A member of the type is named `Serialize` or `Deserialize` (a property, field or nested type, or a method with the generated method's parameters), so that generated static method is left out; use `ToonSerializer` with `ToonTypeInfo` instead |
 | `TOON010` | Error | The type is a static class, a ref struct or a file-local type, which generated code cannot serialize |
 | `TOON011` | Error | The project references a `ToonNet.Core` of an older or another major version than the generator; no code is generated until both packages have the same version |
+| `TOON012` | Warning | A constructor parameter matches no public property, so reading the type throws, as with System.Text.Json; add a property with its name, or mark the constructor `[ToonConstructor]` to read the parameter from a key of its name |
+| `TOON013` | Warning | A type the generated code would name (a base type, a property's type, a converter) has a name that is not a C# identifier, as only another compiler or a hand-written assembly gives one; no code is generated, and the type is serialized with reflection |
 
 ## Viewing generated code
 

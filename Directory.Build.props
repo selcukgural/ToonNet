@@ -31,6 +31,12 @@
 
     <!-- Builds on CI are deterministic, with repository-relative source paths, so others can verify the packages -->
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Restore reports known vulnerabilities of transitive packages too, and on CI a moderate or worse one fails the build -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors Condition="'$(GITHUB_ACTIONS)' == 'true'">$(WarningsAsErrors);NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

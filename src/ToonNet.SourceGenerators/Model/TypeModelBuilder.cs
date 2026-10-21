@@ -80,6 +80,14 @@ internal static class TypeModelBuilder
             diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.NoPublicConstructor, location, type.Name));
         }
 
+        // Names from referenced assemblies go into the generated source as they are: one that is not an identifier
+        // (`G instance, int value); [ModuleInitializer] static void M() => ...; void N(G`) would add code to the project
+        if (FirstUnemittableName(type, properties, constructor) is { } unemittable)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.NameNotEmittable, location, type.Name, ShowName(unemittable)));
+            return Empty(type, diagnostics);
+        }
+
         var setsRequiredMembers = constructor != null && constructor.GetAttributes().Any(a =>
             a.AttributeClass?.ToDisplayString() == "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute");
 
@@ -90,13 +98,30 @@ internal static class TypeModelBuilder
         var allowFallback = GetBool(attribute, "AllowReflectionFallback", true);
         var fallbackDescriptor = allowFallback ? DiagnosticHelper.ReflectionFallback : DiagnosticHelper.ReflectionFallbackNotAllowed;
 
+        var isToonConstructor = constructor != null && constructor.GetAttributes().Any(a =>
+            a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConstructorAttribute");
+        string? constructorError = null;
+
         foreach (var parameter in parameters)
         {
             var index = properties.FindIndex(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
+            var fromDocument = true;
 
             if (index >= 0)
             {
                 boundProperties.Add(index);
+            }
+            else if (HasHiddenMember(type, parameter.Name))
+            {
+                // A member the type keeps out of documents ([ToonIgnore], not public, a field): never read, as by reflection
+                fromDocument = false;
+            }
+            else if (!isToonConstructor)
+            {
+                constructorError ??= $"The parameter '{parameter.Name}' of the constructor of {type.Name} matches no public property. " +
+                                     $"Add a property with its name, or mark the constructor [ToonConstructor] to read the parameter from the key '{parameter.Name}'.";
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticHelper.UnboundConstructorParameter, parameter.Locations.FirstOrDefault() ?? location,
+                                                      parameter.Name, type.Name));
             }
 
             // A parameter bound to a property with [ToonConverter] is read by the converter, like in ToonSerializer.
@@ -109,7 +134,7 @@ internal static class TypeModelBuilder
 
             parameterModels.Add(new ParameterModel(parameter.Name, Typed(parameter.Type, compilation).ToDisplayString(TypeNameFormat), index,
                                                    FormatDefaultValue(parameter), plan,
-                                                   PassIn: parameter.RefKind is RefKind.In or RefKind.RefReadOnlyParameter));
+                                                   PassIn: parameter.RefKind is RefKind.In or RefKind.RefReadOnlyParameter, FromDocument: fromDocument));
         }
 
         var propertyModels = properties.Select((property, index) =>
@@ -164,7 +189,29 @@ internal static class TypeModelBuilder
             Constructor: type.IsAbstract ? null : constructorModel,
             Diagnostics: new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()),
             UnsetRequired: new EquatableArray<string>(unsetRequired.ToImmutableArray()),
-            UnsetRequiredHasInitializer: unsetRequiredHasInitializer && allowFallback);
+            UnsetRequiredHasInitializer: unsetRequiredHasInitializer && allowFallback,
+            ConstructorError: type.IsAbstract ? null : constructorError,
+            // ToonNet.Core 4.0.1 and later: dictionaries and sets get comparers that documents cannot make collide
+            KeyComparers: compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSourceGenerationHelpers")?.GetMembers("KeyComparer").Length > 0,
+            SetterErrors: compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSourceGenerationHelpers")?.GetMembers("SetterError").Length > 0);
+    }
+
+    /// <summary>
+    ///     Whether the type or a base type has an instance property or field of the name (ignoring case) that generated code
+    ///     does not read or write: the collected properties are matched before this is asked.
+    /// </summary>
+    private static bool HasHiddenMember(INamedTypeSymbol type, string name)
+    {
+        for (var current = type; current != null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            if (current.GetMembers().Any(m => !m.IsStatic && (m is IPropertySymbol or IFieldSymbol { IsImplicitlyDeclared: false }) &&
+                                              string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -202,6 +249,132 @@ internal static class TypeModelBuilder
 
         return unset;
     }
+
+    /// <summary>
+    ///     The first name generated code would write that is not a plain C# identifier: of the types of the properties and
+    ///     constructor parameters (with their type arguments, element types, containing types and namespaces), of the
+    ///     base types, of converters and of the properties themselves; null when all can be written.
+    /// </summary>
+    /// <summary>Whether no code is generated for the type because of a name it uses (TOON013), which callers convert with reflection.</summary>
+    internal static bool HasUnemittableNames(INamedTypeSymbol type) => FirstUnemittableName(type, CollectProperties(type), SelectConstructor(type)) != null;
+
+    private static string? FirstUnemittableName(INamedTypeSymbol type, List<IPropertySymbol> properties, IMethodSymbol? constructor)
+    {
+        var types = new List<ITypeSymbol>();
+
+        for (var current = type.BaseType; current != null; current = current.BaseType)
+        {
+            types.Add(current);
+        }
+
+        foreach (var property in properties)
+        {
+            if (!IsEmittableName(property.Name))
+            {
+                return property.Name;
+            }
+
+            types.Add(property.Type);
+            types.Add(property.ContainingType);
+            types.AddRange(ConverterTypes(property));
+        }
+
+        types.AddRange(ConverterTypes(type));
+        types.AddRange(constructor?.Parameters.Select(p => p.Type) ?? []);
+
+        foreach (var used in types)
+        {
+            if (FirstUnemittableName(used) is { } name)
+            {
+                return name;
+            }
+        }
+
+        return null;
+
+        static IEnumerable<ITypeSymbol> ConverterTypes(ISymbol symbol) =>
+            symbol.GetAttributes().Where(a => a.AttributeClass?.ToDisplayString() == AttributeNamespace + "ToonConverterAttribute")
+                  .SelectMany(a => a.ConstructorArguments).Select(argument => argument.Value).OfType<ITypeSymbol>();
+    }
+
+    private static string? FirstUnemittableName(ITypeSymbol type)
+    {
+        switch (type)
+        {
+            case IArrayTypeSymbol array:
+                return FirstUnemittableName(array.ElementType);
+            case IPointerTypeSymbol pointer:
+                return FirstUnemittableName(pointer.PointedAtType);
+            case ITypeParameterSymbol parameter:
+                return IsEmittableName(parameter.Name) ? null : parameter.Name;
+            case INamedTypeSymbol named:
+            {
+                if (!IsEmittableName(named.Name))
+                {
+                    return named.Name;
+                }
+
+                // Tuple element names are written too: (int Count, string Name)
+                if (named.IsTupleType && named.TupleElements.FirstOrDefault(e => !IsEmittableName(e.Name)) is { } element)
+                {
+                    return element.Name;
+                }
+
+                foreach (var argument in named.TypeArguments)
+                {
+                    if (FirstUnemittableName(argument) is { } name)
+                    {
+                        return name;
+                    }
+                }
+
+                if (named.ContainingType != null)
+                {
+                    return FirstUnemittableName(named.ContainingType);
+                }
+
+                for (var ns = named.ContainingNamespace; ns is { IsGlobalNamespace: false }; ns = ns.ContainingNamespace)
+                {
+                    if (!IsEmittableName(ns.Name))
+                    {
+                        return ns.Name;
+                    }
+                }
+
+                return null;
+            }
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    ///     A name C# can write as it is: an identifier (keywords are escaped with '@' when written), without format
+    ///     characters, which C# ignores in identifiers (<c>Is&#x200B;Admin</c> is <c>IsAdmin</c>) and which can hide or
+    ///     reorder text.
+    /// </summary>
+    /// <summary>A name for a message: characters other than letters, digits and ASCII punctuation as <c>\uXXXX</c>, cut to 64.</summary>
+    private static string ShowName(string name)
+    {
+        var text = new StringBuilder();
+
+        foreach (var c in name.Length > 64 ? name.Substring(0, 64) : name)
+        {
+            if (char.IsLetterOrDigit(c) || (c < 0x7F && !char.IsControl(c)))
+            {
+                text.Append(c);
+            }
+            else
+            {
+                text.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+            }
+        }
+
+        return name.Length > 64 ? text.Append("...").ToString() : text.ToString();
+    }
+
+    private static bool IsEmittableName(string name) =>
+        SyntaxFacts.IsValidIdentifier(name) && !name.Any(c => CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.Format);
 
     private static TypeModel Empty(INamedTypeSymbol type, List<DiagnosticInfo> diagnostics)
     {
@@ -542,8 +715,8 @@ internal static class TypeModelBuilder
 
         return value switch
         {
-            string s => SymbolDisplay.FormatLiteral(s, true),
-            char c => SymbolDisplay.FormatLiteral(c, true),
+            string s => CSharpLiteral.Of(s),
+            char c => CSharpLiteral.Of(c),
             bool b => b ? "true" : "false",
             float f when float.IsNaN(f) => "float.NaN",
             float f when float.IsPositiveInfinity(f) => "float.PositiveInfinity",

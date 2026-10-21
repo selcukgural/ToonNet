@@ -529,7 +529,7 @@ public static partial class ToonSerializer
     private static ToonObject SerializeObject(object value, Type type, ToonSerializerOptions options, int depth, SerializerState state)
     {
         ThrowIfAsyncEnumerable(type);
-        var metadata = GetTypeMetadata(type);
+        var metadata = GetWrittenMetadata(type, value.GetType());
         var obj = new ToonObject(metadata.Properties.Length);
 
         foreach (var property in metadata.Properties)
