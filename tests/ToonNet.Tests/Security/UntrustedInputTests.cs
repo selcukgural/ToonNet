@@ -373,4 +373,73 @@ public class UntrustedInputTests
 
         Assert.Equal("Indentation is too wide (line 2, column 1)", ex.Message);
     }
+    /// <summary>Keys whose default hash codes are all 0: a 64-bit key hashes to the XOR of its halves.</summary>
+    private static IEnumerable<long> CollidingLongs(int count) => Enumerable.Range(1, count).Select(i => ((long)i << 32) | (uint)i);
+
+    /// <summary>GUIDs whose four 32-bit parts XOR to 0.</summary>
+    private static IEnumerable<Guid> CollidingGuids(int count) => Enumerable.Range(1, count).Select(i =>
+    {
+        var bytes = new byte[16];
+        BitConverter.GetBytes(i).CopyTo(bytes, 0);
+        BitConverter.GetBytes(i).CopyTo(bytes, 12);
+        return new Guid(bytes);
+    });
+
+    public sealed class Keyed
+    {
+        public Dictionary<long, int> ByLong { get; set; } = [];
+        public HashSet<long> Longs { get; set; } = [];
+        public IReadOnlyDictionary<Guid, int> ByGuid { get; set; } = new Dictionary<Guid, int>();
+    }
+
+    [Fact]
+    public void KeysWithCollidingHashCodes_AreAddedInLinearTime()
+    {
+        // 100,000 such keys took seconds to add (a 4 MB body was half a minute of CPU)
+        var longs = CollidingLongs(100_000).ToList();
+        var guids = CollidingGuids(100_000).ToList();
+        Assert.Single(longs.Select(k => k.GetHashCode()).Distinct());
+        Assert.Single(guids.Select(k => k.GetHashCode()).Distinct());
+
+        var toon = new StringBuilder("ByLong:\n");
+
+        foreach (var key in longs)
+        {
+            toon.Append("  \"").Append(key).Append("\": 1\n");
+        }
+
+        toon.Append("Longs[").Append(longs.Count).Append("]: ").AppendJoin(',', longs).Append("\nByGuid:\n");
+
+        foreach (var key in guids)
+        {
+            toon.Append("  ").Append(key).Append(": 1\n");
+        }
+
+        var text = toon.ToString();
+        Keyed? keyed = null;
+
+        Fast(() => keyed = ToonSerializer.Deserialize<Keyed>(text), 2_000);
+        Fast(() => ToonSerializer.DeserializeFromValue<Keyed>(ToonDocument.Parse(text).Root), 2_000);
+
+        Assert.Equal(100_000, keyed!.ByLong.Count);
+        Assert.Equal(1, keyed.ByLong[longs[^1]]);
+        Assert.Contains(longs[500], keyed.Longs);
+        Assert.Equal(1, keyed.ByGuid[guids[7]]);
+        Assert.False(keyed.ByLong.ContainsKey(1));
+    }
+
+    [Fact]
+    public void KeyComparers_CompareAsTheDefaultComparers()
+    {
+        var doubles = ToonSerializer.Deserialize<HashSet<double>>("[3]: 0,-0,1.5")!;
+        Assert.Equal(2, doubles.Count);
+        Assert.Contains(-0.0, doubles);
+
+        var times = ToonSerializer.Deserialize<Dictionary<DateTimeOffset, int>>("\"2026-01-01T00:00:00+00:00\": 1")!;
+        Assert.Equal(1, times[new DateTimeOffset(2026, 1, 1, 3, 0, 0, TimeSpan.FromHours(3))]);
+
+        // Other key types keep the default comparer
+        Assert.Same(EqualityComparer<int>.Default, ToonSerializer.Deserialize<Dictionary<int, int>>("1: 2")!.Comparer);
+        Assert.NotSame(EqualityComparer<long>.Default, ToonSerializer.Deserialize<Dictionary<long, int>>("1: 2")!.Comparer);
+    }
 }

@@ -48,8 +48,11 @@ internal static class ToonPathRegex
     /// <param name="maxLength">Longer patterns are not valid, which bounds the cost of compiling one.</param>
     public static PathPattern? Get(string pattern, bool full, int maxLength) => Get(pattern, full, maxLength, out _);
 
-    /// <inheritdoc cref="Get(string, bool, int)"/>
-    /// <param name="compiled">Whether the pattern was not in the cache, and compiling it was paid now.</param>
+    /// <summary>The compiled pattern, or null when it is not a valid I-Regexp; see <see cref="Get(string, bool, int)"/>.</summary>
+    /// <param name="pattern">The I-Regexp pattern.</param>
+    /// <param name="full">Whether the whole string must match rather than a substring.</param>
+    /// <param name="maxLength">Longer patterns are not valid.</param>
+    /// <param name="compiled">Whether the pattern was not in the cache, so it was compiled now.</param>
     public static PathPattern? Get(string pattern, bool full, int maxLength, out bool compiled)
     {
         compiled = false;

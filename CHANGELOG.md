@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`SafeHandle`, `WaitHandle`) are not serialized or deserialized, as in System.Text.Json: `NotSupportedException`
   instead of a `MemoryStream` of a capacity from the document, a `FileStream` that truncates a file, or writing a
   reflection graph until a depth error. A converter of the options still handles them.
+- **ToonNet.Core, ToonNet.SourceGenerators:** Dictionaries and sets read from documents with keys of 64 bits or more
+  (`long`, `ulong`, `double`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `Int128`, `UInt128`) get an equality
+  comparer that hashes the whole key with a per-process random seed: the default hash of such a key is the XOR of its
+  halves, so keys such as `(i << 32) | i` all collided, and a few megabytes of them took seconds of CPU to add. The
+  comparer compares keys as the default one does. Code generated for ToonNet.Core 4.0.0 keeps the default comparer.
+- **ToonNet.Core, ToonNet.SourceGenerators:** An exception of a property's setter while reading (a check of the value)
+  is reported as one of a constructor: a `ToonSerializationException` that names the property's path and the
+  exception's type, with the exception as the inner one, instead of the exception and its message (which can contain
+  the value), which the MVC formatter did not turn into a model-state error.
 
 ## [4.0.0] - 2026-10-15
 

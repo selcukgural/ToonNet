@@ -40,6 +40,20 @@ public sealed partial class BindingLogin(string user, string pass)
     public string Secret => pass;
 }
 
+[ToonSerializable]
+public sealed partial class CheckedContact
+{
+    private string _email = "";
+
+    public string Name { get; set; } = "";
+
+    public string Email
+    {
+        get => _email;
+        set => _email = value.Contains('@') ? value : throw new ArgumentException($"Invalid email '{value}'");
+    }
+}
+
 /// <summary>Generated readers bind constructor parameters as ToonSerializer does.</summary>
 public class GeneratedConstructorBindingTests
 {
@@ -86,5 +100,26 @@ public class GeneratedConstructorBindingTests
 
         Assert.Equal("User: u\nSecret: p", ToonSerializer.Serialize(new BindingLogin("u", "p")));
         Assert.Equal("5 EUR", Read<BindingMarked>("Amount: 5\ncurrency: EUR")!.Text);
+    }
+
+    [Fact]
+    public void SetterExceptions_AreReportedAsByReflection()
+    {
+        const string toon = "Name: a\nEmail: secret-value";
+        const string expected = "The setter of Email threw ArgumentException (path: $.Email, target type: CheckedContact)";
+
+        var generated = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<CheckedContact>(toon));
+        var tree = Assert.Throws<ToonSerializationException>(() => ToonSerializer.DeserializeFromValue<CheckedContact>(ToonDocument.Parse(toon).Root));
+        var typeInfo = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize(toon, CheckedContact.ToonTypeInfo));
+        var reflection = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<CheckedContact>(toon, ReflectionOnly.Options()));
+
+        foreach (var ex in new[] { generated, tree, typeInfo, reflection })
+        {
+            Assert.Equal(expected, ex.Message);
+            Assert.IsType<ArgumentException>(ex.InnerException);
+        }
+
+        var nested = Assert.Throws<ToonSerializationException>(() => ToonSerializer.Deserialize<List<CheckedContact>>("[1]:\n  - Name: a\n    Email: x"));
+        Assert.Equal("The setter of Email threw ArgumentException (path: $[0].Email, target type: CheckedContact)", nested.Message);
     }
 }

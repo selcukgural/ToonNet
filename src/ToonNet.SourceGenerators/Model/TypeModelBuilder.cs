@@ -182,7 +182,10 @@ internal static class TypeModelBuilder
             Diagnostics: new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutableArray()),
             UnsetRequired: new EquatableArray<string>(unsetRequired.ToImmutableArray()),
             UnsetRequiredHasInitializer: unsetRequiredHasInitializer && allowFallback,
-            ConstructorError: type.IsAbstract ? null : constructorError);
+            ConstructorError: type.IsAbstract ? null : constructorError,
+            // ToonNet.Core 4.0.1 and later: dictionaries and sets get comparers that documents cannot make collide
+            KeyComparers: compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSourceGenerationHelpers")?.GetMembers("KeyComparer").Length > 0,
+            SetterErrors: compilation.GetTypeByMetadataName("ToonNet.Core.Serialization.ToonSourceGenerationHelpers")?.GetMembers("SetterError").Length > 0);
     }
 
     /// <summary>

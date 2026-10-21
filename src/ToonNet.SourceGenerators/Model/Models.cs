@@ -34,7 +34,9 @@ internal sealed record TypeModel(
     EquatableArray<DiagnosticInfo> Diagnostics,
     EquatableArray<string> UnsetRequired = default,
     bool UnsetRequiredHasInitializer = false,
-    string? ConstructorError = null);
+    string? ConstructorError = null,
+    bool KeyComparers = false,
+    bool SetterErrors = false);
 
 /// <summary>Whether and how the static <c>ToonTypeInfo</c> property is generated.</summary>
 internal enum TypeInfoProperty
