@@ -316,4 +316,61 @@ public class UntrustedInputTests
         Assert.Equal(whole.Message, streamed.Message);
         Assert.True(stream.BytesRead < 1_000_000, $"{stream.BytesRead} of {toon.Length} bytes read");
     }
+    [Theory]
+    [InlineData('\r', "\\\\r")]
+    [InlineData('\u001B', "\\\\u001B")]
+    [InlineData('\u202E', "\\\\u202E")]
+    [InlineData('\u2028', "\\\\u2028")]
+    [InlineData('\u0085', "\\\\u0085")]
+    public void InvalidEscapes_ShowTheCharacterEscaped(char character, string shown)
+    {
+        // A raw line break, escape or bidirectional control in the message would forge a log line or reorder its text
+        var ex = Assert.Throws<ToonParseException>(() => ToonDocument.Parse("a: \"x\\" + character + "\""));
+
+        Assert.StartsWith($"Invalid escape sequence '{shown}'", ex.Message);
+        Assert.DoesNotContain(character, ex.Message);
+    }
+
+    [Fact]
+    public void PropertyCollectionErrors_ShowKeysEscaped()
+    {
+        var properties = new ToonObject { ["a\nb"] = 1 }.Properties;
+
+        Assert.Equal("The key \"x\\r\\u202Ey\" was not found.", Assert.Throws<KeyNotFoundException>(() => properties["x\r\u202Ey"]).Message);
+        Assert.Equal("An item with the same key has already been added. Key: \"a\\nb\" (Parameter 'key')",
+                     Assert.Throws<ArgumentException>(() => properties.Add("a\nb", 2)).Message);
+    }
+
+    [Fact]
+    public void DocumentWriter_LongFieldLists_AreCheckedInLinearTime()
+    {
+        // Columns from data (a CSV header): comparing each pair took 1.7 s for 50,000 fields
+        var fields = Enumerable.Range(0, 200_000).Select(i => "f" + i).ToArray();
+
+        Fast(() =>
+        {
+            var writer = new ToonDocumentWriter(new StringWriter());
+            writer.WriteStartTable(0, fields);
+        });
+
+        fields[^1] = "f\n7";
+        fields[^2] = "f\n7";
+        var ex = Assert.Throws<ArgumentException>(() => new ToonDocumentWriter(new StringWriter()).WriteStartTable(0, fields));
+        Assert.Equal("The field \"f\\n7\" is repeated. (Parameter 'fields')", ex.Message);
+
+        // Short lists are checked pair by pair, with the same message
+        ex = Assert.Throws<ArgumentException>(() => new ToonDocumentWriter(new StringWriter()).WriteStartTable(0, ["a", "b\r", "b\r"]));
+        Assert.Equal("The field \"b\\r\" is repeated. (Parameter 'fields')", ex.Message);
+    }
+
+    [Fact]
+    public void TabIndentation_WiderThanAnInt_IsAnError()
+    {
+        // Non-strict mode counts a tab as IndentSize columns: 21.5 million tabs of 100 columns overflowed the count
+        var text = "a:\n" + new string('\t', 21_474_837) + "b: 1";
+
+        var ex = Assert.Throws<ToonParseException>(() => ToonDocument.Parse(text, new ToonOptions { StrictMode = false, IndentSize = 100 }));
+
+        Assert.Equal("Indentation is too wide (line 2, column 1)", ex.Message);
+    }
 }

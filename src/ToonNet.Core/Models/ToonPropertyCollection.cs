@@ -20,7 +20,10 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     private int _count;
     private int _version;
 
-    /// <summary>Key positions in <see cref="_entries"/>; null until the collection exceeds <see cref="IndexThreshold"/>.</summary>
+    /// <summary>
+    ///     Key positions in <see cref="_entries"/>; null until a lookup in a collection of more than
+    ///     <see cref="IndexThreshold"/> properties.
+    /// </summary>
     private Dictionary<string, int>? _indexes;
 
     /// <summary>
@@ -76,7 +79,7 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     /// <exception cref="KeyNotFoundException">Thrown by the getter when the key does not exist.</exception>
     public ToonValue this[string key]
     {
-        get => IndexOf(key) is var index and >= 0 ? _entries[index].Value : throw new KeyNotFoundException($"The key '{key}' was not found.");
+        get => IndexOf(key) is var index and >= 0 ? _entries[index].Value : throw new KeyNotFoundException($"The key {ToonErrorText.Quote(key)} was not found.");
         set
         {
             ArgumentNullException.ThrowIfNull(value);
@@ -101,7 +104,7 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     {
         if (!TryAdd(key, value))
         {
-            throw new ArgumentException($"An item with the same key has already been added. Key: {key}", nameof(key));
+            throw new ArgumentException($"An item with the same key has already been added. Key: {ToonErrorText.Quote(key)}", nameof(key));
         }
     }
 
@@ -247,6 +250,19 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        if (_indexes == null && _count > IndexThreshold)
+        {
+            // Lookups may run on several threads at once: the index is published only when complete
+            var indexes = new Dictionary<string, int>(_count, StringComparer.Ordinal);
+
+            for (var i = 0; i < _count; i++)
+            {
+                indexes.Add(_entries[i].Key, i);
+            }
+
+            _indexes = indexes;
+        }
+
         if (_indexes != null)
         {
             return _indexes.TryGetValue(key, out var index) ? index : -1;
@@ -276,20 +292,14 @@ public sealed class ToonPropertyCollection : IDictionary<string, ToonValue>, IRe
         _count++;
         _version++;
 
-        if (_indexes != null)
-        {
-            _indexes.Add(key, _count - 1);
-        }
-        else if (_count > IndexThreshold)
-        {
-            _indexes = new Dictionary<string, int>(_count * 2, StringComparer.Ordinal);
-
-            for (var i = 0; i < _count; i++)
-            {
-                _indexes.Add(_entries[i].Key, i);
-            }
-        }
+        _indexes?.Add(key, _count - 1);
     }
+
+    /// <summary>
+    ///     Adds a property at the end without looking for its key, which the caller knows is not there (the fields of a
+    ///     parsed row). The index is built by the first lookup, so rows that are only enumerated never get one.
+    /// </summary>
+    internal void AppendUnique(string key, ToonValue value) => Append(key, value);
 
     private List<string> SnapshotKeys()
     {

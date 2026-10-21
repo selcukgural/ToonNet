@@ -140,4 +140,124 @@ public class ResourceLimitTests
         Assert.True(reader.Read());
         Assert.Equal(0, reader.LineNumber);
     }
+    /// <summary>A table whose header nests <paramref name="levels"/> field groups (<c>{a{a{...}}}</c>) around one field.</summary>
+    private static string NestedGroups(int levels, int rows)
+    {
+        var text = new StringBuilder("t[").Append(rows).Append(']');
+        text.Insert(text.Length, "{a", levels).Append('}', levels).Append(':');
+
+        for (var i = 0; i < rows; i++)
+        {
+            text.Append("\n  1");
+        }
+
+        return text.ToString();
+    }
+
+    [Fact]
+    public void NestedFieldGroups_MakeObjectsInProportionToTheDocument()
+    {
+        // 97 objects per row of one character: 9.7 million objects from 400 KB
+        var text = NestedGroups(97, 100_000);
+        const string message = "The nested field groups of the rows make more than 200150 objects";
+
+        var allocated = Allocated(() => Assert.StartsWith(message, Assert.Throws<ToonParseException>(() => ToonDocument.Parse(text)).Message));
+        Assert.True(allocated < 100 * MiB, $"{allocated / MiB} MiB");
+
+        Assert.StartsWith(message, Assert.Throws<ToonParseException>(() => ToonSerializer.Deserialize<object>(text)).Message);
+
+        using (var reader = new ToonDocumentReader(text))
+        {
+            Assert.StartsWith(message, Assert.Throws<ToonParseException>(() =>
+            {
+                while (reader.Read())
+                {
+                }
+            }).Message);
+        }
+
+        using (var reader = new ToonDocumentReader(text))
+        {
+            Assert.True(reader.Read());
+            Assert.StartsWith(message, Assert.Throws<ToonParseException>(() => reader.Skip()).Message);
+        }
+
+        var error = Assert.Single(ToonNet.Core.Validation.ToonValidator.Validate(text).Errors);
+        Assert.StartsWith(message, error.Message);
+
+        // Keyed tables count their entry rows the same way
+        var keyed = new StringBuilder("t[100000:]{a{a{a{a{a{a{a{a{a{a}}}}}}}}}}:");
+
+        for (var i = 0; i < 100_000; i++)
+        {
+            keyed.Append("\n  k").Append(i).Append(": 1");
+        }
+
+        Assert.StartsWith("The nested field groups of the rows make more than", Assert.Throws<ToonParseException>(() => ToonDocument.Parse(keyed.ToString())).Message);
+    }
+
+    [Fact]
+    public void NestedFieldGroups_WithinTheBudget_AreRead()
+    {
+        // Two groups per row of one character: one object per two characters, the most a document may have
+        var text = NestedGroups(3, 100_000);
+        var rows = ToonDocument.Parse(text).Root.AsObject()["t"]!.AsArray();
+
+        Assert.Equal(100_000, rows.Count);
+        var last = rows[99_999].AsObject();
+        Assert.Equal(1, Assert.Single(last.Properties).Value.AsObject()["a"]!.AsObject()["a"]!.GetValue<int>());
+
+        // A short document may have more per character
+        Assert.Equal(600, ToonDocument.Parse(NestedGroups(97, 600)).Root.AsObject()["t"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void NestedFieldGroups_ReserveTheEntriesOfTheirOwnLevel()
+    {
+        // Each object reserved the entries of all the groups below it: 97 levels took a hundred times the memory
+        var text = NestedGroups(97, 600);
+
+        var allocated = Allocated(() => ToonDocument.Parse(text));
+
+        Assert.True(allocated < 15 * MiB, $"{allocated / MiB} MiB");
+    }
+    [Fact]
+    public void WideRowsOfEmptyCells_UseMemoryInProportionToTheDocument()
+    {
+        // A thousand empty cells per row, one character each: every cell was a string of its own, and every row a hash
+        // index of its keys (548 MB for 3.8 MB)
+        var text = new StringBuilder("t[4000]{");
+        text.AppendJoin(',', Enumerable.Range(0, 1000).Select(i => "f" + i)).Append("}:");
+        var row = "\n  " + new string(',', 999);
+
+        for (var i = 0; i < 4000; i++)
+        {
+            text.Append(row);
+        }
+
+        var input = text.ToString();
+        ToonDocument? document = null;
+        var allocated = Allocated(() => document = ToonDocument.Parse(input));
+
+        Assert.True(allocated < 100 * MiB, $"{allocated / MiB} MiB");
+
+        // Lookups by key still work on wide rows
+        var last = document!.Root.AsObject()["t"]!.AsArray()[3999].AsObject();
+        Assert.Equal(1000, last.Properties.Count);
+        Assert.Equal("", last["f999"]!.GetValue<string>());
+        Assert.Equal("f500", last.Properties.Keys[500]);
+        Assert.False(last.Properties.ContainsKey("f1000"));
+    }
+
+    [Fact]
+    public void WideRows_InNonStrictMode_TakeTheLastCellOfARepeatedField()
+    {
+        var fields = string.Join(',', Enumerable.Range(0, 20).Select(i => "f" + i)) + ",f3";
+        var cells = string.Join(',', Enumerable.Range(0, 20)) + ",99";
+        var row = ToonDocument.Parse($"t[1]{{{fields}}}:\n  {cells}", new ToonOptions { StrictMode = false }).Root.AsObject()["t"]!.AsArray()[0].AsObject();
+
+        Assert.Equal(20, row.Properties.Count);
+        Assert.Equal(99, row["f3"]!.GetValue<int>());
+        Assert.Equal("f3", row.Properties.Keys[3]);
+    }
 }

@@ -12,6 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   error (YAML 1.2 lets an alias refer only to a preceding anchor). YamlDotNet resolved such aliases while loading, so
   their expansion was not limited by the alias budgets or `MaxDepth`. Converting also checks the number of nodes and
   the nesting depth again as it expands aliases.
+- **ToonNet.Core:** The nested field groups of tabular rows (§9.3) take no text of their own, so a short row under a
+  deeply nested header made many objects: a document may have one such object per two characters (at least 65,536),
+  and more is a parse error on every read path (trees, the serializer, `ToonDocumentReader` and `Skip`, the validator).
+  Each group object reserves room for its own fields only, not for those of the groups below it, which made the memory
+  of a row grow with the square of its depth.
+- **ToonNet.Core:** Empty cells and values share one string value, and the objects of rows look up their keys through
+  a hash index only once a key is looked up, so wide tables of empty cells take memory in proportion to the document
+  (a seventh of what they took).
+- **ToonNet.Core:** Error messages show the character of an invalid escape sequence, and the keys and field names of
+  `ToonPropertyCollection` and `ToonDocumentWriter` errors, escaped and shortened, as for other text from documents.
+  `ToonDocumentWriter` checks long field lists for repeated names in linear time, and non-strict mode rejects tab
+  indentation too wide to count instead of reporting a negative column.
 
 ## [4.0.0] - 2026-10-15
 

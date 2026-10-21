@@ -194,6 +194,8 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _position = 0;
         _depth = 0;
         _reservedListItems = 0;
+        _groupObjects = 0;
+        _maxGroupObjects = Math.Max(MinGroupObjects, input.Length / 2);
         _headerSpans = 0;
         _keyCount = 0;
         _headers.Clear();
@@ -381,7 +383,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 throw new ToonParseException("Tabs are not allowed in indentation", number, indentation.IndexOf('\t') + 1);
             }
 
-            columns = (index - tabs) + tabs * _options.IndentSize;
+            // A long run of tabs at a large IndentSize would overflow the column count
+            var expanded = (long)(index - tabs) + (long)tabs * _options.IndentSize;
+
+            if (expanded > int.MaxValue)
+            {
+                throw new ToonParseException("Indentation is too wide", number, 1);
+            }
+
+            columns = (int)expanded;
         }
 
         var content = raw[index..];
@@ -906,6 +916,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
 
         _position = index + 1;
         key = ReadEntryRow(index, cursor.HeaderIndex);
+        CountGroupObjects(HeaderOf(cursor.HeaderIndex), line);
 
         // Entry values are objects one level below the keyed object
         if (cursor.Count++ == 0)
@@ -1199,6 +1210,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                         cursor.RowsEntered = true;
                     }
 
+                    CountGroupObjects(HeaderOf(cursor.HeaderIndex), row);
                     cursor.Count++;
                     item = new ValueRef(RefKind.Row, index, headerIndex: cursor.HeaderIndex);
                     return true;
@@ -1326,6 +1338,31 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>The list item slots reserved in this document so far.</summary>
     private int _reservedListItems;
 
+    /// <summary>The objects of nested field groups in the rows read so far, and how many the document may have.</summary>
+    private long _groupObjects;
+
+    private long _maxGroupObjects;
+
+    /// <summary>The objects of nested field groups any document may have, however short.</summary>
+    private const int MinGroupObjects = 64 * 1024;
+
+    /// <summary>
+    ///     Counts the objects of the nested field groups of a row (§9.3), which take no text of their own: a row of one
+    ///     short cell under a header nested many levels deep would otherwise make an object per level from a few
+    ///     characters. A document may have one such object per two characters of its length (rows take at least two,
+    ///     a cell and a line break), and at least <see cref="MinGroupObjects"/>.
+    /// </summary>
+    /// <exception cref="ToonParseException">Thrown when the document has more.</exception>
+    private void CountGroupObjects(in Header header, in Line row)
+    {
+        var groups = header.Fields!.Length - header.LeafCount;
+
+        if (groups > 0 && (_groupObjects += groups) > _maxGroupObjects)
+        {
+            throw new ToonParseException($"The nested field groups of the rows make more than {_maxGroupObjects} objects", row.Number, row.Indent + 1);
+        }
+    }
+
     /// <summary>
     ///     The capacity to reserve for the items of a list with a declared length. Items can span several lines, so their
     ///     number is not known without reading them; but each starts on a line of its own, so the declared lengths of
@@ -1445,14 +1482,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
     }
 
     /// <summary>The state of the reader methods before a value is read, to read the value again (<see cref="Restore"/>).</summary>
-    internal readonly struct Checkpoint(int position, int depth, int headerSpans, int keyCount, int reservedListItems, int headersFrom,
-                                        int headerCount, Header header, Header[]? headers)
+    internal readonly struct Checkpoint(int position, int depth, int headerSpans, int keyCount, int reservedListItems, long groupObjects,
+                                        int headersFrom, int headerCount, Header header, Header[]? headers)
     {
         public readonly int Position = position;
         public readonly int Depth = depth;
         public readonly int HeaderSpans = headerSpans;
         public readonly int KeyCount = keyCount;
         public readonly int ReservedListItems = reservedListItems;
+        public readonly long GroupObjects = groupObjects;
 
         /// <summary>The headers from this index on, which reading the value may remove; those before it stay.</summary>
         public readonly int HeadersFrom = headersFrom;
@@ -1476,7 +1514,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         var from = value.Kind is RefKind.HeaderArray or RefKind.KeyedObject ? Math.Min(value.HeaderIndex, _headers.Count) : _headers.Count;
         var count = _headers.Count - from;
 
-        return new Checkpoint(_position, _depth, _headerSpans, _keyCount, _reservedListItems, from, count,
+        return new Checkpoint(_position, _depth, _headerSpans, _keyCount, _reservedListItems, _groupObjects, from, count,
                               count == 1 ? _headers[from] : default, count > 1 ? _headers.GetRange(from, count).ToArray() : null);
     }
 
@@ -1488,6 +1526,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         _headerSpans = checkpoint.HeaderSpans;
         _keyCount = checkpoint.KeyCount;
         _reservedListItems = checkpoint.ReservedListItems;
+        _groupObjects = checkpoint.GroupObjects;
 
         if (_headers.Count > checkpoint.HeadersFrom)
         {
@@ -1614,7 +1653,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
         for (var i = 0; i < fields.Length; i++)
         {
             var token = tokens[i];
-            row.Properties[fields[i].Name] = ParsePrimitive(_input.Span.Slice(token.Start, token.Length), line, ColumnAt(line, token.Start));
+            SetRowField(row, fields[i].Name, ParsePrimitive(_input.Span.Slice(token.Start, token.Length), line, ColumnAt(line, token.Start)));
         }
 
         return row;
@@ -1623,7 +1662,15 @@ internal sealed class ToonParser(ToonOptions? options = null)
     /// <summary>Builds the object of the field entries from <paramref name="start"/> to <paramref name="end"/>.</summary>
     private ToonObject BuildRowFields(FieldEntry[] fields, int start, int end, in Line line)
     {
-        var obj = new ToonObject(end - start);
+        // The entries of this level only, not those of the groups below it
+        var count = 0;
+
+        for (var i = start; i < end; i = fields[i].End)
+        {
+            count++;
+        }
+
+        var obj = new ToonObject(count);
         var tokens = CollectionsMarshal.AsSpan(_tokens);
 
         for (var i = start; i < end; i = fields[i].End)
@@ -1644,10 +1691,26 @@ internal sealed class ToonParser(ToonOptions? options = null)
                 _depth--;
             }
 
-            obj.Properties[field.Name] = value;
+            SetRowField(obj, field.Name, value);
         }
 
         return obj;
+    }
+
+    /// <summary>
+    ///     Sets a field of a row. Strict mode has rejected repeated names in the field list, so they are appended without
+    ///     a lookup; otherwise the last cell of a repeated name wins.
+    /// </summary>
+    private void SetRowField(ToonObject row, string name, ToonValue value)
+    {
+        if (_options.StrictMode)
+        {
+            row.Properties.AppendUnique(name, value);
+        }
+        else
+        {
+            row.Properties[name] = value;
+        }
     }
 
     /// <summary>The names of the top-level entries of a field list.</summary>
@@ -2300,7 +2363,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
     {
         if (token.Length == 0)
         {
-            return new ToonString(string.Empty);
+            return ToonString.Empty;
         }
 
         if (token[0] == '"')
@@ -2603,7 +2666,7 @@ internal sealed class ToonParser(ToonOptions? options = null)
                         i += 4;
                         break;
                     default:
-                        throw new ToonParseException($"Invalid escape sequence '\\{text[i]}'", lineNumber, column + i - 1);
+                        throw new ToonParseException($"Invalid escape sequence '{ToonErrorText.EscapeControls("\\" + text[i])}'", lineNumber, column + i - 1);
                 }
             }
 
