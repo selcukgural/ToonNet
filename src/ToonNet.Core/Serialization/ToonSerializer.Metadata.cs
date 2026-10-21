@@ -242,6 +242,64 @@ public static partial class ToonSerializer
     /// with <see cref="ToonIgnoreAttribute"/>, ordered by <see cref="ToonPropertyOrderAttribute"/> (default 0), then base-class
     /// properties before derived ones, then declaration order.
     /// </remarks>
+    private static readonly ConcurrentDictionary<(Type Interface, Type Runtime), TypeMetadata> InterfaceViews = new();
+
+    /// <summary>
+    ///     The metadata an object is written with: that of <paramref name="writtenType"/>, without the properties of an
+    ///     interface that the object's type marks <see cref="ToonIgnoreAttribute"/> where it implements them (a value held
+    ///     as <c>IAccount</c> whose class ignores <c>PasswordHash</c>).
+    /// </summary>
+    private static TypeMetadata GetWrittenMetadata(Type writtenType, Type runtimeType)
+    {
+        var metadata = GetTypeMetadata(writtenType);
+
+        if (!writtenType.IsInterface || runtimeType == writtenType || runtimeType.IsInterface || metadata.Properties.Length == 0)
+        {
+            return metadata;
+        }
+
+        return InterfaceViews.GetOrAdd((writtenType, runtimeType), static (key, metadata) =>
+        {
+            var kept = metadata.Properties.Where(p => !IsIgnoredByImplementation(p.Property, key.Runtime)).ToArray();
+
+            return kept.Length == metadata.Properties.Length
+                ? metadata
+                : new TypeMetadata
+                {
+                    Properties = kept,
+                    Type = metadata.Type,
+                    TypeConverter = metadata.TypeConverter,
+                    FixedNamingPolicy = metadata.FixedNamingPolicy
+                };
+        }, metadata);
+    }
+
+    /// <summary>Whether the member of <paramref name="type"/> that implements an interface property is marked <see cref="ToonIgnoreAttribute"/>.</summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = ToonSerializer.ReflectionJustification)]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = ToonSerializer.ReflectionJustification)]
+    private static bool IsIgnoredByImplementation(PropertyInfo interfaceProperty, Type type)
+    {
+        if (interfaceProperty.GetGetMethod() is not { } getter || !interfaceProperty.DeclaringType!.IsAssignableFrom(type))
+        {
+            return false;
+        }
+
+        var map = type.GetInterfaceMap(interfaceProperty.DeclaringType);
+        var index = Array.IndexOf(map.InterfaceMethods, getter);
+
+        if (index < 0 || map.TargetMethods[index] is not { } target)
+        {
+            return false;
+        }
+
+        // The property whose getter implements it, implicitly (public) or explicitly (private), in the class that declares it
+        const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+        var implementation = target.DeclaringType?.GetProperties(all).FirstOrDefault(p => p.GetGetMethod(nonPublic: true) == target);
+
+        return implementation != null && Attribute.IsDefined(implementation, typeof(ToonIgnoreAttribute), inherit: true);
+    }
+
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = ToonSerializer.ReflectionJustification)]
     private static TypeMetadata GetTypeMetadata(Type type)
     {

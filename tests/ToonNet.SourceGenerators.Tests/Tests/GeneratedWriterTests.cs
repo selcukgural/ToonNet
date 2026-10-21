@@ -176,8 +176,42 @@ public partial class LooseRow
 /// ToonSerializer writes [ToonSerializable] types with their generated field writers; the text must match the
 /// generated tree and the reflection-based writer for every option combination, without falling back.
 /// </summary>
+[ToonSerializable]
+public partial class WriterSummary
+{
+    public string Name { get; set; } = "n";
+}
+
+/// <summary>Not marked [ToonSerializable], with a member a summary does not show.</summary>
+public class WriterEntity : WriterSummary
+{
+    public string PasswordHash { get; set; } = "SECRET";
+}
+
+[ToonSerializable]
+public partial class WriterOrder
+{
+    public int Id { get; set; }
+    public WriterSummary? Owner { get; set; }
+}
+
 public class GeneratedWriterTests
 {
+    [Fact]
+    public void TableRows_WriteObjectPropertiesAsTheirDeclaredType()
+    {
+        // The table planner took the runtime type of generated objects' properties: rows showed the entity's members
+        List<WriterOrder> orders = [new() { Id = 1, Owner = new WriterEntity() }, new() { Id = 2, Owner = new WriterEntity { Name = "m" } }];
+        const string expected = "[2]{Id,Owner{Name}}:\n  1,n\n  2,m";
+
+        Assert.Equal(expected, ToonSerializer.Serialize(orders));
+        Assert.Equal(expected, System.Text.Encoding.UTF8.GetString(ToonSerializer.SerializeToUtf8Bytes(orders)));
+        Assert.Equal(expected, ToonSerializer.Serialize(orders, ToonTypeInfo.CreateList(WriterOrder.ToonTypeInfo)));
+        Assert.Equal(expected, ToonSerializer.Serialize(orders, ReflectionOnly.Options(new ToonSerializerOptions())));
+        Assert.Equal("[2]{Id,Owner{Name,PasswordHash}}:\n  1,n,SECRET\n  2,m,SECRET",
+                     ToonSerializer.Serialize(orders, new ToonSerializerOptions { SerializeRuntimeTypes = true }));
+    }
+
     private static IEnumerable<ToonSerializerOptions> OptionVariants()
     {
         yield return new ToonSerializerOptions();

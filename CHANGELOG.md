@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as a root string or the cell of a one-field table they made a line that closes the Markdown code block a prompt puts
   the document in, so the rest of the data read as text of the prompt, and the model's echo of it was cut short.
   `ToonPrompt.Extract` takes time linear in the answer when it has many blocks of other languages.
+- **ToonNet.Core, ToonNet.SourceGenerators:** The tables of the text writer write object properties of generated types
+  and dictionary values as their declared type, as every other path does since 4.0: a list of `[ToonSerializable]`
+  orders whose `Summary` owner held an entity, or a list of `Dictionary<string, Summary>`, wrote the entity's members
+  (`Serialize`, `SerializeToUtf8Bytes` and the `ToonTypeInfo` overloads; `SerializeToValue` was right).
+- **ToonNet.Core:** A value written as an interface leaves out the interface's properties that its class marks
+  `[ToonIgnore]` where it implements them (implicitly or explicitly): an `Account` that ignores `PasswordHash`, held as
+  an `IAccount` that declares it, wrote the hash.
 
 ## [4.0.0] - 2026-10-15
 
