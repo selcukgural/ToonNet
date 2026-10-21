@@ -123,6 +123,35 @@ Messages that tests or log queries match may have changed:
 | `$.user name.Id` | `$['user name'].Id` (keys that are not identifiers; long keys cut to 64 characters) |
 | Rule message `{value}` of a string: `x` | `"x"` (quoted and escaped) |
 
+## Changes in 4.0.1
+
+4.0.1 is a security release. Two of its fixes change what code reads:
+
+- **Constructor parameters are read as System.Text.Json reads them.** A parameter whose member the type keeps out of
+  documents (`[ToonIgnore]`, a property without a public getter, a field) is no longer read; it gets its default value.
+  A parameter that matches no public property makes reading the type throw `InvalidOperationException` (the generator
+  reports warning `TOON012`), unless the constructor is marked `[ToonConstructor]`:
+
+  ```csharp
+  public class Login
+  {
+      [ToonConstructor] // keeps reading `pass` from a key of its name, as before 4.0.1
+      public Login(string user, string pass) { User = user; Secret = pass; }
+
+      public string User { get; }
+      public string Secret { get; }
+  }
+  ```
+
+- **Reflection, delegate, stream, file system, process and handle types** (`Type`, `Action`, `Stream`, `FileInfo`,
+  `ProcessStartInfo`, `SafeHandle`, ...) are not serialized or deserialized: `NotSupportedException`, as in
+  System.Text.Json. Register a converter to write such a value (a file's name, a type's name).
+
+Messages and output that changed: a setter's exception is reported as
+`The setter of Email threw ArgumentException` (the exception is the inner exception); strings of three or more
+backticks or tildes alone are written quoted; `ReadFromToonAsync` rejects charsets other than UTF-8 and UTF-16; the
+MVC output formatter writes a response as the type the action declares.
+
 ## See Also
 
 - [Security](../advanced/security): safe defaults and limits

@@ -375,3 +375,6 @@ website/yarn-error.log
 *.pem
 *.pfx
 *.key
+
+# Claude Code (local settings and worktrees)
+.claude/

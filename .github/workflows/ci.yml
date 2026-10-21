@@ -99,7 +99,8 @@ jobs:
 
       - name: Install dependencies
         working-directory: website
-        run: npm ci
+        # Install scripts of the docs tooling's packages do not run (the site needs none)
+        run: npm ci --ignore-scripts
 
       - name: Build
         working-directory: website

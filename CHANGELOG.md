@@ -89,6 +89,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   firewall that reads it as UTF-8. An endpoint's own `[RequestSizeLimit]` is enforced while reading too (it replaced
   the 4 MB limit, and was left to the server, which a test host or a body read by earlier middleware does not apply).
 
+### Changed
+- **All packages:** The assemblies in the packages get a build provenance attestation too: nuget.org signs each
+  package it stores, which changes the `.nupkg` file, so `gh attestation verify` checks the `.nupkg` attached to the
+  GitHub release, or the assemblies of a package downloaded from nuget.org (`gh attestation verify
+  lib/net10.0/ToonNet.Core.dll --repo selcukgural/ToonNet`). Publishing pushes only packages of this repository, as many
+  as were packed.
+- **Repository:** Restore reports known vulnerabilities of transitive packages too, and fails CI builds for moderate
+  or worse ones; the documentation site installs its packages without running their install scripts.
+
+### Documentation
+- The [security guide](https://selcukgural.github.io/ToonNet/docs/advanced/security) and the
+  [migration guide](https://selcukgural.github.io/ToonNet/docs/getting-started/migration-4#changes-in-401) describe the
+  changes of 4.0.1; the generator's diagnostics list `TOON012` and `TOON013`.
+
 ## [4.0.0] - 2026-10-15
 
 > All packages move to 4.0.0; rebuild with the 4.0 generator (`TOON011` reports a `ToonNet.Core` of another version).
