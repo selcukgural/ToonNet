@@ -334,8 +334,8 @@ cat BenchmarkDotNet.Artifacts/results/*-report-github.md
 
 ## 📋 Requirements
 
-- .NET 8.0 SDK or later (the project targets `net8.0`)
-- BenchmarkDotNet 0.15.0 (package reference in `ToonNet.Benchmarks.csproj`)
+- .NET 10 runtime and the SDK that `global.json` selects (the project targets `net10.0`)
+- BenchmarkDotNet 0.15.8 (package reference in `ToonNet.Benchmarks.csproj`)
 - Release configuration (benchmarks should run in Release mode)
 
 ---

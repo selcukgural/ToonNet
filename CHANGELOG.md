@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **.NET 11:** Every test runs on .NET 11 as well as on .NET 8 and .NET 10, and CI publishes the NativeAOT smoke test
+  for .NET 10 and .NET 11 (no trimming or AOT warnings on either). The packages still build for `net8.0` and `net10.0`;
+  applications on .NET 11 use the `net10.0` build, which is what these runs check.
+
+### Changed
+- **Build:** The repository builds with the .NET 11 SDK (`global.json`); the benchmark and demo projects target
+  `net10.0` instead of `net8.0`, whose support ended on 2026-11-10.
+
 ## [4.0.1] - 2026-10-21
 
 > A security release for all packages; update both `ToonNet.Core` and `ToonNet.SourceGenerators`. Limits that hold on

@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <!-- Published with NativeAOT in CI: generated code, the document model and the AOT-safe members of the other packages must need no reflection -->
+    <!-- Published with NativeAOT in CI for each target framework (publish with -f): generated code, the document model
+         and the AOT-safe members of the other packages must need no reflection. The libraries have no net11.0 build,
+         so the net11.0 publish checks their net10.0 build with the .NET 11 ILCompiler, as an application on .NET 11 does -->
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>

@@ -72,7 +72,7 @@ them straight from it, with code generated for each type.
 | | ToonNet | Toon.Format 1.0.0 |
 |---|---|---|
 | TOON spec | v4.4, 564/564 fixtures | v4.4, 564/564 fixtures |
-| Targets | .NET 8, .NET 10 | .NET 10, .NET Standard 2.0 |
+| Targets | .NET 8, .NET 10 (tested on .NET 11) | .NET 10, .NET Standard 2.0 |
 | Typed API | `ToonSerializer.Serialize`/`Deserialize` (text, streams, files) | `ToonEncoder.Encode<T>`/`ToonDecoder.Decode<T>` via System.Text.Json |
 | Source generator | ✅ `[ToonSerializable]` | – |
 | NativeAOT / trimming | ✅ `ToonSerializer` with generated type infos, tested in CI | – |
@@ -104,7 +104,7 @@ them straight from it, with code generated for each type.
 - **NativeAOT and trimming** - `ToonNet.Core` is annotated; `ToonSerializer.Serialize(catalog, Catalog.ToonTypeInfo)`
   and the other overloads that take a generated type info need no reflection and keep the fast path (tested with
   NativeAOT in CI)
-- **.NET 8 and .NET 10** - Builds for both; `ToonNet.Core` has no package dependencies
+- **.NET 8 and .NET 10** - Builds for both and is tested on .NET 11 too; `ToonNet.Core` has no package dependencies
 
 ### Async I/O
 - **ConfigureAwait(false)** - Awaited I/O calls do not capture the synchronization context

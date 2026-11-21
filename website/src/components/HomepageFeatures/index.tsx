@@ -28,7 +28,7 @@ const FeatureList: FeatureItem[] = [
       <>
         A <strong>System.Text.Json-style</strong> <code>ToonSerializer</code> with options,
         attributes and custom converters, plus a <code>ToonDocument</code>/<code>ToonValue</code>{' '}
-        model for working with TOON directly. Builds for .NET 8 and .NET 10.
+        model for working with TOON directly. Builds for .NET 8 and .NET 10, tested on .NET 11.
       </>
     ),
   },

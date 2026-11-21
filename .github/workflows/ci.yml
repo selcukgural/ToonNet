@@ -31,9 +31,11 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
+          # The .NET 11 SDK (global.json) builds everything; the 8 and 10 runtimes run the tests of those targets
           dotnet-version: |
             8.0.x
             10.0.x
+            11.0.x
 
       - name: Restore
         run: dotnet restore ToonNet.slnx
@@ -51,9 +53,14 @@ jobs:
           done
 
   aot:
-    name: NativeAOT smoke test
+    name: NativeAOT smoke test (${{ matrix.framework }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # net11.0 compiles the libraries' net10.0 build with the .NET 11 ILCompiler, as applications on .NET 11 do
+        framework: [net10.0, net11.0]
 
     steps:
       - name: Checkout
@@ -64,13 +71,15 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
 
       # Generated code and the document model must compile ahead of time without trim or AOT warnings
       - name: Publish with NativeAOT
+        env:
+          FRAMEWORK: ${{ matrix.framework }}
         run: |
           set -o pipefail
-          dotnet publish tests/ToonNet.AotSmokeTest --configuration Release --runtime linux-x64 --output aot 2>&1 | tee publish.log
+          dotnet publish tests/ToonNet.AotSmokeTest --configuration Release --framework "$FRAMEWORK" --runtime linux-x64 --output aot 2>&1 | tee publish.log
           if grep -E "warning IL[0-9]+" publish.log; then
             echo "::error::Trimming or NativeAOT warnings"
             exit 1

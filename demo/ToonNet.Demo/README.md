@@ -33,7 +33,7 @@ dotnet run
 ```
 
 The demo is not interactive: it runs both samples and exits. The sample files are copied to the output folder
-(`bin/<Configuration>/net8.0/Samples`) at build time and loaded from there.
+(`bin/<Configuration>/net10.0/Samples`) at build time and loaded from there.
 
 ### Demo Output
 
@@ -392,7 +392,7 @@ dotnet test ToonNet.slnx
 
 ## 📋 Requirements
 
-- .NET 8.0 or later
+- .NET 10 or later (the demo targets `net10.0`; the packages themselves need .NET 8.0 or later)
 - ToonNet.Core
 - ToonNet.Extensions.Json (for JSON conversion)
 
