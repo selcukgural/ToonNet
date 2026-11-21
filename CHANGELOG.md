@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-11-21
+
+> A patch release of `ToonNet.Core`, tested on .NET 11. `ToonNumber.Value` of a number created from a `decimal` is the
+> closest `double` on every runtime; before, it depended on the runtime for many values of 16 or more significant
+> digits. The other packages change only their version. The packages still target `net8.0` and `net10.0`; .NET 11
+> applications use the `net10.0` build, which CI now tests.
+
 ### Added
 - **.NET 11:** Every test runs on .NET 11 as well as on .NET 8 and .NET 10, and CI publishes the NativeAOT smoke test
   for .NET 10 and .NET 11 (no trimming or AOT warnings on either). The packages still build for `net8.0` and `net10.0`;
@@ -1798,7 +1805,8 @@ Each release includes:
 
 ---
 
-[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v4.0.1...HEAD
+[Unreleased]: https://github.com/selcukgural/ToonNet/compare/v4.0.2...HEAD
+[4.0.2]: https://github.com/selcukgural/ToonNet/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/selcukgural/ToonNet/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/selcukgural/ToonNet/compare/v3.3.0...v4.0.0
 [3.3.0]: https://github.com/selcukgural/ToonNet/compare/v3.2.0...v3.3.0
