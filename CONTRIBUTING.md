@@ -28,9 +28,9 @@ This project follows a Code of Conduct. By participating, you are expected to up
 
 ### Prerequisites
 
-- .NET 10 SDK (`global.json` selects the newest installed 10.0.x SDK; the solution file is `ToonNet.slnx`, and
-  `ToonNet.SourceGenerators.Tests` also targets `net10.0`)
-- .NET 8 runtime (the libraries and most test projects target `net8.0`)
+- .NET 11 SDK (`global.json` selects the newest installed 11.0.x SDK; the solution file is `ToonNet.slnx`)
+- .NET 8 and .NET 10 runtimes (the libraries target `net8.0` and `net10.0`; the test projects target these and
+  `net11.0`, so `dotnet test` runs every test on .NET 8, 10 and 11)
 - Git
 - Node.js 22 (only to build the documentation site in `website/`)
 - IDE (Visual Studio, Rider, or VS Code)
@@ -132,7 +132,8 @@ dotnet /tmp/gate/ToonNet.Comparison.dll gate --compare base.json mine.json
 ```
 
 CI also publishes `tests/ToonNet.AotSmokeTest` with NativeAOT and fails on any trimming or AOT warning; to check
-locally: `dotnet publish tests/ToonNet.AotSmokeTest -c Release -r <rid>`, then run the published executable.
+locally for each of its target frameworks: `dotnet publish tests/ToonNet.AotSmokeTest -c Release -f net10.0 -r <rid>`
+(and `-f net11.0`), then run the published executable.
 
 ### Writing Tests
 
@@ -196,7 +197,9 @@ Brief description of changes
 ### C# Style
 
 - **Follow .NET conventions** (the repository has no `.editorconfig`; match the style of the surrounding code)
-- **Library projects target `net8.0`** (C# 12); `ToonNet.SourceGenerators` targets `netstandard2.0` and must not
+- **Library projects target `net8.0` and `net10.0`** (code must compile as C# 12 for `net8.0`; there is no `net11.0`
+  build: applications on .NET 11 use the `net10.0` one, which the tests and the NativeAOT smoke test check on .NET 11);
+  `ToonNet.SourceGenerators` targets `netstandard2.0` and must not
   reference `ToonNet.Core`
 - **Nullable reference types are enabled** in every project
 - **Use expression-bodied members** where appropriate

@@ -38,7 +38,7 @@ public class Person
 - 💰 **Token Efficient** - Tabular arrays and keyed tables declare field names once, nested field groups flatten
   uniform nested objects into the same rows (lower AI API costs)
 - 📐 **Spec v4.4** - All 564 official conformance fixtures pass; output is identical to the official .NET library
-- 🎯 **.NET 8 and .NET 10** - Builds for both
+- 🎯 **.NET 8, .NET 10 and .NET 11** - Builds for .NET 8 and .NET 10; tested on .NET 11 too
 - 💻 **Developer Friendly** - System.Text.Json-style API
 - 🔄 **Streaming Support** - Multi-document streaming from `IAsyncEnumerable<T>` without materializing the whole dataset
 - 🔧 **ASP.NET Core** - Input/output formatters, configuration provider

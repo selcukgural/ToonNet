@@ -231,7 +231,7 @@ they are also listed under **Dependencies → Analyzers → ToonNet.SourceGenera
 
 ## Requirements
 
-- .NET 8.0 or later (`ToonNet.Core` builds for .NET 8 and .NET 10)
+- .NET 8.0 or later (`ToonNet.Core` builds for .NET 8 and .NET 10, and is tested on .NET 11 too)
 - C# 10 or later (the default of .NET 6 and later; generated files use file-scoped namespaces)
 - ToonNet.Core of the same release
 

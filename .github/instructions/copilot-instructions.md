@@ -5,13 +5,14 @@ You are my coding assistant. Produce clean, maintainable, production-grade code.
 - Code comments and XML documentation must be in English.
 
 # Project Context (ToonNet)
-- ToonNet is a .NET library for TOON (Token-Oriented Object Notation), implementing TOON spec v3.3.2.
+- ToonNet is a .NET library for TOON (Token-Oriented Object Notation), implementing TOON spec v4.4.
 - Layout:
-  - `src/`: ToonNet.Core, ToonNet.Extensions.Json, ToonNet.Extensions.Yaml, ToonNet.AspNetCore, ToonNet.AspNetCore.Mvc (all `net8.0`)
+  - `src/`: ToonNet.Core, ToonNet.Extensions.Json, ToonNet.Extensions.Yaml, ToonNet.AspNetCore, ToonNet.AspNetCore.Mvc (all `net8.0;net10.0`)
     and ToonNet.SourceGenerators (`netstandard2.0`, must not reference ToonNet.Core).
-  - `tests/`: ToonNet.Tests (`net8.0`), ToonNet.SourceGenerators.Tests (`net8.0;net10.0`).
+  - `tests/`: ToonNet.Tests, ToonNet.SourceGenerators.Tests, ToonNet.Compatibility.Tests (all `net8.0;net10.0;net11.0`),
+    ToonNet.AotSmokeTest (NativeAOT, `net10.0;net11.0`).
   - `benchmark/ToonNet.Benchmarks`, `demo/ToonNet.Demo`, `docs/`, `website/` (Docusaurus).
-- Solution file: `ToonNet.slnx` (requires .NET SDK 9.0.200+; CI uses the .NET 8 and 10 SDKs).
+- Solution file: `ToonNet.slnx` (`global.json` selects the .NET 11 SDK; CI also installs the .NET 8 and 10 runtimes).
 - Commands:
   - Build: `dotnet build ToonNet.slnx --configuration Release`
   - Test: `dotnet test ToonNet.slnx`

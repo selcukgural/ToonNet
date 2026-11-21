@@ -226,7 +226,7 @@ Shop:
   to System.Text.Json ([measurements](https://selcukgural.github.io/ToonNet/docs/comparison)).
 - **Safe by default:** strict parsing, depth and size limits, only public setters set from documents, objects
   written as their declared type, no values in error messages ([security](https://selcukgural.github.io/ToonNet/docs/advanced/security)).
-- **Everywhere:** .NET 8 and .NET 10, NativeAOT and trimming with generated type infos, no dependencies in the core.
+- **Everywhere:** builds for .NET 8 and .NET 10, tested on .NET 11 too, NativeAOT and trimming with generated type infos, no dependencies in the core.
 
 ## Learn More
 
