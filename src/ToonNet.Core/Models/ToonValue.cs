@@ -196,7 +196,7 @@ public sealed class ToonNumber : ToonValue
     /// <param name="value">The numeric value to be represented.</param>
     public ToonNumber(double value)
     {
-        Value = value;
+        _value = value;
     }
 
     /// <summary>
@@ -205,7 +205,7 @@ public sealed class ToonNumber : ToonValue
     /// <param name="value">The numeric value to be represented.</param>
     public ToonNumber(float value)
     {
-        Value = SingleToDouble(value);
+        _value = SingleToDouble(value);
     }
 
     /// <summary>
@@ -230,7 +230,7 @@ public sealed class ToonNumber : ToonValue
     /// <param name="value">The numeric value to be represented.</param>
     public ToonNumber(long value)
     {
-        Value = value;
+        _value = value;
         DecimalValue = value;
     }
 
@@ -240,7 +240,7 @@ public sealed class ToonNumber : ToonValue
     /// <param name="value">The numeric value to be represented.</param>
     public ToonNumber(ulong value)
     {
-        Value = value;
+        _value = value;
         DecimalValue = value;
     }
 
@@ -250,24 +250,70 @@ public sealed class ToonNumber : ToonValue
     /// <param name="value">The numeric value to be represented.</param>
     public ToonNumber(decimal value)
     {
-        Value = (double)value;
+        // The exact conversion of long decimals formats and parses text, so it waits until Value is read (writing
+        // the number uses DecimalValue); NaN marks it as pending, as no decimal converts to NaN.
+        _value = TryDecimalToDoubleFast(value, out var converted) ? converted : double.NaN;
         DecimalValue = value;
     }
 
     /// <summary>
-    ///     A number parsed from text: <paramref name="value"/> is the double closest to the text (the cast from
-    ///     <see cref="decimal"/> is not correctly rounded, so it is not derived from <paramref name="exact"/>).
+    ///     The double closest to <paramref name="value"/>. The cast from <see cref="decimal"/> is correctly rounded only
+    ///     from .NET 11 on; before that it is off by one unit in the last place for many values of 16 or more digits.
+    /// </summary>
+    private static double DecimalToDouble(decimal value)
+    {
+        if (TryDecimalToDoubleFast(value, out var converted))
+        {
+            return converted;
+        }
+
+        Span<char> text = stackalloc char[40];
+        value.TryFormat(text, out var length, provider: CultureInfo.InvariantCulture);
+        return double.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
+    }
+
+    private static readonly double[] PowersOfTen =
+    [
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
+        1e20, 1e21, 1e22
+    ];
+
+    /// <summary>
+    ///     Converts <paramref name="value"/> exactly when its mantissa is below 2^53 and its scale at most 22: both are
+    ///     then exact doubles, and one IEEE division of exact operands is correctly rounded.
+    /// </summary>
+    private static bool TryDecimalToDoubleFast(decimal value, out double result)
+    {
+        Span<int> bits = stackalloc int[4];
+        decimal.GetBits(value, bits);
+        var scale = (bits[3] >> 16) & 0xFF;
+        if (bits[2] != 0 || (uint)bits[1] >= 1u << 21 || scale >= PowersOfTen.Length)
+        {
+            result = 0;
+            return false;
+        }
+
+        var quotient = (((ulong)(uint)bits[1] << 32) | (uint)bits[0]) / PowersOfTen[scale];
+        result = bits[3] < 0 ? -quotient : quotient;
+        return true;
+    }
+
+    /// <summary>
+    ///     A number parsed from text: <paramref name="value"/> is the double closest to the text, parsed from the text
+    ///     rather than converted from <paramref name="exact"/>.
     /// </summary>
     internal ToonNumber(decimal exact, double value)
     {
-        Value = value;
+        _value = value;
         DecimalValue = exact;
     }
 
     /// <summary>
     ///     Gets the numeric value as a <see cref="double"/>.
     /// </summary>
-    public double Value { get; }
+    public double Value => double.IsNaN(_value) && DecimalValue is { } exact ? DecimalToDouble(exact) : _value;
+
+    private readonly double _value;
 
     /// <summary>
     ///     Gets the exact value when it is known, or <c>null</c> when the number only exists as a <see cref="double"/>.

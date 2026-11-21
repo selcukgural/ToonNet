@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build:** The repository builds with the .NET 11 SDK (`global.json`); the benchmark and demo projects target
   `net10.0` instead of `net8.0`, whose support ended on 2026-11-10.
 
+### Fixed
+- **ToonNet.Core:** `ToonNumber.Value` of a number created from a `decimal` is the closest `double` on every runtime.
+  It was the C# cast, which before .NET 11 is not correctly rounded for many values of 16 or more significant digits
+  (`95139460995.18955m` gave `95139460995.18956` instead of `95139460995.18954`), so reading such numbers from a
+  `ToonDocument` into `double`, `float` or `Half` depended on the runtime. TOON and JSON output were not affected: they
+  use the exact `DecimalValue`. Numbers whose mantissa is below 2^53 convert as fast as before; longer ones convert
+  when `Value` is read.
+
 ## [4.0.1] - 2026-10-21
 
 > A security release for all packages; update both `ToonNet.Core` and `ToonNet.SourceGenerators`. Limits that hold on

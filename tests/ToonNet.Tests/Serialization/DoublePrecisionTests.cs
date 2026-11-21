@@ -65,6 +65,63 @@ public class DoublePrecisionTests
         Assert.Equal(123456789012345678m, integer.DecimalValue);
     }
 
+    // The cast from decimal to double is correctly rounded only from .NET 11 on: on .NET 8 and 10 it gave
+    // 95139460995.18956 for the first value (the closest double is 95139460995.18954).
+    [Theory]
+    [InlineData("95139460995.18955")]
+    [InlineData("923199714790672.1")]
+    [InlineData("497229171663659359375330.5918")]
+    [InlineData("-92788615756.64711")]
+    [InlineData("0.1")]
+    [InlineData("-1.5")]
+    [InlineData("9007199254740993")]
+    [InlineData("0.0000000000000000000000000001")]
+    [InlineData("79228162514264337593543950335")]
+    [InlineData("-79228162514264337593543950335")]
+    public void DecimalNumbers_HaveTheClosestDouble_OnEveryRuntime(string text)
+    {
+        var value = decimal.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        var closest = double.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        var number = new ToonNumber(value);
+
+        Assert.Equal(closest, number.Value);
+        Assert.Equal(closest, number.Value);
+        Assert.Equal(value, number.DecimalValue);
+        Assert.True(number.IsFinite);
+        Assert.Equal(closest, ToonSerializer.DeserializeFromValue<double>(number));
+        Assert.Equal((float)closest, ToonSerializer.DeserializeFromValue<float>(number));
+        Assert.Equal(value, ToonSerializer.Deserialize<decimal>(ToonSerializer.Serialize(value)));
+    }
+
+    [Fact]
+    public void DecimalNumbers_HaveTheClosestDouble_ForRandomMantissasAndScales()
+    {
+        var random = new Random(11);
+
+        for (var i = 0; i < 100_000; i++)
+        {
+            var value = (i % 3) switch
+            {
+                0 => new decimal(random.Next(), random.Next(), random.Next(), random.Next(2) == 0, (byte)random.Next(29)),
+                1 => new decimal(random.Next(), random.Next(1 << 21), 0, random.Next(2) == 0, (byte)random.Next(29)),
+                _ => new decimal(random.Next(), random.Next(), random.Next(1, 1 << 8), random.Next(2) == 0, (byte)random.Next(29))
+            };
+            var closest = double.Parse(value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                       System.Globalization.CultureInfo.InvariantCulture);
+
+            Assert.Equal(closest, new ToonNumber(value).Value);
+        }
+    }
+
+    [Fact]
+    public void DecimalNegativeZero_StaysNegativeZero()
+    {
+        var number = new ToonNumber(new decimal(0, 0, 0, isNegative: true, scale: 3));
+
+        Assert.True(double.IsNegative(number.Value));
+        Assert.Equal(0d, number.Value);
+    }
+
     [Fact]
     public void Floats_RoundTripExactly()
     {

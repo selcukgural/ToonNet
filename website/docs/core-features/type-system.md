@@ -132,7 +132,8 @@ bool flag = trueValue;   // implicit ToonBoolean → bool
 ## ToonNumber
 
 Represents a number. Every number has a `double` `Value`; numbers created from integers or `decimal`, and numbers
-parsed from TOON that fit in a `decimal`, also keep their exact value in `DecimalValue`.
+parsed from TOON that fit in a `decimal`, also keep their exact value in `DecimalValue`. `Value` is then the `double`
+closest to the exact value on every runtime (the C# cast from `decimal` is correctly rounded only from .NET 11 on).
 
 ```csharp
 ToonNumber intNum = new ToonNumber(42L);                 // exact: DecimalValue = 42
